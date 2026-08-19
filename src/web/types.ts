@@ -54,6 +54,8 @@ export interface CanvasResponse {
 export interface CardDetail {
   card: CardDTO;
   file: string;
+  /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
+  mtime: number;
   parents: { id: string; title: string }[];
   children: { id: string; title: string; kind: string }[];
   project: {

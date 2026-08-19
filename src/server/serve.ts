@@ -1,8 +1,8 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
-import { existsSync } from 'node:fs';
-import { relative } from 'node:path';
+import { Hono, type Context } from 'hono';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { dataDir, paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
@@ -10,6 +10,24 @@ import { resolveProject, parentsOf } from '../index/project.ts';
 import { blockersOf, counts, groupBy, listRecords, unblocks, type Row } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
 import { loadViews, type BoardView, type CanvasView } from './views.ts';
+import {
+  Conflict,
+  Invalid,
+  bulkDelete,
+  bulkFacet,
+  bulkParent,
+  createCard,
+  deleteCard,
+  fileFor,
+  mtimeOf,
+  patchCard,
+  saveAsset,
+  saveCanvas,
+  setEdges,
+} from './mutate.ts';
+import { watch } from 'chokidar';
+import { streamSSE } from 'hono/streaming';
+import type { Edge } from '../schema/types.ts';
 
 const PORT = Number(process.env.COCKPIT_PORT ?? 8092);
 const root = dataDir();
@@ -169,6 +187,9 @@ app.get('/api/card/:id', (c) => {
       unblocks: unblocks(db, rec.id).map((u) => u.id),
     }),
     file: relative(root, rec.file),
+    // The client sends this back on a write; a mismatch means an agent or an
+    // editor changed the file meanwhile, and the write is refused (409).
+    mtime: mtimeOf(rec.file),
     parents: parentsOf(rec)
       .map((id) => records.get(id))
       .filter((r) => r)
@@ -209,6 +230,167 @@ function isBeneath(
   }
   return false;
 }
+
+// ---------------------------------------------------------------- writes
+//
+// Every mutating route lives here and does nothing but delegate to mutate.ts.
+// There is still no path to any external system: these write card files, canvas
+// files and assets under the data directory, and nothing else.
+
+function fail(c: Context, err: unknown) {
+  if (err instanceof Conflict) {
+    return c.json({ error: 'file changed on disk', mtime: err.mtime, conflict: true }, 409);
+  }
+  if (err instanceof Invalid) return c.json({ error: (err as Error).message }, 400);
+  return c.json({ error: (err as Error).message }, 500);
+}
+
+app.patch('/api/card/:id', async (c) => {
+  try {
+    const body = (await c.req.json()) as Parameters<typeof patchCard>[2];
+    const res = patchCard(root, c.req.param('id'), body);
+    bump();
+    return c.json(res);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.post('/api/card', async (c) => {
+  try {
+    const body = (await c.req.json()) as Parameters<typeof createCard>[1];
+    const res = createCard(root, body);
+    bump();
+    return c.json(res, 201);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.delete('/api/card/:id', (c) => {
+  try {
+    const res = deleteCard(root, c.req.param('id'));
+    bump();
+    return c.json(res);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.put('/api/card/:id/edges', async (c) => {
+  try {
+    const body = (await c.req.json()) as { edges: Edge[]; baseMtime?: number };
+    const res = setEdges(root, c.req.param('id'), body.edges ?? [], body.baseMtime);
+    bump();
+    return c.json(res);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.post('/api/bulk', async (c) => {
+  try {
+    const b = (await c.req.json()) as {
+      ids: string[];
+      op: 'facet' | 'parent' | 'delete';
+      facet?: string;
+      values?: string[];
+      mode?: 'set' | 'add' | 'remove';
+      parent?: string | null;
+    };
+    const ids = b.ids ?? [];
+    let res: unknown;
+    if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
+    else if (b.op === 'parent') res = bulkParent(root, ids, b.parent ?? null);
+    else if (b.op === 'delete') res = bulkDelete(root, ids);
+    else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
+    bump();
+    return c.json(res as object);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.patch('/api/canvas/:name', async (c) => {
+  try {
+    const body = (await c.req.json()) as {
+      nodes: Record<string, { x?: number; y?: number; size?: string }>;
+    };
+    saveCanvas(root, c.req.param('name'), body.nodes ?? {});
+    bump();
+    return c.json({ ok: true });
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.post('/api/card/:id/asset', async (c) => {
+  try {
+    const id = c.req.param('id');
+    fileFor(root, id); // 400s cleanly when the card does not exist
+    const mime = c.req.header('Content-Type') ?? '';
+    const bytes = Buffer.from(await c.req.arrayBuffer());
+    if (!bytes.length) throw new Invalid('empty upload');
+    const res = saveAsset(root, id, mime.split(';')[0]!.trim(), bytes);
+    return c.json(res, 201);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+// Pasted images are referenced from a card body, so the body renderer needs them.
+app.get('/api/asset/*', (c) => {
+  const rel = c.req.path.replace('/api/asset/', '');
+  // Confine to the assets tree: a card body is authored content, and a `..` in
+  // an image path must not be able to read outside the data directory.
+  const file = join(p.assets, rel.replace(/^assets\//, ''));
+  if (!file.startsWith(p.assets) || !existsSync(file)) return c.json({ error: 'not found' }, 404);
+  const ext = file.split('.').pop() ?? '';
+  const type =
+    { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' }[
+      ext
+    ] ?? 'application/octet-stream';
+  return new Response(readFileSync(file), { headers: { 'Content-Type': type } });
+});
+
+// ---------------------------------------------------------------- live updates
+//
+// The point of the watcher is C3: a Claude session editing a card file must show
+// up in the open app without a manual refresh.
+
+let revision = 0;
+const listeners = new Set<(rev: number) => void>();
+
+function bump() {
+  revision++;
+  for (const fn of [...listeners]) fn(revision);
+}
+
+watch([p.cards, p.views, p.facets], {
+  ignoreInitial: true,
+  ignored: (path: string) => path.includes('.tmp-') || path.endsWith('.index.db'),
+  awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
+}).on('all', () => bump());
+
+app.get('/api/events', (c) =>
+  streamSSE(c, async (stream) => {
+    let alive = true;
+    const send = (rev: number) => {
+      void stream.writeSSE({ event: 'change', data: String(rev) });
+    };
+    listeners.add(send);
+    await stream.writeSSE({ event: 'hello', data: String(revision) });
+    stream.onAbort(() => {
+      alive = false;
+      listeners.delete(send);
+    });
+    // Hold the connection open; a heartbeat keeps intermediaries from closing it.
+    while (alive) {
+      await stream.sleep(25000);
+      if (alive) await stream.writeSSE({ event: 'ping', data: String(revision) });
+    }
+  }),
+);
 
 // Built UI, when present. Single-port production mode.
 const dist = new URL('../../dist/', import.meta.url).pathname;

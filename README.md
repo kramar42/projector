@@ -3,8 +3,9 @@
 Personal work-management app. One card database in markdown files, projected as a board and a
 mind-map canvas. Spec: [`../cockpit-plan.md`](../cockpit-plan.md) — that file is authoritative.
 
-**Status: P1 complete.** Schema, indexer, validator, project resolution, both importers, and a
-read-only app with a board view and a mind-map canvas over the same cards.
+**Status: P2 complete.** Everything above plus editing: rename, facets, re-parent, links, body,
+delete, bulk actions across a selection, canvas layout, and a file watcher so edits made by a Claude
+session appear live.
 
 ## Two directories, two repos
 
@@ -91,6 +92,34 @@ a hundred records nothing is legible at fit-zoom in any size anyway.
 
 Cards deep-link as `?card=<id>` on whichever view is open, so one can be pasted into Slack.
 
+## Editing
+
+| Where | What |
+|---|---|
+| Card panel | rename, toggle facet values, set parent, add/remove links, edit the body, promote/demote, delete |
+| Board | drag between columns, `+` to create a card in a column, ⌘/⇧-click to select, bulk bar for the selection |
+| Canvas | drag nodes and **Save layout**, drag handle-to-handle to create an edge, `+ node`, double-click to open |
+
+**Drag semantics on a multi-valued facet.** A plain drag replaces the value the card came from. Holding
+**⌥** on drop *adds* instead, so the card deliberately sits in two columns; **⇧** removes only the value
+dragged from; dropping into `(none)` clears the facet. So "card in two columns" is always a gesture,
+never an accident — the rules are unit-tested in `test/model.test.ts`.
+
+**A card gets its project by getting a parent.** `project` is derived from the parent chain, so the
+panel's *Set parent* and the bulk bar's *Set parent…* are how a loose card joins a project — and it then
+inherits that project's repos, Jira key and instructions.
+
+**Bulk actions** are what make ~130 imported cards tractable: select with ⌘-click, then set a parent, set
+or clear one facet, or delete, across the whole selection.
+
+**Positions live in the canvas file**, never on a card, so the same card can sit at a different place on
+each canvas. Saving a layout also flips that canvas to `layout: manual`.
+
+**Conflicts are refused, not merged.** A card read into the panel carries its file mtime; a write sends
+it back, and if the file changed meanwhile the server answers 409 and the panel shows a *changed on disk*
+banner. Nothing is overwritten. The body editor likewise refuses to swallow an external change while
+there is unsaved text.
+
 ## How it fits together
 
 ```
@@ -122,7 +151,13 @@ operation in P0 that writes anything at all:
 | `ck import …` | new card files; skips any id already present | never edits or deletes an existing card |
 | `ck reindex`, `ck ls`, `ck next`, `ck search` | `data/.index.db` only | never touches a card file |
 | `ck check`, `ck show`, `ck project` | nothing | — |
-| the server, every endpoint | `data/.index.db` only | there is no write endpoint; the app is read-only in P1 |
+| server, GET routes | `data/.index.db` only | never touches a card file |
+| `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
+| `POST /api/card` | one new card file | never overwrites an existing file |
+| `DELETE /api/card/:id`, `POST /api/bulk` | card files, and edges that pointed at a deleted card | nothing outside `data/cards/` |
+| `PUT /api/card/:id/edges` | one card's `edges` | refuses an edge that would create a parent cycle |
+| `PATCH /api/canvas/:name` | one view file under `data/views/canvas/` | never touches a card |
+| `POST /api/card/:id/asset` | one file under `data/cards/assets/<id>/` | never overwrites: the name is a content hash |
 
 There is no code path in this repo that writes to Jira, GitHub, Trello, Slack or any other external
 system, and no network call of any kind yet. A mutating request is additionally refused when it carries

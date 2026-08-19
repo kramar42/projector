@@ -28,7 +28,7 @@ function Sidebar({ meta }: { meta: Meta }) {
     <nav className="sidebar">
       <div className="brand">
         cockpit
-        <span className="brand-sub">P1 · read-only</span>
+        <span className="brand-sub">P2 · editing</span>
       </div>
 
       <div className="navgroup">
@@ -102,10 +102,10 @@ export function App() {
       <main className="main">
         <Switch>
           <Route path="/board/:name">
-            {(params) => <BoardView name={params.name!} onOpen={setOpenCard} />}
+            {(params) => <BoardView name={params.name!} meta={meta} onOpen={setOpenCard} />}
           </Route>
           <Route path="/canvas/:name">
-            {(params) => <CanvasView name={params.name!} onOpen={setOpenCard} />}
+            {(params) => <CanvasView name={params.name!} meta={meta} onOpen={setOpenCard} />}
           </Route>
           <Route>
             <div className="pane-loading">pick a view</div>
@@ -113,7 +113,12 @@ export function App() {
         </Switch>
       </main>
       {openCard && (
-        <CardPanel id={openCard} onClose={() => setOpenCard(null)} onOpen={setOpenCard} />
+        <CardPanel
+          id={openCard}
+          meta={meta}
+          onClose={() => setOpenCard(null)}
+          onOpen={setOpenCard}
+        />
       )}
     </div>
   );

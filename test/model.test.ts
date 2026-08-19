@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { join, patchKey, serialize, split } from '../src/schema/frontmatter.ts';
+import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/frontmatter.ts';
 import { parseCard, renderCard } from '../src/schema/card.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { ancestorChains, derivedProject, extractInstructions, resolveProject } from '../src/index/project.ts';
 import type { Rec } from '../src/schema/types.ts';
+import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 
 // ---------------------------------------------------------------- frontmatter
 
@@ -229,4 +230,66 @@ test('a parent cycle terminates instead of hanging', () => {
   const chains = ancestorChains('a', g);
   assert.ok(chains.length >= 1);
   assert.ok(chains[0]!.length <= 3);
+});
+
+// ---------------------------------------------------------------- drag semantics
+
+test('a plain drop replaces the value it came from', () => {
+  assert.deepEqual(nextValues(['now'], 'now', 'month', 'replace'), ['month']);
+});
+
+test('⌥ drop adds, so a card sits in two columns deliberately', () => {
+  assert.deepEqual(nextValues(['now'], 'now', 'month', 'add'), ['now', 'month']);
+});
+
+test('⌥ drop on a column the card is already in changes nothing', () => {
+  assert.deepEqual(nextValues(['now', 'month'], 'now', 'month', 'add'), ['now', 'month']);
+});
+
+test('⇧ drag removes only the value dragged from', () => {
+  assert.deepEqual(nextValues(['now', 'month'], 'now', 'backlog', 'remove'), ['month']);
+});
+
+test('a replace never leaves a duplicate behind', () => {
+  assert.deepEqual(nextValues(['now', 'month'], 'now', 'month', 'replace'), ['month']);
+});
+
+test('dropping into uncategorised clears the grouped facet', () => {
+  assert.deepEqual(nextValues(['now'], 'now', NONE, 'replace'), []);
+});
+
+test('dragging out of uncategorised just adds the target value', () => {
+  assert.deepEqual(nextValues([], NONE, 'now', 'replace'), ['now']);
+});
+
+test('⌥ into uncategorised is a no-op rather than an empty-string value', () => {
+  assert.deepEqual(nextValues(['now'], 'now', NONE, 'add'), ['now']);
+});
+
+test('modifier keys map to modes, shift winning over alt', () => {
+  assert.equal(modeFor({}), 'replace');
+  assert.equal(modeFor({ altKey: true }), 'add');
+  assert.equal(modeFor({ shiftKey: true }), 'remove');
+  assert.equal(modeFor({ shiftKey: true, altKey: true }), 'remove');
+});
+
+// ---------------------------------------------------------------- view files
+
+test('a plain YAML view file is patched in place, not wrapped as frontmatter', () => {
+  const original = `# a comment
+kind: canvas
+title: Project A
+layout: tree-lr
+include:
+  under: project-a
+`;
+  const out = patchYamlFile(original, { nodes: { project-a: { x: 1, y: 2 } }, layout: 'manual' });
+  // The keys must appear exactly once — the frontmatter patcher would have
+  // duplicated the whole document.
+  assert.equal(out.match(/^kind:/gm)?.length, 1);
+  assert.equal(out.match(/^layout:/gm)?.length, 1);
+  assert.match(out, /layout: manual/);
+  assert.doesNotMatch(out, /^---$/m);
+  assert.match(out, /# a comment/);
+  assert.match(out, /under: project-a/);
 });

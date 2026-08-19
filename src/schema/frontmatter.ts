@@ -108,6 +108,25 @@ export function serialize(value: unknown): string {
 }
 
 /**
+ * Patch keys in a standalone YAML file — a view config, not a card.
+ *
+ * Deliberately separate from `patchKey`: that one expects a `---` fenced
+ * frontmatter block and treats everything after it as an untouchable body. Given
+ * a plain YAML file it would find no fence, wrap the entire original document as
+ * the "body", and emit a file with every key duplicated.
+ */
+export function patchYamlFile(text: string, patch: Record<string, unknown>): string {
+  const doc = parseDoc(text);
+  if (doc.contents === null) doc.contents = doc.createNode({});
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) doc.delete(key);
+    else doc.set(key, doc.createNode(value));
+  }
+  applyFlow(doc);
+  return doc.toString(STRINGIFY);
+}
+
+/**
  * Patch one top-level frontmatter key and return the whole file text.
  *
  * Preserves the body exactly, keeps untouched keys as they were, and restores
