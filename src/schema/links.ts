@@ -55,7 +55,24 @@ export function fallbackLabel(link: Link): string {
       return 'session ' + link.ref.slice(-6);
     case 'doc':
       return link.ref.split('/').pop() ?? link.ref;
+    case 'trello':
+    case 'slack':
+    case 'grafana':
+    case 'url':
+      return shortUrl(link.ref);
     default:
       return link.ref;
+  }
+}
+
+/** host + last meaningful segment. A full URL is a reference, not a label. */
+function shortUrl(ref: string): string {
+  try {
+    const u = new URL(ref);
+    const host = u.hostname.replace(/^www\./, '');
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    return seg ? `${host}/${seg.slice(0, 14)}` : host;
+  } catch {
+    return ref;
   }
 }

@@ -3,8 +3,9 @@
     "target": "esnext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "lib": ["esnext"],
     "types": ["node"],
+    "jsx": "react-jsx",
+    "lib": ["esnext", "dom", "dom.iterable"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
@@ -13,5 +14,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "vite.config.ts"]
 }

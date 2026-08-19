@@ -1,0 +1,86 @@
+import { fallbackLabel } from '../schema/links.ts';
+import type { Rec, ResolvedProject } from '../schema/types.ts';
+import { derivedProject, isProject } from '../index/project.ts';
+
+/** What the web app receives for one record. Everything here is derived, never guessed (C8). */
+export interface CardDTO {
+  id: string;
+  kind: 'card' | 'node';
+  title: string;
+  isProject: boolean;
+  projectKey: string | null;
+  facets: Record<string, string[]>;
+  links: { kind: string; ref: string; label: string; raw: string }[];
+  /** Checklist progress counted from the body's markdown task lists. */
+  progress: { done: number; total: number } | null;
+  /** First prose paragraph, for the card face. */
+  excerpt: string;
+  /** Rendered lazily by the client; the raw body travels as-is. */
+  body: string;
+  updated: string | null;
+  childCount: number;
+  blockedBy: { id: string; title: string; done: boolean }[];
+  unblocks: string[];
+}
+
+const TASK = /^\s*[-*]\s+\[( |x|X)\]\s+/gm;
+
+/** Count markdown task list items. Deterministic — the board's progress bar is a count, not a judgement. */
+export function progressOf(body: string): { done: number; total: number } | null {
+  const matches = [...body.matchAll(TASK)];
+  if (!matches.length) return null;
+  const done = matches.filter((m) => m[1]!.toLowerCase() === 'x').length;
+  return { done, total: matches.length };
+}
+
+/** The first paragraph that is prose — not a heading, task, table row or html comment. */
+export function excerptOf(body: string, max = 160): string {
+  for (const block of body.split(/\n\s*\n/)) {
+    const t = block.trim();
+    if (!t) continue;
+    if (/^(#{1,6}\s|[-*]\s+\[[ xX]\]|\||<!--|!\[)/.test(t)) continue;
+    const flat = t
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')  // markdown link → its text
+      .replace(/^\s*\[?https?:\/\/\S+\]?\s*$/gm, '')
+      .replace(/[*_`]/g, '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[-*]\s+/, '')
+      .trim();
+    if (!flat) continue;
+    return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+  }
+  return '';
+}
+
+export function toDTO(
+  rec: Rec,
+  records: Map<string, Rec>,
+  extra: {
+    childCount?: number;
+    blockedBy?: { id: string; title: string; done: boolean }[];
+    unblocks?: string[];
+  } = {},
+): CardDTO {
+  const project = derivedProject(rec.id, records).nearest;
+  // `project` is derived, so it exists in the index but not in the file. Merge it
+  // in here or a view asking for a project chip would render nothing.
+  const facets = project ? { ...rec.facets, project: [project] } : rec.facets;
+  return {
+    id: rec.id,
+    kind: rec.kind,
+    title: rec.title,
+    isProject: isProject(rec),
+    projectKey: project,
+    facets,
+    links: rec.links.map((l) => ({ ...l, label: fallbackLabel(l) })),
+    progress: progressOf(rec.body),
+    excerpt: excerptOf(rec.body),
+    body: rec.body,
+    updated: rec.updated ?? null,
+    childCount: extra.childCount ?? 0,
+    blockedBy: extra.blockedBy ?? [],
+    unblocks: extra.unblocks ?? [],
+  };
+}
+
+export interface ProjectDTO extends ResolvedProject {}

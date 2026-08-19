@@ -3,19 +3,39 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
-  "bin": { "ck": "./src/cli/ck.ts" },
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "ck": "./src/cli/ck.ts"
+  },
   "scripts": {
     "ck": "node src/cli/ck.ts",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "node src/server/serve.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "serve": "node src/server/serve.ts"
   },
   "dependencies": {
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "hono": "^4.13.3",
+    "@hono/node-server": "^1.13.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@xyflow/react": "^12.11.3",
+    "@dagrejs/dagre": "^3.1.1",
+    "wouter": "^3.10.0",
+    "marked": "^18.0.10"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
   }
 }
