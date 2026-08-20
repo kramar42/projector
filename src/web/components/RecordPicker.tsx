@@ -22,8 +22,12 @@ export function RecordPicker({
   const [q, setQ] = useState('');
 
   useEffect(() => {
-    // The Everything canvas is simply every record — a cheap way to list them.
-    api.canvas('all').then((d) => setAll(d.nodes), () => setAll([]));
+    // An empty query is every record, which is exactly the list to pick from —
+    // no saved view needed, and it no longer depends on one existing.
+    api.query('').then(
+      (d) => setAll(Object.values(d.cards)),
+      () => setAll([]),
+    );
   }, []);
 
   const matches = useMemo(() => {

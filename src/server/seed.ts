@@ -114,8 +114,9 @@ updated: 2026-08-19
   is Project A taxonomy that way, not a global axis.
 - **\`doc:\` paths are relative to the vault root**, or absolute (\`/…\`, \`~/…\`). A document living
   outside the vault is reached with \`../\`.
-- **Positions are not here.** A card can appear on several canvases at different positions, so \`x/y\`
-  lives in \`../views/canvas/<name>.yaml\`. Cards own identity and content; views own arrangement.
+- **Arrangement is not here.** A card can appear on several canvases at different positions, and in a
+  different order in each board column, so \`x/y\` and card order live in \`../views/<name>.yaml\`.
+  Cards own identity and content; views own arrangement — which is why only a *saved* view can hold it.
 
 ## Projects
 
@@ -150,57 +151,64 @@ project record's body under an \`## Instructions\` heading.
 plus a bare \`https://…\` for anything else. All read-only.
 `;
 
-/** Views a new vault starts with. Generic: only built-in facet names appear. */
+/**
+ * Views a new vault starts with. Generic: only built-in facet names appear.
+ *
+ * Flat, and each one states its `shape` — a saved view is a named query, so the
+ * directory it sits in is not allowed to mean anything.
+ */
 export const SEED_VIEWS: { path: string; body: string }[] = [
   {
-    path: 'board/priority-lists.yaml',
-    body: `# Columns are priority; everything else rides along as a chip.
-kind: board
-title: Priority lists
+    path: 'home.yaml',
+    body: `# Opened when nothing else is asked for. The filter is a default *selection*:
+# it shows as clearable chips in the sidebar rather than hiding cards silently.
+shape: board
+title: Home
 filter:
+  kind: [card]
   status: [planning, active, waiting, blocked]
-groupBy: priority
-cardFacets: [project, tech]
+groupBy: [priority]
 sort: [updated:desc]
-dragBehaviour: replace   # \u2325 to add instead, \u21e7 to remove just one value
+face:
+  chips: [project, tech]
 showEmpty: true
 uncategorised: end
 `,
   },
   {
-    path: 'board/project-lists.yaml',
-    body: `# The same cards, grouped the other way. No migration between the two.
-kind: board
-title: Project lists
+    path: 'projects.yaml',
+    body: `# Every project, with its roll-ups. \`type\` is a pseudo-facet: nothing is stored.
+shape: table
+title: Projects
 filter:
-  status: [planning, active, waiting, blocked]
-groupBy: project
-cardFacets: [priority, tech]
-sort: [priority:asc, updated:desc]
-uncategorised: end
+  type: [project]
+sort: [title:asc]
+face:
+  chips: [status, priority]
 `,
   },
   {
-    path: 'board/unblocked.yaml',
-    body: `# Derived, not maintained by hand: blockedBy is computed from blocks edges.
-kind: board
+    path: 'unblocked.yaml',
+    body: `# Derived, not maintained by hand: \`blocked\` is computed from blocks edges.
+shape: board
 title: Unblocked now
 filter:
+  kind: [card]
   status: [planning, active]
-  blockedBy: none
-groupBy: energy
+  blocked: [clear]
+groupBy: [energy]
 sort: [priority:asc]
 `,
   },
   {
-    path: 'canvas/all.yaml',
-    body: `# Every record, laid out left-to-right from the roots.
-kind: canvas
+    path: 'everything.yaml',
+    body: `# Every record as a graph, laid out from the roots.
+shape: canvas
 title: Everything
-layout: tree-lr
-defaultSize: chip
 edges:
   show: [parent, blocks]
+face:
+  size: chip
 `,
   },
 ];

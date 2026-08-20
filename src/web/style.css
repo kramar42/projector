@@ -1,30 +1,64 @@
-/* Palette taken from the tools this replaces: the mind-map's lilac edges on a
-   near-black dot grid, and Trello's dark board. Light theme is a first-class
-   inversion, not an afterthought. */
+/* xoria256 — Dmitriy Zotikov's pastel Vim scheme, via
+   github.com/neozenith/estilo-xoria256. Every value below is from
+   estilo/palettes/xoria256.yml; nothing is interpolated.
+
+   The palette is dark-first and has no light neutrals, so the dark theme *is*
+   xoria and the light one is derived: the same seven hue families, using the
+   dark shades (3) as ink where the light shades (1) would disappear on white.
+
+   Hue families, each in four shades — 1 mid (58%/70%), 2 light (78%/84%),
+   3 dark (28%/30%), 4 darkest (17%/20%):
+     red #df8787  orange #dfaf87  yellow #dfdf87  green #afdf87
+     blue #87afdf  purple #a6a6e7  pink #dfafdf
+   Neutrals: #dddddd text, #bbbbbb gandalf, #999999/#666666/#444444 grey,
+     #323232 shadow, #101010 bg, #080808 darker, #040404 darkest. */
 
 :root {
-  --ground: #fbfafc;
+  /* Light: xoria's own greys read as ink, its dark shades as accents. */
+  --ground: #f7f7f7;
   --surface: #ffffff;
-  --surface-2: #f4f2f8;
-  --surface-3: #ebe7f2;
-  --ink: #17141d;
-  --ink-2: #4a4457;
-  --ink-3: #7b7489;
-  --rule: #e3dfec;
-  --rule-2: #cec7dd;
-  --accent: #6d3fcc;
-  --accent-soft: #f0e8fc;
-  --dot: #ddd6ea;
+  --surface-2: #f0f0f0;
+  --surface-3: #e4e4e4;
+  --ink: #101010;         /* bg, inverted */
+  --ink-2: #323232;       /* shadow */
+  --ink-3: #666666;       /* grey2 */
+  --rule: #e0e0e0;
+  --rule-2: #c4c4c4;
+  --accent: #373762;      /* purple3 */
+  --accent-soft: #ebebf7;
+  --dot: #dcdcdc;
 
-  --edge-parent: #a98fd8;
-  --edge-blocks: #c4485f;
-  --edge-relates: #b9b2c6;
-  --minimap-node: #b9a2e2;
-  --minimap-mask: rgba(120, 110, 140, 0.15);
+  --edge-parent: #7676c4;
+  --edge-blocks: #b06060; /* between red1 and red3, legible on white */
+  --edge-relates: #999999;
+  --edge-member: #5a7fa8;
+  --minimap-node: #a6a6e7;
+  --minimap-mask: rgba(50, 50, 50, 0.12);
 
-  --ok: #1f7a57;
-  --warn: #8c6110;
-  --bad: #a83e52;
+  --ok: #4a6237;          /* green3 */
+  --warn: #624a37;        /* orange3 */
+  --bad: #623737;         /* red3 */
+
+  /* Facet families, so a chip's colour says which axis it is. */
+  --hue-red: #623737;
+  --hue-orange: #624a37;
+  --hue-yellow: #626237;
+  --hue-green: #4a6237;
+  --hue-blue: #375362;
+  --hue-purple: #373762;
+  --hue-pink: #623762;
+  --hue-red-bg: #f6b6b6;
+  --hue-orange-bg: #f6d3b6;
+  --hue-yellow-bg: #f6f6b6;
+  --hue-green-bg: #d3f6b6;
+  --hue-blue-bg: #b6e0f6;
+  --hue-purple-bg: #b6b6f6;
+  --hue-pink-bg: #f8c9f8;
+  /* How much of the hue's own background shade a chip carries. Xoria's light
+     shades are saturated pastels — full strength is fine for one chip and loud
+     for eight stacked in a column, so light mode dilutes toward the surface.
+     Dark mode uses the darkest shades already, which need no help. */
+  --chip-tint: 42%;
 
   --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -32,28 +66,46 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --ground: #0b0a10;
-    --surface: #141220;
-    --surface-2: #1b1826;
-    --surface-3: #241f33;
-    --ink: #edeaf2;
-    --ink-2: #b4aec2;
-    --ink-3: #837c93;
-    --rule: #272232;
-    --rule-2: #3c3549;
-    --accent: #c2a0f7;
-    --accent-soft: #221a33;
-    --dot: #221d2e;
+    /* Strictly xoria: darkest → darker → bg → shadow is the panel stack. */
+    --ground: #080808;    /* darker */
+    --surface: #101010;   /* bg */
+    --surface-2: #1a1a1a;
+    --surface-3: #262626;
+    --ink: #dddddd;       /* text */
+    --ink-2: #bbbbbb;     /* gandalf */
+    --ink-3: #999999;     /* grey1 */
+    --rule: #262626;
+    --rule-2: #444444;    /* grey3 */
+    --accent: #a6a6e7;    /* purple1 — xoria's Type */
+    --accent-soft: #2a2a3c; /* purple4 */
+    --dot: #323232;       /* shadow */
 
-    --edge-parent: #8f6fc4;
-    --edge-blocks: #ee8296;
-    --edge-relates: #4a4459;
-    --minimap-node: #6b5b8f;
-    --minimap-mask: rgba(6, 5, 10, 0.6);
+    --edge-parent: #a6a6e7; /* purple1 */
+    --edge-blocks: #df8787; /* red1 — xoria's Special */
+    --edge-relates: #666666;
+    --edge-member: #87afdf; /* blue1 — xoria's Statement */
+    --minimap-node: #373762; /* purple3 */
+    --minimap-mask: rgba(4, 4, 4, 0.62); /* darkest */
 
-    --ok: #5fcfa0;
-    --warn: #e0b45f;
-    --bad: #ee8296;
+    --ok: #afdf87;        /* green1 — PreProc */
+    --warn: #dfdf87;      /* yellow1 */
+    --bad: #df8787;       /* red1 */
+
+    --hue-red: #df8787;
+    --hue-orange: #dfaf87;
+    --hue-yellow: #dfdf87;
+    --hue-green: #afdf87;
+    --hue-blue: #87afdf;
+    --hue-purple: #a6a6e7;
+    --hue-pink: #dfafdf;
+    --hue-red-bg: #3c2a2a;
+    --hue-orange-bg: #3c322a;
+    --hue-yellow-bg: #3c3c2a;
+    --hue-green-bg: #323c2a;
+    --hue-blue-bg: #2a363c;
+    --hue-purple-bg: #2a2a3c;
+    --hue-pink-bg: #3c2a3c;
+    --chip-tint: 100%;
   }
 }
 
@@ -96,99 +148,494 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   height: 100%;
 }
 
+/* The sidebar *is* the view: sections grouped by purpose, and exactly one of
+   them scrolls. There is no top bar — the footer carries the numbers and the
+   canvas floats its own transient actions. */
 .sidebar {
   border-right: 1px solid var(--rule);
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: 18px 12px;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.brand {
-  font-weight: 650;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  padding: 0 8px;
+.rail-block {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--rule);
+  flex: none;
 }
 
-.brand-sub {
+.rail-stats {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  padding: 0 2px;
+}
+
+.rail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.rail-label {
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-3);
-  font-weight: 400;
+  width: 62px;
+  flex: none;
 }
 
-.navgroup {
+.rail-select {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.rail-select.narrow {
+  flex: 0 1 74px;
+}
+
+.rail-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rail-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  padding-left: 68px;
+}
+
+.rail-check.inline {
+  padding-left: 0;
+  font-size: 11px;
+}
+
+.rail-edges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.rail-dirty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--warn);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rail-focus {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 7px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-filter {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.rail-foot {
+  flex: none;
+  border-top: 1px solid var(--rule);
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rail-active {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+
+.rail-active b {
+  color: var(--ink);
+}
+
+.rail-search input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.rail-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------- popovers */
+
+/* Portalled to the body: the rail has its own overflow, so anything positioned
+   inside it was clipped at the rail's edge. */
+.popover {
+  position: fixed;
+  z-index: 60;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(20, 15, 35, 0.18);
+  overflow-y: auto;
+  padding: 5px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.navgroup h2 {
+.popbtn {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.popbtn:hover,
+.popbtn.is-open {
+  border-color: var(--rule-2);
+  background: var(--surface-3);
+}
+
+.popbtn-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.popbtn-caret {
+  color: var(--ink-3);
+  font-size: 9px;
+  flex: none;
+}
+
+.vaultbtn {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.vaultbtn-mark {
+  color: var(--accent);
+}
+
+.pop-head {
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-3);
-  margin: 0 0 6px;
-  padding: 0 8px;
-  font-weight: 500;
+  padding: 4px 7px 5px;
 }
 
-.navitem {
+.pop-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pop-pick {
   appearance: none;
-  border: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: none;
-  color: var(--ink-2);
-  text-align: left;
-  padding: 6px 8px;
+  border: 0;
   border-radius: 5px;
+  color: var(--ink-2);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
+  padding: 5px 7px;
   cursor: pointer;
+  text-align: left;
 }
 
-.navitem:hover {
+.pop-pick:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--ink);
 }
 
-.navitem.is-active {
-  background: var(--accent-soft);
+.pop-pick.is-current {
   color: var(--accent);
+  font-weight: 600;
+}
+
+.pop-pick.is-missing {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pop-pick-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop-count {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  flex: none;
+}
+
+.pop-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding: 4px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.pop-check:hover {
+  background: var(--surface-2);
+}
+
+.pop-action {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin-top: 3px;
+  padding: 7px;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 5px 5px;
+}
+
+.pop-action:hover {
+  background: var(--surface-2);
+}
+
+.pop-foot {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-3);
+  padding: 5px 7px 2px;
+  word-break: break-all;
+  border-top: 1px solid var(--rule);
+  margin-top: 3px;
+}
+
+/* ------------------------------------------------------- filter panel */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filters-empty {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 6px 2px;
+}
+
+.facet-head {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 2px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.facet-head:hover {
+  color: var(--ink);
+}
+
+.facet.is-active .facet-head {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.facet-caret {
+  font-size: 8px;
+  color: var(--ink-3);
+  width: 8px;
+  flex: none;
+}
+
+.facet-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Marks a computed axis. The panel treats it identically to a stored one; the
+   glyph is there so you know nothing is written on the card. */
+.facet-pseudo {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.facet-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  background: var(--accent);
+  color: var(--surface);
+  border-radius: 7px;
+  padding: 0 4px;
+  min-width: 12px;
+  text-align: center;
+}
+
+.facet-values {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px 0 6px 13px;
+}
+
+.facet-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.facet-value:hover {
+  background: var(--surface-2);
+}
+
+.facet-value.is-on {
+  color: var(--ink);
   font-weight: 550;
 }
 
-.navitem:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* A selected value whose count fell to zero: still shown, or it could never be
+   unselected. */
+.facet-value.is-empty {
+  opacity: 0.55;
 }
 
-.navfoot {
-  margin-top: auto;
-  padding: 10px 8px 0;
-  border-top: 1px solid var(--rule);
-  font-family: var(--mono);
-  font-size: 10.5px;
+.facet-value input {
+  margin: 0;
+  flex: none;
+}
+
+.facet-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facet-name.is-none {
+  font-style: italic;
   color: var(--ink-3);
-  line-height: 1.7;
 }
 
-.navfoot-path {
-  margin-top: 6px;
-  word-break: break-all;
-  opacity: 0.75;
+.facet-value.is-on .facet-name.is-none {
+  color: var(--ink-2);
+}
+
+.facet-count {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  flex: none;
+}
+
+.facet-more {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  text-align: left;
+  cursor: pointer;
 }
 
 .main {
@@ -198,45 +645,15 @@ body {
   flex-direction: column;
 }
 
-/* ---------------------------------------------------------------- headers */
 
-.board-head {
-  padding: 16px 22px 12px;
-  border-bottom: 1px solid var(--rule);
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-  flex: none;
-}
 
-.board-head h1 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-}
 
-.board-sub {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
 
-.board-sub b {
-  color: var(--ink-2);
-  font-weight: 500;
-}
-
-.multi-note {
-  color: var(--accent);
-  border-bottom: 1px dotted var(--accent);
-  cursor: help;
-}
 
 /* ---------------------------------------------------------------- board */
 
 .board-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -246,10 +663,6 @@ body {
 .board {
   display: flex;
   gap: 12px;
-  padding: 16px 22px 22px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex: 1;
   align-items: flex-start;
 }
 
@@ -260,7 +673,7 @@ body {
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  max-height: 100%;
+  max-height: calc(100vh - 120px);
   min-height: 0;
 }
 
@@ -402,37 +815,47 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* One hue family per axis, so a chip's colour says which facet it is before you
+   read it. Taken straight from xoria's syntax mapping where there is an obvious
+   fit: priority is Number (orange), status is PreProc (green), project is Type
+   (purple), tech is Statement (blue), layer is Identifier (pink). */
 .facet-priority {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--hue-orange-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-orange);
+  border-color: color-mix(in srgb, var(--hue-orange) 30%, transparent);
 }
 .facet-status {
-  background: var(--surface-3);
-  color: var(--ink-2);
-}
-.facet-layer {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  font-weight: 600;
+  background: color-mix(in srgb, var(--hue-green-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-green);
+  border-color: color-mix(in srgb, var(--hue-green) 30%, transparent);
 }
 .facet-project {
-  background: transparent;
-  color: var(--ink-2);
-  border-color: var(--rule-2);
+  background: color-mix(in srgb, var(--hue-purple-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-purple);
+  border-color: color-mix(in srgb, var(--hue-purple) 32%, transparent);
 }
-.facet-tech,
-.facet-domain {
-  background: transparent;
-  color: var(--ink-3);
-  border-color: var(--rule);
+.facet-tech {
+  background: color-mix(in srgb, var(--hue-blue-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-blue);
+  border-color: color-mix(in srgb, var(--hue-blue) 30%, transparent);
+}
+.facet-layer {
+  background: color-mix(in srgb, var(--hue-pink-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-pink);
+  border-color: color-mix(in srgb, var(--hue-pink) 34%, transparent);
+  font-weight: 600;
 }
 .facet-waiting {
-  background: color-mix(in srgb, var(--warn) 16%, transparent);
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 34%, transparent);
+  background: color-mix(in srgb, var(--hue-red-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-red);
+  border-color: color-mix(in srgb, var(--hue-red) 32%, transparent);
 }
+.facet-domain {
+  background: color-mix(in srgb, var(--hue-yellow-bg) var(--chip-tint), var(--surface));
+  color: var(--hue-yellow);
+  border-color: color-mix(in srgb, var(--hue-yellow) 30%, transparent);
+}
+/* Energy and source are hints, not identity: no hue, so they recede. */
 .facet-energy {
   background: transparent;
   color: var(--ink-3);
@@ -964,24 +1387,7 @@ textarea { resize: vertical; font-family: inherit; }
 .banner.is-bad { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .banner.is-conflict { border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 
-.board-hint, .canvas-tools {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-left: auto;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
 
-.canvas-foot {
-  border-top: 1px solid var(--rule);
-  padding: 6px 22px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  flex: none;
-}
 
 .edgepick { display: inline-flex; gap: 6px; align-items: center; }
 .edgepick select { padding: 2px 5px; font-size: 11px; }
@@ -996,22 +1402,23 @@ textarea { resize: vertical; font-family: inherit; }
 .newcard { margin-bottom: 4px; }
 .newcard textarea { width: 100%; }
 
+/* Floating, because it exists only while a selection does — see the override at
+   the end of this file for the placement. */
 .bulkbar {
-  margin: 0 22px 10px;
   padding: 8px 12px;
   border: 1px solid var(--accent);
   background: var(--accent-soft);
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  position: relative;
+  box-shadow: 0 6px 20px rgba(20, 15, 35, 0.16);
 }
 .bulkbar-count { font-family: var(--mono); font-size: 11.5px; color: var(--accent); font-weight: 600; }
 .bulkbar-select { font-size: 11.5px; padding: 3px 6px; }
 .bulkbar-values { display: flex; gap: 4px; flex-wrap: wrap; }
-.bulkbar-picker { position: absolute; top: 100%; left: 12px; z-index: 30; margin-top: 4px; }
+.bulkbar-picker { position: absolute; bottom: 100%; left: 12px; z-index: 30; margin-bottom: 6px; }
 
 .togglechip {
   appearance: none;
@@ -1391,94 +1798,263 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 /* footer switcher */
 
-.vaultswitch { margin-top: 8px; position: relative; }
 
-.vaultswitch-current {
-  appearance: none;
-  width: 100%;
-  border: 1px solid var(--rule);
-  background: var(--surface-2);
-  border-radius: 5px;
-  padding: 5px 7px;
-  cursor: pointer;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink);
-}
-.vaultswitch-current:hover { border-color: var(--rule-2); }
-.vaultswitch-mark { color: var(--accent); font-size: 10px; }
-.vaultswitch-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.vaultswitch-caret { color: var(--ink-3); font-size: 9px; }
 
-.vaultswitch-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  min-width: 240px;
-  background: var(--surface);
-  border: 1px solid var(--rule-2);
-  border-radius: 6px;
-  box-shadow: 0 10px 30px rgba(8, 6, 12, 0.28);
-  padding: 6px;
-  z-index: 30;
+
+/* ---------------------------------------------------------------- lanes */
+
+/* A second grouping axis: lanes as rows, columns within each. This is what
+   `swimlanes` was going to be, except it is `groupBy[1]` and so needs no
+   separate code path — the axis function is simply called twice. */
+.board-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 14px;
+  padding: 12px;
 }
-.vaultswitch-head {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding: 2px 6px 4px;
-}
-.vaultswitch-row { display: flex; gap: 2px; align-items: center; }
-.vaultswitch-pick {
-  appearance: none;
-  flex: 1;
-  border: 0;
-  background: none;
-  text-align: left;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--ink-2);
-  padding: 4px 6px;
-  border-radius: 4px;
-  cursor: pointer;
+
+.lane {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
 }
-.vaultswitch-pick:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
-.vaultswitch-pick.is-current { color: var(--accent); font-weight: 600; }
-.vaultswitch-pick.is-missing, .vaultswitch-pick:disabled { opacity: 0.5; cursor: default; }
-.vaultswitch-count { font-family: var(--mono); font-size: 10px; color: var(--ink-3); flex: none; }
-.vaultswitch-add {
-  appearance: none;
-  border: 0;
-  border-top: 1px solid var(--rule);
-  background: none;
-  text-align: left;
-  font: inherit;
-  font-size: 12px;
-  color: var(--accent);
-  padding: 6px;
-  margin-top: 3px;
-  cursor: pointer;
+
+.lane-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  position: sticky;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
-.vaultswitch-add:hover { background: var(--surface-2); }
-.vaultswitch-path {
+
+.lane-count {
+  color: var(--ink-3);
+}
+
+/* In a matrix, a full-height column means one lane fills the screen and the
+   second axis stops being visible — which is the only thing the lane is for. The
+   cap is scoped to a real lane: with one implicit lane it clipped every column to
+   under half the viewport for no reason. */
+.lane.is-laned .column {
+  max-height: 44vh;
+}
+
+.board-empty,
+.board-nudge {
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 8px 4px;
+}
+
+.board-nudge {
+  border-top: 1px solid var(--rule);
+  padding: 8px 12px;
+}
+
+/* ---------------------------------------------------------------- table */
+
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--ground);
   font-family: var(--mono);
   font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--ink-3);
-  padding: 4px 6px 2px;
-  word-break: break-all;
-  border-top: 1px solid var(--rule);
-  margin-top: 3px;
+  font-weight: 500;
+  z-index: 1;
+}
+
+.table tbody tr:hover {
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.table tr.section th {
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.section-count {
+  color: var(--ink-3);
+  margin-left: 8px;
+}
+
+.table tr.is-project .col-title {
+  font-weight: 600;
+}
+
+.table .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.num-total {
+  color: var(--ink-3);
+}
+
+.table .col-updated,
+.table .col-repos {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- canvas */
+
+.canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* Transient, shape-local actions float over the content instead of appearing
+   and vanishing inside the rail. */
+.canvas-float {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 5px 8px;
+  box-shadow: 0 4px 14px rgba(20, 15, 35, 0.1);
+}
+
+.saveas {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.saveas input {
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 120px;
+}
+
+/* Unmatched ancestors, kept so the graph stays connected. Muted, and never
+   counted among the matches. */
+.is-context {
+  opacity: 0.42;
+  filter: saturate(0.5);
+}
+
+.is-context:hover {
+  opacity: 0.75;
+}
+
+/* Bulk bar floats too: it exists only while a selection does. */
+.bulkbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+}
+
+/* Where a reordered card will land. Only rendered on a saved view, since that is
+   the only place card order can live. */
+.column-card.is-over-top {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+
+.column-card.is-over-bottom {
+  box-shadow: 0 2px 0 0 var(--accent);
+}
+
+.rail-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.rail-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rail-problem {
+  font-size: 11px;
+  color: var(--bad);
+  padding: 2px 2px 0;
+}
+
+/* Canvas float: the three controls only a canvas can honour, plus its transient
+   actions. In the rail these would make the sidebar reflow on every shape switch. */
+.floatbtn {
+  flex: none;
+  max-width: 150px;
+}
+
+.floatselect {
+  appearance: none;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  cursor: pointer;
 }

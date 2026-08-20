@@ -1,10 +1,10 @@
 import { currentVault } from './vault.ts';
-import type { BoardResponse, CanvasResponse, CardDetail, Meta, Resolved } from './types.ts';
+import type { CardDetail, Meta, QueryResponse, Resolved } from './types.ts';
 
 /**
  * A thin typed fetch. No client-side cache: the server owns the cache and
  * answers from localhost in under a millisecond, so a second staleness model
- * would only be something extra to reason about (§6.7).
+ * would only be something extra to reason about (see “Libraries” in the README).
  */
 export class ApiError extends Error {
   status: number;
@@ -65,8 +65,12 @@ export interface PatchCard {
 
 export const api = {
   meta: () => get<Meta>('/api/meta'),
-  board: (name: string) => get<BoardResponse>(`/api/board/${encodeURIComponent(name)}`),
-  canvas: (name: string) => get<CanvasResponse>(`/api/canvas/${encodeURIComponent(name)}`),
+  /**
+   * The one read endpoint. `search` is the query half of the page URL, passed
+   * through verbatim — the server merges a named `view=` with the overrides, so
+   * a saved view and an ad-hoc query are the same request.
+   */
+  query: (search: string) => get<QueryResponse>(`/api/query${search}`),
   card: (id: string) => get<CardDetail>(`/api/card/${encodeURIComponent(id)}`),
 
   patchCard: (id: string, patch: PatchCard) =>
@@ -110,8 +114,24 @@ export const api = {
       { yaml, baseMtime },
     ),
 
-  saveCanvas: (name: string, nodes: Record<string, { x?: number; y?: number; size?: string }>) =>
-    req<{ ok: true }>('PATCH', `/api/canvas/${encodeURIComponent(name)}`, { nodes }),
+  /**
+   * Arrangement for a saved view. Merged server-side, never replaced: the client
+   * sends only what it currently renders, and that is a filtered subset.
+   */
+  saveArrangement: (
+    name: string,
+    arrangement: { nodes?: Record<string, { x?: number; y?: number }>; order?: Record<string, string[]> },
+  ) => req<{ ok: true }>('PATCH', `/api/view/${encodeURIComponent(name)}/arrangement`, arrangement),
+
+  /**
+   * *Save current as…*, and updating a saved view — the same call either way.
+   * `search` is the page's own query string, so the file records what was on
+   * screen rather than a second interpretation of it.
+   */
+  saveView: (name: string, search: string, title?: string) =>
+    req<{ name: string }>('PUT', `/api/view/${encodeURIComponent(name)}${search}`, { title }),
+
+  deleteView: (name: string) => req<{ ok: true }>('DELETE', `/api/view/${encodeURIComponent(name)}`),
 
   uploadAsset: async (id: string, file: File): Promise<{ path: string }> => {
     const res = await fetch(`/api/card/${encodeURIComponent(id)}/asset`, {

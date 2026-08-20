@@ -2,9 +2,13 @@ import { useEnrichment } from '../enrichment.tsx';
 import type { CardDTO, Size, Tone } from '../types.ts';
 
 /**
- * The one card component, rendered at three sizes inside a board column, inside
- * a canvas node, and inside the detail panel (§5.3). Both views get identical
- * card faces because there is only one implementation of a card face.
+ * The one card component, rendered at two sizes inside a board column, a canvas
+ * node and a table row. Every shape gets an identical card face because there is
+ * only one implementation of a card face.
+ *
+ * It renders and nothing else: content is edited in the `?card=` panel, structure
+ * by gesture (C10). There is no third `expanded` size — the panel is that, with
+ * a deep link and the real editors.
  */
 
 const FACET_TONE: Record<string, string> = {
@@ -150,19 +154,14 @@ export function CardBody({
 
       {card.links.length > 0 && (
         <div className="chiprow">
-          {card.links.slice(0, size === 'expanded' ? 20 : 3).map((l, i) => (
+          {card.links.slice(0, 3).map((l, i) => (
             <LinkChip key={i} kind={l.kind} linkRef={l.raw} label={l.label} />
           ))}
-          {size !== 'expanded' && card.links.length > 3 && (
-            <span className="chip facet-muted">+{card.links.length - 3}</span>
-          )}
+          {card.links.length > 3 && <span className="chip facet-muted">+{card.links.length - 3}</span>}
         </div>
       )}
 
-      {size === 'expanded' && card.excerpt && <p className="cardface-excerpt">{card.excerpt}</p>}
-      {size === 'card' && card.excerpt && !card.progress && (
-        <p className="cardface-excerpt one-line">{card.excerpt}</p>
-      )}
+      {card.excerpt && !card.progress && <p className="cardface-excerpt one-line">{card.excerpt}</p>}
     </div>
   );
 }

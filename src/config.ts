@@ -24,8 +24,6 @@ export const paths = (root: string) => ({
   assets: join(root, 'cards', 'assets'),
   facets: join(root, 'facets.yaml'),
   views: join(root, 'views'),
-  boards: join(root, 'views', 'board'),
-  canvases: join(root, 'views', 'canvas'),
   db: join(root, '.index.db'),
   enrichDb: join(root, '.enrich.db'),
 });

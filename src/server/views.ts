@@ -1,53 +1,61 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { parse } from 'yaml';
+import { paths } from '../config.ts';
+import { specFromFile, type ViewSpec } from '../view/spec.ts';
 
-export interface BoardView {
-  kind: 'board';
+/**
+ * Saved views: named queries in files (C9).
+ *
+ * P1 kept them in `views/board/` and `views/canvas/`, because a view was a place
+ * and its shape was which folder it sat in. A shape is a control now, so the
+ * directory is not allowed to mean anything — the tree is scanned whole, and
+ * anything new is written flat to `views/<name>.yaml`. Files already in the
+ * subfolders keep working exactly where they are.
+ */
+
+export interface ViewFile {
   name: string;
-  title: string;
-  filter?: Record<string, string[] | 'none'>;
-  groupBy: string;
-  swimlanes?: string | null;
-  cardFacets?: string[];
-  sort?: string[];
-  showEmpty?: boolean;
-  uncategorised?: 'end' | 'start' | 'hide';
+  file: string;
 }
 
-export interface CanvasView {
-  kind: 'canvas';
-  name: string;
-  title: string;
-  include?: {
-    filter?: Record<string, string[]>;
-    explicit?: string[];
-    under?: string;
-    /** Ancestors of included records are added by default; set false to opt out. */
-    ancestors?: boolean;
-  };
-  layout: 'manual' | 'tree-lr' | 'tree-tb';
-  /** Size for records that don't state their own. Omit for full cards. */
-  defaultSize?: 'chip' | 'card' | 'expanded';
-  edges?: { show?: string[] };
-  nodes?: Record<string, { x?: number; y?: number; w?: number; h?: number; size?: string }>;
-}
-
-export type View = BoardView | CanvasView;
-
-function loadDir(dir: string, kind: 'board' | 'canvas'): View[] {
+/** Every view file under `views/`, at any depth, in a stable order. */
+export function viewFiles(root: string): ViewFile[] {
+  const dir = paths(root).views;
   if (!existsSync(dir)) return [];
-  const out: View[] = [];
-  for (const f of readdirSync(dir).sort()) {
-    if (!f.endsWith('.yaml') && !f.endsWith('.yml')) continue;
-    const raw = parse(readFileSync(join(dir, f), 'utf8')) as Record<string, unknown> | null;
+  const out: ViewFile[] = [];
+  const visit = (path: string) => {
+    for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith('.')) continue;
+      const child = join(path, entry.name);
+      if (entry.isDirectory()) visit(child);
+      else if (/\.ya?ml$/.test(entry.name)) out.push({ name: basename(entry.name).replace(/\.ya?ml$/, ''), file: child });
+    }
+  };
+  visit(dir);
+  return out;
+}
+
+/**
+ * The file a view name resolves to: wherever it already is, or a flat path for
+ * one that does not exist yet. *Save current as…* therefore never buries a new
+ * view in a folder named after a shape it might not keep.
+ */
+export function viewFileFor(root: string, name: string): string {
+  const existing = viewFiles(root).find((v) => v.name === name);
+  return existing?.file ?? join(paths(root).views, `${name}.yaml`);
+}
+
+export function loadViews(root: string): ViewSpec[] {
+  const out: ViewSpec[] = [];
+  for (const { name, file } of viewFiles(root)) {
+    const raw = parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null;
     if (!raw) continue;
-    const name = basename(f).replace(/\.ya?ml$/, '');
-    out.push({ ...(raw as object), kind, name, title: String(raw.title ?? name) } as View);
+    out.push(specFromFile(name, raw));
   }
   return out;
 }
 
-export function loadViews(boardsDir: string, canvasesDir: string): View[] {
-  return [...loadDir(boardsDir, 'board'), ...loadDir(canvasesDir, 'canvas')];
+export function findView(root: string, name: string): ViewSpec | undefined {
+  return loadViews(root).find((v) => v.name === name);
 }

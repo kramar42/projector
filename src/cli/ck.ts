@@ -23,6 +23,9 @@ import {
   unblocks,
   valuesFor,
 } from '../index/queries.ts';
+import { runQuery } from '../index/query.ts';
+import { parseSpec, specToParams } from '../view/spec.ts';
+import { findView } from '../server/views.ts';
 import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
 import { migrateProjectFacet } from '../import/migrate.ts';
@@ -65,9 +68,11 @@ const NO_VAULT_NEEDED = new Set(['vaults', 'help', '']);
 const root = NO_VAULT_NEEDED.has(rawCmd ?? '') ? '' : vaultOrExit();
 const p = paths(root || '/nonexistent');
 
-const HELP = `ck — cockpit CLI${root ? `   (vault: ${root})` : ''}
+const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
 
-  ck ls [--group <facet>] [--filter f=v,v] [--nodes]   list records, grouped
+  ck ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
+     [--sort key:dir] [--q text] [--focus <id> --via parent|member-of|blocks
+     --dir down|up|both --depth n] [--nodes]        list records, grouped
   ck show <id>                                         one record in full
   ck next                                              actionable cards: open and unblocked
   ck add <title> [--kind card|node] [--parent id]
@@ -131,8 +136,7 @@ function parseFilter(specs: string[] | undefined): Record<string, string[]> | un
 function ensureData(): void {
   mkdirSync(p.cards, { recursive: true });
   mkdirSync(p.assets, { recursive: true });
-  mkdirSync(p.boards, { recursive: true });
-  mkdirSync(p.canvases, { recursive: true });
+  mkdirSync(p.views, { recursive: true });
 }
 
 function takenIds(): Set<string> {
@@ -150,41 +154,73 @@ function pad(s: string, n: number): string {
 
 // ---------------------------------------------------------------- commands
 
+/**
+ * `ck ls` runs the same compiler the sidebar does.
+ *
+ * The CLI has had `--filter f=v,v --group <facet>` since P0 — the web app is what
+ * caught up. Sharing the compiler is what keeps them from drifting: a saved view
+ * is a name both a human and an agent can say, and it means the same thing to
+ * both.
+ */
 function cmdLs(argv: string[]): void {
   const { flags } = argFlags(argv);
   const facets = loadFacets(p.facets);
-  const { db } = reindex(root);
-  const group = flags.get('group')?.[0];
-  const rows = listRecords(db, {
-    filter: parseFilter(flags.get('filter')),
-    includeNodes: flags.has('nodes'),
-  });
+  const { db, records } = reindex(root);
 
-  if (!group) {
-    for (const r of rows) console.log(`${pad(r.id, 34)} ${r.title}`);
-    console.log(`\n${rows.length} record(s)`);
+  const params: Record<string, string> = {};
+  const named = flags.get('view')?.[0];
+  if (named) {
+    const saved = findView(root, named);
+    if (!saved) {
+      console.error(`no view "${named}"`);
+      process.exit(1);
+    }
+    Object.assign(params, specToParams(saved));
+  }
+  for (const spec of flags.get('filter') ?? []) {
+    const [facet, values] = spec.split('=');
+    if (facet && values !== undefined) params[`f.${facet}`] = values;
+  }
+  for (const [flag, key] of [
+    ['group', 'group'],
+    ['sort', 'sort'],
+    ['q', 'q'],
+    ['focus', 'focus'],
+    ['via', 'via'],
+    ['dir', 'dir'],
+    ['depth', 'depth'],
+  ] as const) {
+    const v = flags.get(flag)?.[0];
+    if (v && v !== 'true') params[key] = v;
+  }
+  // `--nodes` is the `kind` pseudo-facet; without it, cards only, as before.
+  if (!flags.has('nodes') && !params['f.kind']) params['f.kind'] = 'card';
+
+  const spec = parseSpec(params);
+  const res = runQuery(db, records, facets, spec.query);
+  const mark = (id: string) => {
+    const rec = records.get(id);
+    return rec?.project ? 'P' : rec?.kind === 'node' ? 'n' : ' ';
+  };
+  const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${records.get(id)?.title ?? ''}`;
+
+  if (!res.groups) {
+    for (const id of res.ids) console.log(`${pad(id, 34)} ${records.get(id)?.title ?? ''}`);
+    console.log(`\n${res.total} record(s) of ${res.universe}`);
     return;
   }
 
-  const groups = groupBy(db, rows, group, facets);
-  const def = facets[group];
-  const total = rows.length;
-  const placements = groups.reduce((n, g) => n + g.rows.length, 0);
-
-  console.log(`# grouped by ${def?.label ?? group}\n`);
-  for (const g of groups) {
-    console.log(`## ${g.value}  (${g.rows.length})`);
-    for (const r of g.rows) {
-      const marks = [
-        r.is_project ? 'P' : r.kind === 'node' ? 'n' : ' ',
-      ].join('');
-      console.log(`   ${marks} ${pad(r.id, 32)} ${r.title}`);
-    }
+  const axes = spec.query.groupBy ?? [];
+  console.log(`# grouped by ${axes.join(' × ')}\n`);
+  for (const g of res.groups) {
+    if (!g.ids.length && !spec.query.showEmpty) continue;
+    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
+    for (const id of g.ids) console.log(line(id));
     console.log('');
   }
-  const extra = placements - total;
+  const extra = res.placements - res.total;
   console.log(
-    `${total} record(s) in ${groups.length} group(s)` +
+    `${res.total} record(s) of ${res.universe} in ${res.groups.length} group(s)` +
       (extra > 0 ? ` — ${extra} appear in more than one group` : ''),
   );
 }
@@ -226,7 +262,7 @@ function cmdNext(): void {
     const pr = valuesFor(db, r.id, 'priority').join(',') || '-';
     const opens = unblocks(db, r.id).length;
     console.log(
-      `  ${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` + (opens ? `   (unblocks ${opens})` : ''),
+      `  ${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` + (opens ? `  (unblocks ${opens})` : ''),
     );
   }
   console.log(`\n${rows.length} actionable`);
@@ -263,7 +299,7 @@ function cmdAdd(argv: string[]): void {
     console.log(`skipped — fingerprint already on ${res.id}`);
     return;
   }
-  console.log(`created cards/${res.id}.md  (id: ${res.id})`);
+  console.log(`created cards/${res.id}.md (id: ${res.id})`);
 }
 
 function cmdLink(argv: string[]): void {
@@ -333,7 +369,7 @@ function cmdProject(id: string): void {
   console.log(`branch   ${proj.branch ?? '-'}`);
   console.log(`repos    ${proj.repos.length ? '' : '-'}`);
   for (const r of proj.repos) {
-    const ok = existsSync(r.path) ? '' : '   (path not found)';
+    const ok = existsSync(r.path) ? '' : '  (path not found)';
     console.log(`  ${r.path}${r.base ? ` @ ${r.base}` : ''}${ok}`);
   }
   if (proj.instructions.length) {
@@ -364,7 +400,7 @@ function cmdImport(argv: string[]): void {
     console.log(`# Trello import\n`);
     console.log(`  file                    ${src}`);
     console.log(`  cards in file           ${r.cardsTotal}`);
-    console.log(`  lists in file           ${r.listsTotal}  (${r.listsOpen} open)`);
+    console.log(`  lists in file           ${r.listsTotal} (${r.listsOpen} open)`);
     console.log(`  live cards              ${r.cardsLive}`);
     console.log(`  - meta-list skipped     ${r.skippedMeta}`);
     console.log(`  - separators skipped    ${r.skippedSeparator}`);
@@ -391,7 +427,7 @@ function cmdImport(argv: string[]): void {
     const r = res.report;
     console.log(`# TODO.md import\n`);
     console.log(`  project records         ${r.projects.length}`);
-    console.log(`  cards                   ${r.cards}  (${r.doneCards} already done)`);
+    console.log(`  cards                   ${r.cards} (${r.doneCards} already done)`);
     console.log(`    of which inbox        ${r.inboxCards}  → under node "inbox", awaiting triage`);
     console.log(`    of which jira         ${r.jiraCards}  → under node "jira-triage"`);
     for (const s of r.skippedSections) console.log(`  not imported            ${s}`);
@@ -708,14 +744,14 @@ try {
         break;
       }
       patchCard(root, id, { links: [...existing, ref] });
-      console.log(`${id} → ${ref}${found.name ? `  (${found.name})` : ''}`);
+      console.log(`${id} → ${ref}${found.name ? ` (${found.name})` : ''}`);
       break;
     }
 
     case 'migrate-project-facet': {
       const apply = argv.includes('--apply');
       const r = migrateProjectFacet(root, apply);
-      console.log(`# project facet backfill${apply ? '' : '  (dry run — pass --apply to write)'}\n`);
+      console.log(`# project facet backfill${apply ? '' : ' (dry run — pass --apply to write)'}\n`);
       console.log(`  cards given a project     ${r.cardsGiven.length}`);
       console.log(`  project records linked    ${r.projectsLinked.length}`);
       console.log(`  already had one           ${r.alreadySet}`);

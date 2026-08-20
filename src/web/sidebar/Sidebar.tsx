@@ -1,0 +1,632 @@
+import { useEffect, useState } from 'react';
+import { ApiError, api } from '../api.ts';
+import { PopoverButton } from '../components/Popover.tsx';
+import { RecordPicker } from '../components/RecordPicker.tsx';
+import { VaultSwitcher } from '../VaultSwitcher.tsx';
+import { FilterPanel } from './FilterPanel.tsx';
+import { DIRS, SHAPES, SIZES, VIAS, clearFilters, clearFocus, type Patch } from '../query.ts';
+import type { Meta, QueryResponse, SavedView, Shape } from '../types.ts';
+
+/**
+ * The sidebar *is* the view.
+ *
+ * There is no top bar. Everything a header would have carried has a better home:
+ * the numbers sit in the footer next to the filter that produced them, "dragging
+ * sets priority" sits under the control that decides it, and transient
+ * shape-local actions (Save layout, + node, the bulk bar) float over the content
+ * instead — a button that appears and vanishes mid-rail makes the whole thing
+ * jump.
+ *
+ * Sections are grouped by purpose, and exactly one of them scrolls.
+ */
+export function Sidebar({
+  meta,
+  data,
+  search,
+  wire,
+  patch,
+  onSwitchVault,
+  onAddVault,
+  onOpenCard,
+}: {
+  meta: Meta;
+  data: QueryResponse | null;
+  search: string;
+  /** The query half of `search`, which is what a save records. */
+  wire: string;
+  patch: (p: Patch) => void;
+  onSwitchVault: (path: string) => void;
+  onAddVault: () => void;
+  onOpenCard: (id: string) => void;
+}) {
+  const spec = data?.spec;
+  const saved = Boolean(spec?.name);
+
+  return (
+    <nav className="sidebar">
+      <div className="rail-block">
+        <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
+        <div className="rail-stats">
+          {meta.counts.cards} cards · {meta.counts.nodes} nodes · {meta.counts.projects} projects
+        </div>
+        <SavedViews
+          views={data?.views ?? meta.views}
+          current={spec}
+          search={search}
+          patch={patch}
+          apiSearch={wire}
+        />
+      </div>
+
+      <div className="rail-block">
+        <ShapeSection data={data} patch={patch} />
+        <FaceSection meta={meta} data={data} patch={patch} />
+      </div>
+
+      <div className="rail-block">
+        <FocusSection data={data} saved={saved} patch={patch} onOpenCard={onOpenCard} />
+      </div>
+
+      {/* The only scrolling region. */}
+      <div className="rail-filter">
+        {data ? <FilterPanel counts={data.counts} search={search} saved={saved} patch={patch} /> : null}
+      </div>
+
+      <div className="rail-foot">
+        <ActiveStats data={data} saved={saved} search={search} patch={patch} />
+        <SearchBox search={search} patch={patch} />
+      </div>
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------- saved views
+
+/**
+ * Which starting point, and whether it still is one.
+ *
+ * Once shape, face and filter are all live controls, opening a saved view and
+ * changing one of them leaves you somewhere ambiguous. Naming the divergence is
+ * what keeps a saved view worth saving.
+ */
+function SavedViews({
+  views,
+  current,
+  search,
+  patch,
+  apiSearch,
+}: {
+  views: SavedView[];
+  current: QueryResponse['spec'] | undefined;
+  search: string;
+  patch: (p: Patch) => void;
+  apiSearch: string;
+}) {
+  const params = new URLSearchParams(search.replace(/^\?/, ''));
+  const overridden = [...params.keys()].filter((k) => k !== 'view' && k !== 'card');
+  const modified = Boolean(current?.name) && overridden.length > 0;
+  const [naming, setNaming] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const save = (name: string, title?: string) =>
+    api
+      .saveView(name, apiSearch, title)
+      .then((r) => {
+        setNaming(false);
+        setProblem(null);
+        // Land on the saved view with no overrides: the query is the file now.
+        patch({ ...blankQuery(params), view: r.name });
+      })
+      .catch((e: ApiError) => setProblem(e.message));
+
+  return (
+    <>
+      <div className="rail-row">
+        <PopoverButton
+          className="viewbtn"
+          panelClassName="viewmenu"
+          minWidth={240}
+          label={current?.title ?? current?.name ?? 'Ad-hoc query'}
+          render={(close) => (
+            <>
+              <div className="pop-head">Saved views</div>
+              {views.map((v) => (
+                <button
+                  key={v.name}
+                  className={`pop-pick ${v.name === current?.name ? 'is-current' : ''}`}
+                  onClick={() => {
+                    close();
+                    // Picking a view replaces the query wholesale: the old
+                    // overrides belonged to the old view.
+                    patch({ ...blankQuery(params), view: v.name });
+                  }}
+                >
+                  <span className="pop-pick-name">{v.title}</span>
+                  <span className="pop-count">{v.shape}</span>
+                </button>
+              ))}
+              <button
+                className="pop-action"
+                onClick={() => {
+                  close();
+                  setNaming(true);
+                }}
+              >
+                Save current as…
+              </button>
+              <button
+                className="pop-action"
+                onClick={() => {
+                  close();
+                  patch(blankQuery(params));
+                }}
+              >
+                Start from nothing
+              </button>
+            </>
+          )}
+        />
+        {modified && (
+          <span className="rail-dirty">
+            modified
+            <button
+              className="btn ghost tiny"
+              title="write these changes into the saved view — its layout and card order are kept"
+              onClick={() => void save(current!.name!, current!.title)}
+            >
+              save
+            </button>
+            <button
+              className="btn ghost tiny"
+              title="discard the overrides and go back to the saved view"
+              onClick={() => patch(blankQuery(params, current?.name ?? null))}
+            >
+              revert
+            </button>
+          </span>
+        )}
+      </div>
+
+      {naming && <SaveAsRow onCancel={() => setNaming(false)} onSave={(t) => void save(t, t)} />}
+      {problem && <div className="rail-problem">{problem}</div>}
+    </>
+  );
+}
+
+/**
+ * Naming a query is what turns it into a place — and the only way it can hold
+ * arrangement, since positions and card order live in a file or nowhere (C9).
+ */
+function SaveAsRow({ onCancel, onSave }: { onCancel: () => void; onSave: (title: string) => void }) {
+  const [text, setText] = useState('');
+  return (
+    <div className="rail-row">
+      <input
+        className="rail-input"
+        autoFocus
+        value={text}
+        placeholder="name this view"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && text.trim()) onSave(text.trim());
+        }}
+      />
+      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
+        Save
+      </button>
+    </div>
+  );
+}
+
+/** Clear every query key, optionally keeping a `view=`. */
+function blankQuery(params: URLSearchParams, view: string | null = null): Patch {
+  const patch: Patch = {};
+  for (const key of params.keys()) if (key !== 'card') patch[key] = null;
+  if (view) patch.view = view;
+  return patch;
+}
+
+// ---------------------------------------------------------------- shape
+
+/**
+ * Shape, and the grouping controls that turned out not to belong to it.
+ *
+ * `showEmpty`, `uncategorised` and `sort` read identically for a board's columns,
+ * a table's sections and a canvas's clusters — they are properties of *grouping*,
+ * not of boards, which is why they live here once rather than three times.
+ *
+ * **Nothing here appears or disappears with the shape.** The three controls that
+ * only a canvas can honour — which edges are drawn, whether context is kept, and
+ * what a handle-drag creates — float over the canvas itself, so the rail is the
+ * same rail in every shape and switching does not reflow it.
+ */
+function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: Patch) => void }) {
+  const spec = data?.spec;
+  const shape: Shape = spec?.shape ?? 'board';
+  const query = spec?.query ?? {};
+  const group = query.groupBy ?? [];
+  const facets = data?.counts.map((c) => ({ value: c.facet, label: c.label })) ?? [];
+
+  return (
+    <>
+      <div className="rail-row">
+        <label className="rail-label">Shape</label>
+        <select
+          className="rail-select"
+          value={shape}
+          onChange={(e) => patch({ shape: e.target.value })}
+        >
+          {SHAPES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="rail-row">
+        <label className="rail-label">Group by</label>
+        <select
+          className="rail-select"
+          value={group[0] ?? ''}
+          onChange={(e) => patch({ group: [e.target.value, group[1]].filter(Boolean).join(',') || null })}
+        >
+          <option value="">—</option>
+          {facets.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {group[0] && (
+        <>
+          <div className="rail-row">
+            <label className="rail-label">Then by</label>
+            <select
+              className="rail-select"
+              value={group[1] ?? ''}
+              title="board lanes, table sub-sections. A canvas keeps the value but cannot draw it yet: a node has one position, so it cannot sit in two clusters"
+              onChange={(e) => patch({ group: [group[0], e.target.value].filter(Boolean).join(',') })}
+            >
+              <option value="">—</option>
+              {facets
+                .filter((f) => f.value !== group[0])
+                .map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="rail-row">
+            <label className="rail-label">No value</label>
+            <select
+              className="rail-select"
+              value={query.uncategorised ?? 'end'}
+              onChange={(e) => patch({ uncategorised: e.target.value })}
+            >
+              <option value="end">last</option>
+              <option value="start">first</option>
+              <option value="hide">hide</option>
+            </select>
+          </div>
+
+          <label className="rail-check">
+            <input
+              type="checkbox"
+              checked={query.showEmpty === true}
+              onChange={(e) => patch({ showEmpty: e.target.checked ? '1' : null })}
+            />
+            show empty groups
+          </label>
+
+
+        </>
+      )}
+
+      <SortRow query={query} facets={facets} shape={shape} patch={patch} />
+    </>
+  );
+}
+
+function SortRow({
+  query,
+  facets,
+  shape,
+  patch,
+}: {
+  query: QueryResponse['spec']['query'];
+  facets: { value: string; label: string }[];
+  shape: Shape;
+  patch: (p: Patch) => void;
+}) {
+  const [key = '', dir = 'asc'] = (query.sort?.[0] ?? '').split(':');
+  const note =
+    shape === 'canvas'
+      ? 'a canvas is arranged by dagre; this seeds the order within each rank'
+      : key && key !== 'updated' && key !== 'created' && key !== 'title'
+        ? 'ranked by the order declared in facets.yaml'
+        : '';
+  return (
+    <div className="rail-row" title={note}>
+      <label className="rail-label">Sort</label>
+      <select
+        className="rail-select"
+        value={key}
+        onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
+      >
+        <option value="">—</option>
+        <option value="updated">updated</option>
+        <option value="created">created</option>
+        <option value="title">title</option>
+        {facets.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      {key && (
+        <button
+          className="btn ghost tiny"
+          onClick={() => patch({ sort: `${key}:${dir === 'asc' ? 'desc' : 'asc'}` })}
+        >
+          {dir === 'asc' ? '↑' : '↓'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- face
+
+/**
+ * How a record renders. One row: the chip list is a popover so a long selection
+ * cannot push the filter panel off screen.
+ *
+ * `chips` is the same list a table draws as its columns — "which facets are
+ * visible on a record" is one question, so switching shape never asks it twice.
+ */
+function FaceSection({
+  meta,
+  data,
+  patch,
+}: {
+  meta: Meta;
+  data: QueryResponse | null;
+  patch: (p: Patch) => void;
+}) {
+  const face = data?.spec.face ?? {};
+  const chips = face.chips ?? [];
+  const available = Object.entries(meta.facets).map(([name, def]) => ({ name, label: def.label }));
+  const table = data?.spec.shape === 'table';
+
+  return (
+    <div className="rail-row">
+      <label className="rail-label">Face</label>
+      <select
+        className="rail-select narrow"
+        value={face.size ?? 'card'}
+        title={table ? 'row density' : 'how much of a record the face shows'}
+        onChange={(e) => patch({ size: e.target.value })}
+      >
+        {SIZES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+      <PopoverButton
+        className="chipsbtn"
+        minWidth={200}
+        label={table ? columnsLabel(chips) : chipsLabel(chips)}
+        render={() => (
+          <>
+            <div className="pop-head">{table ? 'Columns' : 'Chips on the face'}</div>
+            {available.map((f) => (
+              <label key={f.name} className="pop-check">
+                <input
+                  type="checkbox"
+                  checked={chips.includes(f.name)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...chips, f.name]
+                      : chips.filter((c) => c !== f.name);
+                    patch({ chips: next.join(',') || '' });
+                  }}
+                />
+                {f.label}
+              </label>
+            ))}
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function chipsLabel(chips: string[]): string {
+  if (!chips.length) return 'no chips';
+  return chips.length === 1 ? chips[0]! : `${chips[0]} +${chips.length - 1}`;
+}
+
+function columnsLabel(chips: string[]): string {
+  return chips.length ? `${chips.length} columns` : 'title only';
+}
+
+// ---------------------------------------------------------------- focus
+
+/**
+ * Focus is a traversal, not a facet — pick a record and walk edges from it. The
+ * pseudo-facets (`kind`, `type`, `blocked`, `triage`, `staleness`) are the
+ * facet-like things that aren't facets, and they live in the filter panel,
+ * indistinguishable from the real ones.
+ */
+function FocusSection({
+  data,
+  saved,
+  patch,
+  onOpenCard,
+}: {
+  data: QueryResponse | null;
+  saved: boolean;
+  patch: (p: Patch) => void;
+  onOpenCard: (id: string) => void;
+}) {
+  const focus = data?.spec.query.focus;
+  const title = focus ? (data?.cards[focus.id]?.title ?? focus.id) : null;
+
+  return (
+    <>
+      <div className="rail-row">
+        <label className="rail-label">Focus</label>
+        {focus ? (
+          <>
+            <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
+              {title}
+            </button>
+            <button
+              className="btn ghost tiny"
+              title="clear the focus"
+              onClick={() => patch(clearFocus(saved))}
+            >
+              ✕
+            </button>
+          </>
+        ) : (
+          <PopoverButton
+            className="focusbtn"
+            minWidth={280}
+            label="everything"
+            render={(close) => (
+              <RecordPicker
+                placeholder="focus on…"
+                onCancel={close}
+                onPick={(id) => {
+                  close();
+                  patch({ focus: id });
+                }}
+              />
+            )}
+          />
+        )}
+      </div>
+
+      {focus && (
+        <div className="rail-row">
+          <select
+            className="rail-select"
+            value={focus.via}
+            title="which edges to walk"
+            onChange={(e) => patch({ via: e.target.value })}
+          >
+            {VIAS.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <select
+            className="rail-select narrow"
+            value={focus.dir}
+            onChange={(e) => patch({ dir: e.target.value })}
+          >
+            {DIRS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <select
+            className="rail-select narrow"
+            value={focus.depth ?? ''}
+            title="how many hops"
+            onChange={(e) => patch({ depth: e.target.value || null })}
+          >
+            <option value="">all</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- footer
+
+/**
+ * What is on screen, and why it is not more.
+ *
+ * The worst failure mode of global filtering is "the card isn't there and I don't
+ * know why", so the count of what is hidden and a one-click clear are always
+ * visible — right under the filter that caused it.
+ */
+function ActiveStats({
+  data,
+  saved,
+  search,
+  patch,
+}: {
+  data: QueryResponse | null;
+  saved: boolean;
+  search: string;
+  patch: (p: Patch) => void;
+}) {
+  if (!data) return <div className="rail-active">…</div>;
+  const hidden = Math.max(0, data.universe - data.total);
+  const active = Object.values(data.spec.query.filter ?? {}).filter((v) => v.length).length;
+  const extra = data.spec.query.q ? active + 1 : active;
+
+  return (
+    <div className="rail-active">
+      <b>{data.total}</b> shown
+      {hidden > 0 && <> · {hidden} filtered out</>}
+      {data.context.length > 0 && (
+        <> · <span title="unmatched ancestors kept so the graph stays connected">{data.context.length} for context</span></>
+      )}
+      {data.placements > data.total && (
+        <> · <span title="a card whose grouped facet holds several values appears in each matching group">{data.placements - data.total} extra placements</span></>
+      )}
+      {extra > 0 && (
+        <button className="btn ghost tiny" onClick={() => patch(clearFilters(search, saved))}>
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Live, debounced, and just another predicate in the same query. */
+function SearchBox({ search, patch }: { search: string; patch: (p: Patch) => void }) {
+  const current = new URLSearchParams(search.replace(/^\?/, '')).get('q') ?? '';
+  const [text, setText] = useState(current);
+
+  // Adopt an external change (a saved view, the back button) without fighting
+  // whatever is being typed right now.
+  useEffect(() => setText(current), [current]);
+
+  useEffect(() => {
+    if (text === current) return;
+    const t = setTimeout(() => patch({ q: text.trim() || null }), 200);
+    return () => clearTimeout(t);
+  }, [text, current, patch]);
+
+  return (
+    <div className="rail-search">
+      <input
+        type="search"
+        value={text}
+        placeholder="search title and body"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setText('');
+        }}
+      />
+    </div>
+  );
+}

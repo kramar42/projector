@@ -155,8 +155,7 @@ export function initVault(
   }
   mkdirSync(p.cards, { recursive: true });
   mkdirSync(p.assets, { recursive: true });
-  mkdirSync(p.boards, { recursive: true });
-  mkdirSync(p.canvases, { recursive: true });
+  mkdirSync(p.views, { recursive: true });
   if (!existsSync(p.facets)) writeFileSync(p.facets, seedFacets, 'utf8');
   const readme = join(p.cards, 'README.md');
   if (!existsSync(readme)) writeFileSync(readme, seedReadme, 'utf8');

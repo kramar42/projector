@@ -20,11 +20,14 @@ import { join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
+import { cached, invalidate } from '../index/cache.ts';
 import { projectRecords, resolveProject, parentsOf } from '../index/project.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, groupBy, listRecords, unblocks, type Row } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
-import { loadViews, type BoardView, type CanvasView } from './views.ts';
+import { loadViews, viewFileFor, findView } from './views.ts';
+import { memberEdges, projectRollups, runQuery } from '../index/query.ts';
+import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
 import {
   Conflict,
   Invalid,
@@ -38,7 +41,9 @@ import {
   patchCard,
   saveAsset,
   putFrontmatter,
-  saveCanvas,
+  saveArrangement,
+  saveView,
+  deleteView,
   setEdges,
 } from './mutate.ts';
 import { watch } from 'chokidar';
@@ -82,17 +87,25 @@ function vaultOf(c: Context): string {
   throw new NoVault(known.length ? 'pick a vault' : 'no vault has been opened yet');
 }
 
-/**
- * Everything is read from the files on each request. At this scale a full
- * reindex is milliseconds, and it means the app can never disagree with what an
- * agent just wrote — no cache to invalidate, no staleness to reason about.
- */
-function load(root: string) {
+function build(root: string) {
   const p = paths(root);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
-  const views = loadViews(p.boards, p.canvases);
+  const views = loadViews(root);
   return { facets, db, records, views, p };
+}
+
+/**
+ * Everything is read from the files, and re-read the moment any of them changes.
+ * The memo is keyed on an exact stamp of those files rather than a TTL, so the
+ * app still cannot disagree with what an agent just wrote — see `index/cache.ts`
+ * for why P5 needs it at all. Disposing the superseded handle also closes a
+ * `DatabaseSync` that P0–P4 leaked once per request.
+ *
+ * Callers must not `await` between this and their last read of what it returns.
+ */
+function load(root: string) {
+  return cached(root, build, ({ db }) => db.close());
 }
 
 const app = new Hono();
@@ -202,116 +215,111 @@ app.get('/api/meta', (c) => {
     facets: withDynamicValues(facets, records),
     counts: counts(db),
     enrichment: enrichmentStats(root),
-    views: views.map((v) => ({ kind: v.kind, name: v.name, title: v.title })),
+    views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
   });
 });
 
-app.get('/api/board/:name', (c) => {
+/**
+ * A request's view: the saved one it names, with every other parameter overriding.
+ *
+ * Merged at the *parameter* level rather than the object level, so an override is
+ * a plain string swap and `f.status=` can mean "no status filter" over a saved
+ * view that had one. Shared with the save route, so *save current as…* stores
+ * exactly what is on screen rather than a second interpretation of it.
+ */
+function resolveSpec(root: string, url: string): ViewSpec | { error: string } {
+  const params = Object.fromEntries(new URL(url).searchParams.entries());
+  const saved = params.view ? findView(root, params.view) : undefined;
+  if (params.view && !saved) return { error: `no view "${params.view}"` };
+
+  const spec: ViewSpec = parseSpec(saved ? { ...specToParams(saved), ...params } : params);
+  spec.name = saved?.name;
+  spec.title = saved?.title;
+  // Arrangement is never a query parameter: it comes from the file or nowhere.
+  spec.nodes = saved?.nodes;
+  spec.order = saved?.order;
+  return spec;
+}
+
+/**
+ * The one read endpoint (C9).
+ *
+ * A saved view named in `view=` supplies the defaults; every other parameter
+ * overrides it, which is exactly what the sidebar does as you touch a control.
+ * So a saved view and an ad-hoc query are the same request, and there is one
+ * engine behind both — P1's two endpoints had drifted into two, which is how
+ * four of the eight board keys came to be declared and never read.
+ */
+app.get('/api/query', (c) => {
   const root = vaultOf(c);
   const { facets, db, records, views } = load(root);
-  const view = views.find((v) => v.kind === 'board' && v.name === c.req.param('name')) as
-    | BoardView
-    | undefined;
-  if (!view) return c.json({ error: 'no such board' }, 404);
 
-  // `blockedBy: none` is computed, not stored — the deterministic half of C8.
-  const wantsUnblocked = view.filter?.blockedBy === 'none';
-  const facetFilter = Object.fromEntries(
-    Object.entries(view.filter ?? {}).filter(([k, v]) => k !== 'blockedBy' && Array.isArray(v)),
-  ) as Record<string, string[]>;
+  const spec = resolveSpec(root, c.req.url);
+  if ('error' in spec) return c.json({ error: spec.error }, 404);
 
-  let rows = listRecords(db, { filter: facetFilter, includeNodes: false });
-  if (wantsUnblocked) rows = rows.filter((r) => blockersOf(db, r.id).every((b) => b.done));
+  const res = runQuery(db, records, facets, spec.query);
 
-  const groups = groupBy(db, rows, view.groupBy, facets);
-  const shown = view.uncategorised === 'hide' ? groups.filter((g) => g.value !== '(none)') : groups;
-
-  const dto = (row: Row) => {
-    const rec = records.get(row.id)!;
-    return toDTO(rec, records, {
-      childCount: countChildren(records, row.id),
-      blockedBy: blockersOf(db, row.id),
-      unblocks: unblocks(db, row.id).map((u) => u.id),
+  const shown = [...res.ids, ...res.context];
+  const cards: Record<string, ReturnType<typeof toDTO>> = {};
+  for (const id of shown) {
+    const rec = records.get(id);
+    if (!rec) continue;
+    cards[id] = toDTO(rec, records, {
+      childCount: countChildren(records, id),
+      blockedBy: blockersOf(db, id),
+      unblocks: unblocks(db, id).map((u) => u.id),
     });
-  };
+  }
 
   return c.json({
-    view,
-    groups: shown.map((g) => ({ value: g.value, cards: g.rows.map(dto) })),
-    total: rows.length,
-    placements: shown.reduce((n, g) => n + g.rows.length, 0),
+    spec,
+    // Keyed by id, because a card in three columns is one card. P1 embedded the
+    // whole card per group and shipped it three times.
+    cards,
+    ids: res.ids,
+    context: res.context,
+    groups: res.groups,
+    axis: res.axis,
+    lanes: res.lanes,
+    counts: res.counts,
+    total: res.total,
+    universe: res.universe,
+    placements: res.placements,
+    edges: edgesAmong(records, new Set(shown), spec.edges),
+    // Only a table asks for these, but they are cheap and deriving them here
+    // keeps every number on screen deterministic (C8).
+    rollups: projectRollups(records, new Date().toISOString().slice(0, 10)),
+    views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
   });
 });
 
-app.get('/api/canvas/:name', (c) => {
-  const root = vaultOf(c);
-  const { db, records, views } = load(root);
-  const view = views.find((v) => v.kind === 'canvas' && v.name === c.req.param('name')) as
-    | CanvasView
-    | undefined;
-  if (!view) return c.json({ error: 'no such canvas' }, 404);
-
-  const include = view.include ?? {};
-  let ids = new Set<string>();
-
-  if (include.under) {
-    // Everything at any depth beneath a record, plus the record itself.
-    for (const rec of records.values()) {
-      if (rec.id === include.under || isBeneath(records, rec.id, include.under)) ids.add(rec.id);
-    }
-  } else if (include.filter) {
-    for (const row of listRecords(db, { filter: include.filter, includeNodes: true })) ids.add(row.id);
-  } else {
-    for (const id of records.keys()) ids.add(id);
-  }
-  for (const id of include.explicit ?? []) if (records.has(id)) ids.add(id);
-
-  // Pull in every ancestor of an included record. A filtered canvas selects
-  // cards, but their parents give the tree its shape — without them each edge
-  // points outside the set and the graph renders as scattered orphans.
-  if (include.ancestors !== false) {
-    for (const id of [...ids]) {
-      let frontier = [id];
-      const seen = new Set<string>([id]);
-      while (frontier.length) {
-        const next: string[] = [];
-        for (const cur of frontier) {
-          for (const pid of parentsOf(records.get(cur)!)) {
-            if (!records.has(pid) || seen.has(pid)) continue;
-            seen.add(pid);
-            ids.add(pid);
-            next.push(pid);
-          }
-        }
-        frontier = next;
-      }
-    }
-  }
-
-  const show = new Set(view.edges?.show ?? ['parent', 'blocks']);
-  const nodes = [...ids]
-    .map((id) => records.get(id))
-    .filter((r): r is NonNullable<typeof r> => r !== undefined)
-    .map((rec) =>
-      toDTO(rec, records, {
-        childCount: countChildren(records, rec.id),
-        blockedBy: blockersOf(db, rec.id),
-        unblocks: unblocks(db, rec.id).map((u) => u.id),
-      }),
-    );
-
-  const edges: { src: string; dst: string; type: string }[] = [];
+/**
+ * Edges of the requested types with both ends on screen. `member-of` is derived
+ * from the `project` facet here and nowhere else, so nothing has to be stored for
+ * the project hierarchy to be drawable (C9).
+ */
+function edgesAmong(
+  records: Map<string, Rec>,
+  ids: Set<string>,
+  show: string[],
+): { src: string; dst: string; type: string }[] {
+  const want = new Set(show);
+  const out: { src: string; dst: string; type: string }[] = [];
   for (const id of ids) {
     const rec = records.get(id);
     if (!rec) continue;
     for (const e of rec.edges) {
-      if (!show.has(e.type) || !ids.has(e.to)) continue;
-      edges.push({ src: id, dst: e.to, type: e.type });
+      if (!want.has(e.type) || !ids.has(e.to)) continue;
+      out.push({ src: id, dst: e.to, type: e.type });
     }
   }
-
-  return c.json({ view, nodes, edges, stored: view.nodes ?? {} });
-});
+  if (want.has('member-of')) {
+    for (const e of memberEdges(records)) {
+      if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: 'member-of' });
+    }
+  }
+  return out;
+}
 
 app.get('/api/card/:id', (c) => {
   const root = vaultOf(c);
@@ -475,13 +483,54 @@ app.post('/api/bulk', async (c) => {
   }
 });
 
-app.patch('/api/canvas/:name', async (c) => {
+/**
+ * Arrangement for a saved view: node positions, card order within a column.
+ *
+ * Both merge rather than replace — the client sends only what it currently
+ * renders, and from P5 that is a filtered subset.
+ */
+app.patch('/api/view/:name/arrangement', async (c) => {
   const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as {
-      nodes: Record<string, { x?: number; y?: number; size?: string }>;
+      nodes?: Record<string, { x?: number; y?: number }>;
+      order?: Record<string, string[]>;
     };
-    saveCanvas(root, c.req.param('name'), body.nodes ?? {});
+    saveArrangement(root, c.req.param('name'), { nodes: body.nodes, order: body.order });
+    bump(root);
+    return c.json({ ok: true });
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+/**
+ * *Save current as…*, and updating a saved view in place — the same call.
+ *
+ * The query travels in the URL, exactly as it does for a read, so what gets
+ * written is what was on screen. Arrangement already in the file is preserved:
+ * saving a changed query over a name keeps its positions rather than discarding
+ * them.
+ */
+app.put('/api/view/:name', async (c) => {
+  const root = vaultOf(c);
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { title?: string };
+    const spec = resolveSpec(root, c.req.url);
+    if ('error' in spec) return c.json({ error: spec.error }, 404);
+    const name = c.req.param('name');
+    const res = saveView(root, name, specToFile(spec, body.title?.trim() || spec.title || name));
+    bump(root);
+    return c.json(res, 201);
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.delete('/api/view/:name', (c) => {
+  const root = vaultOf(c);
+  try {
+    deleteView(root, c.req.param('name'));
     bump(root);
     return c.json({ ok: true });
   } catch (err) {
@@ -602,6 +651,9 @@ type Send = (event: 'change' | 'enriched', rev: number, vault: string) => void;
 const listeners = new Set<Send>();
 
 function bump(vault: string) {
+  // Our own writes do not wait to be noticed: a rename inside the same
+  // millisecond as the previous one would leave the stamp unchanged.
+  invalidate(vault);
   revision++;
   for (const fn of [...listeners]) fn('change', revision, vault);
 }
@@ -666,7 +718,7 @@ serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
   const known = listVaults();
   if (!known.length) console.log('vaults   none yet — the app will ask for a folder');
   for (const v of known) {
-    console.log(`vault    ${v.name}  ${v.path}${v.exists ? '' : '  (missing)'}`);
+    console.log(`vault    ${v.name}  ${v.path}${v.exists ? '' : ' (missing)'}`);
   }
   if (!existsSync(dist)) console.log(`ui       not built — run \`pnpm dev:web\` for the dev server`);
 });

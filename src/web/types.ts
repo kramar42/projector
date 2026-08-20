@@ -30,28 +30,102 @@ export interface Meta {
   facets: Record<string, FacetDef>;
   counts: Record<string, number>;
   enrichment: Record<string, number>;
-  views: { kind: 'board' | 'canvas'; name: string; title: string }[];
+  views: SavedView[];
 }
 
-export interface BoardResponse {
-  view: {
-    name: string;
-    title: string;
-    groupBy: string;
-    cardFacets?: string[];
-    filter?: Record<string, unknown>;
-    uncategorised?: string;
-  };
-  groups: { value: string; cards: CardDTO[] }[];
+export interface SavedView {
+  name: string;
+  title: string;
+  shape: Shape;
+}
+
+export type Shape = 'board' | 'canvas' | 'table';
+
+export interface Focus {
+  id: string;
+  via: 'parent' | 'member-of' | 'blocks';
+  dir: 'down' | 'up' | 'both';
+  depth?: number;
+}
+
+/** The query half of a spec: what is in scope, and how it is grouped and ordered. */
+export interface Query {
+  filter?: Record<string, string[]>;
+  q?: string;
+  focus?: Focus;
+  /** Primary axis, then the secondary one — board lanes, table sub-sections. */
+  groupBy?: string[];
+  sort?: string[];
+  connect?: 'ancestors' | 'none';
+  showEmpty?: boolean;
+  uncategorised?: 'end' | 'start' | 'hide';
+}
+
+/**
+ * One view, whether it came from a saved file or from the URL. `nodes` and
+ * `order` are hand-curated arrangement and only ever arrive from a saved view —
+ * an ad-hoc query has no file to hold them (C9).
+ */
+export interface ViewSpec {
+  name?: string;
+  title?: string;
+  shape: Shape;
+  query: Query;
+  edges: string[];
+  /** Chips on a card face; the same list is a table's columns. */
+  face: { size?: Size; chips?: string[] };
+  nodes?: Record<string, { x?: number; y?: number }>;
+  order?: Record<string, string[]>;
+}
+
+export interface ValueCount {
+  value: string;
+  count: number;
+  selected: boolean;
+}
+
+export interface FacetCount {
+  facet: string;
+  label: string;
+  /** Computed rather than stored. The panel does not distinguish them. */
+  pseudo: boolean;
+  values: ValueCount[];
+}
+
+/** `lane` is set only when a second grouping axis is in play. */
+export interface Group {
+  value: string;
+  lane?: string;
+  ids: string[];
+}
+
+/** Derived counts for a project record — what the projects table exists for. */
+export interface Rollup {
+  direct: number;
   total: number;
-  placements: number;
+  blocked: number;
+  untriaged: number;
+  touched: string | null;
 }
 
-export interface CanvasResponse {
-  view: { name: string; title: string; layout: string; defaultSize?: string; edges?: { show?: string[] } };
-  nodes: CardDTO[];
+export interface QueryResponse {
+  spec: ViewSpec;
+  /** Keyed by id: a card in three columns is one card. */
+  cards: Record<string, CardDTO>;
+  ids: string[];
+  /** Ancestors kept so a graph stays connected. Never matches. */
+  context: string[];
+  groups: Group[] | null;
+  axis: string[];
+  lanes: string[];
+  counts: FacetCount[];
+  total: number;
+  /** What focus and search left, before the facet filter. */
+  universe: number;
+  placements: number;
   edges: { src: string; dst: string; type: string }[];
-  stored: Record<string, { x?: number; y?: number; w?: number; h?: number; size?: string }>;
+  rollups?: Record<string, Rollup>;
+  views: SavedView[];
 }
 
 export interface CardDetail {
@@ -71,8 +145,11 @@ export interface CardDetail {
   } | null;
 }
 
-/** Display size, shared by both views. See §5.3 of the plan. */
-export type Size = 'chip' | 'card' | 'expanded';
+/**
+ * Display size, shared by every shape. `expanded` is gone: `?card=` and the panel
+ * are the expanded surface, and a per-node size was reachable by nothing.
+ */
+export type Size = 'chip' | 'card';
 
 // ---------------------------------------------------------------- enrichment
 

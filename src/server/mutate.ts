@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
 import { frontmatterSchema, listCardFiles, loadCard, renderCard, writeCardFile } from '../schema/card.ts';
 import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
+import { viewFileFor } from './views.ts';
 import { ancestorChains } from '../index/project.ts';
 import { EDGE_TYPES, type Edge, type EdgeType } from '../schema/types.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
@@ -399,29 +401,122 @@ export function putFrontmatter(
 // ---------------------------------------------------------------- canvas
 
 /** Persist canvas node positions and sizes. Cards are untouched — views own arrangement. */
-export function saveCanvas(
+/**
+ * Arrangement: node positions, and card order within a column.
+ *
+ * Both are hand-curated, so both live in a named view and nowhere else (C9) —
+ * which is what makes naming a view the act that buys manual arrangement. Cards
+ * own identity and content; views own arrangement.
+ */
+export function saveArrangement(
   root: string,
   name: string,
-  nodes: Record<string, { x?: number; y?: number; size?: string }>,
+  arrangement: { nodes?: Record<string, { x?: number; y?: number }>; order?: Record<string, string[]> },
 ): void {
-  const file = join(paths(root).canvases, `${name}.yaml`);
-  if (!existsSync(file)) throw new Invalid(`no canvas "${name}"`);
-  const rounded = Object.fromEntries(
-    Object.entries(nodes).map(([id, n]) => [
-      id,
-      {
+  const p = paths(root);
+  const file = viewFileFor(root, name);
+  if (!existsSync(file)) throw new Invalid(`no view "${name}"`);
+  const text0 = readFileSync(file, 'utf8');
+  const before = (parse(text0) ?? {}) as { nodes?: Record<string, unknown>; order?: Record<string, unknown> };
+
+  const patch: Record<string, unknown> = {};
+  let live: Set<string> | null = null;
+  /** Ids whose card is gone. The set is built at most once, and only if needed. */
+  const dead = (ids: string[]): Set<string> => {
+    const out = new Set<string>();
+    for (const id of ids) {
+      if (existsSync(join(p.cards, `${id}.md`))) continue;
+      if (!live) {
+        live = new Set<string>();
+        for (const f of listCardFiles(p.cards)) {
+          const res = loadCard(f);
+          if (res.ok) live.add(res.rec.id);
+        }
+      }
+      if (!live.has(id)) out.add(id);
+    }
+    return out;
+  };
+
+  if (arrangement.nodes) {
+    // Merge, never replace. The client sends the nodes it currently renders, and
+    // that is a filtered subset — replacing would silently discard the position
+    // of everything the filter happened to hide.
+    const merged: Record<string, { x?: number; y?: number }> = {
+      ...((before.nodes ?? {}) as Record<string, { x?: number; y?: number }>),
+    };
+    for (const [id, n] of Object.entries(arrangement.nodes)) {
+      merged[id] = {
         ...(n.x !== undefined ? { x: Math.round(n.x) } : {}),
         ...(n.y !== undefined ? { y: Math.round(n.y) } : {}),
-        ...(n.size ? { size: n.size } : {}),
-      },
-    ]),
-  );
-  // A view file is plain YAML, so it needs the YAML patcher, not the frontmatter
-  // one. Storing positions only means anything under a manual layout.
-  const text = patchYamlFile(readFileSync(file, 'utf8'), { nodes: rounded, layout: 'manual' });
+      };
+    }
+    for (const id of dead(Object.keys(merged))) delete merged[id];
+    patch.nodes = merged;
+    // Storing positions only means anything under a manual layout.
+    patch.layout = 'manual';
+  }
+
+  if (arrangement.order) {
+    const merged: Record<string, string[]> = {
+      ...((before.order ?? {}) as Record<string, string[]>),
+    };
+    // Per column, for the same reason: you reorder the column you are looking at.
+    for (const [column, ids] of Object.entries(arrangement.order)) {
+      const gone = dead(ids);
+      const kept = ids.filter((id) => !gone.has(id));
+      if (kept.length) merged[column] = kept;
+      else delete merged[column];
+    }
+    patch.order = merged;
+  }
+
+  if (!Object.keys(patch).length) return;
+  // A view file is plain YAML, so it needs the YAML patcher, not the frontmatter one.
+  const text = patchYamlFile(text0, patch);
   const tmp = `${file}.tmp-${process.pid}`;
   writeFileSync(tmp, text, 'utf8');
   renameSync(tmp, file);
+}
+
+/**
+ * Write a saved view — *save current as…*, and updating one in place.
+ *
+ * Only the query half is written: arrangement belongs to whatever the view
+ * already holds, so saving a new query over an existing name keeps its positions
+ * rather than throwing them away.
+ */
+export function saveView(root: string, name: string, body: Record<string, unknown>): { name: string } {
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug) throw new Invalid('a view needs a name');
+  const p = paths(root);
+  mkdirSync(p.views, { recursive: true });
+  const file = viewFileFor(root, slug);
+
+  let merged: Record<string, unknown> = body;
+  if (existsSync(file)) {
+    const before = (parse(readFileSync(file, 'utf8')) ?? {}) as Record<string, unknown>;
+    merged = { ...body };
+    if (before.nodes) merged.nodes = before.nodes;
+    if (before.order) merged.order = before.order;
+    if (before.layout) merged.layout = before.layout;
+  }
+
+  // Through the YAML patcher rather than a bare stringify, so a view the app
+  // wrote is formatted like one written by hand — short sequences inline. A file
+  // you cannot tell from a hand-edited one is the point of keeping them as files.
+  const text = patchYamlFile('', merged);
+  const tmp = `${file}.tmp-${process.pid}`;
+  writeFileSync(tmp, text, 'utf8');
+  renameSync(tmp, file);
+  return { name: slug };
+}
+
+/** Delete a saved view. The cards it selected are untouched. */
+export function deleteView(root: string, name: string): void {
+  const file = viewFileFor(root, name);
+  if (!existsSync(file)) throw new Invalid(`no view "${name}"`);
+  rmSync(file);
 }
 
 // ---------------------------------------------------------------- assets

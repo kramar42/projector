@@ -1,0 +1,138 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { parse } from 'yaml';
+import { saveArrangement, saveView, deleteView } from '../src/server/mutate.ts';
+import { loadViews } from '../src/server/views.ts';
+import { applyOrder } from '../src/web/query.ts';
+
+/**
+ * Arrangement — positions and card order — lives in a named view and nowhere
+ * else (C9). These lock the two rules that make that safe to use: a save merges
+ * rather than replaces, and a card that has gone is the only thing dropped.
+ */
+function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'cockpit-arr-'));
+  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'views'), { recursive: true });
+  for (const id of cards) {
+    writeFileSync(join(root, 'cards', `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
+  }
+  for (const [name, body] of Object.entries(views)) {
+    writeFileSync(join(root, 'views', `${name}.yaml`), body, 'utf8');
+  }
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+const read = (root: string, name: string) =>
+  parse(readFileSync(join(root, 'views', `${name}.yaml`), 'utf8')) as Record<string, unknown>;
+
+test('saving positions merges, so a filtered canvas cannot discard the rest', () => {
+  const { root, cleanup } = vault({
+    graph: 'shape: canvas\ntitle: Graph\nnodes:\n  a: {x: 10, y: 10}\n  b: {x: 20, y: 20}\n  c: {x: 30, y: 30}\n',
+  });
+  try {
+    // What a filtered canvas sends: only the node it is currently rendering.
+    saveArrangement(root, 'graph', { nodes: { b: { x: 99, y: 98 } } });
+    assert.deepEqual(read(root, 'graph').nodes, {
+      a: { x: 10, y: 10 },
+      b: { x: 99, y: 98 },
+      c: { x: 30, y: 30 },
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('a position is dropped only when its card is gone', () => {
+  const { root, cleanup } = vault(
+    { graph: 'shape: canvas\nnodes:\n  a: {x: 1, y: 1}\n  ghost: {x: 2, y: 2}\n' },
+    ['a'],
+  );
+  try {
+    saveArrangement(root, 'graph', { nodes: { a: { x: 5, y: 5 } } });
+    assert.deepEqual(read(root, 'graph').nodes, { a: { x: 5, y: 5 } });
+  } finally {
+    cleanup();
+  }
+});
+
+test('card order merges per column and rounds positions', () => {
+  const { root, cleanup } = vault({ board: 'shape: board\norder:\n  now: [a, b]\n  later: [c]\n' });
+  try {
+    saveArrangement(root, 'board', { order: { now: ['b', 'a'] } });
+    assert.deepEqual(read(root, 'board').order, { now: ['b', 'a'], later: ['c'] });
+
+    saveArrangement(root, 'board', { nodes: { a: { x: 1.6, y: -2.4 } } });
+    assert.deepEqual(read(root, 'board').nodes, { a: { x: 2, y: -2 } });
+    // Order survived a positions-only save, and vice versa.
+    assert.deepEqual(read(root, 'board').order, { now: ['b', 'a'], later: ['c'] });
+  } finally {
+    cleanup();
+  }
+});
+
+test('an emptied column drops out rather than being stored empty', () => {
+  const { root, cleanup } = vault({ board: 'shape: board\norder:\n  now: [a]\n  later: [b]\n' }, ['b']);
+  try {
+    saveArrangement(root, 'board', { order: { now: ['a'] } });
+    assert.deepEqual(read(root, 'board').order, { later: ['b'] });
+  } finally {
+    cleanup();
+  }
+});
+
+test('saving over a view keeps the arrangement it already had', () => {
+  const { root, cleanup } = vault({
+    graph: 'shape: canvas\ntitle: Graph\nnodes:\n  a: {x: 7, y: 7}\norder:\n  now: [a]\n',
+  });
+  try {
+    // *Save current as…* over an existing name: the query is replaced wholesale.
+    saveView(root, 'graph', { shape: 'board', title: 'Now a board', groupBy: ['priority'] });
+    const after = read(root, 'graph');
+    assert.equal(after.shape, 'board');
+    assert.deepEqual(after.groupBy, ['priority']);
+    // …and the layout is not collateral damage.
+    assert.deepEqual(after.nodes, { a: { x: 7, y: 7 } });
+    assert.deepEqual(after.order, { now: ['a'] });
+  } finally {
+    cleanup();
+  }
+});
+
+test('a saved view is named by a slug and reads back through the loader', () => {
+  const { root, cleanup } = vault();
+  try {
+    const { name } = saveView(root, 'Now by Project!', { shape: 'table', title: 'Now by Project' });
+    assert.equal(name, 'now-by-project');
+    const loaded = loadViews(root).find((v) => v.name === 'now-by-project')!;
+    assert.equal(loaded.shape, 'table');
+    assert.equal(loaded.title, 'Now by Project');
+
+    deleteView(root, 'now-by-project');
+    assert.equal(loadViews(root).length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test('writing arrangement to a view that does not exist is refused', () => {
+  const { root, cleanup } = vault();
+  try {
+    assert.throws(() => saveArrangement(root, 'nope', { order: { now: ['a'] } }), /no view "nope"/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('stored order pins its cards and never loses the others', () => {
+  // The query's own order, with three of them pinned.
+  assert.deepEqual(applyOrder(['a', 'b', 'c', 'd'], ['c', 'a']), ['c', 'a', 'b', 'd']);
+  // An id that is no longer in the column is skipped, not left as a hole.
+  assert.deepEqual(applyOrder(['a', 'b'], ['gone', 'b']), ['b', 'a']);
+  // No order at all leaves the query's sort untouched.
+  assert.deepEqual(applyOrder(['a', 'b'], undefined), ['a', 'b']);
+  assert.deepEqual(applyOrder(['a', 'b'], []), ['a', 'b']);
+});

@@ -7,7 +7,7 @@ import { parseLink } from '../schema/links.ts';
  * Trello board export → cards, nodes and project records.
  *
  * The export is the whole board history, so almost all of it is deliberately
- * dropped. See §7.4 of cockpit-plan.md for the mapping and the arithmetic; the
+ * dropped. The mapping is recorded in the importer itself; the
  * report this returns is what proves the arithmetic held.
  */
 

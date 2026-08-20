@@ -2,49 +2,96 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
-import { useLive } from '../useLive.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
-import type { BoardResponse, CardDTO, Meta } from '../types.ts';
+import type { CardDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE, modeFor, nextValues } from './dragSemantics.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
+import { applyOrder, type Patch } from '../query.ts';
 
+/**
+ * Columns from the primary grouping axis; when a second axis is set, lanes as
+ * rows and the board becomes a matrix — which is what `swimlanes` was going to
+ * be, except it is a position in `groupBy` rather than a key of its own.
+ *
+ * No header: the sidebar states the query and the footer counts it. What lives
+ * here instead is the bulk bar, which floats because it only exists while a
+ * selection does.
+ */
 export function BoardView({
-  name,
-  meta,
+  data,
   onOpen,
+  reload,
+  patch,
 }: {
-  name: string;
-  meta: Meta;
+  data: QueryResponse;
   onOpen: (id: string) => void;
+  reload: () => void;
+  patch: (p: Patch) => void;
 }) {
-  const { data, error, reload } = useLive<BoardResponse>(() => api.board(name), [name]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [problem, setProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  const [addingTo, setAddingTo] = useState<string | null>(null);
 
-  useEffect(() => setSelected(new Set()), [name]);
+  const groupBy = data.spec.query.groupBy?.[0] ?? '';
+  const cards = data.cards;
+  // Only a named view can hold card order — arrangement lives in a file or
+  // nowhere (C9). An ad-hoc query stays in the query's sort order.
+  const viewName = data.spec.name;
 
-  const groupBy = data?.view.groupBy ?? '';
+  useRequestEnrichment([
+    ...new Set(Object.values(cards).flatMap((c) => c.links.map((l) => l.raw))),
+  ]);
 
-  // Ask for every link on screen once. Batched into a single call, and the view
-  // renders regardless of whether anything comes back.
-  useRequestEnrichment(
-    data ? [...new Set(data.groups.flatMap((g) => g.cards.flatMap((c) => c.links.map((l) => l.raw))))] : [],
+  // A card can only be dragged onto an axis that exists. Ungrouped is a single
+  // flat column, which is the "what's next" list and needs no drop targets.
+  const draggableBoard = Boolean(groupBy);
+
+  /**
+   * The ids of one column, in the order it renders: stored order first, then
+   * whatever the query's sort said.
+   *
+   * Order is keyed by the column value alone, so a matrix shares one order per
+   * column across its lanes — which is what you want, since the lane is a
+   * different question about the same card.
+   */
+  const orderedFor = useCallback(
+    (column: string): string[] => {
+      const ids = data.groups
+        ? data.groups.filter((g) => g.value === column).flatMap((g) => g.ids)
+        : data.ids;
+      return applyOrder([...new Set(ids)], data.spec.order?.[column]);
+    },
+    [data],
+  );
+
+  /**
+   * Write the order of one column.
+   *
+   * The stored list is the whole column, so it stays stable as cards come and go:
+   * ids present in it lead, in its order, and anything new falls in behind.
+   */
+  const reorder = useCallback(
+    async (column: string, ids: string[]) => {
+      if (!viewName) return;
+      setProblem(null);
+      try {
+        await api.saveArrangement(viewName, { order: { [column]: ids } });
+        reload();
+      } catch (err) {
+        setProblem((err as ApiError).message);
+      }
+    },
+    [viewName, reload],
   );
 
   const move = useCallback(
     async (cardId: string, from: string, to: string, mode: 'replace' | 'add' | 'remove') => {
-      const card = data?.groups.flatMap((g) => g.cards).find((c) => c.id === cardId);
-      if (!card || !data) return;
-      // Move every selected card when the dragged one is part of the selection.
+      const card = cards[cardId];
+      if (!card || !groupBy) return;
       const ids = selected.has(cardId) ? [...selected] : [cardId];
       setProblem(null);
-
-      // Every facet is written the same way, project included. There is no
-      // special case here any more, which is the point.
       const next = nextValues(card.facets[groupBy] ?? [], from, to, mode);
       try {
         if (ids.length > 1) {
@@ -63,32 +110,51 @@ export function BoardView({
         setProblem((err as ApiError).message);
       }
     },
-    [data, groupBy, selected, reload],
+    [cards, groupBy, selected, reload],
   );
 
-  // One monitor for the whole board: it reads the modifier keys off the drop.
+  // One monitor for the whole board: it reads the modifier keys off the drop, and
+  // the innermost drop target says whether a position was aimed at.
   useEffect(() => {
     return monitorForElements({
       onDragStart: ({ source }) => setDragging(String(source.data.cardId ?? '')),
       onDrop: ({ source, location }) => {
         setDragging(null);
-        const target = location.current.dropTargets[0];
-        if (!target) return;
+        const targets = location.current.dropTargets;
+        const onCard = targets.find((t) => t.data.cardId !== undefined);
+        const onColumn = targets.find((t) => t.data.column !== undefined);
+        if (!onColumn) return;
         const cardId = String(source.data.cardId ?? '');
         const from = String(source.data.column ?? '');
-        const to = String(target.data.column ?? '');
+        const to = String(onColumn.data.column ?? '');
         if (!cardId || !to) return;
-        const mode = modeFor(location.current.input);
-        if (to === from && mode === 'replace') return;
-        void move(cardId, from, to, mode);
+
+        // Dropped onto a card: aim for that slot. Above or below is decided by
+        // which half of the tile the pointer is in — no separate hitbox package
+        // needed for one comparison.
+        let at: number | null = null;
+        if (onCard && onCard.data.cardId !== cardId) {
+          const rect = onCard.element.getBoundingClientRect();
+          const below = location.current.input.clientY > rect.top + rect.height / 2;
+          at = Number(onCard.data.index ?? 0) + (below ? 1 : 0);
+        }
+
+        if (to === from) {
+          // Within a column, a drag means order and nothing else. Without a
+          // saved view there is nowhere to put it, so it is a no-op.
+          if (at === null || !viewName) return;
+          const current = orderedFor(to);
+          const cut = current.indexOf(cardId);
+          const without = current.filter((id) => id !== cardId);
+          const index = cut !== -1 && cut < at ? at - 1 : at;
+          void reorder(to, [...without.slice(0, index), cardId, ...without.slice(index)]);
+          return;
+        }
+        void move(cardId, from, to, modeFor(location.current.input));
       },
     });
-  }, [move]);
+  }, [move, reorder, orderedFor, viewName]);
 
-  if (error) return <div className="pane-error">{error}</div>;
-  if (!data) return <div className="pane-loading">loading…</div>;
-
-  const multi = data.placements - data.total;
   const toggleSelect = (id: string, additive: boolean) =>
     setSelected((prev) => {
       const next = additive ? new Set(prev) : new Set<string>();
@@ -97,33 +163,56 @@ export function BoardView({
       return next;
     });
 
+  const columns = (lane: string | undefined): Group[] =>
+    (data.groups ? data.groups.filter((g) => g.lane === lane) : [{ value: '', ids: data.ids }]).map(
+      (g) => ({ ...g, ids: applyOrder(g.ids, data.spec.order?.[g.value]) }),
+    );
+
+  const lanes = data.lanes.length ? data.lanes : [undefined];
+
   return (
     <div className="board-wrap">
-      <div className="board-head">
-        <h1>{data.view.title}</h1>
-        <span className="board-sub">
-          grouped by <b>{data.view.groupBy}</b> · {data.total} cards
-          {multi > 0 && (
-            <>
-              {' '}·{' '}
-              <span
-                className="multi-note"
-                title="A card whose grouped facet holds several values appears in each matching column. That is the model, not a duplicate."
-              >
-                {multi} in more than one column
-              </span>
-            </>
-          )}
-        </span>
-        <span className="board-hint">drag to move · ⌥ drop to add · ⇧ drag to remove</span>
-      </div>
-
       {problem && <div className="banner is-bad">{problem}</div>}
+
+      <div className="board-scroll">
+        {lanes.map((lane) => (
+          <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>
+            {lane !== undefined && (
+              <div className="lane-head">
+                <span className="lane-name">{lane === NONE ? 'no value' : lane}</span>
+                <span className="lane-count">
+                  {columns(lane).reduce((n, g) => n + g.ids.length, 0)}
+                </span>
+              </div>
+            )}
+            <div className="board">
+              {columns(lane).map((g) => (
+                <Column
+                  key={`${lane ?? ''}/${g.value}`}
+                  group={g}
+                  cards={cards}
+                  chips={data.spec.face.chips}
+                  selected={selected}
+                  dragging={dragging}
+                  groupBy={groupBy}
+                  droppable={draggableBoard}
+                  orderable={Boolean(viewName)}
+                  onSelect={toggleSelect}
+                  onOpen={onOpen}
+                  onProblem={setProblem}
+                  onCreated={reload}
+                />
+              ))}
+              {!columns(lane).length && <div className="board-empty">nothing here</div>}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {selected.size > 0 && (
         <BulkBar
           ids={[...selected]}
-          meta={meta}
+          counts={data.counts}
           onDone={() => {
             setSelected(new Set());
             reload();
@@ -133,71 +222,59 @@ export function BoardView({
         />
       )}
 
-      <div className="board">
-        {data.groups.map((g) => (
-          <Column
-            key={g.value}
-            value={g.value}
-            cards={g.cards}
-            cardFacets={data.view.cardFacets}
-            selected={selected}
-            dragging={dragging}
-            groupBy={groupBy}
-            adding={addingTo === g.value}
-            onAdd={() => setAddingTo(g.value)}
-            onAddCancel={() => setAddingTo(null)}
-            onCreated={() => {
-              setAddingTo(null);
-              reload();
-            }}
-            onSelect={toggleSelect}
-            onOpen={onOpen}
-            onProblem={setProblem}
-          />
-        ))}
-      </div>
+      {!groupBy && (
+        <div className="board-nudge">
+          ungrouped — one flat list. Pick a <b>group by</b> in the sidebar for columns.
+        </div>
+      )}
+      {!viewName && groupBy && (
+        <div className="board-nudge">
+          drag between columns to set <b>{groupBy}</b>. Reordering <em>within</em> a column needs a
+          saved view — card order lives in a file, the way positions do.
+        </div>
+      )}
     </div>
   );
 }
 
 function Column({
-  value,
+  group,
   cards,
-  cardFacets,
+  chips,
   selected,
   dragging,
   groupBy,
-  adding,
-  onAdd,
-  onAddCancel,
-  onCreated,
+  droppable,
+  orderable,
   onSelect,
   onOpen,
   onProblem,
+  onCreated,
 }: {
-  value: string;
-  cards: CardDTO[];
-  cardFacets?: string[];
+  group: Group;
+  cards: Record<string, CardDTO>;
+  chips?: string[];
   selected: Set<string>;
   dragging: string | null;
   groupBy: string;
-  adding: boolean;
-  onAdd: () => void;
-  onAddCancel: () => void;
-  onCreated: () => void;
+  droppable: boolean;
+  orderable: boolean;
   onSelect: (id: string, additive: boolean) => void;
   onOpen: (id: string) => void;
   onProblem: (msg: string) => void;
+  onCreated: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
+  const value = group.value;
 
   useEffect(() => {
     const el = ref.current;
     const body = bodyRef.current;
-    if (!el || !body) return;
+    if (!el || !body || !droppable) return;
     return combine(
       dropTargetForElements({
         element: el,
@@ -209,15 +286,18 @@ function Column({
       // A 68-card column has to scroll while dragging or the far end is unreachable.
       autoScrollForElements({ element: body }),
     );
-  }, [value]);
+  }, [value, droppable]);
 
   const create = () => {
     const t = title.trim();
-    if (!t) return onAddCancel();
+    setAdding(false);
+    if (!t) return;
     setTitle('');
-    // A card created in a column inherits that column's value for the grouped facet.
+    // A card created in a column inherits that column's value for the grouped
+    // facet. Creating is not editing, so this is the one write outside the panel
+    // that is not a gesture (C10).
     api
-      .createCard({ title: t, facets: value === NONE ? {} : { [groupBy]: [value] } })
+      .createCard({ title: t, facets: value && value !== NONE ? { [groupBy]: [value] } : {} })
       .then(onCreated)
       .catch((e: ApiError) => onProblem(e.message));
   };
@@ -228,9 +308,11 @@ function Column({
       className={`column ${value === NONE ? 'is-none' : ''} ${over ? 'is-over' : ''}`}
     >
       <header className="column-head">
-        <span className="column-name">{value}</span>
-        <span className="column-count">{cards.length}</span>
-        <button className="btn ghost tiny" title="new card here" onClick={onAdd}>+</button>
+        <span className="column-name">{value === NONE ? 'no value' : value || 'all'}</span>
+        <span className="column-count">{group.ids.length}</span>
+        <button className="btn ghost tiny" title="new card here" onClick={() => setAdding(true)}>
+          +
+        </button>
       </header>
       <div className="column-body" ref={bodyRef}>
         {adding && (
@@ -242,7 +324,7 @@ function Column({
               placeholder="title, ⏎ to create"
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') onAddCancel();
+                if (e.key === 'Escape') setAdding(false);
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   create();
@@ -252,18 +334,25 @@ function Column({
             />
           </div>
         )}
-        {cards.map((card) => (
-          <CardTile
-            key={card.id}
-            card={card}
-            column={value}
-            cardFacets={cardFacets}
-            isSelected={selected.has(card.id)}
-            isDragging={dragging === card.id}
-            onSelect={onSelect}
-            onOpen={onOpen}
-          />
-        ))}
+        {group.ids.map((id, index) => {
+          const card = cards[id];
+          if (!card) return null;
+          return (
+            <CardTile
+              key={id}
+              card={card}
+              column={value}
+              index={index}
+              chips={chips}
+              draggableTile={Boolean(groupBy)}
+              orderable={orderable}
+              isSelected={selected.has(id)}
+              isDragging={dragging === id}
+              onSelect={onSelect}
+              onOpen={onOpen}
+            />
+          );
+        })}
       </div>
     </section>
   );
@@ -272,7 +361,10 @@ function Column({
 function CardTile({
   card,
   column,
-  cardFacets,
+  index,
+  chips,
+  draggableTile,
+  orderable,
   isSelected,
   isDragging,
   onSelect,
@@ -280,27 +372,49 @@ function CardTile({
 }: {
   card: CardDTO;
   column: string;
-  cardFacets?: string[];
+  index: number;
+  chips?: string[];
+  draggableTile: boolean;
+  orderable: boolean;
   isSelected: boolean;
   isDragging: boolean;
   onSelect: (id: string, additive: boolean) => void;
   onOpen: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState<'top' | 'bottom' | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    return draggable({
-      element: el,
-      getInitialData: () => ({ cardId: card.id, column }),
-    });
-  }, [card.id, column]);
+    const cleanups: (() => void)[] = [];
+    if (draggableTile) {
+      cleanups.push(draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) }));
+    }
+    if (orderable) {
+      cleanups.push(
+        dropTargetForElements({
+          element: el,
+          getData: () => ({ cardId: card.id, index }),
+          canDrop: ({ source }) => source.data.cardId !== card.id,
+          onDrag: ({ location }) => {
+            const rect = el.getBoundingClientRect();
+            setEdge(location.current.input.clientY > rect.top + rect.height / 2 ? 'bottom' : 'top');
+          },
+          onDragLeave: () => setEdge(null),
+          onDrop: () => setEdge(null),
+        }),
+      );
+    }
+    return () => cleanups.forEach((f) => f());
+  }, [card.id, column, index, draggableTile, orderable]);
 
   return (
     <div
       ref={ref}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      className={`column-card ${isSelected ? 'is-selected' : ''} ${isDragging ? 'is-dragging' : ''} ${
+        edge ? `is-over-${edge}` : ''
+      }`}
       onClick={(e) => {
         // Cmd/Ctrl or Shift builds a selection for a bulk action; a plain click opens.
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
@@ -310,31 +424,40 @@ function CardTile({
         else onOpen(card.id);
       }}
     >
-      <CardBody card={card} size="card" showFacets={cardFacets} />
+      <CardBody card={card} size="card" showFacets={chips} />
     </div>
   );
 }
 
-/** Bulk actions across a selection — what makes cleaning 130 imported cards feasible. */
+/**
+ * Bulk actions across a selection — what makes cleaning 130 imported cards
+ * feasible, and structure-only, so it stays on the gesture side of C10.
+ *
+ * The facet list comes from the query's own histogram, so it offers the axes
+ * actually present in what is on screen rather than the whole vocabulary.
+ */
 function BulkBar({
   ids,
-  meta,
+  counts,
   onDone,
   onClear,
   onProblem,
 }: {
   ids: string[];
-  meta: Meta;
+  counts: QueryResponse['counts'];
   onDone: () => void;
   onClear: () => void;
   onProblem: (m: string) => void;
 }) {
   const [pickParent, setPickParent] = useState(false);
   const [facet, setFacet] = useState('');
-  const editable = Object.entries(meta.facets);
+  const editable = counts.filter((c) => !c.pseudo);
+  const chosen = editable.find((c) => c.facet === facet);
 
   const run = (fn: () => Promise<unknown>) =>
-    fn().then(onDone).catch((e: ApiError) => onProblem(e.message));
+    fn()
+      .then(onDone)
+      .catch((e: ApiError) => onProblem(e.message));
 
   return (
     <div className="bulkbar">
@@ -344,31 +467,29 @@ function BulkBar({
         Set parent…
       </button>
 
-      <select
-        className="bulkbar-select"
-        value={facet}
-        onChange={(e) => setFacet(e.target.value)}
-      >
+      <select className="bulkbar-select" value={facet} onChange={(e) => setFacet(e.target.value)}>
         <option value="">set a facet…</option>
-        {editable.map(([n, d]) => (
-          <option key={n} value={n}>{d.label}</option>
+        {editable.map((c) => (
+          <option key={c.facet} value={c.facet}>
+            {c.label}
+          </option>
         ))}
       </select>
-      {facet && (
+      {chosen && (
         <span className="bulkbar-values">
-          {(meta.facets[facet]?.values ?? []).map((v) => (
-            <button
-              key={v}
-              className="togglechip"
-              onClick={() =>
-                void run(() =>
-                  api.bulk({ ids, op: 'facet', facet, values: [v], mode: 'set' }),
-                )
-              }
-            >
-              {v}
-            </button>
-          ))}
+          {chosen.values
+            .filter((v) => v.value !== NONE)
+            .map((v) => (
+              <button
+                key={v.value}
+                className="togglechip"
+                onClick={() =>
+                  void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
+                }
+              >
+                {v.value}
+              </button>
+            ))}
           <button
             className="togglechip is-clear"
             onClick={() => void run(() => api.bulk({ ids, op: 'facet', facet, values: [], mode: 'set' }))}
@@ -388,7 +509,9 @@ function BulkBar({
       >
         Delete
       </button>
-      <button className="btn ghost small" onClick={onClear}>Clear selection</button>
+      <button className="btn ghost small" onClick={onClear}>
+        Clear selection
+      </button>
 
       {pickParent && (
         <div className="bulkbar-picker">

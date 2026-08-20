@@ -1,72 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Route, Switch, useLocation, useRoute, useSearch } from 'wouter';
-import { api } from './api.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useSearch } from 'wouter';
+import { ApiError, api } from './api.ts';
+import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
+import { TableView } from './views/TableView.tsx';
 import { CardPanel } from './views/CardPanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
+import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
-import { VaultSwitcher } from './VaultSwitcher.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
-import { ApiError } from './api.ts';
-import type { Meta } from './types.ts';
+import { CARD_PARAM, apiSearch, patchSearch, type Patch } from './query.ts';
+import type { Meta, QueryResponse } from './types.ts';
 
-function Sidebar({
-  meta,
-  onSwitchVault,
-  onAddVault,
-}: {
-  meta: Meta;
-  onSwitchVault: (path: string) => void;
-  onAddVault: () => void;
-}) {
-  const [location, navigate] = useLocation();
-  const boards = meta.views.filter((v) => v.kind === 'board');
-  const canvases = meta.views.filter((v) => v.kind === 'canvas');
-
-  const item = (kind: string, name: string, title: string) => {
-    const href = `/${kind}/${name}`;
-    return (
-      <button
-        key={href}
-        className={`navitem ${location === href ? 'is-active' : ''}`}
-        onClick={() => navigate(href)}
-      >
-        {title}
-      </button>
-    );
-  };
-
-  return (
-    <nav className="sidebar">
-      <div className="brand">
-        cockpit
-        <span className="brand-sub">P2 · editing</span>
-      </div>
-
-      <div className="navgroup">
-        <h2>Boards</h2>
-        {boards.map((v) => item('board', v.name, v.title))}
-      </div>
-
-      <div className="navgroup">
-        <h2>Canvases</h2>
-        {canvases.map((v) => item('canvas', v.name, v.title))}
-      </div>
-
-      <div className="navfoot">
-        <div>
-          {meta.counts.cards} cards · {meta.counts.nodes} nodes
-        </div>
-        <div>
-          {meta.counts.projects} projects · {meta.counts.edges} edges
-        </div>
-        <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
-      </div>
-    </nav>
-  );
-}
-
+/**
+ * One route.
+ *
+ * P1 routed `/board/:name` and `/canvas/:name`, because a view was a place you
+ * navigated to. A view is a query now (C9), so there is one page and the query
+ * lives in the search string — which keeps `?card=` deep links working exactly
+ * as before, and makes any view shareable without having to first save it.
+ */
 export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,11 +31,8 @@ export function App() {
   const [addingVault, setAddingVault] = useState(false);
   const [location, navigate] = useLocation();
   const search = useSearch();
-  const [isRoot] = useRoute('/');
 
-  // The open card lives in the URL, not in component state, so a card can be
-  // bookmarked or pasted into Slack and reopened in its own view.
-  const openCard = new URLSearchParams(search).get('card');
+  const openCard = new URLSearchParams(search).get(CARD_PARAM);
 
   // `onOpen` reaches React Flow through a memoised node array, so its identity
   // must never change: a new function per render re-seeds the store, node
@@ -89,11 +40,22 @@ export function App() {
   // Reading the current location from a ref keeps the deps genuinely empty.
   const nav = useRef({ search, location, navigate });
   nav.current = { search, location, navigate };
+
+  /**
+   * Every sidebar control funnels through here. `replace` for anything you drag
+   * or type — otherwise a filter session leaves fifty entries in the history and
+   * the back button becomes useless.
+   */
+  const patch = useCallback((p: Patch, replace = false) => {
+    const { search: s, location: loc, navigate: go } = nav.current;
+    go(`${loc}${patchSearch(s, p)}`, { replace });
+  }, []);
+
   const setOpenCard = useCallback((id: string | null) => {
     const { search: s, location: loc, navigate: go } = nav.current;
     const params = new URLSearchParams(s);
-    if (id) params.set('card', id);
-    else params.delete('card');
+    if (id) params.set(CARD_PARAM, id);
+    else params.delete(CARD_PARAM);
     const q = params.toString();
     go(`${loc}${q ? `?${q}` : ''}`, { replace: !id });
   }, []);
@@ -124,20 +86,46 @@ export function App() {
       setCurrentVault(path);
       setMeta(null);
       setGate(null);
-      // The current route names a view in the *old* vault. Go back to the root so
-      // the redirect below picks whichever board the new vault actually has.
+      // The query may name a view or a focus record from the *old* vault.
       navigate('/', { replace: true });
       loadMeta();
     },
     [loadMeta, navigate],
   );
 
+  // Nothing asked for: open `home` if the vault has one, else the first saved
+  // view, else the bare query. Rewritten into the URL so it is always
+  // authoritative and an explicitly empty filter stays representable.
   useEffect(() => {
-    if (isRoot && meta) {
-      const first = meta.views.find((v) => v.kind === 'board');
-      if (first) navigate(`/board/${first.name}`, { replace: true });
-    }
-  }, [isRoot, meta, navigate]);
+    if (!meta || search) return;
+    const home = meta.views.find((v) => v.name === 'home') ?? meta.views[0];
+    if (home) navigate(`/?view=${encodeURIComponent(home.name)}`, { replace: true });
+  }, [meta, search, navigate]);
+
+  const wire = apiSearch(search);
+  const { data, error: queryError, reload } = useLive<QueryResponse>(
+    () => api.query(wire),
+    [wire, meta?.vault],
+  );
+
+  const shape = data?.spec.shape ?? 'board';
+  const content = useMemo(() => {
+    if (queryError) return <div className="pane-error">{queryError}</div>;
+    if (!data) return <div className="pane-loading">loading…</div>;
+    if (shape === 'canvas')
+      return (
+        <CanvasView
+          data={data}
+          onOpen={setOpenCard}
+          reload={reload}
+          patch={patch}
+          wire={wire}
+          onSaved={(name) => patch({ view: name })}
+        />
+      );
+    if (shape === 'table') return <TableView data={data} onOpen={setOpenCard} />;
+    return <BoardView data={data} onOpen={setOpenCard} reload={reload} patch={patch} />;
+  }, [data, queryError, shape, setOpenCard, reload, patch, wire]);
 
   if (gate) {
     return (
@@ -164,37 +152,27 @@ export function App() {
 
   return (
     <EnrichmentProvider>
-    <div className="shell">
-      <Sidebar meta={meta} onSwitchVault={switchVault} onAddVault={() => setAddingVault(true)} />
-      <main className="main">
-        <Switch>
-          <Route path="/board/:name">
-            {(params) => <BoardView name={params.name!} meta={meta} onOpen={setOpenCard} />}
-          </Route>
-          <Route path="/canvas/:name">
-            {(params) => <CanvasView name={params.name!} meta={meta} onOpen={setOpenCard} />}
-          </Route>
-          <Route>
-            {meta.views.length ? (
-              <div className="pane-loading">pick a view</div>
-            ) : (
-              <div className="pane-loading">
-                This vault has no views yet. Add a board to{' '}
-                <code>views/board/</code> — see the spec for the format.
-              </div>
-            )}
-          </Route>
-        </Switch>
-      </main>
-      {openCard && (
-        <CardPanel
-          id={openCard}
+      <div className="shell">
+        <Sidebar
           meta={meta}
-          onClose={() => setOpenCard(null)}
-          onOpen={setOpenCard}
+          data={data}
+          search={search}
+          wire={wire}
+          patch={patch}
+          onSwitchVault={switchVault}
+          onAddVault={() => setAddingVault(true)}
+          onOpenCard={setOpenCard}
         />
-      )}
-    </div>
+        <main className="main">{content}</main>
+        {openCard && (
+          <CardPanel
+            id={openCard}
+            meta={meta}
+            onClose={() => setOpenCard(null)}
+            onOpen={setOpenCard}
+          />
+        )}
+      </div>
     </EnrichmentProvider>
   );
 }

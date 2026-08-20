@@ -5,9 +5,9 @@ description: How to read and write cockpit cards — the markdown card database 
 
 # Cockpit
 
-A personal work-management app. One markdown card database, projected as a kanban board and a
-mind-map canvas. Full spec: `cockpit-plan.md` in the work root — authoritative if anything here
-disagrees.
+A personal work-management app. One markdown card database, projected as a board, a mind-map canvas or
+a table — whichever the current query asks for. Full spec: `cockpit/README.md` — authoritative if
+anything here disagrees.
 
 **Cards are plain files.** You can create and edit them directly with Write/Edit and no app running.
 Prefer `ck` when a command exists, because it validates and keeps formatting consistent.

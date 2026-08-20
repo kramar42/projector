@@ -8,6 +8,7 @@ import {
   Position,
   ReactFlow,
   applyNodeChanges,
+  MarkerType,
   type Connection,
   type Edge,
   type Node,
@@ -16,82 +17,150 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ApiError, api } from '../api.ts';
-import { useLive } from '../useLive.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import { manualLayout, sizeFor, treeLayout } from './layout.ts';
+import { PopoverButton } from '../components/Popover.tsx';
+import { EDGE_KINDS, type Patch } from '../query.ts';
+import { layoutTypes, manualLayout, sizeFor, treeLayout } from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import type { CanvasResponse, CardDTO, Meta } from '../types.ts';
+import type { CardDTO, QueryResponse } from '../types.ts';
 
 /**
- * A canvas node hosts the same `<CardBody>` the board renders. That is the
- * requirement React Flow was chosen for: a node is an ordinary React component,
- * so link chips and progress work here with no second implementation.
+ * A canvas node hosts the same `<CardBody>` every other shape renders. That is
+ * the requirement React Flow was chosen for: a node is an ordinary React
+ * component, so link chips and progress work here with no second implementation.
+ *
+ * `is-context` nodes are the unmatched ancestors kept so the graph stays
+ * connected. They are drawn muted and are never counted as matches — a filter
+ * that quietly widens its own result set is a filter you stop trusting.
  */
 function RecordNode({ data }: NodeProps) {
-  const { card, size, onOpen } = data as unknown as {
+  const { card, size, chips, context, onOpen } = data as unknown as {
     card: CardDTO;
-    size: 'chip' | 'card' | 'expanded';
+    size: 'chip' | 'card';
+    chips?: string[];
+    context: boolean;
     onOpen: (id: string) => void;
   };
   return (
-    <>
+    <div className={context ? 'is-context' : undefined}>
       {/* React Flow attaches edges to handles. Without them a custom node renders
           fine and every edge is silently dropped. */}
       <Handle type="target" position={Position.Left} />
-      <CardBody card={card} size={size} onOpen={onOpen} />
+      <CardBody card={card} size={size} showFacets={chips} onOpen={onOpen} />
       <Handle type="source" position={Position.Right} />
-    </>
+    </div>
   );
 }
 
 const nodeTypes = { record: RecordNode };
 
-const EDGE_STYLE: Record<string, Partial<Edge>> = {
-  parent: { style: { stroke: 'var(--edge-parent)', strokeWidth: 1.6 } },
-  blocks: {
-    style: { stroke: 'var(--edge-blocks)', strokeWidth: 1.8, strokeDasharray: '6 4' },
-    label: 'blocks',
-  },
-  relates: { style: { stroke: 'var(--edge-relates)', strokeWidth: 1.2, strokeDasharray: '2 4' } },
+const EDGE_COLOUR: Record<string, string> = {
+  parent: 'var(--edge-parent)',
+  blocks: 'var(--edge-blocks)',
+  relates: 'var(--edge-relates)',
+  'member-of': 'var(--edge-member)',
 };
 
+const DASH: Record<string, string | undefined> = {
+  blocks: '6 4',
+  relates: '2 4',
+  'member-of': '1 3',
+};
+
+/**
+ * One edge per pair of records, whatever the types.
+ *
+ * `parent` and `member-of` agreeing is the *expected* shape for a project
+ * record — `keycloak` carries both — so drawing both put two identical lines on
+ * top of each other with no way to tell there were two. Collapsing them means a
+ * pair that agrees reads as one relationship, and a pair that *disagrees* still
+ * shows up as two separate edges pointing at different records, which is the case
+ * worth seeing.
+ */
+function buildEdges(
+  raw: { src: string; dst: string; type: string }[],
+  hierarchy: string[],
+): Edge[] {
+  const byPair = new Map<string, { src: string; dst: string; types: string[] }>();
+  for (const e of raw) {
+    // Hierarchy edges are stored child → parent and member → container. Drawn
+    // the other way, so the arrow points the way the graph opens.
+    const flip = hierarchy.includes(e.type);
+    const src = flip ? e.dst : e.src;
+    const dst = flip ? e.src : e.dst;
+    const key = `${src}\u0000${dst}`;
+    const found = byPair.get(key);
+    if (found) found.types.push(e.type);
+    else byPair.set(key, { src, dst, types: [e.type] });
+  }
+
+  return [...byPair.values()].map(({ src, dst, types }) => {
+    // The most structural type wins the styling; the rest ride along in the title.
+    const lead = ['parent', 'member-of', 'blocks', 'relates'].find((t) => types.includes(t)) ?? types[0]!;
+    const colour = EDGE_COLOUR[lead] ?? 'var(--edge-relates)';
+    return {
+      id: `${types.join('+')}:${src}->${dst}`,
+      source: src,
+      target: dst,
+      type: 'smoothstep',
+      style: { stroke: colour, strokeWidth: lead === 'parent' ? 1.6 : 1.4, strokeDasharray: DASH[lead] },
+      // An arrowhead per type, so direction is legible without reading a label.
+      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: colour },
+      // Only `blocks` earns text: it is the one relationship you cannot infer
+      // from the layout. Neutral, because a label inherits the edge colour as its
+      // fill otherwise, and a red word floating over a graph reads as an error.
+      ...(types.includes('blocks') ? { label: types.length > 1 ? types.join(' + ') : 'blocks' } : {}),
+      labelStyle: { fill: 'var(--ink-2)', fontSize: 10 },
+      labelBgStyle: { fill: 'var(--surface)', fillOpacity: 0.9 },
+      labelBgPadding: [4, 2] as [number, number],
+      labelBgBorderRadius: 3,
+      data: { types, src, dst },
+    } satisfies Edge;
+  });
+}
+
 export function CanvasView({
-  name,
-  meta,
+  data,
   onOpen,
+  reload,
+  patch,
+  wire,
+  onSaved,
 }: {
-  name: string;
-  meta: Meta;
+  data: QueryResponse;
   onOpen: (id: string) => void;
+  reload: () => void;
+  patch: (p: Patch) => void;
+  /** The query half of the page URL — what a save records. */
+  wire: string;
+  onSaved: (name: string) => void;
 }) {
-  const { data, error, reload } = useLive<CanvasResponse>(() => api.canvas(name), [name]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
   const [newEdgeType, setNewEdgeType] = useState<'parent' | 'blocks' | 'relates'>('parent');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const sizes = useRef<Record<string, string>>({});
+  const [naming, setNaming] = useState(false);
 
-  useRequestEnrichment(data ? [...new Set(data.nodes.flatMap((n) => n.links.map((l) => l.raw)))] : []);
+  useRequestEnrichment([
+    ...new Set(Object.values(data.cards).flatMap((c) => c.links.map((l) => l.raw))),
+  ]);
 
   const built = useMemo(() => {
-    if (!data) return { nodes: [] as Node[], edges: [] as Edge[] };
-    const viewDefault = data.view.defaultSize;
-    const placed =
-      data.view.layout === 'manual'
-        ? manualLayout(data.nodes, data.edges, data.stored, viewDefault)
-        : treeLayout(
-            data.nodes,
-            data.edges,
-            data.stored,
-            data.view.layout === 'tree-tb' ? 'TB' : 'LR',
-            viewDefault,
-          );
+    const size = data.spec.face.size;
+    const context = new Set(data.context);
+    const shown = [...data.ids, ...data.context].map((id) => data.cards[id]).filter(Boolean) as CardDTO[];
+    const stored = data.spec.nodes ?? {};
+    // Stored positions only ever come from a saved view. An ad-hoc query has no
+    // file to hold arrangement, so it is auto-laid-out — naming a view is what
+    // buys manual positioning (C9).
+    const hierarchy = layoutTypes(data.spec.edges);
+    const placed = Object.keys(stored).length
+      ? manualLayout(shown, data.edges, stored, size, hierarchy)
+      : treeLayout(shown, data.edges, 'LR', size, hierarchy);
 
-    const rfNodes: Node[] = data.nodes.map((card) => {
+    const rfNodes: Node[] = shown.map((card) => {
       const p = placed.get(card.id)!;
-      const size = sizeFor(card, data.stored[card.id]?.size, viewDefault);
-      sizes.current[card.id] = size;
       return {
         id: card.id,
         type: 'record',
@@ -102,21 +171,17 @@ export function CanvasView({
         width: p.w,
         height: p.h,
         style: { width: p.w, height: p.h },
-        data: { card, size, onOpen },
+        data: {
+          card,
+          size: sizeFor(card, size),
+          chips: data.spec.face.chips,
+          context: context.has(card.id),
+          onOpen,
+        },
       };
     });
 
-    const rfEdges: Edge[] = data.edges.map((e, i) => ({
-      id: `${e.type}:${e.src}->${e.dst}:${i}`,
-      // A parent edge is drawn parent → child, matching the layout direction.
-      source: e.type === 'parent' ? e.dst : e.src,
-      target: e.type === 'parent' ? e.src : e.dst,
-      type: 'smoothstep',
-      data: { edgeType: e.type, src: e.src, dst: e.dst },
-      ...EDGE_STYLE[e.type],
-    }));
-
-    return { nodes: rfNodes, edges: rfEdges };
+    return { nodes: rfNodes, edges: buildEdges(data.edges, hierarchy) };
   }, [data, onOpen]);
 
   useEffect(() => {
@@ -130,21 +195,29 @@ export function CanvasView({
     if (changes.some((c) => c.type === 'position' && c.dragging === false)) setDirty(true);
   }, []);
 
-  const savePositions = async () => {
+  /**
+   * Positions go to the view file, never to a card: views own arrangement, so the
+   * same card can sit at a different place on each saved view.
+   *
+   * `title` is set when this is a *save as*: the view does not exist yet, so it
+   * has to be created before it can hold anything. That ordering is the whole
+   * shape of C9 — naming the query is what creates somewhere for the layout to
+   * live.
+   */
+  const savePositions = async (name: string, title?: string) => {
     setSaving(true);
     setProblem(null);
     try {
-      const payload: Record<string, { x: number; y: number; size?: string }> = {};
-      for (const n of nodes) {
-        payload[n.id] = {
-          x: n.position.x,
-          y: n.position.y,
-          ...(sizes.current[n.id] ? { size: sizes.current[n.id] } : {}),
-        };
+      const payload: Record<string, { x: number; y: number }> = {};
+      for (const n of nodes) payload[n.id] = { x: n.position.x, y: n.position.y };
+      if (title) {
+        const saved = await api.saveView(name, wire, title);
+        await api.saveArrangement(saved.name, { nodes: payload });
+        setDirty(false);
+        onSaved(saved.name);
+        return;
       }
-      // Positions go to the canvas file, never to a card: views own arrangement,
-      // so the same card can sit at different places on different canvases.
-      await api.saveCanvas(name, payload);
+      await api.saveArrangement(name, { nodes: payload });
       setDirty(false);
       reload();
     } catch (err) {
@@ -157,7 +230,7 @@ export function CanvasView({
   /** Dragging between handles creates an edge of the currently selected type. */
   const onConnect = useCallback(
     (c: Connection) => {
-      if (!c.source || !c.target || !data) return;
+      if (!c.source || !c.target) return;
       // Drawn parent → child, so a new parent edge is written onto the *target*
       // record, pointing back at the source.
       const owner = newEdgeType === 'parent' ? c.target : c.source;
@@ -165,7 +238,7 @@ export function CanvasView({
       if (owner === to) return;
       setProblem(null);
       const existing = data.edges
-        .filter((e) => e.src === owner)
+        .filter((e) => e.src === owner && e.type !== 'member-of')
         .map((e) => ({ type: e.type, to: e.dst }));
       if (existing.some((e) => e.type === newEdgeType && e.to === to)) return;
       // One parent is the norm: replace rather than stack a second one.
@@ -175,7 +248,7 @@ export function CanvasView({
         .then(() => reload())
         .catch((e: ApiError) => setProblem(e.message));
     },
-    [data, newEdgeType, reload],
+    [data.edges, newEdgeType, reload],
   );
 
   const addNode = async () => {
@@ -189,45 +262,8 @@ export function CanvasView({
     }
   };
 
-  if (error) return <div className="pane-error">{error}</div>;
-  if (!data) return <div className="pane-loading">loading…</div>;
-
-  const byType = data.edges.reduce<Record<string, number>>((acc, e) => {
-    acc[e.type] = (acc[e.type] ?? 0) + 1;
-    return acc;
-  }, {});
-
   return (
     <div className="canvas-wrap">
-      <div className="board-head">
-        <h1>{data.view.title}</h1>
-        <span className="board-sub">
-          {data.nodes.length} records ·{' '}
-          {Object.entries(byType).map(([t, n]) => `${n} ${t}`).join(' · ') || 'no edges'} · layout{' '}
-          <b>{data.view.layout}</b>
-        </span>
-        <span className="canvas-tools">
-          <label className="edgepick">
-            drag creates
-            <select
-              value={newEdgeType}
-              onChange={(e) => setNewEdgeType(e.target.value as 'parent' | 'blocks' | 'relates')}
-            >
-              <option value="parent">parent</option>
-              <option value="blocks">blocks</option>
-              <option value="relates">relates</option>
-            </select>
-          </label>
-          <button className="btn small" onClick={() => void addNode()}>
-            + node
-          </button>
-          {dirty && (
-            <button className="btn primary small" onClick={() => void savePositions()} disabled={saving}>
-              {saving ? 'saving…' : 'Save layout'}
-            </button>
-          )}
-        </span>
-      </div>
       {problem && <div className="banner is-bad">{problem}</div>}
       <div className="canvas">
         <ReactFlow
@@ -246,11 +282,135 @@ export function CanvasView({
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable nodeColor="var(--minimap-node)" maskColor="var(--minimap-mask)" />
         </ReactFlow>
-      </div>
-      <div className="canvas-foot">
-        double-click a node to open it · drag from a node's right edge to another to connect ·{' '}
-        {meta.counts.records} records indexed
+
+        {/*
+          Everything a canvas has that the other shapes do not — geometry and
+          edges — lives here rather than in the rail, so switching shape never
+          changes the sidebar. Transient actions (Save layout, + node) float for
+          the same reason: a control that appears and vanishes mid-rail makes the
+          whole thing jump.
+        */}
+        <div className="canvas-float">
+          <PopoverButton
+            className="floatbtn"
+            minWidth={170}
+            label={edgeLabel(data.spec.edges)}
+            title="which edge types are drawn — the hierarchy ones also lay the graph out"
+            render={() => (
+              <>
+                <div className="pop-head">Edges drawn</div>
+                {EDGE_KINDS.map((kind) => (
+                  <label key={kind} className="pop-check">
+                    <input
+                      type="checkbox"
+                      checked={data.spec.edges.includes(kind)}
+                      onChange={(e) => {
+                        const next = new Set(data.spec.edges);
+                        if (e.target.checked) next.add(kind);
+                        else next.delete(kind);
+                        patch({ edges: [...next].join(',') || 'parent' });
+                      }}
+                    />
+                    {kind}
+                  </label>
+                ))}
+              </>
+            )}
+          />
+
+          <select
+            className="floatselect"
+            value={data.spec.query.connect ?? 'ancestors'}
+            title="keep unmatched ancestors so the graph stays connected — drawn muted, never counted as matches"
+            onChange={(e) => patch({ connect: e.target.value })}
+          >
+            <option value="ancestors">keep context</option>
+            <option value="none">matches only</option>
+          </select>
+
+          <label className="edgepick">
+            drag creates
+            <select
+              value={newEdgeType}
+              onChange={(e) => setNewEdgeType(e.target.value as 'parent' | 'blocks' | 'relates')}
+            >
+              <option value="parent">parent</option>
+              <option value="blocks">blocks</option>
+              <option value="relates">relates</option>
+            </select>
+          </label>
+
+          <button className="btn small" onClick={() => void addNode()}>
+            + node
+          </button>
+          {dirty && !naming && (
+            <button
+              className="btn primary small"
+              disabled={saving}
+              onClick={() => {
+                const name = data.spec.name;
+                if (name) void savePositions(name);
+                // An ad-hoc query has nowhere to put positions. Naming it is the
+                // act that creates somewhere.
+                else setNaming(true);
+              }}
+            >
+              {saving ? 'saving…' : data.spec.name ? 'Save layout' : 'Save as view…'}
+            </button>
+          )}
+          {naming && (
+            <SaveAs
+              onCancel={() => setNaming(false)}
+              onSave={(title) => {
+                setNaming(false);
+                void savePositions(title, title);
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+/**
+ * Naming an ad-hoc canvas so it can hold a layout.
+ *
+ * This is the materialisation step, not a convenience: arrangement lives in a
+ * file, so it needs a file to live in.
+ */
+function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: string) => void }) {
+  const [text, setText] = useState('');
+  return (
+    <span className="saveas">
+      <input
+        autoFocus
+        value={text}
+        placeholder="view name"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && text.trim()) onSave(slug(text));
+        }}
+      />
+      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(slug(text))}>
+        Save
+      </button>
+    </span>
+  );
+}
+
+/** A short reading of the edge selection, so the button says what it holds. */
+function edgeLabel(edges: string[]): string {
+  if (!edges.length) return 'no edges';
+  if (edges.length === 1) return edges[0]!;
+  return `${edges.length} edge types`;
+}
+
+function slug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
