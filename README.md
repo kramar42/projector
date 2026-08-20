@@ -3,9 +3,8 @@
 Personal work-management app. One card database in markdown files, projected as a board and a
 mind-map canvas. Spec: [`../cockpit-plan.md`](../cockpit-plan.md) — that file is authoritative.
 
-**Status: P2 complete.** Everything above plus editing: rename, facets, re-parent, links, body,
-delete, bulk actions across a selection, canvas layout, and a file watcher so edits made by a Claude
-session appear live.
+**Status: P3 complete.** Everything above plus link enrichment: a Jira key, pull request, branch,
+commit, Claude session or local doc resolves inline on the card.
 
 ## Two directories, two repos
 
@@ -123,6 +122,41 @@ it back, and if the file changed meanwhile the server answers 409 and the panel 
 banner. Nothing is overwritten. The body editor likewise refuses to swallow an external change while
 there is unsaved text.
 
+## Enrichment
+
+Strictly additive. A link renders as its parsed label, and enrichment replaces that with something
+richer *if and when* it arrives. No view waits on it, no endpoint that serves cards knows it exists,
+and deleting `src/enrich/` would leave the app behaving exactly as it did in P2.
+
+| Kind | Source | Needs | TTL |
+|---|---|---|---|
+| `gh:pr` | `gh pr view --json` | the `gh` CLI, already authenticated | 5 min |
+| `gh:branch` | `gh api` | — | 10 min |
+| `gh:commit` | `gh api` | — | never (a commit does not change) |
+| `claude` | `~/.claude/projects/**` + `~/.claude/sessions` | — | 1 min |
+| `doc` | filesystem | — | 30 s |
+| `jira` | Jira REST | `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | 15 min |
+| `slack` `trello` `cal` `grafana` `url` | not fetched — parsed label only | — | — |
+
+A Claude session link takes the **transcript uuid** — the filename under
+`~/.claude/projects/<slug>/`. Enrichment gives its opening prompt, whether a process is currently
+holding it, last activity, turn count, cwd, git branch, and the `claude --resume <uuid>` command to
+pick it back up. An id of the form `local_<uuid>` comes from the desktop app's own store, is not on
+disk, and says so rather than failing silently.
+
+**Reads never block.** `POST /api/enrich` answers from cache immediately — possibly with nothing —
+then fetches what is missing or stale in the background and emits an `enriched` server event, which is
+deliberately separate from `change` so a chip resolving never makes a board rebuild itself. Failures
+are cached too, so a ref that cannot resolve says why once instead of being retried on every render.
+
+The cache is its own SQLite file, `data/.enrich.db`, not a table in the index: the index is derived
+from the card files and rebuilt on every request, which would throw away network data on each read.
+
+```bash
+node src/cli/ck.ts enrich --all        # resolve every link on every card and print it
+node src/cli/ck.ts enrich <ref> --force
+```
+
 ## How it fits together
 
 ```
@@ -161,9 +195,11 @@ operation in P0 that writes anything at all:
 | `PUT /api/card/:id/edges` | one card's `edges` | refuses an edge that would create a parent cycle |
 | `PATCH /api/canvas/:name` | one view file under `data/views/canvas/` | never touches a card |
 | `POST /api/card/:id/asset` | one file under `data/cards/assets/<id>/` | never overwrites: the name is a content hash |
+| `POST /api/enrich`, `/api/enrich/clear` | `data/.enrich.db` only | never touches a card; every fetcher is read-only — `gh pr view`, `gh api` GETs, Jira GETs, filesystem reads |
 
 There is no code path in this repo that writes to Jira, GitHub, Trello, Slack or any other external
-system, and no network call of any kind yet. A mutating request is additionally refused when it carries
+system. P3 adds the first outbound network calls, and they are all reads: `gh pr view`, `gh api` GETs,
+and Jira `GET /rest/api/3/issue`. Fetchers export no mutation functions, so there is nothing to call. A mutating request is additionally refused when it carries
 an `Origin` header that is not one of ours, since a localhost server is reachable from any page open in
 the browser. Every frontmatter write goes through
 `writeCardFile`, which writes a temp file and renames, so a concurrent reader never sees half a file.

@@ -19,6 +19,7 @@ import { ApiError, api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { manualLayout, sizeFor, treeLayout } from './layout.ts';
+import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CanvasResponse, CardDTO, Meta } from '../types.ts';
 
 /**
@@ -70,6 +71,8 @@ export function CanvasView({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const sizes = useRef<Record<string, string>>({});
+
+  useRequestEnrichment(data ? [...new Set(data.nodes.flatMap((n) => n.links.map((l) => l.raw)))] : []);
 
   const built = useMemo(() => {
     if (!data) return { nodes: [] as Node[], edges: [] as Edge[] };

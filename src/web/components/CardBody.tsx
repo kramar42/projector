@@ -1,4 +1,5 @@
-import type { CardDTO, Size } from '../types.ts';
+import { useEnrichment } from '../enrichment.tsx';
+import type { CardDTO, Size, Tone } from '../types.ts';
 
 /**
  * The one card component, rendered at three sizes inside a board column, inside
@@ -36,11 +37,41 @@ export function FacetChip({ facet, value }: { facet: string; value: string }) {
   return <span className={`chip ${FACET_TONE[facet] ?? 'facet-muted'}`}>{value}</span>;
 }
 
-function LinkChip({ kind, label }: { kind: string; label: string }) {
+/**
+ * A link chip, enriched when the server has something for it.
+ *
+ * Falls back to the parsed label the instant it has nothing — which is what
+ * every chip looked like before P3, so an unconfigured or failing fetcher costs
+ * nothing but the richness.
+ */
+function LinkChip({ kind, linkRef, label }: { kind: string; linkRef: string; label: string }) {
+  const { get } = useEnrichment();
+  const res = get(linkRef);
+  const d = res?.data;
+
+  const shown = d?.label ?? label;
+  const tip = [
+    `${kind}: ${linkRef}`,
+    d?.title,
+    ...(d?.fields ?? []).map((f) => `${f.k}: ${f.v}`),
+    res?.error,
+    res?.note,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const state =
+    res?.state === 'error' ? 'is-failed' : res?.state === 'stale' ? 'is-stale' : d ? 'is-live' : '';
+
   return (
-    <span className="linkchip" title={`${kind}: ${label}`}>
+    <span className={`linkchip ${state}`} title={tip}>
       <b>{LINK_GLYPH[kind] ?? '?'}</b>
-      <span className="linkchip-label">{label}</span>
+      <span className="linkchip-label">{shown}</span>
+      {d?.badges?.slice(0, 1).map((b) => (
+        <em key={b.label} className={`tone-${b.tone}`}>
+          {b.label}
+        </em>
+      ))}
     </span>
   );
 }
@@ -120,7 +151,7 @@ export function CardBody({
       {card.links.length > 0 && (
         <div className="chiprow">
           {card.links.slice(0, size === 'expanded' ? 20 : 3).map((l, i) => (
-            <LinkChip key={i} kind={l.kind} label={l.label} />
+            <LinkChip key={i} kind={l.kind} linkRef={l.raw} label={l.label} />
           ))}
           {size !== 'expanded' && card.links.length > 3 && (
             <span className="chip facet-muted">+{card.links.length - 3}</span>

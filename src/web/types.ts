@@ -28,6 +28,7 @@ export interface Meta {
   dataDir: string;
   facets: Record<string, FacetDef>;
   counts: Record<string, number>;
+  enrichment: Record<string, number>;
   views: { kind: 'board' | 'canvas'; name: string; title: string }[];
 }
 
@@ -71,3 +72,27 @@ export interface CardDetail {
 
 /** Display size, shared by both views. See §5.3 of the plan. */
 export type Size = 'chip' | 'card' | 'expanded';
+
+// ---------------------------------------------------------------- enrichment
+
+export type Tone = 'neutral' | 'good' | 'warn' | 'bad' | 'accent';
+
+export interface Enrichment {
+  label: string;
+  title?: string;
+  badges?: { label: string; tone: Tone }[];
+  fields?: { k: string; v: string }[];
+  url?: string;
+  command?: string;
+}
+
+export interface Resolved {
+  ref: string;
+  kind: string;
+  state: 'fresh' | 'stale' | 'missing' | 'error' | 'unsupported';
+  data?: Enrichment;
+  error?: string;
+  needsSetup?: boolean;
+  fetchedAt?: number;
+  note?: string;
+}

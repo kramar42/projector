@@ -24,6 +24,7 @@ import {
 import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
 import { migrateProjectFacet } from '../import/migrate.ts';
+import { readCached, refresh } from '../server/enrich.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
 
 const root = dataDir();
@@ -45,6 +46,7 @@ const HELP = `ck — cockpit CLI   (data: ${root})
   ck import todo <TODO.md>                             import a TODO.md
   ck stats                                             index counts
   ck migrate-project-facet [--apply]                   backfill the project facet from parent edges
+  ck enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
 `;
 
 function argFlags(argv: string[]): { flags: Map<string, string[]>; rest: string[] } {
@@ -381,6 +383,7 @@ function cmdStats(): void {
 
 const [cmd, ...argv] = process.argv.slice(2);
 try {
+  // eslint-disable-next-line no-lone-blocks
   switch (cmd) {
     case 'ls':
       cmdLs(argv);
@@ -415,6 +418,35 @@ try {
     case 'stats':
       cmdStats();
       break;
+    case 'enrich': {
+      const { flags, rest } = argFlags(argv);
+      const { records } = readAll(p.cards);
+      const refs = rest.length
+        ? rest
+        : flags.has('all')
+          ? [...new Set([...records.values()].flatMap((r) => r.links.map((l) => l.raw)))]
+          : [];
+      if (!refs.length) {
+        console.error('ck enrich <ref>... | ck enrich --all');
+        process.exit(1);
+      }
+      // Kick off the fetches, wait for the queue to drain, then report.
+      await new Promise<void>((done) => {
+        let settled = false;
+        refresh({ dataRoot: root, onRefreshed: () => { settled = true; done(); } }, refs, flags.has('force'));
+        // Nothing to fetch (all fresh) means onRefreshed never fires.
+        setTimeout(() => { if (!settled) done(); }, 60_000);
+      });
+      for (const item of readCached(root, refs)) {
+        const d = item.data;
+        const badges = (d?.badges ?? []).map((b) => b.label).join(' ');
+        console.log(
+          `${pad(item.state, 12)} ${pad(d?.label ?? '—', 22)} ${(d?.title ?? item.error ?? item.note ?? '').slice(0, 62)}` +
+            (badges ? `  [${badges}]` : ''),
+        );
+      }
+      break;
+    }
     case 'migrate-project-facet': {
       const apply = argv.includes('--apply');
       const r = migrateProjectFacet(root, apply);

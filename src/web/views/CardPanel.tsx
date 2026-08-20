@@ -7,6 +7,7 @@ import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
+import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -36,6 +37,7 @@ export function CardPanel({
   onOpen: (id: string) => void;
 }) {
   const { data, error, reload } = useLive<CardDetail>(() => api.card(id), [id]);
+  useRequestEnrichment(data ? data.card.links.map((l) => l.raw) : []);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -45,6 +47,7 @@ export function CardPanel({
   const [fm, setFm] = useState<{ yaml: string; mtime: number } | null>(null);
   const [showFm, setShowFm] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const { refresh: refreshEnrichment } = useEnrichment();
 
   useEffect(() => {
     setProblem(null);
@@ -315,7 +318,18 @@ export function CardPanel({
             )}
 
             <section className="panel-section">
-              <h3>Links</h3>
+              <h3>
+                Links
+                <span className="tabs">
+                  <button
+                    className="tab"
+                    title="Re-fetch every link on this card"
+                    onClick={() => refreshEnrichment(card.links.map((l) => l.raw))}
+                  >
+                    refresh
+                  </button>
+                </span>
+              </h3>
               <LinkEditor
                 links={card.links.map((l) => l.raw)}
                 onChange={(next) =>
@@ -402,25 +416,64 @@ export function CardPanel({
   );
 }
 
+/** One link, shown with whatever the server managed to resolve about it. */
+function LinkRow({ raw, onRemove }: { raw: string; onRemove: () => void }) {
+  const { get } = useEnrichment();
+  const res = get(raw);
+  const d = res?.data;
+
+  return (
+    <div className={`linkrow ${res?.state ? `state-${res.state}` : ''}`}>
+      <div className="linkrow-head">
+        <span className="linkkind">{res?.kind || '?'}</span>
+        {d?.url ? (
+          <a className="linkrow-label" href={d.url} target="_blank" rel="noreferrer noopener">
+            {d.label}
+          </a>
+        ) : (
+          <span className="linkrow-label">{d?.label ?? raw}</span>
+        )}
+        {d?.badges?.map((b) => (
+          <span key={b.label} className={`badge tone-${b.tone}`}>
+            {b.label}
+          </span>
+        ))}
+        {res?.state === 'stale' && <span className="badge tone-warn" title="refreshing">stale</span>}
+        <button className="btn ghost tiny" title="remove this link" onClick={onRemove}>
+          ✕
+        </button>
+      </div>
+
+      {d?.title && <div className="linkrow-title">{d.title}</div>}
+
+      {d?.fields?.length ? (
+        <div className="linkrow-fields">
+          {d.fields.map((f) => (
+            <span key={f.k}>
+              <em>{f.k}</em> {f.v}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {d?.command && <code className="linkrow-cmd">{d.command}</code>}
+
+      {res?.error && (
+        <div className={`linkrow-note ${res.needsSetup ? 'is-setup' : 'is-bad'}`}>{res.error}</div>
+      )}
+      {res?.note && <div className="linkrow-note">{res.note}</div>}
+      {!res && <div className="linkrow-note">resolving…</div>}
+      {!d && <code className="linkrow-raw">{raw}</code>}
+    </div>
+  );
+}
+
 function LinkEditor({ links, onChange }: { links: string[]; onChange: (next: string[]) => void }) {
   const [adding, setAdding] = useState('');
   return (
     <div className="linkedit">
       {links.map((raw) => (
-        <div className="linkedit-row" key={raw}>
-          {/^https?:\/\//.test(raw) ? (
-            <a href={raw} target="_blank" rel="noreferrer noopener">{raw}</a>
-          ) : (
-            <code>{raw}</code>
-          )}
-          <button
-            className="btn ghost tiny"
-            title="remove"
-            onClick={() => onChange(links.filter((l) => l !== raw))}
-          >
-            ✕
-          </button>
-        </div>
+        <LinkRow key={raw} raw={raw} onRemove={() => onChange(links.filter((l) => l !== raw))} />
       ))}
       <input
         value={adding}

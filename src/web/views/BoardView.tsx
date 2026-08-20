@@ -8,6 +8,7 @@ import { RecordPicker } from '../components/RecordPicker.tsx';
 import type { BoardResponse, CardDTO, Meta } from '../types.ts';
 
 import { NONE, modeFor, nextValues } from './dragSemantics.ts';
+import { useRequestEnrichment } from '../enrichment.tsx';
 
 export function BoardView({
   name,
@@ -27,6 +28,12 @@ export function BoardView({
   useEffect(() => setSelected(new Set()), [name]);
 
   const groupBy = data?.view.groupBy ?? '';
+
+  // Ask for every link on screen once. Batched into a single call, and the view
+  // renders regardless of whether anything comes back.
+  useRequestEnrichment(
+    data ? [...new Set(data.groups.flatMap((g) => g.cards.flatMap((c) => c.links.map((l) => l.raw))))] : [],
+  );
 
   const move = useCallback(
     async (cardId: string, from: string, to: string, mode: 'replace' | 'add' | 'remove') => {

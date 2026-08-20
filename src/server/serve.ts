@@ -29,6 +29,7 @@ import {
   setEdges,
 } from './mutate.ts';
 import { watch } from 'chokidar';
+import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.ts';
 import { streamSSE } from 'hono/streaming';
 import type { Edge } from '../schema/types.ts';
 
@@ -69,6 +70,7 @@ app.get('/api/meta', (c) => {
     dataDir: root,
     facets: withDynamicValues(facets, records),
     counts: counts(db),
+    enrichment: enrichmentStats(root),
     views: views.map((v) => ({ kind: v.kind, name: v.name, title: v.title })),
   });
 });
@@ -405,17 +407,65 @@ app.get('/api/asset/*', (c) => {
   return new Response(readFileSync(file), { headers: { 'Content-Type': type } });
 });
 
+// ---------------------------------------------------------------- enrichment
+//
+// Strictly additive. A view never waits on it: the endpoint answers from cache,
+// schedules whatever is missing or stale, and signals when that lands. If every
+// fetcher failed, cards would render exactly as they did before P3.
+
+app.post('/api/enrich', async (c) => {
+  try {
+    const body = (await c.req.json()) as { refs?: unknown; force?: boolean };
+    if (body.refs !== undefined && !Array.isArray(body.refs)) {
+      return c.json({ error: 'refs must be an array of link strings' }, 400);
+    }
+    const refs = (body.refs ?? []).filter((r): r is string => typeof r === 'string' && !!r);
+    if (!refs.length) return c.json({ items: [] });
+    const opts = { dataRoot: root, onRefreshed: () => bumpEnriched() };
+    // Read first so the answer is immediate, then kick off the work.
+    const items = readCached(root, refs);
+    refresh(opts, refs, body.force === true);
+    return c.json({ items });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
+});
+
+app.post('/api/enrich/clear', async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as { refs?: unknown };
+    if (body.refs !== undefined && !Array.isArray(body.refs)) {
+      return c.json({ error: 'refs must be an array of link strings' }, 400);
+    }
+    const n = clearEnrichment(root, body.refs as string[] | undefined);
+    bumpEnriched();
+    return c.json({ cleared: n });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
+});
+
 // ---------------------------------------------------------------- live updates
 //
 // The point of the watcher is C3: a Claude session editing a card file must show
 // up in the open app without a manual refresh.
 
 let revision = 0;
-const listeners = new Set<(rev: number) => void>();
+let enrichRevision = 0;
+const listeners = new Set<(event: 'change' | 'enriched', rev: number) => void>();
 
 function bump() {
   revision++;
-  for (const fn of [...listeners]) fn(revision);
+  for (const fn of [...listeners]) fn('change', revision);
+}
+
+/**
+ * Enrichment gets its own signal. A chip resolving should refresh the chips, not
+ * make the board rebuild itself — and it must never look like a file changed.
+ */
+function bumpEnriched() {
+  enrichRevision++;
+  for (const fn of [...listeners]) fn('enriched', enrichRevision);
 }
 
 watch([p.cards, p.views, p.facets], {
@@ -427,8 +477,8 @@ watch([p.cards, p.views, p.facets], {
 app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {
     let alive = true;
-    const send = (rev: number) => {
-      void stream.writeSSE({ event: 'change', data: String(rev) });
+    const send = (event: 'change' | 'enriched', rev: number) => {
+      void stream.writeSSE({ event, data: String(rev) });
     };
     listeners.add(send);
     await stream.writeSSE({ event: 'hello', data: String(revision) });

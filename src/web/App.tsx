@@ -4,6 +4,7 @@ import { api } from './api.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { CardPanel } from './views/CardPanel.tsx';
+import { EnrichmentProvider } from './enrichment.tsx';
 import type { Meta } from './types.ts';
 
 function Sidebar({ meta }: { meta: Meta }) {
@@ -97,6 +98,7 @@ export function App() {
   if (!meta) return <div className="boot">starting…</div>;
 
   return (
+    <EnrichmentProvider>
     <div className="shell">
       <Sidebar meta={meta} />
       <main className="main">
@@ -121,5 +123,6 @@ export function App() {
         />
       )}
     </div>
+    </EnrichmentProvider>
   );
 }

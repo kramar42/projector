@@ -1,4 +1,4 @@
-import type { BoardResponse, CanvasResponse, CardDetail, Meta } from './types.ts';
+import type { BoardResponse, CanvasResponse, CardDetail, Meta, Resolved } from './types.ts';
 
 /**
  * A thin typed fetch. No client-side cache: the server owns the cache and
@@ -78,6 +78,12 @@ export const api = {
     parent?: string | null;
   }) => req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input),
 
+  enrich: (refs: string[], force = false) =>
+    req<{ items: Resolved[] }>('POST', '/api/enrich', { refs, force }),
+
+  clearEnrichment: (refs?: string[]) =>
+    req<{ cleared: number }>('POST', '/api/enrich/clear', { refs }),
+
   frontmatter: (id: string) =>
     get<{ yaml: string; mtime: number }>(`/api/card/${encodeURIComponent(id)}/frontmatter`),
 
@@ -106,12 +112,16 @@ export const api = {
 };
 
 /**
- * Subscribe to file changes. The server watches the data directory, so a card
- * edited by a Claude session in another window shows up here without a refresh —
- * which is the whole point of keeping markdown as the source of truth.
+ * Subscribe to server events.
+ *
+ * `change` means a file under the data directory changed — a card edited by a
+ * Claude session in another window shows up without a refresh, which is the whole
+ * point of keeping markdown as the source of truth. `enriched` means a background
+ * enrichment fetch landed, and is deliberately separate so a chip resolving does
+ * not make a board rebuild itself.
  */
-export function onDataChange(fn: () => void): () => void {
+export function onDataChange(fn: () => void, event: 'change' | 'enriched' = 'change'): () => void {
   const es = new EventSource('/api/events');
-  es.addEventListener('change', () => fn());
+  es.addEventListener(event, () => fn());
   return () => es.close();
 }
