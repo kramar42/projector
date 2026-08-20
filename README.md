@@ -3,8 +3,8 @@
 Personal work-management app. One card database in markdown files, projected as a board and a
 mind-map canvas. Spec: [`../cockpit-plan.md`](../cockpit-plan.md) — that file is authoritative.
 
-**Status: P3 complete.** Everything above plus link enrichment: a Jira key, pull request, branch,
-commit, Claude session or local doc resolves inline on the card.
+**Status: P4 complete.** Everything above plus the agent layer: assembled card context, a multi-repo
+worktree launcher, and four skills for intake, triage and doing the work.
 
 ## Two directories, two repos
 
@@ -62,6 +62,12 @@ alias ck='node /Users/you/Code/work/cockpit/src/cli/ck.ts'
 | `ck search <query>` | full-text search |
 | `ck import trello <file.json>` / `ck import todo <TODO.md>` | one-time imports |
 | `ck stats` | index counts |
+| `ck context <id> [--json]` | everything known about a card, assembled — facets, project chain, repos, inherited instructions, links with enrichment, relations, body |
+| `ck untriaged [--json]` | cards missing project/priority/status, with the reason each surfaced |
+| `ck set <id> …` | scripted edits: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none` |
+| `ck work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace + `AGENT_BRIEFING.md` + a Terminal running claude |
+| `ck link-session <id>` | link the live Claude session working in this directory |
+| `ck enrich [<ref>…] [--all]` | resolve link enrichment |
 
 ## Tests
 
@@ -156,6 +162,48 @@ from the card files and rebuilt on every request, which would throw away network
 node src/cli/ck.ts enrich --all        # resolve every link on every card and print it
 node src/cli/ck.ts enrich <ref> --force
 ```
+
+## The agent layer
+
+Cards are plain files, so an agent can always edit them directly. What P4 adds is the context to do it
+well and the discipline to do it safely.
+
+**`ck context <id>`** is the entry point for anything about a card: it resolves the project chain, the
+inherited repos and instructions, relations, and the cached link enrichment in one pass, so an agent
+never re-derives them from the filesystem.
+
+**`ck work <id>`** prepares a workspace: one directory outside every repo, a `git worktree` per
+project repo on a single branch, `AGENT_BRIEFING.md` with the full context embedded, and a Terminal
+running `claude "Read AGENT_BRIEFING.md and follow it exactly."` Five behaviours worth knowing, each
+bugs already paid for once:
+
+- `git worktree prune` runs unconditionally, so a hand-deleted workspace can be reopened
+- an existing branch is reused and an existing folder skipped — reopening is idempotent
+- **one repo failing does not stop the others**; the briefing lists the failures as out of scope
+- base branch: declared → `origin/HEAD` → `HEAD`
+- AppleScript quoting is applied on top of shell quoting, because a path may contain a quote
+
+The briefing's step 4 is the point of it: read the card, the linked issues and every repo's docs —
+then **stop and ask** before planning or writing code. Its last step is `ck link-session <id>`, so the
+card accumulates its own history rather than depending on someone pasting an id.
+
+Workspaces default to `~/Code/wt`, overridable with `COCKPIT_WORKSPACES`.
+
+## Skills
+
+In `work/.claude/skills/`, invoked as slash commands:
+
+| | |
+|---|---|
+| `/cockpit` | the model and the `ck` surface — read by the others, and on its own for ad-hoc card work |
+| `/capture` | sweep Slack, Jira, Gmail and git into new cards, deduplicated by `source_fingerprint` |
+| `/triage` | give incomplete cards a project, priority and status |
+| `/work` | start work on a card |
+
+`/capture` and `/triage` both **propose and stop**. They present a table and apply nothing until it is
+approved — a wrong project assignment hides a card in a column its owner will not look in, which is
+worse than leaving it blank. `--fingerprint` on `ck add` makes a sweep converge instead of refilling
+the inbox, so `/capture` is safe to run daily.
 
 ## How it fits together
 

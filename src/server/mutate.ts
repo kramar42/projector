@@ -152,13 +152,26 @@ export function createCard(
     parent?: string;
     facets?: Record<string, string[]>;
     body?: string;
+    links?: string[];
+    /**
+     * A stable hash of whatever this card came from. A sweep that runs twice
+     * must converge rather than refill the inbox, so a fingerprint already
+     * present short-circuits instead of creating a duplicate.
+     */
+    fingerprint?: string;
   },
-): { id: string } {
+): { id: string; existed?: boolean } {
   const title = input.title.trim();
   if (!title) throw new Invalid('title cannot be empty');
   const p = paths(root);
   mkdirSync(p.cards, { recursive: true });
   const { records } = readAll(p.cards);
+
+  if (input.fingerprint) {
+    for (const rec of records.values()) {
+      if (rec.source_fingerprint === input.fingerprint) return { id: rec.id, existed: true };
+    }
+  }
   const id = uniqueId(slugify(title), new Set(records.keys()));
   const facets = input.facets ?? {};
   if (Object.keys(facets).length) checkFacets(root, id, facets, records as never);
@@ -169,7 +182,8 @@ export function createCard(
     title,
     facets,
     edges: input.parent ? [{ type: 'parent', to: input.parent }] : [],
-    links: [],
+    links: (input.links ?? []).map(parseLink),
+    source_fingerprint: input.fingerprint,
     created: today(),
     updated: today(),
     body: input.body ? `\n${input.body}\n` : '\n',

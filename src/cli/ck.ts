@@ -25,6 +25,13 @@ import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
 import { migrateProjectFacet } from '../import/migrate.ts';
 import { readCached, refresh } from '../server/enrich.ts';
+import { cardContext, renderContext, untriaged } from '../agent/context.ts';
+import { buildBriefing } from '../agent/briefing.ts';
+import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
+import { sessionForCwd } from '../agent/session.ts';
+import { createCard, patchCard, setEdges } from '../server/mutate.ts';
+import { execFileSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { slugify, uniqueId } from '../import/slug.ts';
 
 const root = dataDir();
@@ -36,7 +43,8 @@ const HELP = `ck — cockpit CLI   (data: ${root})
   ck show <id>                                         one record in full
   ck next                                              actionable cards: open and unblocked
   ck add <title> [--kind card|node] [--parent id]
-         [--facet f=v ...] [--link ref ...]            create a record
+         [--facet f=v ...] [--link ref ...]
+         [--fingerprint fp] [--body text]              create a record
   ck link <id> <ref> [...]                             append links to a record
   ck check                                             validate every card file
   ck reindex                                           rebuild the index from files
@@ -47,6 +55,13 @@ const HELP = `ck — cockpit CLI   (data: ${root})
   ck stats                                             index counts
   ck migrate-project-facet [--apply]                   backfill the project facet from parent edges
   ck enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
+
+  ck context <id> [--json]                             everything known about a card, assembled
+  ck untriaged [--json] [--limit n]                    cards needing attention, and why
+  ck set <id> [--title t] [--facet f=v] [--add f=v]
+         [--remove f=v] [--parent id|none]             scripted edits, for skills
+  ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
+  ck link-session <id> [--cwd dir]                     link the live session working here
 `;
 
 function argFlags(argv: string[]): { flags: Map<string, string[]>; rest: string[] } {
@@ -199,26 +214,22 @@ function cmdAdd(argv: string[]): void {
     if (f && v) facets[f] = v.split(',').map((s) => s.trim()).filter(Boolean);
   }
   const kind = (flags.get('kind')?.[0] ?? 'card') as 'card' | 'node';
-  const parent = flags.get('parent')?.[0];
-  const today = new Date().toISOString().slice(0, 10);
-  const text = renderCard({
-    id,
-    kind,
+  const fingerprint = flags.get('fingerprint')?.[0];
+  const res = createCard(root, {
     title,
+    kind,
+    parent: flags.get('parent')?.[0],
     facets,
-    edges: parent ? [{ type: 'parent', to: parent }] : [],
-    links: (flags.get('link') ?? []).map(parseLink),
-    created: today,
-    updated: today,
-    body: '\n',
+    links: flags.get('link') ?? [],
+    body: flags.get('body')?.[0],
+    fingerprint,
   });
-  const file = cardPath(id);
-  if (existsSync(file)) {
-    console.error(`${file} already exists`);
-    process.exit(1);
+  if (res.existed) {
+    // A sweep run twice converges instead of refilling the inbox.
+    console.log(`skipped — fingerprint already on ${res.id}`);
+    return;
   }
-  writeCardFile(file, text);
-  console.log(`created ${file.replace(root + '/', '')}  (id: ${id})`);
+  console.log(`created cards/${res.id}.md  (id: ${res.id})`);
 }
 
 function cmdLink(argv: string[]): void {
@@ -394,9 +405,10 @@ try {
     case 'next':
       cmdNext();
       break;
-    case 'add':
+    case 'add': {
       cmdAdd(argv);
       break;
+    }
     case 'link':
       cmdLink(argv);
       break;
@@ -447,6 +459,186 @@ try {
       }
       break;
     }
+    case 'context': {
+      const { flags, rest } = argFlags(argv);
+      const ctx = cardContext(rest[0] ?? '', root);
+      if (!ctx) {
+        console.error(`no record with id "${rest[0] ?? ''}"`);
+        process.exit(1);
+      }
+      console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
+      break;
+    }
+
+    case 'untriaged': {
+      const { flags } = argFlags(argv);
+      const limit = Number(flags.get('limit')?.[0] ?? 200);
+      const all = untriaged(root);
+      const list = all.slice(0, limit);
+      if (flags.has('json')) {
+        console.log(JSON.stringify({ total: all.length, shown: list.length, cards: list }, null, 2));
+        break;
+      }
+      for (const u of list) console.log(`${pad(u.id, 46)} ${pad(u.reasons.join(', '), 34)} ${u.title.slice(0, 50)}`);
+      console.log(`\n${all.length} card(s) need attention${all.length > list.length ? ` (showing ${list.length})` : ''}`);
+      break;
+    }
+
+    case 'set': {
+      const { flags, rest } = argFlags(argv);
+      const id = rest[0];
+      if (!id) {
+        console.error('ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]');
+        process.exit(1);
+      }
+      const { records } = readAll(p.cards);
+      const rec = records.get(id);
+      if (!rec) {
+        console.error(`no record with id "${id}"`);
+        process.exit(1);
+      }
+      const facets: Record<string, string[]> = { ...rec.facets };
+      const split = (spec: string): [string, string[]] => {
+        const i = spec.indexOf('=');
+        const f = i === -1 ? spec : spec.slice(0, i);
+        const v = i === -1 ? '' : spec.slice(i + 1);
+        return [f, v ? v.split(',').map((x) => x.trim()).filter(Boolean) : []];
+      };
+      for (const spec of flags.get('facet') ?? []) {
+        const [f, v] = split(spec);
+        if (v.length) facets[f] = v;
+        else delete facets[f];
+      }
+      for (const spec of flags.get('add') ?? []) {
+        const [f, v] = split(spec);
+        facets[f] = [...new Set([...(facets[f] ?? []), ...v])];
+      }
+      for (const spec of flags.get('remove') ?? []) {
+        const [f, v] = split(spec);
+        const kept = (facets[f] ?? []).filter((x) => !v.includes(x));
+        if (kept.length) facets[f] = kept;
+        else delete facets[f];
+      }
+
+      const title = flags.get('title')?.[0];
+      patchCard(root, id, {
+        ...(title ? { title } : {}),
+        ...(flags.has('facet') || flags.has('add') || flags.has('remove') ? { facets } : {}),
+      });
+
+      const parent = flags.get('parent')?.[0];
+      if (parent !== undefined) {
+        const others = rec.edges.filter((e) => e.type !== 'parent');
+        const next = parent === 'none' ? others : [...others, { type: 'parent' as const, to: parent }];
+        setEdges(root, id, next);
+      }
+      const after = cardContext(id, root)!;
+      console.log(
+        `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}` +
+          (after.parents.length ? `  parent=${after.parents.map((x) => x.id).join(',')}` : ''),
+      );
+      break;
+    }
+
+    case 'work': {
+      const { flags, rest } = argFlags(argv);
+      const id = rest[0];
+      const ctx = id ? cardContext(id, root) : null;
+      if (!ctx) {
+        console.error('ck work <id>');
+        process.exit(1);
+      }
+      const jiraKeys = ctx.links.filter((l) => l.kind === 'jira').map((l) => l.ref);
+      const branch = branchFor(ctx.id, { template: ctx.project?.branch, jiraKeys });
+      const parentDir =
+        process.env.COCKPIT_WORKSPACES ?? join(homedir(), 'Code', 'wt');
+      const workspace = workspacePath(parentDir, ctx.project?.key ?? 'no-project', branch);
+      const repos = ctx.project?.repos ?? [];
+
+      if (!repos.length) {
+        console.error(
+          `"${ctx.id}" has no repos: its project declares none, or it has no project.\n` +
+            `Add repos to the project record's frontmatter, then try again.`,
+        );
+        process.exit(1);
+      }
+
+      console.log(`workspace  ${workspace}`);
+      console.log(`branch     ${branch}`);
+      for (const r of repos) console.log(`repo       ${r.path}${r.base ? ` @ ${r.base}` : ''}`);
+
+      if (flags.has('dry-run')) {
+        const briefing = buildBriefing({
+          ctx,
+          workspace,
+          branch,
+          repos: repos.map((r) => ({ name: r.path.split('/').pop()!, path: r.path, created: false, error: null })),
+        });
+        console.log('\n--- AGENT_BRIEFING.md (dry run) ---\n');
+        console.log(briefing);
+        break;
+      }
+
+      const results = prepareWorkspace(workspace, repos, branch);
+      for (const r of results) {
+        console.log(`  ${r.error ? '✗' : r.created ? '+' : '='} ${pad(r.name, 26)} ${r.error ?? r.path}`);
+      }
+      if (!results.some((r) => !r.error)) {
+        console.error('\nno worktree could be created; not launching');
+        process.exit(1);
+      }
+
+      const briefing = buildBriefing({ ctx, workspace, branch, repos: results });
+      const briefingPath = join(workspace, 'AGENT_BRIEFING.md');
+      writeFileSync(briefingPath, briefing, 'utf8');
+      console.log(`\nwrote ${briefingPath}`);
+
+      if (flags.has('no-open')) {
+        console.log('not opening a terminal (--no-open)');
+        break;
+      }
+      try {
+        execFileSync('osascript', ['-e', terminalScript(workspace, 'Read AGENT_BRIEFING.md and follow it exactly.')], {
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
+        console.log('opened a Terminal running claude there');
+      } catch (err) {
+        console.error(`could not open Terminal: ${(err as Error).message}`);
+        console.log(`run it yourself:\n  cd ${workspace} && claude "Read AGENT_BRIEFING.md and follow it exactly."`);
+      }
+      break;
+    }
+
+    case 'link-session': {
+      const { flags, rest } = argFlags(argv);
+      const id = rest[0];
+      if (!id) {
+        console.error('ck link-session <id> [--cwd dir]');
+        process.exit(1);
+      }
+      const cwd = flags.get('cwd')?.[0] ?? process.cwd();
+      const found = sessionForCwd(cwd, process.pid);
+      if (!found) {
+        console.error(`no live Claude session found working in ${cwd}`);
+        process.exit(1);
+      }
+      const { records } = readAll(p.cards);
+      const rec = records.get(id);
+      if (!rec) {
+        console.error(`no record with id "${id}"`);
+        process.exit(1);
+      }
+      const ref = `claude:${found.sessionId}`;
+      const existing = rec.links.map((l) => l.raw);
+      if (existing.includes(ref)) {
+        console.log(`${id} already links ${ref}`);
+        break;
+      }
+      patchCard(root, id, { links: [...existing, ref] });
+      console.log(`${id} → ${ref}${found.name ? `  (${found.name})` : ''}`);
+      break;
+    }
+
     case 'migrate-project-facet': {
       const apply = argv.includes('--apply');
       const r = migrateProjectFacet(root, apply);
