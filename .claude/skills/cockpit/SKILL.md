@@ -1,6 +1,6 @@
 ---
 name: cockpit
-description: How to read and write cockpit cards — the markdown card database in work/cockpit/data that backs the personal board and mind-map canvas. Use whenever a request involves cards, projects, facets, the board, the canvas, or the `ck` CLI: creating a card, changing its facets or project, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Also read this before hand-editing any file under cockpit/data/cards/.
+description: How to read and write cockpit cards — the markdown card database that backs the board, canvas and table views. Use whenever a request involves cards, projects, facets, the board, the canvas, or the `ck` CLI: creating a card, changing its facets or project, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Also read this before hand-editing any card file.
 ---
 
 # Cockpit
@@ -13,7 +13,7 @@ anything here disagrees.
 Prefer `ck` when a command exists, because it validates and keeps formatting consistent.
 
 ```bash
-alias ck='node /Users/you/Code/work/cockpit/src/cli/ck.ts'
+alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
 ```
 
 ## The model, in four facts

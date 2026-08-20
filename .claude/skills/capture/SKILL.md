@@ -20,7 +20,7 @@ Cover these unless the user narrows it. Say which you covered and which you skip
 | Slack saved | `is:saved` | bookmarked messages |
 | Jira | assigned to him, or mentioning him, updated recently | anything needing his reply or action |
 | Gmail | vendor threads, forwarded meeting notes | commitments made to other people |
-| git | `git log --oneline -20 --author=Oleksii` in the active repos | work in flight with no card |
+| git | `git log --oneline -20 --author="$(git config user.name)"` in the active repos | work in flight with no card |
 
 Prefer the last sweep's boundary over a fixed window: `ck ls --filter source=slack --json` shows what
 was already taken, and each card's `source_fingerprint` records exactly what it came from.
