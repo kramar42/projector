@@ -4,22 +4,9 @@ A personal work-management app. One card database in markdown files, projected a
 **mind-map canvas** or a **table** — whichever the current query asks for — with read-only inline views
 of Jira issues, GitHub PRs, Claude sessions and local docs.
 
-It is a single-user app that runs on your own machine against a folder of your own files.
-
-## Principles
-
-The rules the app obeys. Most of what follows is one of them being applied, and the code cites them
-by number.
-
-| | | |
-|---|---|---|
-| C1 | Markdown files are the source of truth | any index is derived and disposable |
-| C2 | Everything external is read-only | no code path writes to Jira, GitHub, Trello or Slack |
-| C3 | Cards stay agent-editable | an agent edits them with plain file writes — no API, no app running |
-| C6 | The card body is free-form | description, links, files, images — no template |
-| C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
-| C9 | A view is a query, not a place | `view = filter × focus × shape × face` |
-| C10 | Structure is edited by gesture, content in the panel | |
+It is a single-user app that runs on your own machine against a folder of your own files. Two promises
+shape everything else: **your markdown files are the source of truth**, and **nothing is ever written
+back** to Jira, GitHub, Trello or Slack.
 
 ## Running
 
@@ -65,7 +52,7 @@ facets:
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
-Each is a count, a date comparison or the presence of an edge — never a judgement (C8). `type=project`
+Each is a count, a date comparison or the presence of an edge — never a judgement. `type=project`
 *is* the projects view, and `triage` turns the untriaged pile into something you can drag out of.
 
 ## Cards and nodes
@@ -170,10 +157,9 @@ context, with a one-click *clear* — so a card that is missing is never a myste
 Multi-select over every facet and pseudo-facet, plus **`(none)`** for absence — "cards with no project"
 is a click, not a search. Values within a facet are ORed; facets are ANDed.
 
-Counts are **disjunctive**: a facet's own selection is lifted before counting its values, so an
-unselected value tells you what adding it would bring rather than reading 0. Which facets are *offered*
-depends on what focus and search left, so refining one facet never removes another, and a facet with no
-values anywhere in view is not shown at all.
+Counts are **disjunctive**: an unselected value tells you how many cards adding it would bring in,
+rather than reading 0 — so a selection can always be widened, not just narrowed. Refining one facet
+never removes another from the panel, and a facet nothing in view carries is not offered at all.
 
 ## focus
 
@@ -208,8 +194,8 @@ orders within a column, a section or a canvas rank.
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`
 comes before `month`.
 
-A canvas cannot cluster yet: a node has one position, so a card multi-valued on the grouped facet
-cannot sit in two clusters. `groupBy` is kept but not drawn there, so switching shape never loses it.
+A canvas does not draw clusters yet, but it keeps the setting, so switching shape and back never loses
+it.
 
 ## search
 
@@ -263,13 +249,12 @@ bar.
 
 So "card in two columns" is always a gesture, never an accident.
 
-**Canvas.** An auto-laid-out tree, plus free positioning once saved. Drag handle-to-handle to create an
-edge, `+ node` for cheap capture, double-click to open. Layout follows whichever hierarchy edges are
-shown — `parent` or `member-of` — while `blocks` and `relates` are drawn but never allowed to distort
-the tree.
+**Canvas.** A tree laid out from its roots, plus free positioning once saved. Drag handle-to-handle to
+create an edge, `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
+you have chosen to draw — decomposition (`parent`) or membership (`member-of`).
 
 Filtering a graph means **match plus context**: unmatched ancestors are kept so the tree stays
-connected, drawn muted and reported separately, so the count stays honest.
+connected, drawn muted and counted separately, so a filtered graph still reads as a graph.
 
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** card counts, blocked,
@@ -278,7 +263,7 @@ member and six nested ones reads `1 / 7`.
 
 ## Editing
 
-**Structure is edited by gesture; content is edited in the panel** (C10). Facets, `parent` and edges
+**Structure is edited by gesture; content is edited in the panel.** Facets, `parent` and edges
 are written by drag, the bulk bar and canvas handles — the same writes for one card or fifty. Title,
 body, links and the `project:` block go through the card panel only. Creating a card inline in a column
 is the one exception.
@@ -293,8 +278,9 @@ is the one exception.
 **Bulk actions** make a few hundred cards tractable: ⌘-click a selection, then set a parent, set or
 clear one facet, or delete, across all of it.
 
-**Conflicts are refused, not merged.** If a file changed since the panel read it, the write is refused
-and the panel says so — which matters when an agent may be editing the same file in another window.
+**Conflicts are refused, not merged.** If a file changed since the panel read it the write is refused
+and the panel says so, rather than one of you silently losing an edit — which matters when an agent may
+be working on the same card in another window.
 
 ---
 
@@ -313,9 +299,8 @@ enrichment replaces that with something richer if and when it arrives — nothin
 | `doc` | `doc:path.md` | filesystem | — | 30 s |
 | `slack` `trello` `cal` `grafana` `url` | — | not fetched — parsed label only | — | — |
 
-Every fetcher is server-side and read-only; credentials stay in the Node process and the browser only
-ever receives cached JSON. Failures are cached too, so a link that cannot resolve says why once instead
-of retrying on every render.
+Every fetcher is read-only and runs server-side, so credentials stay out of the browser. Failures are
+cached too, so a link that cannot resolve says why once instead of retrying on every render.
 
 A `doc:` path is relative to the vault root, or absolute. A `claude:` link takes a session transcript
 uuid and resolves to its opening prompt, last activity, turn count, working directory, branch, and the
@@ -330,8 +315,8 @@ ck enrich <ref> --force
 
 # Agents
 
-Cards are plain files, so an agent can create and edit them directly with no API and no app running
-(C3). Two commands make that reliable:
+Cards are plain files, so an agent can create and edit them directly with no API and no app running.
+Two commands make that reliable:
 
 **`ck context <id>`** assembles everything known about a card in one pass — the project chain, the
 inherited repos and instructions, relations, and cached link enrichment — so an agent never
@@ -418,7 +403,7 @@ browser mean the same thing.
     fix-deploy.md                # kind: card
     eventing.md                  # kind: node, may carry a project: block
     assets/fix-deploy/error.png
-    README.md                    # conventions, for agents and humans
+    README.md                    # the format, written into every new vault
   facets.yaml                    # facet vocabulary, order, scope
   views/
     home.yaml  projects.yaml  …  # flat: a shape is a field, not a folder
@@ -447,21 +432,20 @@ created: 2026-08-19
 updated: 2026-08-19
 ---
 
-Free-form markdown below the frontmatter (C6). Checklists are ordinary task lists —
+Free-form markdown below the frontmatter. Checklists are ordinary task lists —
 the app counts them for the progress bar and never rewrites them.
 
 - [x] Deploy to the dev namespace
 - [ ] Drop the `KAFKA_` prefix from env vars
 ```
 
-`id`, `kind` and `title` are required; everything else is optional. The `id` is the join key
-everywhere and never changes, though the filename may drift from it. Facet values are always arrays,
-and a facet the vocabulary does not know is preserved rather than dropped. An `edges` target that does
-not exist is a warning, not an error. `created`/`updated` are maintained by the app and agents may omit
-them; `source_fingerprint` is what makes a repeated import or capture sweep converge instead of
-duplicating.
+`id`, `kind` and `title` are required; everything else is optional. The `id` is the join key everywhere
+and never changes, though the filename may drift from it. Facet values are always arrays, and a facet
+the vocabulary does not know is preserved rather than dropped.
 
-`ck check` validates every card and reports every problem at once, rather than stopping at the first.
+Every vault gets its own `cards/README.md` documenting all of this, so the format travels with the data
+rather than with the app. `ck check` validates every card and reports every problem at once, rather
+than stopping at the first.
 
 ## Facet vocabulary
 
@@ -479,40 +463,13 @@ project:
   open: true
 ```
 
----
+# Theme
 
-# Architecture
-
-```
-cards/*.md, facets.yaml, views/**        ← source of truth. Git-tracked, agent-editable
-        │
-        ▼
-   read → validate → node:sqlite index (.index.db)
-        │                    derived and disposable; ck reindex is always correct
-        ▼
-   hono: /api/meta  /api/query  /api/card/:id  /api/view/:name
-        │                    re-read whenever a file changes
-        ▼
-   React: the sidebar composes the query │ board │ canvas │ table │ card panel
-```
-
-The index is never authoritative — nothing in it survives a rebuild, and nothing needs to. It is
-re-read whenever a file it was built from changes, so the app cannot disagree with what you or an agent
-just wrote, and an edit made in another window shows up without a refresh.
-
-**What it writes:** card files, view files, assets under `cards/assets/`, and two derived SQLite
-databases. Nothing else, anywhere. Every external call is a read, and the fetcher modules export no
-mutation functions, so there is no code path to write back. Card writes go through a temp file and a
-rename, so a concurrent reader never sees half a file.
-
-**Stack.** `hono` and `node:sqlite` on the server; React with `@xyflow/react` for the canvas,
-`@dagrejs/dagre` for layout, `@atlaskit/pragmatic-drag-and-drop` for the board, and CodeMirror 6 for
-the body — chosen because it edits markdown text directly rather than round-tripping it through a
-document model, which would reformat files an agent wrote.
-
-**Theme.** [xoria256](https://github.com/neozenith/estilo-xoria256), one hue family per facet, so a
-chip's colour says which axis it is before you read it. Light and dark follow the system setting.
+[xoria256](https://github.com/neozenith/estilo-xoria256), one hue family per facet, so a chip's colour
+says which axis it is before you read it — priority orange, status green, project purple, tech blue.
+Light and dark follow the system setting.
 
 ---
 
-Open items are in [TODO.md](TODO.md).
+How it works inside, and the invariants to keep when changing it: [ARCHITECTURE.md](ARCHITECTURE.md).
+Open items: [TODO.md](TODO.md).
