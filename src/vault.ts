@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { paths, resolvePath } from './config.ts';
+import { looksLikeVault, paths, resolvePath } from './config.ts';
 
 /**
  * Vaults — a directory of cards, opened the way Obsidian opens a folder.
@@ -12,7 +12,17 @@ import { paths, resolvePath } from './config.ts';
  * filesystem path on every request.
  */
 
-const REGISTRY_DIR = join(homedir(), '.cockpit');
+/**
+ * Where the registry lives. `COCKPIT_HOME` relocates it, which is what makes a
+ * test, a second install or a portable checkout able to keep its own list
+ * instead of sharing the one in your home directory.
+ *
+ * This is the only file the app writes outside a vault, and it holds nothing but
+ * paths you have opened — deleting it loses the list and nothing else.
+ */
+const REGISTRY_DIR = process.env.COCKPIT_HOME
+  ? resolvePath(process.env.COCKPIT_HOME, process.cwd())
+  : join(homedir(), '.cockpit');
 const REGISTRY = join(REGISTRY_DIR, 'vaults.json');
 
 export interface VaultEntry {
@@ -51,11 +61,6 @@ export function normalise(p: string): string {
 }
 
 /** A directory is a vault when it holds the things a vault is made of. */
-export function looksLikeVault(path: string): boolean {
-  const p = paths(path);
-  return existsSync(p.cards) || existsSync(p.facets);
-}
-
 export function countCards(path: string): number {
   const dir = paths(path).cards;
   if (!existsSync(dir)) return 0;
@@ -201,4 +206,4 @@ export function browse(path: string): { path: string; entries: { name: string; i
   return { path: p, entries };
 }
 
-export { REGISTRY };
+export { REGISTRY, looksLikeVault };

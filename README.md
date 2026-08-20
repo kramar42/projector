@@ -356,8 +356,11 @@ and remembers the choice, and the switcher at the top of the sidebar opens or ad
 
 Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, four
 starter views, a README of the conventions, and a `.gitignore` for the derived index and cache. A
-non-empty folder that is not a vault is refused. Known vaults are recorded in `~/.cockpit/vaults.json`,
-and the server only ever opens one it has been asked to.
+non-empty folder that is not a vault is refused.
+
+The folders you have opened are listed in `~/.cockpit/vaults.json` (relocatable with `COCKPIT_HOME`),
+and the server will only open one that is on that list — so a page in your browser cannot point it at
+an arbitrary directory. Delete the file and you lose the list, nothing else.
 
 ```bash
 ck vaults                                  # list
@@ -366,7 +369,9 @@ ck vaults forget <path>                    # stop tracking it; the folder is unt
 ck --vault <path> <command>                # act on a specific one
 ```
 
-For the CLI the vault is `--vault`, else `COCKPIT_DATA`, else the single registered one.
+The CLI does not need the list at all: run `ck` anywhere inside a vault and it finds it by walking up,
+the way git finds a repository. Otherwise `--vault`, then `COCKPIT_DATA`, then the single registered
+one.
 
 ---
 

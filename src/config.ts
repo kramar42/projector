@@ -36,6 +36,26 @@ export const paths = (root: string) => ({
  * several registered and no choice made, the caller is asked to pick rather than
  * guessing.
  */
+/**
+ * Whether a directory is a vault. `paths` is the only place the layout is written
+ * down, so this is the only place the question is answered.
+ */
+export function looksLikeVault(path: string): boolean {
+  const p = paths(path);
+  return existsSync(p.cards) || existsSync(p.facets);
+}
+
+/** A vault at or above `from`, found the way git finds a repository. */
+export function vaultAbove(from: string): string | null {
+  let dir = resolve(from);
+  for (;;) {
+    if (looksLikeVault(dir)) return dir;
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
 export function resolveCliVault(
   argv: string[],
   registered: { path: string; name: string }[],
@@ -49,16 +69,20 @@ export function resolveCliVault(
   if (process.env.COCKPIT_DATA) {
     return { root: resolvePath(process.env.COCKPIT_DATA, process.cwd()) };
   }
+  // Standing inside a vault is an unambiguous answer, and it does not need the
+  // registry to exist — so the CLI works on a vault the app has never opened.
+  const here = vaultAbove(process.cwd());
+  if (here) return { root: here };
   if (registered.length === 1) return { root: registered[0]!.path };
   if (!registered.length) {
     return {
       error:
-        'no vault. Pass --vault <path>, set COCKPIT_DATA, or open one in the app first.',
+        'no vault. Run from inside one, pass --vault <path>, set COCKPIT_DATA, or open one in the app.',
     };
   }
   return {
     error:
-      `several vaults are registered — pass --vault <path>:\n` +
+      `several vaults are registered — run from inside one or pass --vault <path>:\n` +
       registered.map((v) => `  ${v.name}  ${v.path}`).join('\n'),
   };
 }

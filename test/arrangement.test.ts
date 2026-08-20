@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
 import { saveArrangement, saveView, deleteView } from '../src/server/mutate.ts';
 import { loadViews } from '../src/server/views.ts';
 import { applyOrder } from '../src/web/query.ts';
+import { resolveCliVault, vaultAbove } from '../src/config.ts';
 
 /**
  * Arrangement — positions and card order — lives in a named view and nowhere
@@ -135,4 +136,49 @@ test('stored order pins its cards and never loses the others', () => {
   // No order at all leaves the query's sort untouched.
   assert.deepEqual(applyOrder(['a', 'b'], undefined), ['a', 'b']);
   assert.deepEqual(applyOrder(['a', 'b'], []), ['a', 'b']);
+});
+
+test('the CLI finds a vault from the working directory, without a registry', () => {
+  const { root, cleanup } = vault();
+  try {
+    // Standing inside one, or anywhere below it — the way git finds a repo.
+    assert.equal(vaultAbove(root), root);
+    assert.equal(vaultAbove(join(root, 'cards')), root);
+    assert.equal(vaultAbove(join(root, 'views')), root);
+    // A folder that is not a vault and has none above it.
+    assert.equal(vaultAbove(tmpdir()), null);
+
+    // So `ck` needs no flag and no registry entry when run from inside. Compared
+    // against the real path: chdir resolves symlinks, and on macOS the temp dir
+    // is one.
+    const cwd = process.cwd();
+    try {
+      process.chdir(join(root, 'cards'));
+      assert.deepEqual(resolveCliVault([], []), { root: realpathSync(root) });
+    } finally {
+      process.chdir(cwd);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('an explicit vault still wins over the working directory', () => {
+  const a = vault();
+  const b = vault();
+  try {
+    const cwd = process.cwd();
+    try {
+      process.chdir(a.root);
+      assert.deepEqual(resolveCliVault(['--vault', b.root], []), { root: b.root });
+      process.env.COCKPIT_DATA = b.root;
+      assert.deepEqual(resolveCliVault([], []), { root: b.root });
+    } finally {
+      delete process.env.COCKPIT_DATA;
+      process.chdir(cwd);
+    }
+  } finally {
+    a.cleanup();
+    b.cleanup();
+  }
 });

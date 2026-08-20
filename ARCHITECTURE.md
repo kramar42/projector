@@ -168,6 +168,70 @@ A mutating request is refused when it carries an `Origin` header that is not one
 localhost server is reachable from any page open in the browser. Every frontmatter write goes through
 `writeCardFile`, which writes a temp file and renames, so a concurrent reader never sees half a file.
 
+## Everything it touches
+
+The complete filesystem surface, audited. Nothing else on disk is read or written.
+
+**Writes — three places, and that is all:**
+
+| Path | What | When |
+|---|---|---|
+| `<vault>/cards/**` | card files, and assets under `cards/assets/<id>/` | you create or edit a card |
+| `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
+| `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
+| `$COCKPIT_HOME/vaults.json` (default `~/.cockpit/`) | the list of vaults you have opened | you open or forget a vault |
+| `$COCKPIT_WORKSPACES/<card>/` (default `~/Code/wt/`) | `ck work` worktrees and `AGENT_BRIEFING.md` | only `ck work` |
+
+Every card write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
+sees half a file. The registry is written the same way.
+
+**Reads outside a vault:**
+
+| Path | Why | Surface |
+|---|---|---|
+| `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link to its transcript | read-only |
+| any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
+| any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
+| a project's declared `repos` | `ck work`, through `git` | `git worktree`, `git fetch` |
+
+`doc:` and the folder picker are the two places a path outside the vault is reachable, and both are
+deliberate: a `doc:` ref is something you typed, and a picker that cannot leave one directory cannot
+pick a folder. Neither reads anything you have not named.
+
+**Subprocesses:** `git` (worktrees, in declared repos only), `gh` (`pr view`, `api` GETs), and
+`osascript` (opening a terminal, `ck work` only). No shell — `execFile` with an argument array, so
+nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
+because a path may contain a quote.
+
+**Environment:**
+
+| | |
+|---|---|
+| `COCKPIT_HOME` | where the vault registry lives (default `~/.cockpit`) |
+| `COCKPIT_DATA` | the vault, for the CLI |
+| `COCKPIT_PORT` | server port (default 8092) |
+| `COCKPIT_WORKSPACES` | where `ck work` puts worktrees (default `~/Code/wt`) |
+| `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | Jira enrichment; absent means Jira links show their key and nothing more |
+
+No credential is read from anywhere but the environment, and none reaches the browser: enrichment
+responses carry the resolved fields, never the token.
+
+## Why the registry is a file
+
+`$COCKPIT_HOME/vaults.json` cannot be `localStorage`, because the **server** is the party that needs it.
+A request names its vault in an `X-Cockpit-Vault` header, and the server refuses a path that is not
+registered — so the header is a reference to a folder you chose rather than an arbitrary path a page can
+name. `localStorage` is browser-side; the server cannot read it.
+
+Verified behaviour: an unregistered path gets 428, and a cross-origin request is refused twice over —
+the custom header forces a CORS preflight that no origin of ours answers, and a mutating request with a
+foreign `Origin` is rejected outright.
+
+The CLI does not depend on the registry at all: `vaultAbove` walks up from the working directory the way
+git finds a repository, so `ck` works inside any vault whether or not the app has ever opened it. The
+registry is then only the browser's memory of which folders you use — delete it and you lose the list,
+nothing else.
+
 ## Vault seeding
 
 `initVault` writes `cards/`, `facets.yaml`, four starter views, a `.gitignore`, and
