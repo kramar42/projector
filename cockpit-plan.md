@@ -218,9 +218,9 @@ work/cockpit/data/               # the data — gitignored, relocatable
   .index.db                      # derived, gitignored
 ```
 
-The data directory is resolved from `COCKPIT_DATA`, else `cockpit.config.json`, else `./data`. Cards are
-plain files under a path of your choosing; the app is versioned on its own and can be thrown away without
-touching them.
+The vault is chosen in the app and remembered per browser; on the CLI it is `--vault`, else
+`COCKPIT_DATA`, else the single registered vault. Cards are plain files under a path of your choosing;
+the app is versioned on its own and can be thrown away without touching them.
 
 ### 3.2 Card file
 
