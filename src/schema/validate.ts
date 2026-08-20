@@ -45,10 +45,6 @@ export function validate(
         at(`facets.${facet}`, `unknown facet "${facet}" — add it to facets.yaml or remove it`);
         continue;
       }
-      if (def.derived) {
-        at(`facets.${facet}`, `"${facet}" is derived by the indexer and must not be set in a card file`);
-        continue;
-      }
       if (!def.open) {
         for (const v of values) {
           if (!def.values.includes(v)) {
@@ -104,24 +100,38 @@ export function validate(
     if (hasCycle(rec.id, records)) at('edges', 'parent edges form a cycle');
   }
 
-  // A card with no project ancestor cannot inherit repos or instructions.
+  // A card with no project groups under (none) and inherits nothing. Note this
+  // is about the `project` facet, not about parent edges: the two are
+  // independent, and a card may legitimately have either, both or neither.
+  const projectKeys = new Set<string>();
   for (const rec of records.values()) {
-    if (rec.kind !== 'card' || isProject(rec)) continue;
-    const chains = ancestorChains(rec.id, records);
-    const hasProject = chains.some((c) =>
-      c.some((cid) => {
-        const r = records.get(cid);
-        return r ? isProject(r) : false;
-      }),
-    );
-    if (!hasProject) {
+    if (rec.project) projectKeys.add(rec.project.key ?? rec.id);
+  }
+  for (const rec of records.values()) {
+    if (rec.kind !== 'card') continue;
+    const mine = rec.facets.project ?? [];
+    // A project record is its own context, so a root project belongs to nothing
+    // above it and that is not a problem to report.
+    if (!mine.length && !rec.project) {
       issues.push({
         severity: 'warning',
         file: rec.file,
         id: rec.id,
-        field: 'edges',
-        message: 'no project ancestor — will group under (none) and inherit no repos or instructions',
+        field: 'facets.project',
+        message: 'no project — groups under (none) and inherits no repos or instructions',
       });
+      continue;
+    }
+    for (const v of mine) {
+      if (!projectKeys.has(v)) {
+        issues.push({
+          severity: 'warning',
+          file: rec.file,
+          id: rec.id,
+          field: 'facets.project',
+          message: `project "${v}" has no record carrying a matching project: block`,
+        });
+      }
     }
   }
 

@@ -3,9 +3,9 @@ import { api } from '../api.ts';
 import type { CardDTO } from '../types.ts';
 
 /**
- * Pick a record — used to set a parent, which is how a card acquires a project:
- * project membership is derived from the parent chain, never typed in directly.
- * Projects sort first, since they are what a loose card usually needs.
+ * Pick a record — used to set a parent, meaning "this card is part of that one".
+ * Project membership is a separate thing entirely: it is the `project` facet.
+ * Projects still sort first, since they are the usual landmarks.
  */
 export function RecordPicker({
   exclude = [],

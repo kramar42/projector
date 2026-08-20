@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync, rea
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { paths, resolvePath } from '../config.ts';
-import { listCardFiles, loadCard, renderCard, writeCardFile } from '../schema/card.ts';
-import { patchKey, patchYamlFile, split } from '../schema/frontmatter.ts';
+import { frontmatterSchema, listCardFiles, loadCard, renderCard, writeCardFile } from '../schema/card.ts';
+import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
@@ -69,8 +69,8 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
 
 /**
  * Validate facet names and values against the vocabulary before writing.
- * A closed facet rejects unknown values; a derived facet is never storable; a
- * scoped facet is only offered where it applies.
+ * A closed facet rejects unknown values; a scoped facet is only valid where it
+ * applies. Every facet is writable — there is no special kind.
  */
 export function checkFacets(
   root: string,
@@ -82,7 +82,6 @@ export function checkFacets(
   for (const [name, values] of Object.entries(facets)) {
     const def = defs[name];
     if (!def) throw new Invalid(`unknown facet "${name}"`);
-    if (def.derived) throw new Invalid(`"${name}" is derived and cannot be set on a card`);
     if (!def.open) {
       for (const v of values) {
         if (!def.values.includes(v)) {
@@ -314,6 +313,73 @@ export function bulkDelete(root: string, ids: string[]): { deleted: number } {
 
 function same(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * Replace a card's whole frontmatter from raw YAML.
+ *
+ * Validated before anything is written: it must parse, satisfy the skeleton
+ * schema, and pass the same facet checks as any other write. `id` is refused
+ * because other cards' edges point at it — renaming would silently orphan them.
+ */
+export function putFrontmatter(
+  root: string,
+  id: string,
+  yamlText: string,
+  baseMtime?: number,
+): { mtime: number; warnings: string[] } {
+  const file = fileFor(root, id);
+  guard(file, baseMtime);
+
+  const text = readFileSync(file, 'utf8');
+  const { body } = split(text);
+
+  let parsed: unknown;
+  try {
+    parsed = parseDoc(yamlText).toJS();
+  } catch (err) {
+    throw new Invalid(`invalid YAML: ${(err as Error).message}`);
+  }
+  if (!parsed || typeof parsed !== 'object') throw new Invalid('frontmatter must be a mapping');
+
+  const draft = parsed as Record<string, unknown>;
+  if (draft.id !== undefined && draft.id !== id) {
+    throw new Invalid(
+      `id cannot be changed here — other records' edges point at "${id}". Delete and recreate instead.`,
+    );
+  }
+  draft.id = id;
+
+  const check = frontmatterSchema.safeParse(draft);
+  if (!check.success) {
+    throw new Invalid(
+      check.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '),
+    );
+  }
+
+  const { records } = readAll(paths(root).cards);
+  const facets: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries((check.data.facets ?? {}) as Record<string, unknown>)) {
+    const arr = Array.isArray(v) ? v : [v];
+    facets[k] = arr.filter((x) => x != null).map(String);
+  }
+  checkFacets(root, id, facets, records as never);
+
+  const warnings: string[] = [];
+  for (const e of check.data.edges ?? []) {
+    if (!records.has(e.to)) warnings.push(`edge target "${e.to}" does not exist yet`);
+    if (e.to === id) throw new Invalid('an edge cannot point at its own record');
+  }
+  for (const e of (check.data.edges ?? []).filter((x) => x.type === 'parent')) {
+    if (wouldCycle(id, e.to, records as never)) {
+      throw new Invalid(`parent "${e.to}" is already beneath "${id}" — that would make a cycle`);
+    }
+  }
+
+  // Re-render through the canonical serializer so key order and flow style match
+  // every other file, then restore the body untouched.
+  writeCardFile(file, joinFm(serialize(check.data), body));
+  return { mtime: mtimeOf(file), warnings };
 }
 
 // ---------------------------------------------------------------- canvas

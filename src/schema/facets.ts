@@ -20,7 +20,7 @@ export function loadFacets(file: string): Facets {
       values: Array.isArray(d.values) ? d.values.map(String) : [],
       open: d.open === true,
       scope: scope?.under ? { under: String(scope.under) } : undefined,
-      derived: d.derived === true,
+      valuesFrom: d.valuesFrom === 'project-records' ? 'project-records' : undefined,
     };
   }
   return out;

@@ -23,6 +23,7 @@ import {
 } from '../index/queries.ts';
 import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
+import { migrateProjectFacet } from '../import/migrate.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
 
 const root = dataDir();
@@ -43,6 +44,7 @@ const HELP = `ck — cockpit CLI   (data: ${root})
   ck import trello <file.json>                         import a Trello board export
   ck import todo <TODO.md>                             import a TODO.md
   ck stats                                             index counts
+  ck migrate-project-facet [--apply]                   backfill the project facet from parent edges
 `;
 
 function argFlags(argv: string[]): { flags: Map<string, string[]>; rest: string[] } {
@@ -413,6 +415,22 @@ try {
     case 'stats':
       cmdStats();
       break;
+    case 'migrate-project-facet': {
+      const apply = argv.includes('--apply');
+      const r = migrateProjectFacet(root, apply);
+      console.log(`# project facet backfill${apply ? '' : '  (dry run — pass --apply to write)'}\n`);
+      console.log(`  cards given a project     ${r.cardsGiven.length}`);
+      console.log(`  project records linked    ${r.projectsLinked.length}`);
+      console.log(`  already had one           ${r.alreadySet}`);
+      console.log(`  no project to infer       ${r.noProject}`);
+      const sample = [...r.cardsGiven, ...r.projectsLinked].slice(0, 8);
+      if (sample.length) {
+        console.log('');
+        for (const s of sample) console.log(`    ${pad(s.id, 44)} → ${s.project.join(', ')}`);
+        if (r.cardsGiven.length + r.projectsLinked.length > sample.length) console.log('    …');
+      }
+      break;
+    }
     case 'init':
       ensureData();
       console.log(`data directory ready at ${root}`);

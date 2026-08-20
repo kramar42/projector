@@ -20,7 +20,8 @@ export interface FacetDef {
   values: string[];
   open: boolean;
   scope?: { under: string };
-  derived?: boolean;
+  /** Vocabulary sourced from the data rather than a static list. */
+  valuesFrom?: 'project-records';
 }
 
 export interface Meta {

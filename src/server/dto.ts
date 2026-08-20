@@ -1,6 +1,6 @@
 import { fallbackLabel } from '../schema/links.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
-import { derivedProject, isProject } from '../index/project.ts';
+import { isProject } from '../index/project.ts';
 
 /** What the web app receives for one record. Everything here is derived, never guessed (C8). */
 export interface CardDTO {
@@ -61,17 +61,14 @@ export function toDTO(
     unblocks?: string[];
   } = {},
 ): CardDTO {
-  const project = derivedProject(rec.id, records).nearest;
-  // `project` is derived, so it exists in the index but not in the file. Merge it
-  // in here or a view asking for a project chip would render nothing.
-  const facets = project ? { ...rec.facets, project: [project] } : rec.facets;
   return {
     id: rec.id,
     kind: rec.kind,
     title: rec.title,
     isProject: isProject(rec),
-    projectKey: project,
-    facets,
+    // Convenience for chips and pickers; the facet itself is the truth.
+    projectKey: rec.facets.project?.[0] ?? null,
+    facets: rec.facets,
     links: rec.links.map((l) => ({ ...l, label: fallbackLabel(l) })),
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),

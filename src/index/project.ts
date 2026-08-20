@@ -59,91 +59,80 @@ function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], replace: boole
   return out;
 }
 
+/** Map every project key to the record that declares it. */
+export function projectRecords(byId: Map<string, Rec>): Map<string, Rec> {
+  const out = new Map<string, Rec>();
+  for (const rec of byId.values()) {
+    if (rec.project) out.set(rec.project.key ?? rec.id, rec);
+  }
+  return out;
+}
+
+/** The project keys a record belongs to. Membership is the facet, nothing else. */
+export function projectsOf(rec: Rec): string[] {
+  return rec.facets.project ?? [];
+}
+
 /**
- * Resolve a record's effective project config by walking its parent chain
- * root-down and merging every `project:` block found.
+ * Resolve a record's effective project config from its `project` facet.
  *
- * `repos` unions down the chain (a sub-project adds repos rather than
- * re-listing its parent's), `instructions` concatenate root-first so the most
- * specific advice reads last, and every other key takes the nearest value.
- * Returns null when no ancestor — including the record itself — is a project.
+ * Membership is the facet and only the facet — parent edges are decomposition and
+ * carry no config. A record may belong to several projects, so the chain is
+ * walked for each and the results merged with the same rules that already apply
+ * within one chain: `repos` union, `instructions` concatenate outermost-first so
+ * the most specific advice reads last, and other keys take the nearest value.
+ *
+ * Returns null when the record names no project that exists.
  */
 export function resolveProject(
   id: string,
   byId: Map<string, Rec>,
   dataRoot: string,
 ): ResolvedProject | null {
-  const chains = ancestorChains(id, byId);
-  if (!chains.length) return null;
+  const rec = byId.get(id);
+  if (!rec) return null;
+  const registry = projectRecords(byId);
 
-  // Prefer the chain carrying the most project records; ties go to the first declared.
-  const scored = chains.map((c) => ({
-    chain: c,
-    projects: c.filter((cid) => {
-      const r = byId.get(cid);
-      return r ? isProject(r) : false;
-    }),
-  }));
-  scored.sort((a, b) => b.projects.length - a.projects.length);
-  const best = scored[0];
-  if (!best || !best.projects.length) return null;
+  // Outermost-first order across every project the record belongs to, so
+  // instructions read general → specific and repos accumulate the same way.
+  const order: Rec[] = [];
+  const seen = new Set<string>();
 
-  // best.chain is nearest-first; merge root-down.
-  const rootDown = [...best.chain].reverse();
+  const walk = (key: string, trail: Set<string>) => {
+    const owner = registry.get(key);
+    if (!owner || trail.has(key)) return;
+    trail.add(key);
+    // Ancestors first: a project's own project is more general than it is.
+    for (const up of projectsOf(owner)) walk(up, trail);
+    if (!seen.has(owner.id)) {
+      seen.add(owner.id);
+      order.push(owner);
+    }
+  };
+
+  // A project record is its own innermost context, then whatever it belongs to.
+  const roots = rec.project ? [...projectsOf(rec), rec.project.key ?? rec.id] : projectsOf(rec);
+  for (const key of roots) walk(key, new Set());
+
+  if (!order.length) return null;
+
   let repos: ProjectRepo[] = [];
   const instructions: string[] = [];
-  const projectChain: string[] = [];
+  const chain: string[] = [];
   let key: string | undefined;
   let jira: string | undefined;
   let branch: string | undefined;
 
-  for (const cid of rootDown) {
-    const rec = byId.get(cid);
-    if (!rec?.project) continue;
-    projectChain.push(cid);
-    const p = rec.project;
+  for (const owner of order) {
+    const p = owner.project!;
+    chain.push(owner.id);
     repos = mergeRepos(repos, p.repos ?? [], p.repos_replace === true, dataRoot);
-    if (p.key) key = p.key;
-    else key = key ?? cid;
+    key = p.key ?? owner.id;
     if (p.jira) jira = p.jira;
     if (p.branch) branch = p.branch;
-    const ins = extractInstructions(rec.body);
-    if (ins) instructions.push(`<!-- from ${cid} -->\n${ins}`);
+    const ins = extractInstructions(owner.body);
+    if (ins) instructions.push(`<!-- from ${owner.id} -->\n${ins}`);
   }
 
-  const nearest = projectChain[projectChain.length - 1];
-  const nearestRec = nearest ? byId.get(nearest) : undefined;
-  return {
-    key: nearestRec?.project?.key ?? nearest ?? key ?? id,
-    repos,
-    jira,
-    branch,
-    instructions,
-    chain: projectChain,
-  };
-}
-
-/**
- * The derived `project` facet: the nearest project record at or above a record.
- * `root` is the topmost project in the same chain, so a board can group at
- * either altitude without either being stored in a file.
- */
-export function derivedProject(
-  id: string,
-  byId: Map<string, Rec>,
-): { nearest: string | null; root: string | null } {
-  const chains = ancestorChains(id, byId);
-  for (const chain of chains) {
-    const projects = chain.filter((cid) => {
-      const r = byId.get(cid);
-      return r ? isProject(r) : false;
-    });
-    if (projects.length) {
-      const nearestId = projects[0]!;
-      const rootId = projects[projects.length - 1]!;
-      const keyOf = (cid: string) => byId.get(cid)?.project?.key ?? cid;
-      return { nearest: keyOf(nearestId), root: keyOf(rootId) };
-    }
-  }
-  return { nearest: null, root: null };
+  return { key: key ?? id, repos, jira, branch, instructions, chain };
 }

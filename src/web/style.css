@@ -1181,3 +1181,6 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .editor-note { color: var(--ok); }
 .editor-dirty { color: var(--warn); margin-left: auto; }
+
+.editor-host.is-yaml .cm-scroller { font-size: 12px; }
+.editor-host.is-yaml .cm-editor { max-height: 48vh; }

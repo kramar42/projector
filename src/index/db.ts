@@ -17,8 +17,9 @@ CREATE TABLE records (
   created       TEXT,
   updated       TEXT,
   is_project    INTEGER NOT NULL DEFAULT 0,
+  -- First value of the project facet, for display only. Grouping and filtering
+  -- go through the facets table, like every other facet.
   project       TEXT,
-  project_root  TEXT,
   fingerprint   TEXT
 );
 CREATE TABLE facets (

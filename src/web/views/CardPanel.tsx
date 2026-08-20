@@ -6,6 +6,7 @@ import { CardBody } from '../components/CardBody.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
+import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -41,6 +42,8 @@ export function CardPanel({
   const [editTitle, setEditTitle] = useState<string | null>(null);
   const [pickParent, setPickParent] = useState(false);
   const [showBody, setShowBody] = useState<'read' | 'edit'>('read');
+  const [fm, setFm] = useState<{ yaml: string; mtime: number } | null>(null);
+  const [showFm, setShowFm] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -48,6 +51,8 @@ export function CardPanel({
     setConflict(false);
     setEditTitle(null);
     setShowBody('read');
+    setShowFm(false);
+    setFm(null);
   }, [id]);
 
   useEffect(() => {
@@ -169,6 +174,24 @@ export function CardPanel({
                 {card.kind === 'card' ? 'Demote to node' : 'Promote to card'}
               </button>
               <button
+                className="btn small"
+                title={
+                  card.isProject
+                    ? 'Remove the project block. Children keep their parent edges but stop inheriting from here.'
+                    : 'Add a project block, so this record can own repos and instructions that its children inherit.'
+                }
+                onClick={() =>
+                  void run(card.isProject ? 'un-projecting' : 'making a project', () =>
+                    api.patchCard(card.id, {
+                      project: card.isProject ? null : { key: card.id },
+                      baseMtime: data.mtime,
+                    }),
+                  )
+                }
+              >
+                {card.isProject ? 'Not a project' : 'Make a project'}
+              </button>
+              <button
                 className="btn small danger"
                 onClick={() => {
                   if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
@@ -192,7 +215,7 @@ export function CardPanel({
             </dl>
 
             <section className="panel-section">
-              <h3>Parent {card.projectKey ? `· project ${card.projectKey}` : '· no project'}</h3>
+              <h3>Parent</h3>
               {data.parents.map((p) => (
                 <button className="reflink" key={p.id} onClick={() => onOpen(p.id)}>
                   {p.title}
@@ -215,12 +238,10 @@ export function CardPanel({
                   }}
                 />
               )}
-              {!card.projectKey && (
-                <p className="hint">
-                  A card gets its project from the parent chain, so setting a parent here is what puts
-                  it in a project.
-                </p>
-              )}
+              <p className="hint">
+                A parent means decomposition — this card is part of that one — and is what the canvas
+                draws. It is independent of the project facet: a card can have either, both or neither.
+              </p>
             </section>
 
             <section className="panel-section">
@@ -234,7 +255,7 @@ export function CardPanel({
                   onChange={(next) =>
                     void run('saving facets', () =>
                       api.patchCard(card.id, {
-                        facets: { ...stripDerived(card.facets, meta), [name]: next },
+                        facets: { ...card.facets, [name]: next },
                         baseMtime: data.mtime,
                       }),
                     )
@@ -307,6 +328,42 @@ export function CardPanel({
 
             <section className="panel-section">
               <h3>
+                Frontmatter
+                <span className="tabs">
+                  <button
+                    className={`tab ${showFm ? 'is-on' : ''}`}
+                    onClick={() => {
+                      const next = !showFm;
+                      setShowFm(next);
+                      if (next) api.frontmatter(card.id).then(setFm, () => setFm(null));
+                    }}
+                  >
+                    {showFm ? 'hide' : 'edit raw'}
+                  </button>
+                </span>
+              </h3>
+              {!showFm ? (
+                <p className="hint">
+                  Everything above edits the frontmatter through chips. Open this to set what the panel
+                  does not draw — a project's repos, a branch template, keys added later.
+                </p>
+              ) : fm ? (
+                <FrontmatterEditor
+                  cardId={card.id}
+                  yaml={fm.yaml}
+                  onSave={(y) => api.putFrontmatter(card.id, y, fm.mtime)}
+                  onSaved={() => {
+                    reload();
+                    api.frontmatter(card.id).then(setFm, () => setFm(null));
+                  }}
+                />
+              ) : (
+                <div className="pane-loading">loading…</div>
+              )}
+            </section>
+
+            <section className="panel-section">
+              <h3>
                 Body
                 <span className="tabs">
                   <button
@@ -343,16 +400,6 @@ export function CardPanel({
       </aside>
     </>
   );
-}
-
-/** The derived `project` facet is served for display but must never be written back. */
-function stripDerived(facets: Record<string, string[]>, meta: Meta): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const [k, v] of Object.entries(facets)) {
-    if (meta.facets[k]?.derived) continue;
-    out[k] = v;
-  }
-  return out;
 }
 
 function LinkEditor({ links, onChange }: { links: string[]; onChange: (next: string[]) => void }) {

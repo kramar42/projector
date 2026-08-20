@@ -65,8 +65,16 @@ export interface FacetDef {
   open: boolean;
   /** Only valid on records at any depth beneath this record id. */
   scope?: { under: string };
-  /** Computed by the indexer; rejected if present in a card file. */
-  derived?: boolean;
+  /**
+   * Where the offered values come from, when a static list will not do.
+   * `project-records` means every record carrying a `project:` block, so a new
+   * project is offerable the moment it exists rather than once something uses it.
+   *
+   * This affects the *vocabulary* only. Every facet is stored and written
+   * identically — there is deliberately no such thing as a facet the app writes
+   * through some other mechanism.
+   */
+  valuesFrom?: 'project-records';
 }
 
 export type Facets = Record<string, FacetDef>;

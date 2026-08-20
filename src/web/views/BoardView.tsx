@@ -31,12 +31,14 @@ export function BoardView({
   const move = useCallback(
     async (cardId: string, from: string, to: string, mode: 'replace' | 'add' | 'remove') => {
       const card = data?.groups.flatMap((g) => g.cards).find((c) => c.id === cardId);
-      if (!card) return;
-      const current = card.facets[groupBy] ?? [];
-      const next = nextValues(current, from, to, mode);
+      if (!card || !data) return;
       // Move every selected card when the dragged one is part of the selection.
       const ids = selected.has(cardId) ? [...selected] : [cardId];
       setProblem(null);
+
+      // Every facet is written the same way, project included. There is no
+      // special case here any more, which is the point.
+      const next = nextValues(card.facets[groupBy] ?? [], from, to, mode);
       try {
         if (ids.length > 1) {
           await api.bulk({
@@ -322,7 +324,7 @@ function BulkBar({
 }) {
   const [pickParent, setPickParent] = useState(false);
   const [facet, setFacet] = useState('');
-  const editable = Object.entries(meta.facets).filter(([, d]) => !d.derived);
+  const editable = Object.entries(meta.facets);
 
   const run = (fn: () => Promise<unknown>) =>
     fn().then(onDone).catch((e: ApiError) => onProblem(e.message));

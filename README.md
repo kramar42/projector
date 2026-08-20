@@ -105,9 +105,12 @@ Cards deep-link as `?card=<id>` on whichever view is open, so one can be pasted 
 dragged from; dropping into `(none)` clears the facet. So "card in two columns" is always a gesture,
 never an accident — the rules are unit-tested in `test/model.test.ts`.
 
-**A card gets its project by getting a parent.** `project` is derived from the parent chain, so the
-panel's *Set parent* and the bulk bar's *Set parent…* are how a loose card joins a project — and it then
-inherits that project's repos, Jira key and instructions.
+**Project membership is an ordinary facet.** A card carries `project: [project-d, mapping]` and can belong
+to several at once, inheriting the union of their repos and both instruction blocks. Nothing about
+`project` is special: it drags, bulk-edits and groups through the same code path as `priority`.
+
+**A parent edge means decomposition** — "this card is part of that one" — and is what the canvas draws.
+It is independent of the project facet: a card may have either, both or neither.
 
 **Bulk actions** are what make ~130 imported cards tractable: select with ⌘-click, then set a parent, set
 or clear one facet, or delete, across the whole selection.

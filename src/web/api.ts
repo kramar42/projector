@@ -42,6 +42,8 @@ export interface PatchCard {
   links?: string[];
   body?: string;
   kind?: 'card' | 'node';
+  /** `null` removes the block, so the record stops being a project. */
+  project?: Record<string, unknown> | null;
   baseMtime?: number;
 }
 
@@ -75,6 +77,16 @@ export const api = {
     mode?: 'set' | 'add' | 'remove';
     parent?: string | null;
   }) => req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input),
+
+  frontmatter: (id: string) =>
+    get<{ yaml: string; mtime: number }>(`/api/card/${encodeURIComponent(id)}/frontmatter`),
+
+  putFrontmatter: (id: string, yaml: string, baseMtime?: number) =>
+    req<{ mtime: number; warnings: string[] }>(
+      'PUT',
+      `/api/card/${encodeURIComponent(id)}/frontmatter`,
+      { yaml, baseMtime },
+    ),
 
   saveCanvas: (name: string, nodes: Record<string, { x?: number; y?: number; size?: string }>) =>
     req<{ ok: true }>('PATCH', `/api/canvas/${encodeURIComponent(name)}`, { nodes }),

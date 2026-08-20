@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { listCardFiles, loadCard } from '../schema/card.ts';
 import type { Rec } from '../schema/types.ts';
-import { derivedProject, isProject } from './project.ts';
+import { isProject } from './project.ts';
 import { openDb } from './db.ts';
 import { paths } from '../config.ts';
 
@@ -50,8 +50,8 @@ export function reindex(dataRoot?: string): IndexResult {
   const db = openDb(p.db, { fresh: true });
 
   const insRec = db.prepare(
-    `INSERT INTO records (id, kind, title, file, body, created, updated, is_project, project, project_root, fingerprint)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO records (id, kind, title, file, body, created, updated, is_project, project, fingerprint)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insFacet = db.prepare('INSERT OR IGNORE INTO facets (record_id, facet, value) VALUES (?, ?, ?)');
   const insEdge = db.prepare('INSERT OR IGNORE INTO edges (src, dst, type) VALUES (?, ?, ?)');
@@ -60,7 +60,6 @@ export function reindex(dataRoot?: string): IndexResult {
 
   db.exec('BEGIN');
   for (const rec of records.values()) {
-    const proj = derivedProject(rec.id, records);
     insRec.run(
       rec.id,
       rec.kind,
@@ -70,15 +69,12 @@ export function reindex(dataRoot?: string): IndexResult {
       rec.created ?? null,
       rec.updated ?? null,
       isProject(rec) ? 1 : 0,
-      proj.nearest,
-      proj.root,
+      rec.facets.project?.[0] ?? null,
       rec.source_fingerprint ?? null,
     );
     for (const [facet, values] of Object.entries(rec.facets)) {
       for (const v of values) insFacet.run(rec.id, facet, v);
     }
-    // The derived project facet is written to the index, never to a card file.
-    if (proj.nearest) insFacet.run(rec.id, 'project', proj.nearest);
     for (const e of rec.edges) insEdge.run(rec.id, e.to, e.type);
     for (const l of rec.links) insLink.run(rec.id, l.kind, l.ref, l.raw);
     insFts.run(rec.id, rec.title, rec.body);

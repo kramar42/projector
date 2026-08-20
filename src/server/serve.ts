@@ -2,11 +2,13 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
+import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
 import { dataDir, paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
-import { resolveProject, parentsOf } from '../index/project.ts';
+import { projectRecords, resolveProject, parentsOf } from '../index/project.ts';
+import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, groupBy, listRecords, unblocks, type Row } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
 import { loadViews, type BoardView, type CanvasView } from './views.ts';
@@ -22,6 +24,7 @@ import {
   mtimeOf,
   patchCard,
   saveAsset,
+  putFrontmatter,
   saveCanvas,
   setEdges,
 } from './mutate.ts';
@@ -61,10 +64,10 @@ app.use('*', async (c, next) => {
 });
 
 app.get('/api/meta', (c) => {
-  const { facets, db, views } = load();
+  const { facets, db, views, records } = load();
   return c.json({
     dataDir: root,
-    facets,
+    facets: withDynamicValues(facets, records),
     counts: counts(db),
     views: views.map((v) => ({ kind: v.kind, name: v.name, title: v.title })),
   });
@@ -201,6 +204,26 @@ app.get('/api/card/:id', (c) => {
   });
 });
 
+/**
+ * Fill in the values of any facet that sources its vocabulary from the data.
+ *
+ * `project` offers every record carrying a `project:` block, so a project just
+ * created is immediately offerable rather than only once something uses it. This
+ * is vocabulary only — the facet is stored and written like any other.
+ */
+function withDynamicValues(facets: Facets, records: Map<string, Rec>): Facets {
+  const out: Facets = {};
+  for (const [name, def] of Object.entries(facets)) {
+    if (def.valuesFrom !== 'project-records') {
+      out[name] = def;
+      continue;
+    }
+    const keys = [...projectRecords(records).keys()].sort();
+    out[name] = { ...def, values: [...new Set([...def.values, ...keys])] };
+  }
+  return out;
+}
+
 function countChildren(records: Map<string, ReturnType<typeof Object>>, id: string): number {
   let n = 0;
   for (const rec of (records as Map<string, { edges: { type: string; to: string }[] }>).values()) {
@@ -319,6 +342,35 @@ app.patch('/api/canvas/:name', async (c) => {
     saveCanvas(root, c.req.param('name'), body.nodes ?? {});
     bump();
     return c.json({ ok: true });
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+/**
+ * Raw frontmatter, so the app can never express less than the file.
+ *
+ * The UI will never model every key — repos, repos_replace, branch templates,
+ * whatever comes next — and the file is the source of truth, so there has to be
+ * a way to edit it directly. The write validates first and refuses rather than
+ * saving something the indexer would then reject.
+ */
+app.get('/api/card/:id/frontmatter', (c) => {
+  try {
+    const file = fileFor(root, c.req.param('id'));
+    const { yaml } = split(readFileSync(file, 'utf8'));
+    return c.json({ yaml: yaml ?? '', mtime: mtimeOf(file) });
+  } catch (err) {
+    return fail(c, err);
+  }
+});
+
+app.put('/api/card/:id/frontmatter', async (c) => {
+  try {
+    const body = (await c.req.json()) as { yaml: string; baseMtime?: number };
+    const res = putFrontmatter(root, c.req.param('id'), body.yaml ?? '', body.baseMtime);
+    bump();
+    return c.json(res);
   } catch (err) {
     return fail(c, err);
   }

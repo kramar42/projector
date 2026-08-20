@@ -4,7 +4,7 @@ import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/f
 import { parseCard, renderCard } from '../src/schema/card.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { ancestorChains, derivedProject, extractInstructions, resolveProject } from '../src/index/project.ts';
+import { ancestorChains, extractInstructions, projectsOf, resolveProject } from '../src/index/project.ts';
 import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 
@@ -134,12 +134,18 @@ test('uniqueId suffixes collisions', () => {
 
 // ---------------------------------------------------------------- projects
 
-function rec(id: string, parents: string[], project?: Rec['project'], body = ''): Rec {
+function rec(
+  id: string,
+  parents: string[],
+  project?: Rec['project'],
+  body = '',
+  belongsTo: string[] = [],
+): Rec {
   return {
     id,
     kind: 'card',
     title: id,
-    facets: {},
+    facets: belongsTo.length ? { project: belongsTo } : {},
     edges: parents.map((to) => ({ type: 'parent' as const, to })),
     links: [],
     project,
@@ -152,11 +158,11 @@ function graph(...recs: Rec[]): Map<string, Rec> {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
-test('repos union down the chain, nearest wins for scalars', () => {
+test('repos union across the project chain, nearest wins for scalars', () => {
   const g = graph(
     rec('root', [], { key: 'root', jira: 'AAA', repos: [{ path: '/a' }] }),
-    rec('mid', ['root'], { key: 'mid', repos: [{ path: '/b' }] }),
-    rec('leaf', ['mid']),
+    rec('mid', [], { key: 'mid', repos: [{ path: '/b' }] }, '', ['root']),
+    rec('leaf', [], undefined, '', ['mid']),
   );
   const p = resolveProject('leaf', g, '/data');
   assert.ok(p);
@@ -166,11 +172,26 @@ test('repos union down the chain, nearest wins for scalars', () => {
   assert.deepEqual(p.chain, ['root', 'mid']);
 });
 
+test('a card in two projects inherits from both, unioned', () => {
+  const g = graph(
+    rec('project-d', [], { key: 'project-d', repos: [{ path: '/project-d' }] }, '## Instructions\n\nnexus rule\n'),
+    rec('mapping', [], { key: 'mapping', repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
+    rec('deploy', [], undefined, '', ['project-d', 'mapping']),
+  );
+  const p = resolveProject('deploy', g, '/data');
+  assert.ok(p);
+  assert.deepEqual(p.repos.map((r) => r.path), ['/project-d', '/mapping']);
+  assert.equal(p.instructions.length, 2);
+  assert.match(p.instructions[0]!, /project-d rule/);
+  assert.match(p.instructions[1]!, /mapping rule/);
+  assert.deepEqual(p.chain, ['project-d', 'mapping']);
+});
+
 test('repos_replace narrows instead of unioning', () => {
   const g = graph(
     rec('root', [], { key: 'root', repos: [{ path: '/a' }] }),
-    rec('mid', ['root'], { key: 'mid', repos: [{ path: '/b' }], repos_replace: true }),
-    rec('leaf', ['mid']),
+    rec('mid', [], { key: 'mid', repos: [{ path: '/b' }], repos_replace: true }, '', ['root']),
+    rec('leaf', [], undefined, '', ['mid']),
   );
   assert.deepEqual(resolveProject('leaf', g, '/data')!.repos.map((r) => r.path), ['/b']);
 });
@@ -178,15 +199,15 @@ test('repos_replace narrows instead of unioning', () => {
 test('a duplicate repo path is not added twice', () => {
   const g = graph(
     rec('root', [], { key: 'root', repos: [{ path: '/a' }] }),
-    rec('leaf', ['root'], { key: 'leaf', repos: [{ path: '/a' }] }),
+    rec('leaf', [], { key: 'leaf', repos: [{ path: '/a' }] }, '', ['root']),
   );
   assert.equal(resolveProject('leaf', g, '/data')!.repos.length, 1);
 });
 
-test('instructions concatenate root first', () => {
+test('instructions concatenate outermost first', () => {
   const g = graph(
     rec('root', [], { key: 'root' }, '## Instructions\n\nroot rule\n'),
-    rec('leaf', ['root'], { key: 'leaf' }, '## Instructions\n\nleaf rule\n'),
+    rec('leaf', [], { key: 'leaf' }, '## Instructions\n\nleaf rule\n', ['root']),
   );
   const p = resolveProject('leaf', g, '/data')!;
   assert.equal(p.instructions.length, 2);
@@ -199,23 +220,40 @@ test('only the Instructions section is extracted', () => {
   assert.equal(extractInstructions(body), 'the rule');
 });
 
-test('a record with no project ancestor resolves to null', () => {
+test('a record naming no project resolves to null', () => {
   const g = graph(rec('a', []), rec('b', ['a']));
   assert.equal(resolveProject('b', g, '/data'), null);
 });
 
-test('derivedProject reports nearest and root separately', () => {
+test('a parent edge grants no project — membership is only the facet', () => {
   const g = graph(
-    rec('top', [], { key: 'top' }),
-    rec('mid', ['top'], { key: 'mid' }),
-    rec('leaf', ['mid']),
+    rec('project-a', [], { key: 'project-a', repos: [{ path: '/staging' }] }),
+    rec('child', ['project-a']),
   );
-  assert.deepEqual(derivedProject('leaf', g), { nearest: 'mid', root: 'top' });
+  assert.equal(resolveProject('child', g, '/data'), null);
+  assert.deepEqual(projectsOf(g.get('child')!), []);
 });
 
-test('a project record belongs to itself', () => {
-  const g = graph(rec('top', [], { key: 'top' }), rec('mid', ['top'], { key: 'mid' }));
-  assert.equal(derivedProject('mid', g).nearest, 'mid');
+test('a project record is its own innermost context', () => {
+  const g = graph(
+    rec('project-b', [], { key: 'project-b', jira: 'SUPPORT' }),
+    rec('keycloak', [], { key: 'keycloak', branch: 'kc/{card}' }, '', ['project-b']),
+  );
+  const p = resolveProject('keycloak', g, '/data')!;
+  assert.equal(p.key, 'keycloak');
+  assert.equal(p.jira, 'SUPPORT');
+  assert.equal(p.branch, 'kc/{card}');
+  assert.deepEqual(p.chain, ['project-b', 'keycloak']);
+});
+
+test('a cycle between projects terminates', () => {
+  const g = graph(
+    rec('a', [], { key: 'a' }, '', ['b']),
+    rec('b', [], { key: 'b' }, '', ['a']),
+  );
+  const p = resolveProject('a', g, '/data');
+  assert.ok(p);
+  assert.ok(p.chain.length <= 2);
 });
 
 test('multiple parents give multiple chains', () => {

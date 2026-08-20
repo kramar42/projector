@@ -7,6 +7,7 @@ import type { FacetDef } from '../types.ts';
  * A closed facet offers exactly its declared values; an open one also accepts a
  * new value typed in. Every facet is multi-valued, so this is a toggle list
  * rather than a single-choice control — that is the model, not a convenience.
+ * `project` is an ordinary facet here, which is why it needs no special handling.
  */
 export function FacetEditor({
   name,
@@ -20,8 +21,6 @@ export function FacetEditor({
   onChange: (next: string[]) => void;
 }) {
   const [adding, setAdding] = useState('');
-
-  if (def.derived) return null;
 
   const toggle = (v: string) =>
     onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
