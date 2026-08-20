@@ -43,7 +43,7 @@ function inferProject(id: string, byId: Map<string, Rec>, registry: Map<string, 
   return self?.project && id !== self.id ? keyOf(self) : null;
 }
 
-export function migrateProjectFacet(dataRoot?: string, apply = false): MigrationReport {
+export function migrateProjectFacet(dataRoot: string, apply = false): MigrationReport {
   const p = paths(dataRoot);
   const { records } = readAll(p.cards);
   const registry = projectRecords(records);

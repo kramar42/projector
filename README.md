@@ -6,15 +6,33 @@ mind-map canvas. Spec: [`../cockpit-plan.md`](../cockpit-plan.md) — that file 
 **Status: P4 complete.** Everything above plus the agent layer: assembled card context, a multi-repo
 worktree launcher, and four skills for intake, triage and doing the work.
 
-## Two directories, two repos
+## Vaults
 
-| | |
-|---|---|
-| `cockpit/` | the app. Its own git repo |
-| `cockpit/data/` | cards, facets, views. Its own git repo, ignored by the app's |
+A **vault** is a folder holding `cards/`, `facets.yaml` and `views/` — opened the way Obsidian opens
+one. The app has no built-in location and assumes no directory name: on first run it asks for a folder,
+remembers the choice in `localStorage`, and the switcher in the sidebar footer opens or adds others.
 
-Data location resolves from `COCKPIT_DATA` → `cockpit.config.json` → `./data`, so it can be moved
-without touching the code.
+Known vaults live in `~/.cockpit/vaults.json`. The browser names its vault with an `X-Cockpit-Vault`
+header on every request, and the server refuses one it has not been asked to open — so this is a
+reference to a folder the user chose, not an arbitrary path the page can name. A request that names no
+usable vault gets **428**, which is how the UI knows to show the picker rather than an error.
+
+Pointing at an empty (or non-existent) folder sets a vault up: `cards/`, `facets.yaml`, three boards, a
+canvas, a `README.md` of the conventions, and a `.gitignore` for the derived index and enrichment
+cache. Pointing at a non-empty folder that is not a vault is refused.
+
+For the CLI: `--vault <path>`, else `COCKPIT_DATA`, else the single registered vault if there is exactly
+one. With several registered and no choice made it lists them and asks.
+
+```bash
+ck vaults                                  # list
+ck vaults add <path> [--name n] [--create] # open a folder as a vault
+ck vaults forget <path>                    # stop tracking it; the folder is untouched
+ck --vault <path> <command>                # act on a specific one
+```
+
+In this workspace the app lives in `cockpit/` and the vault in `cockpit/data/`, each its own git repo,
+the vault ignored by the app's. Nothing depends on that arrangement.
 
 ## Running
 
@@ -143,6 +161,10 @@ and deleting `src/enrich/` would leave the app behaving exactly as it did in P2.
 | `doc` | filesystem | — | 30 s |
 | `jira` | Jira REST | `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | 15 min |
 | `slack` `trello` `cal` `grafana` `url` | not fetched — parsed label only | — | — |
+
+A `doc:` path is **relative to the vault root**, or absolute (`/…`, `~/…`). A document that lives
+outside the vault is reached with `../` — and since relative means relative to the *vault*, those refs
+travel with it rather than following it. When one misses, the error names the path it tried.
 
 A Claude session link takes the **transcript uuid** — the filename under
 `~/.claude/projects/<slug>/`. Enrichment gives its opening prompt, whether a process is currently

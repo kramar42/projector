@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { dataDir, paths, resolvePath } from '../config.ts';
+import { paths, resolveCliVault, resolvePath } from '../config.ts';
+import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
+import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles, renderCard, writeCardFile } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
@@ -34,10 +36,36 @@ import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { slugify, uniqueId } from '../import/slug.ts';
 
-const root = dataDir();
-const p = paths(root);
+/**
+ * Which vault this invocation acts on: `--vault`, then `COCKPIT_DATA`, then the
+ * single registered vault if there is exactly one. There is no built-in default
+ * and no directory name assumed.
+ */
+/**
+ * `--vault <path>` may appear anywhere, including before the command, so it is
+ * removed from the argument list before the command is read.
+ */
+const rawArgs = process.argv.slice(2);
+const vaultFlagAt = rawArgs.indexOf('--vault');
+const cliArgs =
+  vaultFlagAt === -1 ? rawArgs : [...rawArgs.slice(0, vaultFlagAt), ...rawArgs.slice(vaultFlagAt + 2)];
+const [rawCmd, ...rawArgv] = cliArgs;
 
-const HELP = `ck — cockpit CLI   (data: ${root})
+function vaultOrExit(): string {
+  const res = resolveCliVault(process.argv, listVaults().filter((v) => v.exists));
+  if ('error' in res) {
+    console.error(res.error);
+    process.exit(1);
+  }
+  return res.root;
+}
+
+// `ck vaults` manages the registry and so must not require a vault itself.
+const NO_VAULT_NEEDED = new Set(['vaults', 'help', '']);
+const root = NO_VAULT_NEEDED.has(rawCmd ?? '') ? '' : vaultOrExit();
+const p = paths(root || '/nonexistent');
+
+const HELP = `ck — cockpit CLI${root ? `   (vault: ${root})` : ''}
 
   ck ls [--group <facet>] [--filter f=v,v] [--nodes]   list records, grouped
   ck show <id>                                         one record in full
@@ -62,6 +90,12 @@ const HELP = `ck — cockpit CLI   (data: ${root})
          [--remove f=v] [--parent id|none]             scripted edits, for skills
   ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
   ck link-session <id> [--cwd dir]                     link the live session working here
+
+  ck vaults                                            list known vaults
+  ck vaults add <path> [--name n] [--create]           open a folder as a vault
+  ck vaults forget <path>                              stop tracking it (folder untouched)
+
+  --vault <path>                                       act on a specific vault
 `;
 
 function argFlags(argv: string[]): { flags: Map<string, string[]>; rest: string[] } {
@@ -392,7 +426,8 @@ function cmdStats(): void {
 
 // ---------------------------------------------------------------- dispatch
 
-const [cmd, ...argv] = process.argv.slice(2);
+const cmd = rawCmd;
+const argv = rawArgv;
 try {
   // eslint-disable-next-line no-lone-blocks
   switch (cmd) {
@@ -430,6 +465,44 @@ try {
     case 'stats':
       cmdStats();
       break;
+
+    case 'vaults': {
+      const { flags, rest } = argFlags(argv);
+      const [sub, given] = rest;
+      if (!sub || sub === 'list') {
+        const vaults = listVaults();
+        if (!vaults.length) {
+          console.log('no vaults yet — `ck vaults add <path>`, or open one in the app');
+          break;
+        }
+        for (const v of vaults) {
+          const state = v.exists ? `${v.cards} card(s)` : 'MISSING';
+          console.log(`${pad(v.name, 20)} ${pad(state, 14)} ${v.path}`);
+        }
+        break;
+      }
+      if (sub === 'add') {
+        if (!given) {
+          console.error('ck vaults add <path> [--name n] [--create]');
+          process.exit(1);
+        }
+        const path = normalise(given);
+        if (flags.has('create')) initVault(path, SEED_FACETS, SEED_README, SEED_VIEWS);
+        const entry = registerVault(path, flags.get('name')?.[0]);
+        console.log(`${entry.name}  ${entry.path}`);
+        break;
+      }
+      if (sub === 'forget') {
+        if (!given) {
+          console.error('ck vaults forget <path>');
+          process.exit(1);
+        }
+        console.log(forgetVault(given) ? `forgot ${normalise(given)}` : 'not tracked');
+        break;
+      }
+      console.error(`unknown: ck vaults ${sub}`);
+      process.exit(1);
+    }
     case 'enrich': {
       const { flags, rest } = argFlags(argv);
       const { records } = readAll(p.cards);

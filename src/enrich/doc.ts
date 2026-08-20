@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { ago, firstLine } from './run.ts';
 import { unavailable, type Enrichment, type Fetcher } from './types.ts';
-import { resolvePath } from '../config.ts';
+import { resolveDoc } from '../vault.ts';
 
 /**
  * Local markdown documents — the design docs that are the real artifacts of the
@@ -12,10 +12,13 @@ export function docFetcher(dataRoot: string): Fetcher {
     // Cheap enough to re-read whenever asked; mtime does the real caching.
     ttl: 30,
     async fetch(ref) {
-      const path = resolvePath(ref, dataRoot);
-      if (!existsSync(path)) return unavailable(`no file at ${ref}`);
+      const { path, tried } = resolveDoc(ref, dataRoot);
+      if (!path) {
+        // Name what was tried: a relative doc ref resolves against the vault, so
+        // a doc outside it needs `../`, and saying so beats "not found".
+        return unavailable(`no file at ${ref} — looked in ${tried.join(', ')}`);
+      }
       const st = statSync(path);
-      if (st.isDirectory()) return unavailable(`${ref} is a directory`);
 
       const head = readFileSync(path, 'utf8').slice(0, 4000);
       const h1 = head.match(/^#\s+(.+)$/m)?.[1]?.trim();

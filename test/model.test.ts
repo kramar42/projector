@@ -22,6 +22,11 @@ import {
   workspacePath,
 } from '../src/agent/worktree.ts';
 import { buildBriefing } from '../src/agent/briefing.ts';
+import { looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
+import { resolveCliVault } from '../src/config.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join as pathJoin, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // ---------------------------------------------------------------- frontmatter
 
@@ -526,4 +531,68 @@ test('the briefing names failed repos as out of scope and stops before building'
   assert.match(out, /STOP/);
   assert.match(out, /deliberately left out/);
   assert.match(out, /ck link-session c1/);
+});
+
+// ---------------------------------------------------------------- vaults
+
+test('a vault path is normalised: ~ expanded, absolute, no trailing slash', () => {
+  assert.equal(normalise('/tmp/v/'), '/tmp/v');
+  assert.equal(normalise('/tmp/v///'), '/tmp/v');
+  assert.equal(normalise('~/v').startsWith('/'), true);
+  assert.ok(!normalise('~/v').includes('~'));
+});
+
+test('a generic leaf name borrows its parent, so vaults are distinguishable', () => {
+  // `…/work/cockpit/data` and `…/notes/other/data` would otherwise both be "data".
+  assert.equal(suggestName('/Users/k/Code/work/cockpit/data'), 'cockpit');
+  assert.equal(suggestName('/Users/k/notes/vault'), 'notes');
+  assert.equal(suggestName('/Users/k/second-brain'), 'second-brain');
+});
+
+test('doc refs resolve against the vault, and absolutely when absolute', () => {
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'ck-vault-'));
+  mkdirSync(pathJoin(dir, 'cards'), { recursive: true });
+  writeFileSync(pathJoin(dir, 'inside.md'), '# in');
+  const outside = pathJoin(dir, '..', `ck-outside-${process.pid}.md`);
+  writeFileSync(outside, '# out');
+
+  assert.equal(resolveDoc('inside.md', dir).path, pathJoin(dir, 'inside.md'));
+  // A doc outside the vault is reached with `../` — relative means relative to
+  // the vault, not to the card file.
+  assert.equal(resolveDoc(`../${basename(outside)}`, dir).path, resolve(outside));
+  assert.equal(resolveDoc(outside, dir).path, resolve(outside));
+  // A miss reports what it tried, so the message can say where it looked.
+  const miss = resolveDoc('nope.md', dir);
+  assert.equal(miss.path, null);
+  assert.deepEqual(miss.tried, [pathJoin(dir, 'nope.md')]);
+
+  rmSync(dir, { recursive: true, force: true });
+  rmSync(outside, { force: true });
+});
+
+test('a directory is a vault when it holds what a vault is made of', () => {
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'ck-vault-'));
+  assert.equal(looksLikeVault(dir), false);
+  mkdirSync(pathJoin(dir, 'cards'));
+  assert.equal(looksLikeVault(dir), true);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
+  const one = [{ path: '/v/one', name: 'one' }];
+  const two = [...one, { path: '/v/two', name: 'two' }];
+
+  // An explicit flag wins over everything.
+  assert.deepEqual(resolveCliVault(['node', 'ck', '--vault', '/v/x', 'ls'], two), { root: '/v/x' });
+  // One registered vault needs no flag.
+  assert.deepEqual(resolveCliVault(['node', 'ck', 'ls'], one), { root: '/v/one' });
+  // Several, with no choice made, must ask rather than guess.
+  const ambiguous = resolveCliVault(['node', 'ck', 'ls'], two);
+  assert.ok('error' in ambiguous && /--vault/.test(ambiguous.error));
+  // None at all says how to get one.
+  const none = resolveCliVault(['node', 'ck', 'ls'], []);
+  assert.ok('error' in none && /no vault/.test(none.error));
+  // A flag with no value is an error, not a silent fallback.
+  const bare = resolveCliVault(['node', 'ck', 'ls', '--vault'], one);
+  assert.ok('error' in bare);
 });

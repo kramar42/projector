@@ -1,3 +1,4 @@
+import { currentVault } from './vault.ts';
 import type { BoardResponse, CanvasResponse, CardDetail, Meta, Resolved } from './types.ts';
 
 /**
@@ -8,19 +9,33 @@ import type { BoardResponse, CanvasResponse, CardDetail, Meta, Resolved } from '
 export class ApiError extends Error {
   status: number;
   conflict: boolean;
+  /** The server could not tell which vault this was about; the UI must ask. */
+  needsVault: boolean;
   mtime?: number;
-  constructor(message: string, status: number, opts: { conflict?: boolean; mtime?: number } = {}) {
+  constructor(
+    message: string,
+    status: number,
+    opts: { conflict?: boolean; mtime?: number; needsVault?: boolean } = {},
+  ) {
     super(message);
     this.status = status;
     this.conflict = opts.conflict ?? false;
+    this.needsVault = opts.needsVault ?? false;
     this.mtime = opts.mtime;
   }
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // Every request names its vault. The server refuses one it has not been asked
+  // to open, so this is a reference to a chosen folder, not an arbitrary path.
+  const vault = currentVault();
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (vault) headers['X-Cockpit-Vault'] = vault;
+
   const res = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
@@ -28,6 +43,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
       error?: string;
       conflict?: boolean;
       mtime?: number;
+      needsVault?: boolean;
     };
     throw new ApiError(payload.error ?? `${res.status} ${res.statusText}`, res.status, payload);
   }
@@ -122,6 +138,17 @@ export const api = {
  */
 export function onDataChange(fn: () => void, event: 'change' | 'enriched' = 'change'): () => void {
   const es = new EventSource('/api/events');
-  es.addEventListener(event, () => fn());
+  es.addEventListener(event, (e) => {
+    // Events carry the vault they came from: a change in another vault is none
+    // of this tab's business.
+    try {
+      const { vault } = JSON.parse((e as MessageEvent<string>).data) as { vault?: string };
+      const mine = currentVault();
+      if (vault && mine && vault !== mine) return;
+    } catch {
+      /* older payload shape; fall through and refresh */
+    }
+    fn();
+  });
   return () => es.close();
 }

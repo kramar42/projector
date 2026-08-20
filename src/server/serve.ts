@@ -1,10 +1,23 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  browse,
+  forgetVault,
+  initVault,
+  isRegistered,
+  listVaults,
+  looksLikeVault,
+  countCards,
+  normalise,
+  registerVault,
+  suggestName,
+  touchVault,
+} from '../vault.ts';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
-import { dataDir, paths } from '../config.ts';
+import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { projectRecords, resolveProject, parentsOf } from '../index/project.ts';
@@ -30,12 +43,11 @@ import {
 } from './mutate.ts';
 import { watch } from 'chokidar';
 import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.ts';
+import { SEED_FACETS, SEED_README, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import type { Edge } from '../schema/types.ts';
 
 const PORT = Number(process.env.COCKPIT_PORT ?? 8092);
-const root = dataDir();
-const p = paths(root);
 
 /** Origins allowed to send a mutating request. A localhost server is still
  *  reachable from any page open in the browser, so an Origin that is present
@@ -43,15 +55,44 @@ const p = paths(root);
 const ORIGINS = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, 'http://localhost:5176']);
 
 /**
+ * The vault a request is about.
+ *
+ * The browser names it with `X-Cockpit-Vault`, and it must already be
+ * registered — the registry is what keeps this from being "read any directory
+ * the page asks for". Registering happens through the vault endpoints, which is
+ * where a path is checked and, if the user asked, initialised.
+ */
+class NoVault extends Error {}
+
+function vaultOf(c: Context): string {
+  const header = c.req.header('X-Cockpit-Vault');
+  if (header) {
+    const want = normalise(header);
+    if (!isRegistered(want)) throw new NoVault(`vault not registered: ${want}`);
+    if (!existsSync(want)) throw new NoVault(`vault directory is missing: ${want}`);
+    ensureWatched(want);
+    return want;
+  }
+  // No header: fall back only when the choice is unambiguous.
+  const known = listVaults().filter((v) => v.exists);
+  if (known.length === 1) {
+    ensureWatched(known[0]!.path);
+    return known[0]!.path;
+  }
+  throw new NoVault(known.length ? 'pick a vault' : 'no vault has been opened yet');
+}
+
+/**
  * Everything is read from the files on each request. At this scale a full
  * reindex is milliseconds, and it means the app can never disagree with what an
  * agent just wrote — no cache to invalidate, no staleness to reason about.
  */
-function load() {
+function load(root: string) {
+  const p = paths(root);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
   const views = loadViews(p.boards, p.canvases);
-  return { facets, db, records, views };
+  return { facets, db, records, views, p };
 }
 
 const app = new Hono();
@@ -64,10 +105,100 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-app.get('/api/meta', (c) => {
-  const { facets, db, views, records } = load();
+/**
+ * A request naming no usable vault is not a failure of the app; it means the
+ * client has to choose one. 428 says exactly that, so the UI shows the picker
+ * instead of an error. This has to be `onError` rather than a try around
+ * `next()`: a synchronous throw inside a handler never reaches the middleware.
+ */
+app.onError((err, c) => {
+  if (err instanceof NoVault) {
+    return c.json({ error: err.message, needsVault: true }, 428);
+  }
+  return c.json({ error: err.message }, 500);
+});
+
+// ---------------------------------------------------------------- vaults
+//
+// A vault is a folder of cards, opened the way Obsidian opens one. Nothing here
+// assumes a location or a directory name.
+
+app.get('/api/vaults', (c) => c.json({ vaults: listVaults() }));
+
+app.get('/api/vaults/browse', (c) => {
+  try {
+    return c.json(browse(c.req.query('path') ?? ''));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+/** Inspect a path before committing to it, so the picker can say what will happen. */
+app.get('/api/vaults/inspect', (c) => {
+  const given = c.req.query('path') ?? '';
+  if (!given.trim()) return c.json({ error: 'path is required' }, 400);
+  const path = normalise(given);
+  const exists = existsSync(path);
   return c.json({
-    dataDir: root,
+    path,
+    exists,
+    isVault: exists && looksLikeVault(path),
+    cards: exists && looksLikeVault(path) ? countCards(path) : 0,
+    empty: exists ? readdirSync(path).filter((f) => !f.startsWith('.')).length === 0 : true,
+    suggestedName: suggestName(path),
+    registered: isRegistered(path),
+  });
+});
+
+/** Open a folder as a vault, creating the skeleton when asked. */
+app.post('/api/vaults', async (c) => {
+  try {
+    const body = (await c.req.json()) as { path?: string; name?: string; create?: boolean };
+    if (!body.path?.trim()) return c.json({ error: 'path is required' }, 400);
+    const path = normalise(body.path);
+
+    if (!looksLikeVault(path)) {
+      if (!body.create) {
+        return c.json(
+          {
+            error: existsSync(path)
+              ? `${path} is not a vault — pass create to set one up there`
+              : `${path} does not exist — pass create to make it a vault`,
+            needsCreate: true,
+            path,
+          },
+          409,
+        );
+      }
+      initVault(path, SEED_FACETS, SEED_README, SEED_VIEWS);
+    }
+    const entry = registerVault(path, body.name);
+    ensureWatched(entry.path);
+    return c.json({ vault: entry }, 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+/** Forget a vault. The folder is left exactly as it is. */
+app.delete('/api/vaults', async (c) => {
+  try {
+    const body = (await c.req.json()) as { path?: string };
+    if (!body.path?.trim()) return c.json({ error: 'path is required' }, 400);
+    const removed = forgetVault(body.path);
+    return c.json({ forgotten: removed });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.get('/api/meta', (c) => {
+  const root = vaultOf(c);
+  touchVault(root);
+  const { facets, db, views, records } = load(root);
+  return c.json({
+    vault: root,
+    vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
     facets: withDynamicValues(facets, records),
     counts: counts(db),
     enrichment: enrichmentStats(root),
@@ -76,7 +207,8 @@ app.get('/api/meta', (c) => {
 });
 
 app.get('/api/board/:name', (c) => {
-  const { facets, db, records, views } = load();
+  const root = vaultOf(c);
+  const { facets, db, records, views } = load(root);
   const view = views.find((v) => v.kind === 'board' && v.name === c.req.param('name')) as
     | BoardView
     | undefined;
@@ -112,7 +244,8 @@ app.get('/api/board/:name', (c) => {
 });
 
 app.get('/api/canvas/:name', (c) => {
-  const { db, records, views } = load();
+  const root = vaultOf(c);
+  const { db, records, views } = load(root);
   const view = views.find((v) => v.kind === 'canvas' && v.name === c.req.param('name')) as
     | CanvasView
     | undefined;
@@ -181,7 +314,8 @@ app.get('/api/canvas/:name', (c) => {
 });
 
 app.get('/api/card/:id', (c) => {
-  const { db, records } = load();
+  const root = vaultOf(c);
+  const { db, records } = load(root);
   const rec = records.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
   const project = resolveProject(rec.id, records, root);
@@ -271,10 +405,11 @@ function fail(c: Context, err: unknown) {
 }
 
 app.patch('/api/card/:id', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as Parameters<typeof patchCard>[2];
     const res = patchCard(root, c.req.param('id'), body);
-    bump();
+    bump(root);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -282,10 +417,11 @@ app.patch('/api/card/:id', async (c) => {
 });
 
 app.post('/api/card', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as Parameters<typeof createCard>[1];
     const res = createCard(root, body);
-    bump();
+    bump(root);
     return c.json(res, 201);
   } catch (err) {
     return fail(c, err);
@@ -293,9 +429,10 @@ app.post('/api/card', async (c) => {
 });
 
 app.delete('/api/card/:id', (c) => {
+  const root = vaultOf(c);
   try {
     const res = deleteCard(root, c.req.param('id'));
-    bump();
+    bump(root);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -303,10 +440,11 @@ app.delete('/api/card/:id', (c) => {
 });
 
 app.put('/api/card/:id/edges', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as { edges: Edge[]; baseMtime?: number };
     const res = setEdges(root, c.req.param('id'), body.edges ?? [], body.baseMtime);
-    bump();
+    bump(root);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -314,6 +452,7 @@ app.put('/api/card/:id/edges', async (c) => {
 });
 
 app.post('/api/bulk', async (c) => {
+  const root = vaultOf(c);
   try {
     const b = (await c.req.json()) as {
       ids: string[];
@@ -329,7 +468,7 @@ app.post('/api/bulk', async (c) => {
     else if (b.op === 'parent') res = bulkParent(root, ids, b.parent ?? null);
     else if (b.op === 'delete') res = bulkDelete(root, ids);
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
-    bump();
+    bump(root);
     return c.json(res as object);
   } catch (err) {
     return fail(c, err);
@@ -337,12 +476,13 @@ app.post('/api/bulk', async (c) => {
 });
 
 app.patch('/api/canvas/:name', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as {
       nodes: Record<string, { x?: number; y?: number; size?: string }>;
     };
     saveCanvas(root, c.req.param('name'), body.nodes ?? {});
-    bump();
+    bump(root);
     return c.json({ ok: true });
   } catch (err) {
     return fail(c, err);
@@ -358,6 +498,7 @@ app.patch('/api/canvas/:name', async (c) => {
  * saving something the indexer would then reject.
  */
 app.get('/api/card/:id/frontmatter', (c) => {
+  const root = vaultOf(c);
   try {
     const file = fileFor(root, c.req.param('id'));
     const { yaml } = split(readFileSync(file, 'utf8'));
@@ -368,10 +509,11 @@ app.get('/api/card/:id/frontmatter', (c) => {
 });
 
 app.put('/api/card/:id/frontmatter', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as { yaml: string; baseMtime?: number };
     const res = putFrontmatter(root, c.req.param('id'), body.yaml ?? '', body.baseMtime);
-    bump();
+    bump(root);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -379,6 +521,7 @@ app.put('/api/card/:id/frontmatter', async (c) => {
 });
 
 app.post('/api/card/:id/asset', async (c) => {
+  const root = vaultOf(c);
   try {
     const id = c.req.param('id');
     fileFor(root, id); // 400s cleanly when the card does not exist
@@ -394,6 +537,8 @@ app.post('/api/card/:id/asset', async (c) => {
 
 // Pasted images are referenced from a card body, so the body renderer needs them.
 app.get('/api/asset/*', (c) => {
+  const root = vaultOf(c);
+  const p = paths(root);
   const rel = c.req.path.replace('/api/asset/', '');
   // Confine to the assets tree: a card body is authored content, and a `..` in
   // an image path must not be able to read outside the data directory.
@@ -414,6 +559,7 @@ app.get('/api/asset/*', (c) => {
 // fetcher failed, cards would render exactly as they did before P3.
 
 app.post('/api/enrich', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as { refs?: unknown; force?: boolean };
     if (body.refs !== undefined && !Array.isArray(body.refs)) {
@@ -421,7 +567,7 @@ app.post('/api/enrich', async (c) => {
     }
     const refs = (body.refs ?? []).filter((r): r is string => typeof r === 'string' && !!r);
     if (!refs.length) return c.json({ items: [] });
-    const opts = { dataRoot: root, onRefreshed: () => bumpEnriched() };
+    const opts = { dataRoot: root, onRefreshed: () => bumpEnriched(root) };
     // Read first so the answer is immediate, then kick off the work.
     const items = readCached(root, refs);
     refresh(opts, refs, body.force === true);
@@ -432,13 +578,14 @@ app.post('/api/enrich', async (c) => {
 });
 
 app.post('/api/enrich/clear', async (c) => {
+  const root = vaultOf(c);
   try {
     const body = (await c.req.json().catch(() => ({}))) as { refs?: unknown };
     if (body.refs !== undefined && !Array.isArray(body.refs)) {
       return c.json({ error: 'refs must be an array of link strings' }, 400);
     }
     const n = clearEnrichment(root, body.refs as string[] | undefined);
-    bumpEnriched();
+    bumpEnriched(root);
     return c.json({ cleared: n });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 500);
@@ -451,37 +598,50 @@ app.post('/api/enrich/clear', async (c) => {
 // up in the open app without a manual refresh.
 
 let revision = 0;
-let enrichRevision = 0;
-const listeners = new Set<(event: 'change' | 'enriched', rev: number) => void>();
+type Send = (event: 'change' | 'enriched', rev: number, vault: string) => void;
+const listeners = new Set<Send>();
 
-function bump() {
+function bump(vault: string) {
   revision++;
-  for (const fn of [...listeners]) fn('change', revision);
+  for (const fn of [...listeners]) fn('change', revision, vault);
 }
 
 /**
  * Enrichment gets its own signal. A chip resolving should refresh the chips, not
  * make the board rebuild itself — and it must never look like a file changed.
  */
-function bumpEnriched() {
-  enrichRevision++;
-  for (const fn of [...listeners]) fn('enriched', enrichRevision);
+function bumpEnriched(vault: string) {
+  revision++;
+  for (const fn of [...listeners]) fn('enriched', revision, vault);
 }
 
-watch([p.cards, p.views, p.facets], {
-  ignoreInitial: true,
-  ignored: (path: string) => path.includes('.tmp-') || path.endsWith('.index.db'),
-  awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
-}).on('all', () => bump());
+/**
+ * Watch a vault the first time it is used, not every registered one — a vault
+ * that is merely known should not cost an open file handle. The event carries
+ * which vault changed so a client looking at another one ignores it.
+ */
+const watched = new Map<string, ReturnType<typeof watch>>();
+
+function ensureWatched(root: string): void {
+  if (watched.has(root)) return;
+  const p = paths(root);
+  const w = watch([p.cards, p.views, p.facets], {
+    ignoreInitial: true,
+    ignored: (path: string) =>
+      path.includes('.tmp-') || path.endsWith('.index.db') || path.endsWith('.enrich.db'),
+    awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
+  }).on('all', () => bump(root));
+  watched.set(root, w);
+}
 
 app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {
     let alive = true;
-    const send = (event: 'change' | 'enriched', rev: number) => {
-      void stream.writeSSE({ event, data: String(rev) });
+    const send: Send = (event, rev, vault) => {
+      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault }) });
     };
     listeners.add(send);
-    await stream.writeSSE({ event: 'hello', data: String(revision) });
+    await stream.writeSSE({ event: 'hello', data: JSON.stringify({ rev: revision }) });
     stream.onAbort(() => {
       alive = false;
       listeners.delete(send);
@@ -489,7 +649,7 @@ app.get('/api/events', (c) =>
     // Hold the connection open; a heartbeat keeps intermediaries from closing it.
     while (alive) {
       await stream.sleep(25000);
-      if (alive) await stream.writeSSE({ event: 'ping', data: String(revision) });
+      if (alive) await stream.writeSSE({ event: 'ping', data: JSON.stringify({ rev: revision }) });
     }
   }),
 );
@@ -503,6 +663,10 @@ if (existsSync(dist)) {
 
 serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
   console.log(`cockpit  http://127.0.0.1:${info.port}`);
-  console.log(`data     ${root}`);
+  const known = listVaults();
+  if (!known.length) console.log('vaults   none yet — the app will ask for a folder');
+  for (const v of known) {
+    console.log(`vault    ${v.name}  ${v.path}${v.exists ? '' : '  (missing)'}`);
+  }
   if (!existsSync(dist)) console.log(`ui       not built — run \`pnpm dev:web\` for the dev server`);
 });

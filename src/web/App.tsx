@@ -5,9 +5,21 @@ import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { CardPanel } from './views/CardPanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
+import { VaultPicker } from './VaultPicker.tsx';
+import { VaultSwitcher } from './VaultSwitcher.tsx';
+import { currentVault, setCurrentVault } from './vault.ts';
+import { ApiError } from './api.ts';
 import type { Meta } from './types.ts';
 
-function Sidebar({ meta }: { meta: Meta }) {
+function Sidebar({
+  meta,
+  onSwitchVault,
+  onAddVault,
+}: {
+  meta: Meta;
+  onSwitchVault: (path: string) => void;
+  onAddVault: () => void;
+}) {
   const [location, navigate] = useLocation();
   const boards = meta.views.filter((v) => v.kind === 'board');
   const canvases = meta.views.filter((v) => v.kind === 'canvas');
@@ -49,9 +61,7 @@ function Sidebar({ meta }: { meta: Meta }) {
         <div>
           {meta.counts.projects} projects · {meta.counts.edges} edges
         </div>
-        <div className="navfoot-path" title={meta.dataDir}>
-          {meta.dataDir.replace(/^.*\/(?=[^/]+\/[^/]+$)/, '…/')}
-        </div>
+        <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
       </div>
     </nav>
   );
@@ -60,6 +70,11 @@ function Sidebar({ meta }: { meta: Meta }) {
 export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // No vault chosen, or the server rejected the one we named: ask.
+  const [gate, setGate] = useState<{ reason?: string } | null>(
+    currentVault() ? null : { reason: undefined },
+  );
+  const [addingVault, setAddingVault] = useState(false);
   const [location, navigate] = useLocation();
   const search = useSearch();
   const [isRoot] = useRoute('/');
@@ -83,9 +98,39 @@ export function App() {
     go(`${loc}${q ? `?${q}` : ''}`, { replace: !id });
   }, []);
 
-  useEffect(() => {
-    api.meta().then(setMeta, (e: Error) => setError(e.message));
+  const loadMeta = useCallback(() => {
+    api.meta().then(
+      (m) => {
+        setMeta(m);
+        setError(null);
+        setGate(null);
+        // Adopt whatever the server actually served, so a fallback to the single
+        // registered vault is remembered rather than re-derived every load.
+        if (m.vault !== currentVault()) setCurrentVault(m.vault);
+      },
+      (e: ApiError) => {
+        if (e.needsVault || e.status === 428) setGate({ reason: e.message });
+        else setError(e.message);
+      },
+    );
   }, []);
+
+  useEffect(() => {
+    if (!gate) loadMeta();
+  }, [gate, loadMeta]);
+
+  const switchVault = useCallback(
+    (path: string) => {
+      setCurrentVault(path);
+      setMeta(null);
+      setGate(null);
+      // The current route names a view in the *old* vault. Go back to the root so
+      // the redirect below picks whichever board the new vault actually has.
+      navigate('/', { replace: true });
+      loadMeta();
+    },
+    [loadMeta, navigate],
+  );
 
   useEffect(() => {
     if (isRoot && meta) {
@@ -94,13 +139,33 @@ export function App() {
     }
   }, [isRoot, meta, navigate]);
 
+  if (gate) {
+    return (
+      <VaultPicker
+        reason={gate.reason}
+        onOpened={switchVault}
+        onCancel={meta ? () => setGate(null) : undefined}
+      />
+    );
+  }
+  if (addingVault) {
+    return (
+      <VaultPicker
+        onOpened={(path) => {
+          setAddingVault(false);
+          switchVault(path);
+        }}
+        onCancel={() => setAddingVault(false)}
+      />
+    );
+  }
   if (error) return <div className="boot-error">Cannot reach the cockpit server: {error}</div>;
   if (!meta) return <div className="boot">starting…</div>;
 
   return (
     <EnrichmentProvider>
     <div className="shell">
-      <Sidebar meta={meta} />
+      <Sidebar meta={meta} onSwitchVault={switchVault} onAddVault={() => setAddingVault(true)} />
       <main className="main">
         <Switch>
           <Route path="/board/:name">
@@ -110,7 +175,14 @@ export function App() {
             {(params) => <CanvasView name={params.name!} meta={meta} onOpen={setOpenCard} />}
           </Route>
           <Route>
-            <div className="pane-loading">pick a view</div>
+            {meta.views.length ? (
+              <div className="pane-loading">pick a view</div>
+            ) : (
+              <div className="pane-loading">
+                This vault has no views yet. Add a board to{' '}
+                <code>views/board/</code> — see the spec for the format.
+              </div>
+            )}
           </Route>
         </Switch>
       </main>

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { paths } from '../config.ts';
 import { parseLink } from '../schema/links.ts';
 import { NOT_ENRICHED, registry } from '../enrich/registry.ts';
@@ -44,20 +44,31 @@ export interface Resolved {
   note?: string;
 }
 
-let db: DatabaseSync | null = null;
+/**
+ * One connection per vault. A single module-level handle would serve whichever
+ * vault happened to be opened first and silently answer for the others.
+ */
+const connections = new Map<string, DatabaseSync>();
 
 function open(dataRoot: string): DatabaseSync {
-  if (db) return db;
-  const file = join(paths(dataRoot).root, '.enrich.db');
+  const file = paths(dataRoot).enrichDb;
+  const existing = connections.get(file);
+  if (existing) return existing;
   mkdirSync(dirname(file), { recursive: true });
-  db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec(SCHEMA);
-  return db;
+  const conn = new DatabaseSync(file);
+  conn.exec('PRAGMA journal_mode = WAL;');
+  conn.exec(SCHEMA);
+  connections.set(file, conn);
+  return conn;
 }
 
-/** Refreshes in flight, so N cards linking the same PR cause one fetch. */
+/**
+ * Refreshes in flight, so N cards linking the same PR cause one fetch. Keyed by
+ * vault as well as ref: a `doc:` ref is vault-relative, so the same string means
+ * different files in different vaults.
+ */
 const inFlight = new Set<string>();
+const flightKey = (root: string, ref: string) => `${root}\u0000${ref}`;
 
 export interface EnrichOptions {
   dataRoot: string;
@@ -154,12 +165,12 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): voi
     .map((x) => x.ref)) {
     const link = parseLink(r);
     if (!fetchers[link.kind]) continue;
-    if (inFlight.has(r)) continue;
+    if (inFlight.has(flightKey(opts.dataRoot, r))) continue;
     todo.push({ ref: r, kind: link.kind });
   }
   if (!todo.length) return;
 
-  for (const t of todo) inFlight.add(t.ref);
+  for (const t of todo) inFlight.add(flightKey(opts.dataRoot, t.ref));
 
   void (async () => {
     // Small concurrency: these are subprocesses and HTTP calls, and a board can
@@ -180,7 +191,7 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): voi
             reason: `fetcher failed: ${(err as Error).message}`,
           });
         } finally {
-          inFlight.delete(next.ref);
+          inFlight.delete(flightKey(opts.dataRoot, next.ref));
         }
       }
     });

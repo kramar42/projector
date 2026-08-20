@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -12,24 +12,13 @@ export function resolvePath(p: string, base: string): string {
 }
 
 /**
- * Data directory resolution, in precedence order:
- *   COCKPIT_DATA → cockpit.config.json's dataDir → ./data
- * Relative values resolve against the app root, so the data directory can be
- * moved anywhere without the CLI's working directory mattering.
+ * Everything inside a vault, derived from its root.
+ *
+ * The app has no built-in location and no directory name it assumes — a vault is
+ * whichever folder the user opened, the way Obsidian works. `paths()` is the only
+ * place the internal layout of a vault is written down.
  */
-export function dataDir(): string {
-  const fromEnv = process.env.COCKPIT_DATA;
-  if (fromEnv) return resolvePath(fromEnv, appRoot);
-
-  const cfgPath = join(appRoot, 'cockpit.config.json');
-  if (existsSync(cfgPath)) {
-    const cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as { dataDir?: string };
-    if (cfg.dataDir) return resolvePath(cfg.dataDir, appRoot);
-  }
-  return join(appRoot, 'data');
-}
-
-export const paths = (root = dataDir()) => ({
+export const paths = (root: string) => ({
   root,
   cards: join(root, 'cards'),
   assets: join(root, 'cards', 'assets'),
@@ -38,6 +27,42 @@ export const paths = (root = dataDir()) => ({
   boards: join(root, 'views', 'board'),
   canvases: join(root, 'views', 'canvas'),
   db: join(root, '.index.db'),
+  enrichDb: join(root, '.enrich.db'),
 });
 
-export { appRoot };
+/**
+ * The vault a command-line invocation should act on.
+ *
+ * `--vault <path>` wins, then `COCKPIT_DATA`. Otherwise, if exactly one vault is
+ * registered, that one — a single-vault setup should not have to say so. With
+ * several registered and no choice made, the caller is asked to pick rather than
+ * guessing.
+ */
+export function resolveCliVault(
+  argv: string[],
+  registered: { path: string; name: string }[],
+): { root: string } | { error: string } {
+  const flagAt = argv.indexOf('--vault');
+  if (flagAt !== -1) {
+    const given = argv[flagAt + 1];
+    if (!given) return { error: '--vault needs a path' };
+    return { root: resolvePath(given, process.cwd()) };
+  }
+  if (process.env.COCKPIT_DATA) {
+    return { root: resolvePath(process.env.COCKPIT_DATA, process.cwd()) };
+  }
+  if (registered.length === 1) return { root: registered[0]!.path };
+  if (!registered.length) {
+    return {
+      error:
+        'no vault. Pass --vault <path>, set COCKPIT_DATA, or open one in the app first.',
+    };
+  }
+  return {
+    error:
+      `several vaults are registered — pass --vault <path>:\n` +
+      registered.map((v) => `  ${v.name}  ${v.path}`).join('\n'),
+  };
+}
+
+export { appRoot, existsSync };

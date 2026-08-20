@@ -25,7 +25,8 @@ export interface FacetDef {
 }
 
 export interface Meta {
-  dataDir: string;
+  vault: string;
+  vaultName: string;
   facets: Record<string, FacetDef>;
   counts: Record<string, number>;
   enrichment: Record<string, number>;

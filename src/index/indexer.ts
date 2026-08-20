@@ -44,7 +44,7 @@ export function readAll(cardsDir: string): {
 }
 
 /** Rebuild the whole index from the card files. */
-export function reindex(dataRoot?: string): IndexResult {
+export function reindex(dataRoot: string): IndexResult {
   const p = paths(dataRoot);
   const { records, unreadable, duplicates } = readAll(p.cards);
   const db = openDb(p.db, { fresh: true });

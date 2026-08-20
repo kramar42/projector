@@ -3,6 +3,7 @@ import { isKnownKind } from './links.ts';
 import { EDGE_TYPES, type Facets, type Issue, type Rec } from './types.ts';
 import { ancestorChains, isProject, parentsOf } from '../index/project.ts';
 import { resolvePath } from '../config.ts';
+import { resolveDoc } from '../vault.ts';
 
 /**
  * Validate every record against the loaded vocabulary and the graph.
@@ -83,8 +84,10 @@ export function validate(
       if (!l.kind) at('links', `unrecognised link "${l.raw}"`, 'warning');
       else if (!isKnownKind(l.kind)) at('links', `unknown link kind "${l.kind}"`, 'warning');
       if (l.kind === 'doc') {
-        const p = resolvePath(l.ref, dataRoot);
-        if (!existsSync(p)) at('links', `doc link target not found: ${l.ref}`, 'warning');
+        const { path, tried } = resolveDoc(l.ref, dataRoot);
+        if (!path) {
+          at('links', `doc not found: ${l.ref} (looked in ${tried.join(', ')})`, 'warning');
+        }
       }
     }
 
