@@ -1,5 +1,5 @@
 import { useEnrichment } from '../enrichment.tsx';
-import type { CardDTO, Size, Tone } from '../types.ts';
+import type { CardDTO, Tone } from '../types.ts';
 
 /**
  * The one card component, rendered at two sizes inside a board column, a canvas
@@ -94,14 +94,29 @@ function Progress({ done, total }: { done: number; total: number }) {
   );
 }
 
+/**
+ * A deadline, once it is close enough to matter.
+ *
+ * `later` draws nothing: a face that badges every date says nothing about the
+ * one that is overdue. The bucket is computed on the server (C8), so this and
+ * the `due` filter axis can never disagree about where the boundary falls.
+ */
+export function DueBadge({ card }: { card: CardDTO }) {
+  if (!card.due || !card.dueIn || card.dueIn === 'later') return null;
+  const label = card.dueIn === 'overdue' ? 'overdue' : card.dueIn === 'today' ? 'today' : card.due;
+  return (
+    <span className={`due is-${card.dueIn}`} title={`due ${card.due}`}>
+      {label}
+    </span>
+  );
+}
+
 export function CardBody({
   card,
-  size,
   showFacets,
   onOpen,
 }: {
   card: CardDTO;
-  size: Size;
   /** Which facets render as chips on the face — the view's `chips`. */
   showFacets: string[];
   onOpen?: (id: string) => void;
@@ -109,21 +124,12 @@ export function CardBody({
   const blocked = card.blockedBy.filter((b) => !b.done);
   const facetKeys = showFacets.filter((f) => card.facets[f]?.length);
 
-  if (size === 'chip') {
-    return (
-      <div className={cls(card, 'chipnode')} onDoubleClick={() => onOpen?.(card.id)}>
-        <KindMark card={card} />
-        <span className="chipnode-title">{card.title}</span>
-        {card.childCount > 0 && <span className="count">{card.childCount}</span>}
-      </div>
-    );
-  }
-
   return (
     <div className={cls(card, 'cardface')} onDoubleClick={() => onOpen?.(card.id)}>
       <div className="cardface-head">
         <KindMark card={card} />
         <span className="cardface-title">{card.title}</span>
+        <DueBadge card={card} />
       </div>
 
       {facetKeys.length > 0 && (
@@ -196,8 +202,11 @@ export function kindTitle(card: CardDTO): string {
 }
 
 export function KindMark({ card }: { card: CardDTO }) {
+  // The kind is also a class, because each glyph needs its own optical nudge —
+  // see `.kindmark` in style.css.
+  const kind = card.isProject ? 'project' : card.kind === 'node' ? 'node' : 'card';
   return (
-    <span className="kindmark" title={kindTitle(card)}>
+    <span className={`kindmark is-${kind}`} title={kindTitle(card)}>
       {kindGlyph(card)}
     </span>
   );

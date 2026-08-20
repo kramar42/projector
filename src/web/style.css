@@ -757,12 +757,41 @@ body {
   align-items: baseline;
 }
 
+/*
+ * The kind mark, optically centred on the lowercase text beside it.
+ *
+ * Three things have to be true, and none of them was:
+ *
+ *  1. **Relative size.** A fixed 10px mark cannot sit correctly next to text that
+ *     is 12.5px in a table, 13px on a card and 16px in the panel header — the
+ *     correction would differ at every size. `em` makes one rule serve all.
+ *  2. **Baseline alignment**, in every container. With `align-items: center` the
+ *     mark's line box is centred against the row instead, so in a tall table row
+ *     the glyph drifts toward the bottom of the title. `line-height: 1` keeps its
+ *     box from adding its own offset.
+ *  3. **A per-glyph nudge**, because the three characters do not sit at the same
+ *     height. Measured ink centres above the baseline, in em of their own size:
+ *     `·` 0.347, `○` and `▣` 0.260. Lowercase text centres at 0.254em of *its*
+ *     size, so at 0.8em the middle dot lands 0.024em too high and the two
+ *     geometric shapes 0.046em too low. These two constants are those
+ *     differences — they are measurements, not taste.
+ */
 .kindmark {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 0.8em;
+  line-height: 1;
   color: var(--ink-3);
   flex: none;
-  line-height: 1.6;
+  align-self: baseline;
+}
+
+.kindmark.is-card {
+  transform: translateY(0.03em);
+}
+
+.kindmark.is-node,
+.kindmark.is-project {
+  transform: translateY(-0.058em);
 }
 
 .cardface-title {
@@ -961,7 +990,7 @@ body {
   padding: 7px 10px;
   display: flex;
   gap: 7px;
-  align-items: center;
+  align-items: baseline;
   font-size: 12.5px;
 }
 
@@ -1086,18 +1115,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-
-.panel-body > .cardface {
-  border: 0;
-  padding: 0;
-  background: none;
-}
-
-.panel-body > .cardface .cardface-title {
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
 }
 
 .panel-section h3 {
@@ -1443,71 +1460,57 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* panel editing */
 
+/* The only part of the panel that does not scroll, so it holds the mark and the
+   title — the same line a card face and a table row lead with. */
 .panel-top {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--surface);
   border-bottom: 1px solid var(--rule);
-  padding: 8px 12px;
+  padding: 10px 12px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.panel-x {
+  margin-left: auto;
+  flex: none;
+}
+
+.panel-top .titleedit {
+  flex: 1;
+  min-width: 0;
 }
 .panel-busy { font-family: var(--mono); font-size: 11px; color: var(--accent); }
 
 .panel-title {
   margin: 0;
-  font-size: 18px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.015em;
+  line-height: 1.3;
   cursor: text;
   border-radius: 4px;
-  padding: 2px 4px;
+  padding: 1px 4px;
   margin-left: -4px;
 }
 .panel-title:hover { background: var(--surface-2); }
 
-/* The record's own classes, stated where the buttons that change them are. */
-.panel-head {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
+.panel-title-text {
+  overflow-wrap: anywhere;
 }
 
-.panel-kinds {
-  display: flex;
-  gap: 4px;
-}
-
-.kindbadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border: 1px solid var(--rule-2);
-  border-radius: 3px;
-  padding: 1px 6px 1px 5px;
-  color: var(--ink-3);
-  cursor: default;
-}
-
-.kindbadge .kindmark {
-  line-height: 1;
-  font-size: 11px;
-}
-
-.kindbadge.is-project {
-  color: var(--hue-purple);
-  border-color: color-mix(in srgb, var(--hue-purple) 40%, transparent);
-}
-
-.kindbadge.is-node {
-  font-style: italic;
+/* The mark carries what the record is; hovering it says so in words. It scales
+   with the title, so it needs no size of its own. */
+.panel-title .kindmark {
+  cursor: help;
 }
 
 .titleedit textarea { width: 100%; font-size: 15px; }
@@ -1972,7 +1975,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
    card face is. In a table cell they sat flush against the title. */
 .table td.col-title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 7px;
 }
 

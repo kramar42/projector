@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { marked } from 'marked';
 import { ApiError, api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { CardBody, kindTitle, kindWords } from '../components/CardBody.tsx';
+import { KindMark } from '../components/CardBody.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
@@ -90,11 +90,62 @@ export function CardPanel({
     <>
       <div className="scrim" onClick={() => (dirty ? undefined : onClose())} />
       <aside className="panel" role="dialog" aria-label="Card detail">
+        {/*
+          The one part of the panel that does not scroll, so it carries what a
+          card face and a table row carry: the mark, then the title. Same glyph,
+          same order, no word labels — this line should read the way the record
+          reads everywhere else.
+        */}
         <div className="panel-top">
-          <button className="btn ghost" onClick={onClose} aria-label="Close">
+          {card &&
+            (editTitle === null ? (
+              <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
+                <KindMark card={card} />
+                <span className="panel-title-text">{card.title}</span>
+              </h2>
+            ) : (
+              <div className="titleedit">
+                <textarea
+                  autoFocus
+                  value={editTitle}
+                  rows={2}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setEditTitle(null);
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      const next = editTitle;
+                      setEditTitle(null);
+                      void run('renaming', () =>
+                        api.patchCard(card.id, { title: next, baseMtime: data!.mtime }),
+                      );
+                    }
+                  }}
+                />
+                <div className="titleedit-bar">
+                  <button
+                    className="btn primary small"
+                    onClick={() => {
+                      const next = editTitle;
+                      setEditTitle(null);
+                      void run('renaming', () =>
+                        api.patchCard(card.id, { title: next, baseMtime: data!.mtime }),
+                      );
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button className="btn ghost small" onClick={() => setEditTitle(null)}>
+                    Cancel
+                  </button>
+                  <span className="editor-hint">⏎ to save · ⇧⏎ for a newline</span>
+                </div>
+              </div>
+            ))}
+          {busy && <span className="panel-busy">{busy}…</span>}
+          <button className="btn ghost panel-x" onClick={onClose} aria-label="Close">
             ✕
           </button>
-          {busy && <span className="panel-busy">{busy}…</span>}
         </div>
 
         {error && <div className="pane-error">{error}</div>}
@@ -113,93 +164,22 @@ export function CardPanel({
 
         {data && card && (
           <div className="panel-body">
-            {editTitle === null ? (
-              <div className="panel-head">
-                {/* What this record is, next to the buttons that change it —
-                    "Demote to node" and "Not a project" are otherwise actions on
-                    something you cannot see. */}
-                <span className="panel-kinds">
-                  {kindWords(card).map((w) => (
-                    <span key={w} className={`kindbadge is-${w}`} title={kindTitle(card)}>
-                      <span className="kindmark">{w === 'project' ? '▣' : w === 'node' ? '○' : '·'}</span>
-                      {w}
-                    </span>
-                  ))}
-                </span>
-                <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
-                  {card.title}
-                </h2>
-              </div>
-            ) : (
-              <div className="titleedit">
-                <textarea
-                  autoFocus
-                  value={editTitle}
-                  rows={2}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditTitle(null);
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      const next = editTitle;
-                      setEditTitle(null);
-                      void run('renaming', () =>
-                        api.patchCard(card.id, { title: next, baseMtime: data.mtime }),
-                      );
-                    }
-                  }}
-                />
-                <div className="titleedit-bar">
-                  <button
-                    className="btn primary small"
-                    onClick={() => {
-                      const next = editTitle;
-                      setEditTitle(null);
-                      void run('renaming', () =>
-                        api.patchCard(card.id, { title: next, baseMtime: data.mtime }),
-                      );
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button className="btn small" onClick={() => setEditTitle(null)}>
-                    Cancel
-                  </button>
-                  <span className="editor-hint">⏎ to save · ⇧⏎ for a newline</span>
-                </div>
-              </div>
-            )}
-
             <div className="panel-actions">
-              <button
-                className="btn small"
-                onClick={() =>
-                  void run('changing kind', () =>
-                    api.patchCard(card.id, {
-                      kind: card.kind === 'card' ? 'node' : 'card',
-                      baseMtime: data.mtime,
-                    }),
-                  )
-                }
-                title={
-                  card.kind === 'card'
-                    ? 'Demote to a node: a thought, canvas-only, off every board'
-                    : 'Promote to a card: real work, appears on boards'
-                }
-              >
-                {card.kind === 'card' ? 'Demote to node' : 'Promote to card'}
-              </button>
+              {/* Promote/demote is gone on purpose: `kind` is an ordinary facet
+                  now, so it is toggled in the Facets section like every other
+                  axis rather than through a control of its own. */}
               <button
                 className="btn small"
                 title={
                   card.isProject
-                    ? 'Remove the project block. Children keep their parent edges but stop inheriting from here.'
-                    : 'Add a project block, so this record can own repos and instructions that its children inherit.'
+                    ? 'Remove the project block. Records naming this one in their project facet stop inheriting repos and instructions from it.'
+                    : 'Add a project block, so this record can own repos and instructions that its members inherit.'
                 }
                 onClick={() =>
                   void run(card.isProject ? 'un-projecting' : 'making a project', () =>
                     api.patchCard(card.id, {
-                      project: card.isProject ? null : { key: card.id },
+                      // A project's key is its record id, so the block starts empty.
+                      project: card.isProject ? null : {},
                       baseMtime: data.mtime,
                     }),
                   )
@@ -227,6 +207,34 @@ export function CardPanel({
               <dd><code>{card.id}</code></dd>
               <dt>file</dt>
               <dd><code>{data.file}</code></dd>
+              <dt>due</dt>
+              <dd>
+                {/* A date input, not a facet chip: a deadline is compared
+                    against today rather than matched against a vocabulary. */}
+                <input
+                  type="date"
+                  className={`dueinput ${card.dueIn ? `is-${card.dueIn}` : ''}`}
+                  value={card.due ?? ''}
+                  onChange={(e) => {
+                    const next = e.target.value || null;
+                    void run('setting due', () =>
+                      api.patchCard(card.id, { due: next, baseMtime: data.mtime }),
+                    );
+                  }}
+                />
+                {card.due && (
+                  <button
+                    className="btn ghost small"
+                    onClick={() =>
+                      void run('clearing due', () =>
+                        api.patchCard(card.id, { due: null, baseMtime: data.mtime }),
+                      )
+                    }
+                  >
+                    clear
+                  </button>
+                )}
+              </dd>
               {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
             </dl>
 
@@ -255,8 +263,10 @@ export function CardPanel({
                 />
               )}
               <p className="hint">
-                A parent means decomposition — this card is part of that one — and is what the canvas
-                draws. It is independent of the project facet: a card can have either, both or neither.
+                A parent means decomposition — this card is <em>part of</em> that one — and is what
+                the canvas draws. Membership is the <code>project</code> facet, and only that: repos
+                and instructions are inherited through it, never through a parent edge. The two are
+                independent, so a card can have either, both or neither.
               </p>
             </section>
 
