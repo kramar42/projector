@@ -172,14 +172,14 @@ localhost server is reachable from any page open in the browser. Every frontmatt
 
 The complete filesystem surface, audited. Nothing else on disk is read or written.
 
-**Writes — three places, and that is all:**
+**Writes — inside a vault, plus two files of its own:**
 
 | Path | What | When |
 |---|---|---|
 | `<vault>/cards/**` | card files, and assets under `cards/assets/<id>/` | you create or edit a card |
 | `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `$COCKPIT_HOME/vaults.json` (default `~/.cockpit/`) | the list of vaults you have opened | you open or forget a vault |
+| `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$COCKPIT_WORKSPACES/<card>/` (default `~/Code/wt/`) | `ck work` worktrees and `AGENT_BRIEFING.md` | only `ck work` |
 
 Every card write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
@@ -207,7 +207,6 @@ because a path may contain a quote.
 
 | | |
 |---|---|
-| `COCKPIT_HOME` | where the vault registry lives (default `~/.cockpit`) |
 | `COCKPIT_DATA` | the vault, for the CLI |
 | `COCKPIT_PORT` | server port (default 8092) |
 | `COCKPIT_WORKSPACES` | where `ck work` puts worktrees (default `~/Code/wt`) |
@@ -218,10 +217,14 @@ responses carry the resolved fields, never the token.
 
 ## Why the registry is a file
 
-`$COCKPIT_HOME/vaults.json` cannot be `localStorage`, because the **server** is the party that needs it.
-A request names its vault in an `X-Cockpit-Vault` header, and the server refuses a path that is not
-registered — so the header is a reference to a folder you chose rather than an arbitrary path a page can
-name. `localStorage` is browser-side; the server cannot read it.
+`vaults.json` cannot be `localStorage`, because the **server** is the party that needs it. A request
+names its vault in an `X-Cockpit-Vault` header, and the server refuses a path that is not registered —
+so the header is a reference to a folder you chose rather than an arbitrary path a page can name.
+`localStorage` is browser-side; the server cannot read it.
+
+It sits next to the app rather than in `~/.cockpit`, so an install carries its own list: nothing is
+written to your home directory, and two installs cannot fight over one file. It is gitignored, because
+it holds local paths and belongs to the install rather than the code.
 
 Verified behaviour: an unregistered path gets 428, and a cross-origin request is refused twice over —
 the custom header forces a CORS preflight that no origin of ours answers, and a mutating request with a

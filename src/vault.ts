@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { looksLikeVault, paths, resolvePath } from './config.ts';
+import { appRoot, looksLikeVault, paths, resolvePath } from './config.ts';
 
 /**
  * Vaults — a directory of cards, opened the way Obsidian opens a folder.
@@ -13,17 +13,14 @@ import { looksLikeVault, paths, resolvePath } from './config.ts';
  */
 
 /**
- * Where the registry lives. `COCKPIT_HOME` relocates it, which is what makes a
- * test, a second install or a portable checkout able to keep its own list
- * instead of sharing the one in your home directory.
+ * The registry lives next to the app. One fixed location: an install keeps its
+ * own list of vaults, so nothing is written to your home directory and two
+ * installs cannot fight over one file.
  *
- * This is the only file the app writes outside a vault, and it holds nothing but
- * paths you have opened — deleting it loses the list and nothing else.
+ * It is the only thing the app writes outside a vault, and it holds nothing but
+ * paths you have opened — delete it and you lose the list, nothing else.
  */
-const REGISTRY_DIR = process.env.COCKPIT_HOME
-  ? resolvePath(process.env.COCKPIT_HOME, process.cwd())
-  : join(homedir(), '.cockpit');
-const REGISTRY = join(REGISTRY_DIR, 'vaults.json');
+const REGISTRY = join(appRoot, 'vaults.json');
 
 export interface VaultEntry {
   path: string;
@@ -49,7 +46,6 @@ function readRegistry(): VaultEntry[] {
 }
 
 function writeRegistry(vaults: VaultEntry[]): void {
-  mkdirSync(REGISTRY_DIR, { recursive: true });
   const tmp = `${REGISTRY}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify({ vaults }, null, 2) + '\n', 'utf8');
   renameSync(tmp, REGISTRY);

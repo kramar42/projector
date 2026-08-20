@@ -358,9 +358,9 @@ Pointing at an empty or non-existent folder sets one up: a card directory, a fac
 starter views, a README of the conventions, and a `.gitignore` for the derived index and cache. A
 non-empty folder that is not a vault is refused.
 
-The folders you have opened are listed in `~/.cockpit/vaults.json` (relocatable with `COCKPIT_HOME`),
-and the server will only open one that is on that list — so a page in your browser cannot point it at
-an arbitrary directory. Delete the file and you lose the list, nothing else.
+The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
+one that is on that list — so a page in your browser cannot point it at an arbitrary directory. It is
+the only thing written outside a vault; delete it and you lose the list, nothing else.
 
 ```bash
 ck vaults                                  # list
