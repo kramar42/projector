@@ -183,8 +183,14 @@ writable. See §7.
 
 ### 3.1 Directory layout
 
-Two directories: **`cockpit/`** for the app, and **`cockpit/data/`** for the data as a subdirectory of
-it — gitignored, and configurable so it can be relocated later.
+A **vault** is a folder holding `cards/`, `facets.yaml` and `views/`, opened the way Obsidian opens
+one. There is no built-in location and no assumed directory name: the app asks for a folder on first
+run, remembers it per browser, and the sidebar switcher opens or adds others. Known vaults are recorded
+in `~/.cockpit/vaults.json`; a request names its vault with a header, and the server refuses one it was
+never asked to open.
+
+In this workspace the app lives in **`cockpit/`** and one vault in **`cockpit/data/`** — but that is a
+choice, not a requirement.
 
 ```
 work/cockpit/                    # the app
@@ -197,7 +203,6 @@ work/cockpit/                    # the app
     web/                         # React app (P1)
     cli/                         # ck
     import/                      # trello, todo.md
-  cockpit.config.json            # { "dataDir": "./data" }
   .gitignore                     # data/, node_modules/, *.db
 
 work/cockpit/data/               # the data — gitignored, relocatable
@@ -556,6 +561,10 @@ modules export no mutation functions, so there is no code path to write back (C2
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | subject, author, date | immutable |
 | `claude` | `claude:local_9e09…` | session-mgmt MCP | title, running dot, last activity, PR badge, cwd, branch | 60s running / 10 min idle |
 | `doc` | `doc:path/to.md` | filesystem | H1, mtime, size, first-paragraph excerpt | on mtime change |
+
+A `doc:` path resolves against the **vault root**, or absolutely (`/…`, `~/…`). A document outside the
+vault is reached with `../`, so such refs travel with the vault rather than following it — accepted in
+exchange for having no second configured root to keep in step.
 | `slack` | `slack:<permalink>` | none in P3 — channel + date parsed from the URL | channel, date | — |
 | `cal` | `cal:<eventId>` | Calendar MCP | title, start, attendees | 10 min |
 | `grafana` | `grafana:<url>` | Grafana MCP (two instances configured) | dashboard title, alert state | 5 min |
