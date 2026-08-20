@@ -7,7 +7,7 @@ import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
  * The third shape.
  *
  * A table exists for the one thing neither a board nor a canvas gives: columns of
- * numbers. Its columns are `face.chips` — the same list a board draws as chips —
+ * numbers. Its columns are `chips` — the same list a board draws as chips —
  * so switching shape never asks "which facets matter" twice, and there is no
  * column picker to build or keep in sync.
  *
@@ -21,7 +21,7 @@ export function TableView({
   data: QueryResponse;
   onOpen: (id: string) => void;
 }) {
-  const chips = data.spec.face.chips ?? [];
+  const chips = data.spec.chips;
   // A project row earns the roll-up columns; a table of ordinary cards has
   // nothing to put in them.
   const projects = data.ids.some((id) => data.cards[id]?.isProject);

@@ -37,7 +37,7 @@ function RecordNode({ data }: NodeProps) {
   const { card, size, chips, context, onOpen } = data as unknown as {
     card: CardDTO;
     size: 'chip' | 'card';
-    chips?: string[];
+    chips: string[];
     context: boolean;
     onOpen: (id: string) => void;
   };
@@ -147,7 +147,6 @@ export function CanvasView({
   ]);
 
   const built = useMemo(() => {
-    const size = data.spec.face.size;
     const context = new Set(data.context);
     const shown = [...data.ids, ...data.context].map((id) => data.cards[id]).filter(Boolean) as CardDTO[];
     const stored = data.spec.nodes ?? {};
@@ -156,8 +155,8 @@ export function CanvasView({
     // buys manual positioning (C9).
     const hierarchy = layoutTypes(data.spec.edges);
     const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.edges, stored, size, hierarchy)
-      : treeLayout(shown, data.edges, 'LR', size, hierarchy);
+      ? manualLayout(shown, data.edges, stored, hierarchy)
+      : treeLayout(shown, data.edges, 'LR', hierarchy);
 
     const rfNodes: Node[] = shown.map((card) => {
       const p = placed.get(card.id)!;
@@ -173,8 +172,8 @@ export function CanvasView({
         style: { width: p.w, height: p.h },
         data: {
           card,
-          size: sizeFor(card, size),
-          chips: data.spec.face.chips,
+          size: sizeFor(card),
+          chips: data.spec.chips,
           context: context.has(card.id),
           onOpen,
         },

@@ -18,7 +18,7 @@ number.
 | C6 | The card body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is structured nodes and typed edges. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
-| C9 | A view is a query, not a place | `view = filter × focus × shape × face`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
+| C9 | A view is a query, not a place | `view = filter × focus × shape × facets`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
 | C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?card=` |
 
 ## The pipeline
@@ -139,7 +139,9 @@ it back and a mismatch is a 409. This matters because an agent may be editing th
 window (C3).
 
 **Grouping is one function called twice.** A second axis is a position in `groupBy`, not a separate
-`swimlanes` concept, which is why a matrix needed no new code path. A canvas cannot cluster yet because
+`swimlanes` concept, which is why a matrix needed no new code path. Every value a facet declares gets a
+group, empty or not — a board missing a declared column reads as though it did not exist, and an empty
+column is somewhere to drag a card to. A canvas cannot cluster yet because
 a node has one position and a card multi-valued on the grouped facet cannot sit in two clusters —
 `groupBy` is accepted and ignored there so switching shape never drops the parameter.
 

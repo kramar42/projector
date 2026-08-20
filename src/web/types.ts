@@ -57,7 +57,6 @@ export interface Query {
   groupBy?: string[];
   sort?: string[];
   connect?: 'ancestors' | 'none';
-  showEmpty?: boolean;
   uncategorised?: 'end' | 'start' | 'hide';
 }
 
@@ -72,8 +71,8 @@ export interface ViewSpec {
   shape: Shape;
   query: Query;
   edges: string[];
-  /** Chips on a card face; the same list is a table's columns. */
-  face: { size?: Size; chips?: string[] };
+  /** Which facets show on a record: chips on a face, columns in a table. */
+  chips: string[];
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
 }
@@ -146,8 +145,8 @@ export interface CardDetail {
 }
 
 /**
- * Display size, shared by every shape. `expanded` is gone: `?card=` and the panel
- * are the expanded surface, and a per-node size was reachable by nothing.
+ * How much of a record a face shows. Not a view option: a plain node has no
+ * facets to draw, so it renders as a chip, and everything else as a card.
  */
 export type Size = 'chip' | 'card';
 

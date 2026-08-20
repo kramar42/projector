@@ -213,7 +213,6 @@ function cmdLs(argv: string[]): void {
   const axes = spec.query.groupBy ?? [];
   console.log(`# grouped by ${axes.join(' × ')}\n`);
   for (const g of res.groups) {
-    if (!g.ids.length && !spec.query.showEmpty) continue;
     console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
     for (const id of g.ids) console.log(line(id));
     console.log('');

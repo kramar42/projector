@@ -102,14 +102,12 @@ export function CardBody({
 }: {
   card: CardDTO;
   size: Size;
-  /** Which facets render as chips on the face. Defaults to all but source. */
-  showFacets?: string[];
+  /** Which facets render as chips on the face — the view's `chips`. */
+  showFacets: string[];
   onOpen?: (id: string) => void;
 }) {
   const blocked = card.blockedBy.filter((b) => !b.done);
-  const facetKeys = (showFacets ?? Object.keys(card.facets).filter((f) => f !== 'source')).filter(
-    (f) => card.facets[f]?.length,
-  );
+  const facetKeys = showFacets.filter((f) => card.facets[f]?.length);
 
   if (size === 'chip') {
     return (

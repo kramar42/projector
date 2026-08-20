@@ -49,10 +49,9 @@ export interface Query {
    */
   connect?: 'ancestors' | 'none';
   /**
-   * Grouping options, not board options — they read identically for a board's
-   * columns, a table's sections and a canvas's clusters.
+   * A grouping option, not a board option — it reads identically for a board's
+   * columns and a table's sections.
    */
-  showEmpty?: boolean;
   uncategorised?: 'end' | 'start' | 'hide';
 }
 
@@ -536,10 +535,10 @@ export function runQuery(
         }
       }
       const pseudo = PSEUDO[facet];
-      const declared = pseudo ? pseudo.values : orderValues(facets[facet], seen);
-      // `showEmpty` keeps a declared value that nothing is on — a priority board
-      // without its `now` column reads as though the column did not exist.
-      const order = declared.filter((v) => buckets.has(v) || query.showEmpty === true);
+      // Every declared value gets a group, empty or not: a priority board missing
+      // its `now` column reads as though the column did not exist, and an empty
+      // column is somewhere to drag a card to.
+      const order = pseudo ? [...pseudo.values] : orderValues(facets[facet], seen);
       if (none.length && query.uncategorised !== 'hide') {
         if (query.uncategorised === 'start') order.unshift(NONE);
         else order.push(NONE);

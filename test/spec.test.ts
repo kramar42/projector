@@ -16,9 +16,7 @@ test('a spec survives the round trip through URL parameters', () => {
     group: 'priority,status',
     sort: 'priority:asc,updated:desc',
     uncategorised: 'start',
-    showEmpty: '1',
     edges: 'parent,member-of',
-    size: 'chip',
     chips: 'project,tech',
   };
   const spec = parseSpec(params);
@@ -52,7 +50,7 @@ test('a canvas connects itself by default; other shapes do not', () => {
 test('a stale bookmark opens rather than erroring', () => {
   const spec = parseSpec({ shape: 'mindmap', via: 'sideways', size: 'expanded', edges: 'parent,telepathy' });
   assert.equal(spec.shape, 'board');
-  assert.equal(spec.face.size, undefined);
+  assert.deepEqual(spec.chips, []);
   assert.deepEqual(spec.edges, ['parent']);
 });
 
@@ -65,14 +63,12 @@ test('the seven views written before P5 still open', () => {
     swimlanes: null,
     cardFacets: ['project', 'tech'],
     sort: ['updated:desc'],
-    showEmpty: true,
     uncategorised: 'end',
   });
   assert.equal(board.shape, 'board');
   assert.deepEqual(board.query.filter, { status: ['planning', 'active', 'waiting', 'blocked'] });
   assert.deepEqual(board.query.groupBy, ['priority']);
-  assert.deepEqual(board.face.chips, ['project', 'tech']);
-  assert.equal(board.query.showEmpty, true);
+  assert.deepEqual(board.chips, ['project', 'tech']);
 
   // `blockedBy: none` was a computed predicate in a filter; it is a pseudo-facet.
   const unblocked = specFromFile('unblocked', {
@@ -100,17 +96,14 @@ test('the seven views written before P5 still open', () => {
     defaultSize: 'chip',
   });
   assert.deepEqual(filtered.query.filter, { source: ['trello'] });
-  assert.equal(filtered.face.size, 'chip');
+  // `defaultSize` was a face-size option and there is no longer one: a plain node
+  // renders as a chip and everything else as a card, from the record's nature.
+  assert.deepEqual(filtered.chips, []);
 });
 
 test('a swimlane in an old file becomes the second grouping axis', () => {
   const spec = specFromFile('matrix', { kind: 'board', groupBy: 'priority', swimlanes: 'project' });
   assert.deepEqual(spec.query.groupBy, ['priority', 'project']);
-});
-
-test('defaultSize: expanded is read as a card face, since expanded is gone', () => {
-  assert.equal(specFromFile('x', { kind: 'canvas', defaultSize: 'expanded' }).face.size, undefined);
-  assert.equal(specFromFile('x', { kind: 'canvas', defaultSize: 'chip' }).face.size, 'chip');
 });
 
 test('saving writes the query half and never the arrangement', () => {
@@ -133,7 +126,7 @@ test('saving writes the query half and never the arrangement', () => {
     filter: { project: ['project-a'] },
     groupBy: ['priority'],
     edges: { show: ['parent'] },
-    face: { chips: ['tech'] },
+    chips: ['tech'],
   });
   assert.ok(!('nodes' in file));
   assert.ok(!('order' in file));
@@ -152,8 +145,8 @@ test('a file round-trips through save and reload', () => {
   assert.deepEqual(reloaded.query.filter, original.query.filter);
   assert.deepEqual(reloaded.query.groupBy, original.query.groupBy);
   assert.deepEqual(reloaded.query.sort, original.query.sort);
-  // A table renders `chips` as its columns, so there is no separate key to keep.
-  assert.deepEqual(reloaded.face.chips, ['project', 'priority']);
+  // A table renders the same list as its columns, so there is no separate key.
+  assert.deepEqual(reloaded.chips, ['project', 'priority']);
 });
 
 test('an explicitly empty focus overrides a saved one', () => {

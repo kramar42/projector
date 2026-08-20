@@ -1,5 +1,5 @@
 import { NONE } from './views/dragSemantics.ts';
-import type { Query, Shape, Size, ViewSpec } from './types.ts';
+import type { Query, Shape, ViewSpec } from './types.ts';
 
 /**
  * The URL is the view (C9).
@@ -19,7 +19,7 @@ const VIEW_PARAM = 'view';
 function isQueryParam(key: string): boolean {
   return (
     key.startsWith('f.') ||
-    ['view', 'shape', 'group', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'connect', 'edges', 'size', 'chips', 'uncategorised', 'showEmpty'].includes(key)
+    ['view', 'shape', 'group', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'connect', 'edges', 'chips', 'uncategorised'].includes(key)
   );
 }
 
@@ -135,11 +135,6 @@ export const SHAPES: { value: Shape; label: string }[] = [
   { value: 'board', label: 'Board' },
   { value: 'canvas', label: 'Canvas' },
   { value: 'table', label: 'Table' },
-];
-
-export const SIZES: { value: Size; label: string }[] = [
-  { value: 'chip', label: 'Chip' },
-  { value: 'card', label: 'Card' },
 ];
 
 export const VIAS = ['parent', 'member-of', 'blocks'] as const;

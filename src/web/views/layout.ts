@@ -16,32 +16,23 @@ const SIZE = {
 
 export type SizeName = keyof typeof SIZE;
 
-function asSize(v: string | undefined): SizeName | undefined {
-  return v === 'chip' || v === 'card' ? v : undefined;
-}
-
 /**
- * The size a record renders at: the view's `face.size`, then the record's nature.
+ * The size a record renders at, from its nature alone — not a view option.
  *
- * The per-node override is gone — it was reachable by nothing, and it was the
- * last thing keeping arrangement on a card rather than in a view.
+ * A plain node is thinking scaffolding with no facets to draw, so a title is all
+ * it needs. Everything else gets a card face.
  *
  * There is deliberately no count-based rule. Shrinking cards once a canvas gets
  * busy would mean the same card looked different depending on how many neighbours
  * it happened to have, and past a hundred records nothing is legible at fit-zoom
  * in any size — you zoom in, or you narrow the query.
  */
-export function sizeFor(card: CardDTO, viewSize?: string): SizeName {
-  // Nodes are thinking scaffolding — a title is all they need.
-  if (card.kind === 'node' && !card.isProject) return 'chip';
-  // Projects keep their face even in a compact view: they are the landmarks.
-  const fromView = asSize(viewSize);
-  if (fromView && !card.isProject) return fromView;
-  return 'card';
+export function sizeFor(card: CardDTO): SizeName {
+  return card.kind === 'node' && !card.isProject ? 'chip' : 'card';
 }
 
-export function dims(card: CardDTO, viewSize?: string): { w: number; h: number } {
-  return SIZE[sizeFor(card, viewSize)];
+export function dims(card: CardDTO): { w: number; h: number } {
+  return SIZE[sizeFor(card)];
 }
 
 /**
@@ -71,10 +62,11 @@ export function treeLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   direction: 'LR' | 'TB' = 'LR',
-  viewSize?: string,
   hierarchy: string[] = ['parent'],
 ): Map<string, Placed> {
-  const tight = asSize(viewSize) === 'chip';
+  // Tighter spacing when the graph is all chips, which is what a canvas of plain
+  // nodes is.
+  const tight = nodes.every((n) => sizeFor(n) === 'chip');
   const g = new dagre.graphlib.Graph();
   g.setGraph({
     rankdir: direction,
@@ -86,7 +78,7 @@ export function treeLayout(
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const n of nodes) {
-    const { w, h } = dims(n, viewSize);
+    const { w, h } = dims(n);
     g.setNode(n.id, { width: w, height: h });
   }
   const ids = new Set(nodes.map((n) => n.id));
@@ -104,7 +96,7 @@ export function treeLayout(
   const out = new Map<string, Placed>();
   for (const n of nodes) {
     const gn = g.node(n.id) as { x: number; y: number; width: number; height: number } | undefined;
-    const { w, h } = dims(n, viewSize);
+    const { w, h } = dims(n);
     out.set(n.id, {
       id: n.id,
       x: (gn?.x ?? 0) - w / 2,
@@ -126,10 +118,9 @@ export function manualLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
-  viewSize?: string,
   hierarchy: string[] = ['parent'],
 ): Map<string, Placed> {
-  const fallback = treeLayout(nodes, edges, 'LR', viewSize, hierarchy);
+  const fallback = treeLayout(nodes, edges, 'LR', hierarchy);
   const out = new Map<string, Placed>();
   for (const n of nodes) {
     const s = stored[n.id];

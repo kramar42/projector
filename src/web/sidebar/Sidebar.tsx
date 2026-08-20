@@ -4,7 +4,7 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import { VaultSwitcher } from '../VaultSwitcher.tsx';
 import { FilterPanel } from './FilterPanel.tsx';
-import { DIRS, SHAPES, SIZES, VIAS, clearFilters, clearFocus, type Patch } from '../query.ts';
+import { DIRS, SHAPES, VIAS, clearFilters, clearFocus, type Patch } from '../query.ts';
 import type { Meta, QueryResponse, SavedView, Shape } from '../types.ts';
 
 /**
@@ -60,7 +60,7 @@ export function Sidebar({
 
       <div className="rail-block">
         <ShapeSection data={data} patch={patch} />
-        <FaceSection meta={meta} data={data} patch={patch} />
+        <FacetsSection meta={meta} data={data} patch={patch} />
       </div>
 
       <div className="rail-block">
@@ -232,9 +232,9 @@ function blankQuery(params: URLSearchParams, view: string | null = null): Patch 
 /**
  * Shape, and the grouping controls that turned out not to belong to it.
  *
- * `showEmpty`, `uncategorised` and `sort` read identically for a board's columns,
- * a table's sections and a canvas's clusters — they are properties of *grouping*,
- * not of boards, which is why they live here once rather than three times.
+ * `uncategorised` and `sort` read identically for a board's columns and a table's
+ * sections — they are properties of *grouping*, not of boards, which is why they
+ * live here once rather than twice.
  *
  * **Nothing here appears or disappears with the shape.** The three controls that
  * only a canvas can honour — which edges are drawn, whether context is kept, and
@@ -315,15 +315,6 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
             </select>
           </div>
 
-          <label className="rail-check">
-            <input
-              type="checkbox"
-              checked={query.showEmpty === true}
-              onChange={(e) => patch({ showEmpty: e.target.checked ? '1' : null })}
-            />
-            show empty groups
-          </label>
-
 
         </>
       )}
@@ -384,13 +375,13 @@ function SortRow({
 // ---------------------------------------------------------------- face
 
 /**
- * How a record renders. One row: the chip list is a popover so a long selection
- * cannot push the filter panel off screen.
+ * Which facets show on a record. One row: the list is a popover so a long
+ * selection cannot push the filter panel off screen.
  *
- * `chips` is the same list a table draws as its columns — "which facets are
- * visible on a record" is one question, so switching shape never asks it twice.
+ * A board and a canvas draw them as chips, a table draws them as columns — one
+ * parameter, so switching shape never asks the same question twice.
  */
-function FaceSection({
+function FacetsSection({
   meta,
   data,
   patch,
@@ -399,33 +390,20 @@ function FaceSection({
   data: QueryResponse | null;
   patch: (p: Patch) => void;
 }) {
-  const face = data?.spec.face ?? {};
-  const chips = face.chips ?? [];
+  const chips = data?.spec.chips ?? [];
   const available = Object.entries(meta.facets).map(([name, def]) => ({ name, label: def.label }));
   const table = data?.spec.shape === 'table';
 
   return (
     <div className="rail-row">
-      <label className="rail-label">Face</label>
-      <select
-        className="rail-select narrow"
-        value={face.size ?? 'card'}
-        title={table ? 'row density' : 'how much of a record the face shows'}
-        onChange={(e) => patch({ size: e.target.value })}
-      >
-        {SIZES.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
+      <label className="rail-label">Facets</label>
       <PopoverButton
         className="chipsbtn"
         minWidth={200}
         label={table ? columnsLabel(chips) : chipsLabel(chips)}
         render={() => (
           <>
-            <div className="pop-head">{table ? 'Columns' : 'Chips on the face'}</div>
+            <div className="pop-head">{table ? 'Columns' : 'Shown on a card'}</div>
             {available.map((f) => (
               <label key={f.name} className="pop-check">
                 <input
@@ -449,7 +427,7 @@ function FaceSection({
 }
 
 function chipsLabel(chips: string[]): string {
-  if (!chips.length) return 'no chips';
+  if (!chips.length) return 'none';
   return chips.length === 1 ? chips[0]! : `${chips[0]} +${chips.length - 1}`;
 }
 

@@ -1915,6 +1915,14 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   margin-left: 8px;
 }
 
+/* The kind mark and the child count are styled for a flex row, which is what a
+   card face is. In a table cell they sat flush against the title. */
+.table td.col-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .table tr.is-project .col-title {
   font-weight: 600;
 }

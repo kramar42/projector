@@ -287,9 +287,10 @@ test('grouping puts a multi-valued card in every matching column', () => {
       'utf8',
     );
     const res = open(root)({ groupBy: ['priority'] });
+    // Every declared value gets a column, `backlog` included with nothing in it.
     assert.deepEqual(
       res.groups!.map((g) => g.value),
-      ['now', 'month', NONE],
+      ['now', 'month', 'backlog', NONE],
     );
     assert.ok(res.groups![0]!.ids.includes('kc-realms'));
     assert.ok(res.groups![1]!.ids.includes('kc-realms'));
@@ -301,17 +302,20 @@ test('grouping puts a multi-valued card in every matching column', () => {
   }
 });
 
-test('showEmpty keeps a declared column that nothing is in', () => {
+test('every declared value gets a group, empty or not', () => {
   const { root, cleanup } = vault();
   try {
-    const run = open(root);
+    // `backlog` is declared in facets.yaml and no card carries it. It still gets a
+    // column: a priority board missing one reads as though it did not exist, and
+    // an empty column is somewhere to drag a card to.
     assert.deepEqual(
-      run({ groupBy: ['priority'] }).groups!.map((g) => g.value),
-      ['now', 'month', NONE],
-    );
-    assert.deepEqual(
-      run({ groupBy: ['priority'], showEmpty: true }).groups!.map((g) => g.value),
+      open(root)({ groupBy: ['priority'] }).groups!.map((g) => g.value),
       ['now', 'month', 'backlog', NONE],
+    );
+    // Declared order, not the order the values happen to appear in.
+    assert.deepEqual(
+      open(root)({ groupBy: ['status'] }).groups!.map((g) => g.value),
+      ['planning', 'active', 'done', NONE],
     );
   } finally {
     cleanup();
@@ -324,9 +328,9 @@ test('uncategorised places or hides the (none) column', () => {
     const run = open(root);
     const values = (u: Query['uncategorised']) =>
       run({ groupBy: ['priority'], uncategorised: u }).groups!.map((g) => g.value);
-    assert.deepEqual(values('start'), [NONE, 'now', 'month']);
-    assert.deepEqual(values('end'), ['now', 'month', NONE]);
-    assert.deepEqual(values('hide'), ['now', 'month']);
+    assert.deepEqual(values('start'), [NONE, 'now', 'month', 'backlog']);
+    assert.deepEqual(values('end'), ['now', 'month', 'backlog', NONE]);
+    assert.deepEqual(values('hide'), ['now', 'month', 'backlog']);
   } finally {
     cleanup();
   }
@@ -475,12 +479,19 @@ test('a second grouping axis makes a matrix, not a new concept', () => {
   const { root, cleanup } = vault();
   try {
     const res = open(root)({ groupBy: ['priority', 'status'], filter: { priority: ['now', 'month'] } });
-    assert.deepEqual(res.axis, ['now', 'month']);
-    assert.deepEqual(res.lanes, ['planning', 'active']);
+    assert.deepEqual(res.axis, ['now', 'month', 'backlog']);
+    assert.deepEqual(res.lanes, ['planning', 'active', 'done']);
     // Every cell exists, in reading order, so an empty one still holds its place.
     assert.deepEqual(
-      res.groups!.map((g) => `${g.lane}/${g.value}:${g.ids.length}`),
-      ['planning/now:2', 'planning/month:1', 'active/now:2', 'active/month:0'],
+      res.groups!.filter((g) => g.lane !== 'done').map((g) => `${g.lane}/${g.value}:${g.ids.length}`),
+      [
+        'planning/now:2',
+        'planning/month:1',
+        'planning/backlog:0',
+        'active/now:2',
+        'active/month:0',
+        'active/backlog:0',
+      ],
     );
     // Each record lands in exactly one cell here, so nothing is double-counted.
     assert.equal(res.placements, res.total);
@@ -495,7 +506,7 @@ test('grouping options read the same on either axis', () => {
     const run = open(root);
     // `showEmpty` and `uncategorised` are properties of grouping, not of boards:
     // they apply to the lane axis exactly as they apply to the column axis.
-    const res = run({ groupBy: ['status', 'priority'], showEmpty: true, uncategorised: 'start' });
+    const res = run({ groupBy: ['status', 'priority'], uncategorised: 'start' });
     // `project-a-eventing` is a node with no facets at all, so both axes have a
     // (none) — leading, because `uncategorised` says so, on either axis.
     assert.deepEqual(res.axis, [NONE, 'planning', 'active', 'done']);

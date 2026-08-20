@@ -10,7 +10,6 @@ import { NONE, type Dir, type Focus, type Query, type Via } from '../index/query
  */
 
 export type Shape = 'board' | 'canvas' | 'table';
-export type Size = 'chip' | 'card';
 
 export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
 export const VIAS: readonly Via[] = ['parent', 'member-of', 'blocks'];
@@ -26,11 +25,11 @@ export interface ViewSpec {
   /** Which edge types the canvas draws. Layout always follows `parent`. */
   edges: string[];
   /**
-   * Which facets are visible on a record, and how big it renders. A board and a
-   * canvas draw `chips` as chips; a table draws the same list as its columns —
-   * one parameter, so switching shape never asks the question twice.
+   * Which facets are visible on a record. A board and a canvas draw them as chips;
+   * a table draws the same list as its columns — one parameter, so switching shape
+   * never asks the question twice.
    */
-  face: { size?: Size; chips?: string[] };
+  chips: string[];
   /** Saved views only: positions, and card order within a column. */
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
@@ -97,7 +96,6 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   if (sort.length) query.sort = sort;
   const uncategorised = one(params.uncategorised, ['end', 'start', 'hide'] as const);
   if (uncategorised) query.uncategorised = uncategorised;
-  if (params.showEmpty === '1' || params.showEmpty === 'true') query.showEmpty = true;
 
   const shape = one(params.shape, SHAPES) ?? 'board';
   // A graph has to stay connected to be readable; a column does not.
@@ -109,10 +107,7 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
     shape,
     query,
     edges: edges.length ? edges.filter((e) => EDGE_KINDS.includes(e)) : ['parent', 'blocks'],
-    face: {
-      ...(one(params.size, ['chip', 'card'] as const) ? { size: one(params.size, ['chip', 'card'] as const) } : {}),
-      ...(chips.length ? { chips } : {}),
-    },
+    chips,
   };
 }
 
@@ -129,7 +124,6 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
   if (q.groupBy?.length) out.group = q.groupBy.join(',');
   if (q.sort?.length) out.sort = q.sort.join(',');
   if (q.uncategorised) out.uncategorised = q.uncategorised;
-  if (q.showEmpty) out.showEmpty = '1';
   if (q.focus) {
     out.focus = q.focus.id;
     out.via = q.focus.via;
@@ -138,8 +132,7 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
   }
   if (spec.shape === 'canvas' && q.connect === 'none') out.connect = 'none';
   if (spec.edges.length) out.edges = spec.edges.join(',');
-  if (spec.face.size) out.size = spec.face.size;
-  if (spec.face.chips?.length) out.chips = spec.face.chips.join(',');
+  if (spec.chips.length) out.chips = spec.chips.join(',');
   return out;
 }
 
@@ -188,17 +181,14 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (typeof raw.swimlanes === 'string' && params.group) params.group += `,${raw.swimlanes}`;
   if (Array.isArray(raw.sort)) params.sort = raw.sort.map(String).join(',');
   if (typeof raw.uncategorised === 'string') params.uncategorised = raw.uncategorised;
-  if (raw.showEmpty === true) params.showEmpty = '1';
 
   const edges = (raw.edges ?? {}) as { show?: unknown };
   if (Array.isArray(edges.show)) params.edges = edges.show.map(String).join(',');
 
-  const face = (raw.face ?? {}) as { size?: unknown; chips?: unknown };
-  // `defaultSize: expanded` no longer exists; anything but `chip` is a card face.
-  const size = String(face.size ?? raw.defaultSize ?? '');
-  if (size === 'chip' || size === 'card') params.size = size;
-  // `cardFacets` (P1) and `columns` (an early P5 draft) were the same list.
-  const chips = face.chips ?? raw.cardFacets ?? raw.columns;
+  // `face: { chips }` was a wrapper around one key once `size` went; `cardFacets`
+  // and `columns` were earlier spellings of the same list.
+  const face = (raw.face ?? {}) as { chips?: unknown };
+  const chips = raw.chips ?? face.chips ?? raw.cardFacets ?? raw.columns;
   if (Array.isArray(chips)) params.chips = chips.map(String).join(',');
 
   const spec = parseSpec(params);
@@ -228,8 +218,7 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
     ...(q.uncategorised ? { uncategorised: q.uncategorised } : {}),
-    ...(q.showEmpty ? { showEmpty: true } : {}),
     ...(spec.shape === 'canvas' ? { edges: { show: spec.edges } } : {}),
-    ...(spec.face.size || spec.face.chips?.length ? { face: spec.face } : {}),
+    ...(spec.chips.length ? { chips: spec.chips } : {}),
   };
 }

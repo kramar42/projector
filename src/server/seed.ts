@@ -169,9 +169,7 @@ filter:
   status: [planning, active, waiting, blocked]
 groupBy: [priority]
 sort: [updated:desc]
-face:
-  chips: [project, tech]
-showEmpty: true
+chips: [project, tech]
 uncategorised: end
 `,
   },
@@ -183,8 +181,7 @@ title: Projects
 filter:
   type: [project]
 sort: [title:asc]
-face:
-  chips: [status, priority]
+chips: [status, priority]
 `,
   },
   {
@@ -207,8 +204,6 @@ shape: canvas
 title: Everything
 edges:
   show: [parent, blocks]
-face:
-  size: chip
 `,
   },
 ];

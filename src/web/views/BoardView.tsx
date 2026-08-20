@@ -191,7 +191,7 @@ export function BoardView({
                   key={`${lane ?? ''}/${g.value}`}
                   group={g}
                   cards={cards}
-                  chips={data.spec.face.chips}
+                  chips={data.spec.chips}
                   selected={selected}
                   dragging={dragging}
                   groupBy={groupBy}
@@ -253,7 +253,7 @@ function Column({
 }: {
   group: Group;
   cards: Record<string, CardDTO>;
-  chips?: string[];
+  chips: string[];
   selected: Set<string>;
   dragging: string | null;
   groupBy: string;
@@ -373,7 +373,7 @@ function CardTile({
   card: CardDTO;
   column: string;
   index: number;
-  chips?: string[];
+  chips: string[];
   draggableTile: boolean;
   orderable: boolean;
   isSelected: boolean;

@@ -63,6 +63,16 @@ is work, with facets, links and checklists. Same file format, same directory, on
 canvas altitude and promote when something becomes real; promotion and demotion are one field flip
 from any shape.
 
+Every record carries a mark before its title saying which it is, and a count after it when it contains
+others:
+
+| | |
+|---|---|
+| `·` | a card — work |
+| `○` | a node — a thought |
+| `▣` | a project — it owns configuration that its members inherit |
+| `12` | how many records name this one as their parent |
+
 ## Typed edges
 
 | Type | Meaning | Powers |
@@ -120,7 +130,7 @@ There is one page and one endpoint. The sidebar composes a query, the URL holds 
 shareable or bookmarkable without being saved first.
 
 ```
-view = filter × focus × shape × face
+view = filter × focus × shape × facets
 ```
 
 That is also the sidebar, top to bottom. No top bar, and only the filter panel scrolls:
@@ -130,9 +140,9 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 [ saved view ▾ ]  modified · save · revert
 ──────────────────────────────────────────
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
-                     no value [ end ▾ ]        [ ] show empty groups
+                     no value [ end ▾ ]
                      sort     [ priority ▾ ] [ ↑ ]
-[ face: card ▾ ]     [ chips: project +1 ▾ ]
+[ facets: project +1 ▾ ]
 ──────────────────────────────────────────
 [ focus ]    record · via · direction · depth
 [ filter ]   the facet panel
@@ -178,18 +188,19 @@ sub-project by hand, and remember again when a new one appears.
 It applies to every shape: `via=blocks dir=down` is "what does finishing this unblock", and `dir=up` is
 "what is this part of".
 
-## shape and face
+## shape and facets
 
-`shape` is `board`, `canvas` or `table` — explicit, never inferred. `face` is how much of a record
-shows (`chip` or `card`) and which facets are visible; a board and a canvas draw those as chips, a
-table draws the same list as its columns.
+`shape` is `board`, `canvas` or `table` — explicit, never inferred. `facets` is which of them show on a
+record: a board and a canvas draw them as chips, a table draws the same list as its columns, so
+switching shape never asks the same question twice.
 
 ## grouping
 
 `groupBy: [primary, secondary]` gives a board columns and swimlane rows, and a table sections and
 sub-sections. Its options are shared, because they describe grouping rather than any one shape:
-`showEmpty` keeps a declared group nothing is in, `uncategorised` places the no-value group, and `sort`
-orders within a column, a section or a canvas rank.
+`uncategorised` places the no-value group, and `sort` orders within a column, a section or a canvas
+rank. Every value the facet declares gets a group whether anything is in it or not — an empty column is
+somewhere to drag a card to.
 
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`
 comes before `month`.
@@ -224,8 +235,7 @@ q: keycloak
 groupBy: [priority, project]
 sort: [priority:asc, updated:desc]
 uncategorised: end | start | hide
-showEmpty: true
-face: { size: chip | card, chips: [project, tech] }
+chips: [project, tech]              # which facets show on a record
 edges: { show: [parent, blocks] }  # canvas only
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
 order: { now: [id, id] }           # written by a drag, not by hand
