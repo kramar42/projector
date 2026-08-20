@@ -38,10 +38,9 @@ export function FacetEditor({
 
   return (
     <div className="facetedit">
-      <div className="facetedit-label">
-        {def.label}
-        {def.open && <span className="facetedit-open" title="new values allowed">open</span>}
-      </div>
+      {/* No "open" badge: the `+ new` field is present exactly when new values are
+          accepted, so it already says so. */}
+      <div className="facetedit-label">{def.label}</div>
       <div className="facetedit-values">
         {[...def.values, ...extras].map((v) => (
           <button

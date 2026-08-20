@@ -1468,6 +1468,48 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .panel-title:hover { background: var(--surface-2); }
 
+/* The record's own classes, stated where the buttons that change them are. */
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.panel-kinds {
+  display: flex;
+  gap: 4px;
+}
+
+.kindbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  padding: 1px 6px 1px 5px;
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.kindbadge .kindmark {
+  line-height: 1;
+  font-size: 11px;
+}
+
+.kindbadge.is-project {
+  color: var(--hue-purple);
+  border-color: color-mix(in srgb, var(--hue-purple) 40%, transparent);
+}
+
+.kindbadge.is-node {
+  font-style: italic;
+}
+
 .titleedit textarea { width: 100%; font-size: 15px; }
 .titleedit-bar { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
@@ -1503,15 +1545,26 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 6px;
   align-items: center;
 }
-.facetedit-open {
-  font-size: 8.5px;
-  border: 1px solid var(--rule-2);
-  border-radius: 2px;
-  padding: 0 3px;
-  letter-spacing: 0.06em;
-}
 .facetedit-values { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-.facetedit-add input { width: 74px; font-size: 10.5px; padding: 1.5px 5px; }
+/* Sized to its placeholder rather than to a round number, so it reads as one more
+   chip in the row instead of a gap at the end. It grows when focused. */
+.facetedit-add input {
+  width: 52px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border: 1px dashed var(--rule-2);
+  border-radius: 3px;
+  background: none;
+  color: var(--ink);
+  transition: width 90ms ease;
+}
+.facetedit-add input:focus {
+  width: 108px;
+  outline: none;
+  border-style: solid;
+  border-color: var(--accent);
+}
 .facetedit-scope { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; font-style: italic; }
 
 .linkedit { display: flex; flex-direction: column; gap: 4px; }

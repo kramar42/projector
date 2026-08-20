@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { marked } from 'marked';
 import { ApiError, api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { CardBody } from '../components/CardBody.tsx';
+import { CardBody, kindTitle, kindWords } from '../components/CardBody.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
@@ -114,9 +114,22 @@ export function CardPanel({
         {data && card && (
           <div className="panel-body">
             {editTitle === null ? (
-              <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
-                {card.title}
-              </h2>
+              <div className="panel-head">
+                {/* What this record is, next to the buttons that change it —
+                    "Demote to node" and "Not a project" are otherwise actions on
+                    something you cannot see. */}
+                <span className="panel-kinds">
+                  {kindWords(card).map((w) => (
+                    <span key={w} className={`kindbadge is-${w}`} title={kindTitle(card)}>
+                      <span className="kindmark">{w === 'project' ? '▣' : w === 'node' ? '○' : '·'}</span>
+                      {w}
+                    </span>
+                  ))}
+                </span>
+                <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
+                  {card.title}
+                </h2>
+              </div>
             ) : (
               <div className="titleedit">
                 <textarea

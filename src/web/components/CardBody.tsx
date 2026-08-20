@@ -112,7 +112,7 @@ export function CardBody({
   if (size === 'chip') {
     return (
       <div className={cls(card, 'chipnode')} onDoubleClick={() => onOpen?.(card.id)}>
-        <span className="kindmark">{mark(card)}</span>
+        <KindMark card={card} />
         <span className="chipnode-title">{card.title}</span>
         {card.childCount > 0 && <span className="count">{card.childCount}</span>}
       </div>
@@ -122,7 +122,7 @@ export function CardBody({
   return (
     <div className={cls(card, 'cardface')} onDoubleClick={() => onOpen?.(card.id)}>
       <div className="cardface-head">
-        <span className="kindmark">{mark(card)}</span>
+        <KindMark card={card} />
         <span className="cardface-title">{card.title}</span>
       </div>
 
@@ -164,9 +164,43 @@ export function CardBody({
   );
 }
 
-function mark(card: CardDTO): string {
+/**
+ * What a record is, in one glyph. `▣` a project, `○` a node, `·` a card.
+ *
+ * One definition, because it appears on a card face, in a table row and in the
+ * card panel — and in the panel it is what makes *Demote to node* and *Not a
+ * project* legible as actions on something.
+ */
+export function kindGlyph(card: CardDTO): string {
   if (card.isProject) return '▣';
   return card.kind === 'node' ? '○' : '·';
+}
+
+/** The same thing in words, for a tooltip or a badge. */
+export function kindWords(card: CardDTO): string[] {
+  const out = card.isProject ? ['project'] : [];
+  out.push(card.kind === 'node' ? 'node' : 'card');
+  return out;
+}
+
+const MEANS: Record<string, string> = {
+  project: 'a project — it owns repos and instructions that its members inherit',
+  node: 'a node — a thought, canvas only, kept off boards by the default filter',
+  card: 'a card — work, with facets and links',
+};
+
+export function kindTitle(card: CardDTO): string {
+  return kindWords(card)
+    .map((w) => MEANS[w])
+    .join('\n');
+}
+
+export function KindMark({ card }: { card: CardDTO }) {
+  return (
+    <span className="kindmark" title={kindTitle(card)}>
+      {kindGlyph(card)}
+    </span>
+  );
 }
 
 function cls(card: CardDTO, base: string): string {

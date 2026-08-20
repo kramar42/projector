@@ -1,4 +1,4 @@
-import { FacetChip } from '../components/CardBody.tsx';
+import { FacetChip, KindMark } from '../components/CardBody.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { NONE } from './dragSemantics.ts';
 import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
@@ -105,7 +105,7 @@ function Row({
   return (
     <tr className={card.isProject ? 'is-project' : ''} onClick={() => onOpen(card.id)}>
       <td className="col-title">
-        <span className="kindmark">{card.isProject ? '▣' : card.kind === 'node' ? '○' : '·'}</span>
+        <KindMark card={card} />
         {card.title}
         {card.childCount > 0 && <span className="count">{card.childCount}</span>}
       </td>
