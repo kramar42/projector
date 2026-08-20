@@ -1,5 +1,17 @@
-import type { ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
+import type { Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
 import { resolvePath } from '../config.ts';
+
+/**
+ * Card or node, from the `kind` facet.
+ *
+ * A derived accessor, like `isProject` — the value is stored as an ordinary
+ * facet so it filters and groups through the one code path, and this is just the
+ * convenient way to ask. `parseCard` guarantees the facet is present, so the
+ * fallback here only covers records built in memory.
+ */
+export function kindOf(rec: Pick<Rec, 'facets'>): Kind {
+  return rec.facets.kind?.[0] === 'node' ? 'node' : 'card';
+}
 
 /** Parent ids of a record, in declaration order. A record may have several. */
 export function parentsOf(rec: Rec): string[] {
@@ -45,9 +57,9 @@ export function isProject(rec: Rec): boolean {
   return rec.project !== undefined;
 }
 
-function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], replace: boolean, base: string): ProjectRepo[] {
+/** Union, nearest last. A nested project needs its parent's repos plus its own. */
+function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], base: string): ProjectRepo[] {
   const norm = (r: ProjectRepo) => ({ ...r, path: resolvePath(r.path, base) });
-  if (replace) return own.map(norm);
   const out = inherited.map(norm);
   const seen = new Set(out.map((r) => r.path));
   for (const r of own.map(norm)) {
@@ -59,11 +71,17 @@ function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], replace: boole
   return out;
 }
 
-/** Map every project key to the record that declares it. */
+/**
+ * Every record carrying a `project:` block, keyed by its id.
+ *
+ * A project's key *is* its record id. There is no separate `key` field: the
+ * `project` facet stores record ids like every other reference in the model, so
+ * membership, the canvas and the roll-ups all address the same name.
+ */
 export function projectRecords(byId: Map<string, Rec>): Map<string, Rec> {
   const out = new Map<string, Rec>();
   for (const rec of byId.values()) {
-    if (rec.project) out.set(rec.project.key ?? rec.id, rec);
+    if (rec.project) out.set(rec.id, rec);
   }
   return out;
 }
@@ -111,7 +129,7 @@ export function resolveProject(
   };
 
   // A project record is its own innermost context, then whatever it belongs to.
-  const roots = rec.project ? [...projectsOf(rec), rec.project.key ?? rec.id] : projectsOf(rec);
+  const roots = rec.project ? [...projectsOf(rec), rec.id] : projectsOf(rec);
   for (const key of roots) walk(key, new Set());
 
   if (!order.length) return null;
@@ -126,8 +144,8 @@ export function resolveProject(
   for (const owner of order) {
     const p = owner.project!;
     chain.push(owner.id);
-    repos = mergeRepos(repos, p.repos ?? [], p.repos_replace === true, dataRoot);
-    key = p.key ?? owner.id;
+    repos = mergeRepos(repos, p.repos ?? [], dataRoot);
+    key = owner.id;
     if (p.jira) jira = p.jira;
     if (p.branch) branch = p.branch;
     const ins = extractInstructions(owner.body);

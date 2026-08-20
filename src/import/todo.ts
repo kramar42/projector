@@ -118,7 +118,7 @@ export function importTodo(
     const status = STATUS_BY_EMOJI.find(([re]) => re.test(rawTitle))?.[1];
 
     // The same project can appear in both sources. Reuse it rather than creating
-    // a second record — the whole point of a stable key.
+    // a second record — a project's key is its record id, so there is one name.
     const already = existing.get(key);
     if (already) return { id: already, level, status };
 
@@ -126,12 +126,11 @@ export function importTodo(
     existing.set(key, id);
     out.push({
       id,
-      kind: 'card',
       title,
       facets: status ? { status: [status] } : {},
       edges: parent ? [{ type: 'parent', to: parent }] : [],
       links: [],
-      project: { key },
+      project: {},
       created: today(),
       updated: today(),
       body: `\nImported from TODO.md.\n\n## Instructions\n\n_None recorded yet._\n`,
@@ -169,9 +168,8 @@ export function importTodo(
           taken.add(cont.id);
           out.push({
             id: cont.id,
-            kind: 'node',
             title: cont.title,
-            facets: {},
+            facets: { kind: ['node'] },
             edges: [],
             links: [],
             created: today(),
@@ -308,7 +306,6 @@ function buildCard(
   const short = title.length > 120 ? title.slice(0, 117) + '…' : title;
   return {
     id: uniqueId(slugify(title), taken),
-    kind: 'card',
     title: short,
     facets,
     edges: [{ type: 'parent', to: parent }],

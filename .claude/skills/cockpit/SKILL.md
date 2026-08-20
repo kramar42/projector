@@ -18,14 +18,21 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
 
 ## The model, in four facts
 
-1. **Facets are multi-valued.** Every value is an array, even when there is one. A card with two
-   values for a grouped facet appears in two board columns — that is the model working.
+1. **Facets are arrays, and some hold one value.** Every value is an array, even when there is one. A
+   card with two values for a grouped facet appears in two board columns — that is the model working.
+   A facet declared `single: true` refuses a second value instead: `priority`, `status`, `kind`,
+   `energy` and `owner` are single, because holding two at once is incoherent rather than expressive.
 2. **`project` is an ordinary facet.** `project: [project-d, mapping]` means the card belongs to both and
-   inherits the repos and instructions of both. Values are keys of records carrying a `project:`
-   block. It is *not* derived from anything.
+   inherits the repos and instructions of both. Values are the **ids** of records carrying a
+   `project:` block — a project has no separate key. It is *not* derived from anything.
 3. **`parent` edges mean decomposition** — "this card is part of that one". They are what the canvas
    draws and they carry no config. Independent of `project`: a card may have either, both or neither.
-4. **`kind`** is `card` (work, appears on boards) or `node` (a thought, canvas only).
+4. **`kind` is an ordinary facet too** — `[card]` for work, `[node]` for scaffolding. Nothing about it
+   is special: set it with `--facet kind=node` like any other axis. There is no top-level `kind:` key.
+5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
+   from a non-empty `waiting_on`; neither is a status. `status` is lifecycle only.
+6. **`due` is a field, not a facet.** `priority` is what you intend to do next; `due` is what the world
+   expects regardless. Set it with `ck set <id> --due YYYY-MM-DD`, clear it with `--due none`.
 
 ## Reading
 
@@ -37,6 +44,8 @@ ck ls --group project        # or any facet
 ck ls --filter status=active,planning
 ck next                      # open cards with no unfinished blocker
 ck untriaged --json          # cards missing project/priority/status, and why
+ck next                      # actionable now: deadline first, then priority
+ck log --since "1 week ago"  # what actually changed, out of git
 ck search <query>
 ck project <id>              # just the resolved project config
 ck enrich <ref> --force      # resolve a link's live state
@@ -49,8 +58,8 @@ re-derive those by reading files.
 ## Writing
 
 ```bash
-ck add "<title>" [--facet f=v] [--link ref] [--parent id] [--fingerprint fp] [--body text]
-ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]
+ck add "<title>" [--facet f=v] [--link ref] [--parent id] [--due d] [--fingerprint fp] [--body text]
+ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due d|none]
 ck link <id> <ref> [...]
 ck link-session <id>         # link the live Claude session working in this directory
 ck check                     # validate everything; run this after a batch of edits
@@ -63,10 +72,16 @@ refilling the inbox.
 ## Rules that matter
 
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
-  `planning|active|waiting|blocked|frozen|done`; `energy` is `deep|shallow|decide|delegate`. Check
+  `planning|active|frozen|done|dropped`; `energy` is `deep|shallow|decide|delegate`. Check
   `cockpit/data/facets.yaml` before inventing a value; `ck set` will refuse anyway.
-- **`layer` (L2–L6) only applies beneath `project-a`.** It is Project A taxonomy, not a global axis.
-- **Never set a `project` value with no matching project record.** Either use an existing key or
+- **Never write `status: blocked` or `status: waiting`.** They are not values. If something is
+  blocked by another card, add a `blocks` edge from the blocker; if it is waiting on a person, set
+  `waiting_on`. Both surface on the `blocked` axis without being stored twice.
+- **`dropped` is how you reject a captured card**, not deletion. Deleting it destroys the
+  `source_fingerprint` too, so the next `/capture` sweep creates it again.
+- **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a card
+  outside Project A.
+- **Never set a `project` value with no matching project record.** Either use an existing id or
   propose creating the record — do not invent membership that resolves to nothing.
 - **Positions are never on a card.** Canvas `x/y` lives in `cockpit/data/views/canvas/*.yaml`.
 - **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a card
@@ -75,8 +90,10 @@ refilling the inbox.
 ## Link kinds
 
 `jira:PROJ-303` · `gh:pr:ORG/repo#412` · `gh:branch:ORG/repo@name` · `gh:commit:ORG/repo@sha` ·
-`claude:<transcript-uuid>` · `doc:relative/path.md` · `slack:<permalink>` · `trello:<url>` ·
-`cal:<id>` · `grafana:<url>` · a bare `https://…`
+`claude:<transcript-uuid>` · `doc:relative/path.md` · `slack:<permalink>` · a bare `https://…`
+
+A kind exists when something resolves it. Everything else — a Trello card, a calendar entry, a Grafana
+dashboard — is a bare URL, with provenance in the `source` facet where it matters.
 
 A `claude:` link takes the **transcript uuid** — the filename under `~/.claude/projects/<slug>/`.
 A `local_…` id comes from the desktop app's store, is not on disk, and will not resolve.

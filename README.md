@@ -29,39 +29,55 @@ hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
 
 ## Facets, not lists
 
-A card does not live in a column. It carries **facets** — `project`, `priority`, `status`, `domain`,
-`energy`, `owner`, `waiting_on`, `source`, `tech`, and any others you declare — and **every facet value
-is an array**, uniformly, even `priority`. Group by any facet to get columns; group by a multi-valued
-one and a card appears in every column it belongs to, by construction.
+A card does not live in a column. It carries **facets** — `kind`, `project`, `priority`, `status`,
+`domain`, `energy`, `owner`, `waiting_on`, `source`, `tech`, and any others you declare — and **every
+facet value is an array**, uniformly. Group by any facet to get columns; group by a multi-valued one
+and a card appears in every column it belongs to, by construction.
 
-No facet is structurally privileged, so "group by project" and "group by priority" are the same board
-with one control moved rather than two boards to keep in sync. A facet may be **scoped** with
-`scope: { under: <id> }` and is then only valid on records beneath that one, so a large project can
-bring its own taxonomy without polluting the shared vocabulary.
+No facet is structurally privileged. `kind` and `project` are facets like the rest, so "group by
+project" and "group by priority" are the same board with one control moved rather than two boards to
+keep in sync — and there is no axis with a top-level frontmatter key, a bespoke button or a column of
+its own in the index.
+
+Storage is uniform; the **vocabulary** is where the constraints live. `open: false` refuses a value the
+list does not declare, and `single: true` refuses a second value at all — because `status: [planning,
+done]` is not a card in two columns, it is a card in no coherent state, and the thing writing most of
+these files is an agent (C3). `priority`, `status`, `kind`, `energy` and `owner` are single; `project`,
+`tech`, `domain`, `waiting_on` and `source` are not.
 
 ## Pseudo-facets
 
-Five axes are computed rather than stored, and appear in the filter panel indistinguishable from real
+Four axes are computed rather than stored, and appear in the filter panel indistinguishable from real
 facets:
 
 | | Values | Derived from |
 |---|---|---|
-| `kind` | `card`, `node` | the `kind` field |
 | `type` | `project`, `plain` | presence of a `project:` block |
-| `blocked` | `blocked`, `clear` | a `blocks` edge from a record that is not `done` |
+| `blocked` | `blocked`, `waiting`, `clear` | an unfinished `blocks` edge · a non-empty `waiting_on` |
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
+| `due` | `overdue`, `today`, `week`, `later` | `due` against today |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
 Each is a count, a date comparison or the presence of an edge — never a judgement. `type=project`
 *is* the projects view, and `triage` turns the untriaged pile into something you can drag out of.
 
+**Every one of them computes.** Nothing derivable is also storable, which is why there is no
+`status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
+`waiting_on` — `status` is lifecycle alone. A record with no `due` has no value on that axis rather
+than an `undated` bucket of its own, so "no deadline" is the same `(none)` refinement every other
+facet already has.
+
 ## Cards and nodes
 
-A canvas and a board sit at different altitudes: most leaves of a mind-map are scoping scaffolding, not
-work. So `kind: node` is a thought — title, optional body, edges, no facets required — and `kind: card`
-is work, with facets, links and checklists. Same file format, same directory, one field. Brainstorm at
-canvas altitude and promote when something becomes real; promotion and demotion are one field flip
-from any shape.
+A canvas and a board sit at different altitudes: most leaves of a mind-map are scaffolding, not work.
+So `kind: [node]` is a thought and `kind: [card]` is work. Same file format, same directory, and
+**an ordinary facet** — not a top-level field and not a class of record. Brainstorm at canvas altitude
+and promote when something becomes real: promotion is toggling a chip, through exactly the code path
+that changes a priority.
+
+It is a facet rather than a field because it was never doing anything a facet cannot. What it actually
+controls is whether a record appears on a board, and that is `filter: kind: [card]` — an ordinary
+selection you can clear.
 
 Every record carries a mark before its title saying which it is, and a count after it when it contains
 others:
@@ -79,11 +95,14 @@ others:
 |---|---|---|
 | `parent` | containment / decomposition | the mind-map tree, roll-up progress |
 | `blocks` | A must finish before B | the `blocked` axis, "what does finishing this unblock" |
-| `relates` | soft association | canvas context, "see also" |
 | `member-of` | derived from the `project` facet, never stored | the project hierarchy, transitive roll-up |
 
 `blocks` is the one neither Trello nor Jira gives usefully. Its transitive closure is what "unblocked
 now" is built from.
+
+There was a third, `relates`, for soft association. It is gone: every job it could do is done better by
+something already here. "See also" is a link, "these are similar" is a facet, and a canvas already
+keeps connected records visible without one.
 
 ## Projects
 
@@ -94,13 +113,16 @@ cards implementing it.
 
 ```yaml
 project:
-  key: platform                       # used for workspace directory naming
   repos:
     - { path: ../services,   base: main }
     - { path: ~/code/infra,  base: dev }
   jira: PROJ                          # default project for new jira: links
   branch: "plat/{card}"               # branch template
 ```
+
+A project's key is its record **id**. There is no separate `key`: a second name for one thing is a
+second thing to keep in step, and it would let a `project` facet value point at something that is not
+a record id.
 
 Repos are declared inline by path — no registry to populate first. Relative paths resolve against the
 vault.
@@ -112,9 +134,8 @@ exists.
 
 **Inheritance is what makes "define once" work.** A card's effective config walks its `project` facet
 outward — each value's record, then whatever *that* record belongs to. `repos` accumulate as a union
-(a nested project needs its parent's plus its own; `repos_replace: true` narrows), `instructions`
-concatenate outermost-first so the most specific advice reads last, and everything else takes the
-nearest value.
+(a nested project needs its parent's plus its own), `instructions` concatenate outermost-first so the
+most specific advice reads last, and everything else takes the nearest value.
 
 Instructions live in the project record's **body**, under an `## Instructions` heading — which is
 exactly where "how we work on this" belongs.
@@ -259,8 +280,10 @@ bar.
 
 So "card in two columns" is always a gesture, never an accident.
 
-**Canvas.** A tree laid out from its roots, plus free positioning once saved. Drag handle-to-handle to
-create an edge, `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
+**Canvas.** A tree laid out from its roots, plus free positioning once saved. Every record draws the
+same face — how much of a record to show is a property of the view, which is what `chips` is, so a card
+never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
+`+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw — decomposition (`parent`) or membership (`member-of`).
 
 Filtering a graph means **match plus context**: unmatched ancestors are kept so the tree stays
@@ -280,7 +303,7 @@ is the one exception.
 
 | Where | What |
 |---|---|
-| Card panel | rename, toggle facets, set parent, add/remove links, edit the body, raw frontmatter, promote/demote, delete |
+| Card panel | rename, toggle facets, set a deadline, set parent, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
 | Canvas | drag nodes and **Save layout**, handle-to-handle to create an edge, `+ node` |
 | Table | click a row to open the panel |
@@ -299,6 +322,12 @@ be working on the same card in another window.
 A link is a typed string on a card, resolved lazily and cached. It renders as its parsed label, and
 enrichment replaces that with something richer if and when it arrives — nothing waits on it.
 
+**A kind exists when something resolves it.** Anything that only ever renders its own text is a `url`
+with extra vocabulary, so there is no `cal:` or `grafana:` — and no `trello:`, which was import
+provenance, which is the `source` facet's job. `slack:` is the one kind kept without a fetcher: a
+Slack ref is not interchangeable with the permalink it wraps, and it is common enough to be worth
+resolving.
+
 | Kind | Syntax | Source | Needs | TTL |
 |---|---|---|---|---|
 | `jira` | `jira:PROJ-303` | Jira REST | `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | 15 min |
@@ -307,7 +336,7 @@ enrichment replaces that with something richer if and when it arrives — nothin
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | — | never |
 | `claude` | `claude:<uuid>` | `~/.claude/projects/**` | — | 1 min |
 | `doc` | `doc:path.md` | filesystem | — | 30 s |
-| `slack` `trello` `cal` `grafana` `url` | — | not fetched — parsed label only | — | — |
+| `slack` `url` | — | not fetched — parsed label only | — | — |
 
 Every fetcher is read-only and runs server-side, so credentials stay out of the browser. Failures are
 cached too, so a link that cannot resolve says why once instead of retrying on every render.
@@ -331,6 +360,11 @@ Two commands make that reliable:
 **`ck context <id>`** assembles everything known about a card in one pass — the project chain, the
 inherited repos and instructions, relations, and cached link enrichment — so an agent never
 re-derives it from the filesystem.
+
+**`ck log`** answers "what did I actually do last week", which nothing stored on a card can: `updated`
+is one overwritten date and only ever says that *something* changed. The vault is a git repository, so
+the answer was already on disk — this reads the two versions of every changed file through the card
+parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
 **`ck work <id>`** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
 with the card's full context embedded, and a terminal running a Claude session in it. Reopening is
@@ -391,9 +425,10 @@ one.
 |---|---|
 | `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir d --depth n] [--nodes]` | list records, through the same query compiler the app uses |
 | `ck show <id>` | one record, with its resolved project config |
-| `ck next` | open cards with no unfinished blocker |
-| `ck add <title> [--kind] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
-| `ck set <id> …` | scripted edits: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none` |
+| `ck next` | open cards with nobody waited on and no unfinished blocker, deadline first |
+| `ck log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
+| `ck add <title> [--parent] [--facet f=v] [--link ref] [--due d] [--fingerprint fp]` | create a record |
+| `ck set <id> …` | scripted edits: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--due d\|none` |
 | `ck link <id> <ref> …` | append links |
 | `ck project <id>` | resolved project config and inherited instructions |
 | `ck context <id> [--json]` | everything known about a card, assembled |
@@ -415,11 +450,11 @@ browser mean the same thing.
 ```
 <vault>/
   cards/
-    fix-deploy.md                # kind: card
-    eventing.md                  # kind: node, may carry a project: block
+    fix-deploy.md                # a card
+    eventing.md                  # a node, may carry a project: block
     assets/fix-deploy/error.png
     README.md                    # the format, written into every new vault
-  facets.yaml                    # facet vocabulary, order, scope
+  facets.yaml                    # facet vocabulary, order, constraints
   views/
     home.yaml  projects.yaml  …  # flat: a shape is a field, not a folder
   .index.db  .enrich.db          # derived, gitignored
@@ -430,9 +465,9 @@ browser mean the same thing.
 ```markdown
 ---
 id: fix-deploy
-kind: card
 title: Fix the Kpow deployment
 facets:
+  kind: [card]
   project: [platform]
   priority: [now]
   status: [active]
@@ -443,6 +478,7 @@ links:
   - jira:PROJ-303
   - gh:pr:ORG/services#412
   - doc:notes/schema-registry.md
+due: 2026-09-01
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -454,9 +490,13 @@ the app counts them for the progress bar and never rewrites them.
 - [ ] Drop the `KAFKA_` prefix from env vars
 ```
 
-`id`, `kind` and `title` are required; everything else is optional. The `id` is the join key everywhere
-and never changes, though the filename may drift from it. Facet values are always arrays, and a facet
-the vocabulary does not know is preserved rather than dropped.
+`id` and `title` are required; everything else is optional. The `id` is the join key everywhere and
+never changes, though the filename may drift from it. Facet values are always arrays, and a facet the
+vocabulary does not know is preserved rather than dropped.
+
+`due` is a **field, not a facet**, and the distinction is the point: a facet is a declared vocabulary
+matched for membership, while a date is compared against today. `priority` says what you intend to do
+next; `due` says what the world expects regardless of intent.
 
 Every vault gets its own `cards/README.md` documenting all of this, so the format travels with the data
 rather than with the app. `ck check` validates every card and reports every problem at once, rather
@@ -470,9 +510,11 @@ priority:
   label: Priority
   values: [now, month, backlog, someday]   # declared order == column order, everywhere
   open: false                              # new values rejected by the validator
-layer:
-  scope: { under: platform }               # only valid beneath that record
-  values: [infra, services, apps]
+  single: true                             # a second value rejected too
+kind:
+  values: [card, node]                     # work, or the scaffolding that organises it
+  open: false
+  single: true
 project:
   valuesFrom: project-records              # vocabulary from the data, not a list
   open: true

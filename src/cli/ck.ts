@@ -11,24 +11,14 @@ import { parseLink } from '../schema/links.ts';
 import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
-import { resolveProject } from '../index/project.ts';
-import {
-  blockersOf,
-  counts,
-  groupBy,
-  listRecords,
-  nextUp,
-  search,
-  UNCATEGORISED,
-  unblocks,
-  valuesFor,
-} from '../index/queries.ts';
+import { kindOf, resolveProject } from '../index/project.ts';
+import { counts, nextUp, search, unblocks, valuesFor } from '../index/queries.ts';
 import { runQuery } from '../index/query.ts';
 import { parseSpec, specToParams } from '../view/spec.ts';
 import { findView } from '../server/views.ts';
 import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
-import { migrateProjectFacet } from '../import/migrate.ts';
+import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
 import { cardContext, renderContext, untriaged } from '../agent/context.ts';
 import { buildBriefing } from '../agent/briefing.ts';
@@ -75,8 +65,9 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
      --dir down|up|both --depth n] [--nodes]        list records, grouped
   ck show <id>                                         one record in full
   ck next                                              actionable cards: open and unblocked
-  ck add <title> [--kind card|node] [--parent id]
-         [--facet f=v ...] [--link ref ...]
+  ck log [--since "1 week ago"]                        what changed, from git history
+  ck add <title> [--parent id] [--facet f=v ...]
+         [--link ref ...] [--due YYYY-MM-DD]
          [--fingerprint fp] [--body text]              create a record
   ck link <id> <ref> [...]                             append links to a record
   ck check                                             validate every card file
@@ -86,13 +77,13 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   ck import trello <file.json>                         import a Trello board export
   ck import todo <TODO.md>                             import a TODO.md
   ck stats                                             index counts
-  ck migrate-project-facet [--apply]                   backfill the project facet from parent edges
   ck enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
 
   ck context <id> [--json]                             everything known about a card, assembled
   ck untriaged [--json] [--limit n]                    cards needing attention, and why
   ck set <id> [--title t] [--facet f=v] [--add f=v]
-         [--remove f=v] [--parent id|none]             scripted edits, for skills
+         [--remove f=v] [--parent id|none]
+         [--due YYYY-MM-DD|none]                       scripted edits, for skills
   ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
   ck link-session <id> [--cwd dir]                     link the live session working here
 
@@ -200,7 +191,7 @@ function cmdLs(argv: string[]): void {
   const res = runQuery(db, records, facets, spec.query);
   const mark = (id: string) => {
     const rec = records.get(id);
-    return rec?.project ? 'P' : rec?.kind === 'node' ? 'n' : ' ';
+    return rec?.project ? 'P' : rec && kindOf(rec) === 'node' ? 'n' : ' ';
   };
   const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${records.get(id)?.title ?? ''}`;
 
@@ -233,8 +224,9 @@ function cmdShow(id: string): void {
   }
   console.log(`# ${rec.title}\n`);
   console.log(`id       ${rec.id}`);
-  console.log(`kind     ${rec.kind}${rec.project ? ' (project)' : ''}`);
+  console.log(`kind     ${kindOf(rec)}${rec.project ? ' (project)' : ''}`);
   console.log(`file     ${rec.file.replace(root + '/', '')}`);
+  if (rec.due) console.log(`due      ${rec.due}`);
   for (const [f, v] of Object.entries(rec.facets)) console.log(`${pad(f, 8)} ${v.join(', ')}`);
   if (rec.edges.length) {
     console.log('\nedges');
@@ -256,12 +248,13 @@ function cmdNext(): void {
   const facets = loadFacets(p.facets);
   const { db } = reindex(root);
   const rows = nextUp(db, facets);
-  console.log('# actionable now — open status, no unfinished blocker\n');
+  console.log('# actionable now — open, nobody waited on, no unfinished blocker\n');
   for (const r of rows) {
     const pr = valuesFor(db, r.id, 'priority').join(',') || '-';
     const opens = unblocks(db, r.id).length;
     console.log(
-      `  ${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` + (opens ? `  (unblocks ${opens})` : ''),
+      `  ${pad(r.due ?? '', 11)}${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` +
+        (opens ? `  (unblocks ${opens})` : ''),
     );
   }
   console.log(`\n${rows.length} actionable`);
@@ -282,15 +275,14 @@ function cmdAdd(argv: string[]): void {
     const [f, v] = spec.split('=');
     if (f && v) facets[f] = v.split(',').map((s) => s.trim()).filter(Boolean);
   }
-  const kind = (flags.get('kind')?.[0] ?? 'card') as 'card' | 'node';
   const fingerprint = flags.get('fingerprint')?.[0];
   const res = createCard(root, {
     title,
-    kind,
     parent: flags.get('parent')?.[0],
     facets,
     links: flags.get('link') ?? [],
     body: flags.get('body')?.[0],
+    due: flags.get('due')?.[0],
     fingerprint,
   });
   if (res.existed) {
@@ -418,8 +410,7 @@ function cmdImport(argv: string[]): void {
     const { records: current } = readAll(p.cards);
     const existingProjects = new Map<string, string>();
     for (const rec of current.values()) {
-      const key = rec.project?.key;
-      if (key && !existingProjects.has(key)) existingProjects.set(key, rec.id);
+      if (rec.project && !existingProjects.has(rec.id)) existingProjects.set(rec.id, rec.id);
     }
     const res = importTodo(src, { taken, existingProjects });
     records = res.records;
@@ -475,6 +466,17 @@ try {
     case 'next':
       cmdNext();
       break;
+    case 'log': {
+      const { flags } = argFlags(argv);
+      if (!isRepo(root)) {
+        console.error(
+          'this vault is not a git repository — `ck log` reads the history git already keeps',
+        );
+        process.exit(1);
+      }
+      console.log(formatHistory(history(root, flags.get('since')?.[0] ?? '1 week ago')));
+      break;
+    }
     case 'add': {
       cmdAdd(argv);
       break;
@@ -596,7 +598,9 @@ try {
       const { flags, rest } = argFlags(argv);
       const id = rest[0];
       if (!id) {
-        console.error('ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]');
+        console.error(
+          'ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due YYYY-MM-DD|none]',
+        );
         process.exit(1);
       }
       const { records } = readAll(p.cards);
@@ -629,8 +633,10 @@ try {
       }
 
       const title = flags.get('title')?.[0];
+      const due = flags.get('due')?.[0];
       patchCard(root, id, {
         ...(title ? { title } : {}),
+        ...(due !== undefined ? { due: due === 'none' ? null : due } : {}),
         ...(flags.has('facet') || flags.has('add') || flags.has('remove') ? { facets } : {}),
       });
 
@@ -747,22 +753,6 @@ try {
       break;
     }
 
-    case 'migrate-project-facet': {
-      const apply = argv.includes('--apply');
-      const r = migrateProjectFacet(root, apply);
-      console.log(`# project facet backfill${apply ? '' : ' (dry run — pass --apply to write)'}\n`);
-      console.log(`  cards given a project     ${r.cardsGiven.length}`);
-      console.log(`  project records linked    ${r.projectsLinked.length}`);
-      console.log(`  already had one           ${r.alreadySet}`);
-      console.log(`  no project to infer       ${r.noProject}`);
-      const sample = [...r.cardsGiven, ...r.projectsLinked].slice(0, 8);
-      if (sample.length) {
-        console.log('');
-        for (const s of sample) console.log(`    ${pad(s.id, 44)} → ${s.project.join(', ')}`);
-        if (r.cardsGiven.length + r.projectsLinked.length > sample.length) console.log('    …');
-      }
-      break;
-    }
     case 'init':
       ensureData();
       console.log(`data directory ready at ${root}`);
@@ -775,5 +765,3 @@ try {
   console.error(`ck ${cmd}: ${(err as Error).message}`);
   process.exit(1);
 }
-
-export { UNCATEGORISED, blockersOf, writeFileSync };

@@ -5,6 +5,9 @@ import type { FacetDef, Facets } from './types.ts';
 /**
  * Load the facet vocabulary. This file is the single place column order lives —
  * what list-order does in Trello, made explicit and shared by every view.
+ *
+ * It is also where the constraints live: `open` decides whether a new value is
+ * accepted, and `single` whether more than one may be held at once.
  */
 export function loadFacets(file: string): Facets {
   if (!existsSync(file)) return {};
@@ -14,12 +17,11 @@ export function loadFacets(file: string): Facets {
   for (const [name, def] of Object.entries(raw)) {
     if (!def || typeof def !== 'object') continue;
     const d = def as Record<string, unknown>;
-    const scope = d.scope as { under?: string } | undefined;
     out[name] = {
       label: typeof d.label === 'string' ? d.label : name,
       values: Array.isArray(d.values) ? d.values.map(String) : [],
       open: d.open === true,
-      scope: scope?.under ? { under: String(scope.under) } : undefined,
+      single: d.single === true,
       valuesFrom: d.valuesFrom === 'project-records' ? 'project-records' : undefined,
     };
   }

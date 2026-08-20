@@ -21,9 +21,9 @@ import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
-import { projectRecords, resolveProject, parentsOf } from '../index/project.ts';
+import { kindOf, projectRecords, resolveProject, parentsOf } from '../index/project.ts';
 import type { Facets, Rec } from '../schema/types.ts';
-import { blockersOf, counts, groupBy, listRecords, unblocks, type Row } from '../index/queries.ts';
+import { blockersOf, counts, unblocks } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
 import { loadViews, viewFileFor, findView } from './views.ts';
 import { memberEdges, projectRollups, runQuery } from '../index/query.ts';
@@ -343,7 +343,7 @@ app.get('/api/card/:id', (c) => {
       .map((r) => ({ id: r!.id, title: r!.title })),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))
-      .map((r) => ({ id: r.id, title: r.title, kind: r.kind })),
+      .map((r) => ({ id: r.id, title: r.title, kind: kindOf(r) })),
     project,
   });
 });
@@ -541,9 +541,9 @@ app.delete('/api/view/:name', (c) => {
 /**
  * Raw frontmatter, so the app can never express less than the file.
  *
- * The UI will never model every key — repos, repos_replace, branch templates,
- * whatever comes next — and the file is the source of truth, so there has to be
- * a way to edit it directly. The write validates first and refuses rather than
+ * The UI will never model every key — repos, branch templates, whatever comes
+ * next — and the file is the source of truth, so there has to be a way to edit
+ * it directly. The write validates first and refuses rather than
  * saving something the indexer would then reject.
  */
 app.get('/api/card/:id/frontmatter', (c) => {

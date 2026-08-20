@@ -139,7 +139,7 @@ export const SHAPES: { value: Shape; label: string }[] = [
 
 export const VIAS = ['parent', 'member-of', 'blocks'] as const;
 export const DIRS = ['down', 'up', 'both'] as const;
-export const EDGE_KINDS = ['parent', 'blocks', 'relates', 'member-of'] as const;
+export const EDGE_KINDS = ['parent', 'blocks', 'member-of'] as const;
 
 /** A one-line reading of the query, for the sidebar footer and the page title. */
 export function describe(spec: ViewSpec, total: number): string {

@@ -4,7 +4,11 @@ import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/f
 import { parseCard, renderCard } from '../src/schema/card.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { ancestorChains, extractInstructions, projectsOf, resolveProject } from '../src/index/project.ts';
+import { ancestorChains, extractInstructions, kindOf, projectsOf, resolveProject } from '../src/index/project.ts';
+import { validate } from '../src/schema/validate.ts';
+import { loadFacets } from '../src/schema/facets.ts';
+import { history } from '../src/agent/history.ts';
+import { execFileSync } from 'node:child_process';
 import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 import { ago, firstLine } from '../src/enrich/run.ts';
@@ -65,10 +69,16 @@ test('patchKey preserves the body and every untouched key, comments included', (
 });
 
 test('patchKey restores canonical key order for a newly added key', () => {
-  const text = join('id: x\nkind: card\ntitle: T\nupdated: 2026-01-01\n', '\n');
+  const text = join('id: x\ntitle: T\nupdated: 2026-01-01\n', '\n');
   const out = patchKey(text, 'edges', [{ type: 'parent', to: 'p' }]);
   const keys = [...out.matchAll(/^([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(keys, ['id', 'kind', 'title', 'edges', 'updated']);
+  assert.deepEqual(keys, ['id', 'title', 'edges', 'updated']);
+});
+
+test('due sits between the references and the timestamps', () => {
+  const text = join('id: x\ntitle: T\ncreated: 2026-01-01\n', '\n');
+  const keys = [...patchKey(text, 'due', '2026-09-01').matchAll(/^([a-z_]+):/gm)].map((m) => m[1]);
+  assert.deepEqual(keys, ['id', 'title', 'due', 'created']);
 });
 
 test('scalar arrays serialize on one line', () => {
@@ -79,9 +89,9 @@ test('scalar arrays serialize on one line', () => {
 
 const CARD = `---
 id: demo-card
-kind: card
 title: Demo
 facets:
+  kind: [card]
   priority: [now]
   status: active
 edges:
@@ -163,9 +173,8 @@ function rec(
 ): Rec {
   return {
     id,
-    kind: 'card',
     title: id,
-    facets: belongsTo.length ? { project: belongsTo } : {},
+    facets: { kind: ['card'], ...(belongsTo.length ? { project: belongsTo } : {}) },
     edges: parents.map((to) => ({ type: 'parent' as const, to })),
     links: [],
     project,
@@ -180,8 +189,8 @@ function graph(...recs: Rec[]): Map<string, Rec> {
 
 test('repos union across the project chain, nearest wins for scalars', () => {
   const g = graph(
-    rec('root', [], { key: 'root', jira: 'AAA', repos: [{ path: '/a' }] }),
-    rec('mid', [], { key: 'mid', repos: [{ path: '/b' }] }, '', ['root']),
+    rec('root', [], { jira: 'AAA', repos: [{ path: '/a' }] }),
+    rec('mid', [], { repos: [{ path: '/b' }] }, '', ['root']),
     rec('leaf', [], undefined, '', ['mid']),
   );
   const p = resolveProject('leaf', g, '/data');
@@ -194,8 +203,8 @@ test('repos union across the project chain, nearest wins for scalars', () => {
 
 test('a card in two projects inherits from both, unioned', () => {
   const g = graph(
-    rec('project-d', [], { key: 'project-d', repos: [{ path: '/project-d' }] }, '## Instructions\n\nnexus rule\n'),
-    rec('mapping', [], { key: 'mapping', repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
+    rec('project-d', [], { repos: [{ path: '/project-d' }] }, '## Instructions\n\nnexus rule\n'),
+    rec('mapping', [], { repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
     rec('deploy', [], undefined, '', ['project-d', 'mapping']),
   );
   const p = resolveProject('deploy', g, '/data');
@@ -207,27 +216,18 @@ test('a card in two projects inherits from both, unioned', () => {
   assert.deepEqual(p.chain, ['project-d', 'mapping']);
 });
 
-test('repos_replace narrows instead of unioning', () => {
-  const g = graph(
-    rec('root', [], { key: 'root', repos: [{ path: '/a' }] }),
-    rec('mid', [], { key: 'mid', repos: [{ path: '/b' }], repos_replace: true }, '', ['root']),
-    rec('leaf', [], undefined, '', ['mid']),
-  );
-  assert.deepEqual(resolveProject('leaf', g, '/data')!.repos.map((r) => r.path), ['/b']);
-});
-
 test('a duplicate repo path is not added twice', () => {
   const g = graph(
-    rec('root', [], { key: 'root', repos: [{ path: '/a' }] }),
-    rec('leaf', [], { key: 'leaf', repos: [{ path: '/a' }] }, '', ['root']),
+    rec('root', [], { repos: [{ path: '/a' }] }),
+    rec('leaf', [], { repos: [{ path: '/a' }] }, '', ['root']),
   );
   assert.equal(resolveProject('leaf', g, '/data')!.repos.length, 1);
 });
 
 test('instructions concatenate outermost first', () => {
   const g = graph(
-    rec('root', [], { key: 'root' }, '## Instructions\n\nroot rule\n'),
-    rec('leaf', [], { key: 'leaf' }, '## Instructions\n\nleaf rule\n', ['root']),
+    rec('root', [], {}, '## Instructions\n\nroot rule\n'),
+    rec('leaf', [], {}, '## Instructions\n\nleaf rule\n', ['root']),
   );
   const p = resolveProject('leaf', g, '/data')!;
   assert.equal(p.instructions.length, 2);
@@ -247,7 +247,7 @@ test('a record naming no project resolves to null', () => {
 
 test('a parent edge grants no project — membership is only the facet', () => {
   const g = graph(
-    rec('project-a', [], { key: 'project-a', repos: [{ path: '/staging' }] }),
+    rec('project-a', [], { repos: [{ path: '/staging' }] }),
     rec('child', ['project-a']),
   );
   assert.equal(resolveProject('child', g, '/data'), null);
@@ -256,8 +256,8 @@ test('a parent edge grants no project — membership is only the facet', () => {
 
 test('a project record is its own innermost context', () => {
   const g = graph(
-    rec('project-b', [], { key: 'project-b', jira: 'SUPPORT' }),
-    rec('keycloak', [], { key: 'keycloak', branch: 'kc/{card}' }, '', ['project-b']),
+    rec('project-b', [], { jira: 'SUPPORT' }),
+    rec('keycloak', [], { branch: 'kc/{card}' }, '', ['project-b']),
   );
   const p = resolveProject('keycloak', g, '/data')!;
   assert.equal(p.key, 'keycloak');
@@ -268,8 +268,8 @@ test('a project record is its own innermost context', () => {
 
 test('a cycle between projects terminates', () => {
   const g = graph(
-    rec('a', [], { key: 'a' }, '', ['b']),
-    rec('b', [], { key: 'b' }, '', ['a']),
+    rec('a', [], {}, '', ['b']),
+    rec('b', [], {}, '', ['a']),
   );
   const p = resolveProject('a', g, '/data');
   assert.ok(p);
@@ -595,4 +595,102 @@ test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
   // A flag with no value is an error, not a silent fallback.
   const bare = resolveCliVault(['node', 'ck', 'ls', '--vault'], one);
   assert.ok('error' in bare);
+});
+
+// ---------------------------------------------------------------- kind and due
+
+test('kind is read from the facet, and card is what a record without one is', () => {
+  const node = parseCard('/n.md', '---\nid: n\ntitle: N\nfacets: { kind: [node] }\n---\n');
+  assert.ok(node.ok);
+  assert.equal(kindOf(node.rec), 'node');
+
+  const card = parseCard('/c.md', '---\nid: c\ntitle: C\n---\n');
+  assert.ok(card.ok);
+  // No default is stored: the facet is simply absent, exactly as `priority`
+  // would be. `kindOf` is a total function over it, nothing more.
+  assert.equal(card.rec.facets.kind, undefined);
+  assert.equal(kindOf(card.rec), 'card');
+});
+
+test('due round-trips as a date, and a yaml date is not a timestamp', () => {
+  const res = parseCard('/d.md', '---\nid: d\ntitle: D\ndue: 2026-09-01\n---\n');
+  assert.ok(res.ok);
+  assert.equal(res.rec.due, '2026-09-01');
+  assert.match(renderCard({ ...res.rec }), /^due: 2026-09-01$/m);
+});
+
+// ---------------------------------------------------------------- validation
+
+function facetsFile(body: string): string {
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'cockpit-facets-'));
+  const f = pathJoin(dir, 'facets.yaml');
+  writeFileSync(f, body, 'utf8');
+  return f;
+}
+
+function recordOf(text: string): Rec {
+  const res = parseCard('/x.md', text);
+  assert.ok(res.ok);
+  return res.rec;
+}
+
+test('a single-valued facet holding two values is an error, not a card in two columns', () => {
+  const facets = loadFacets(
+    facetsFile('status: { values: [planning, done], open: false, single: true }\n'),
+  );
+  const bad = recordOf('---\nid: x\ntitle: X\nfacets: { status: [planning, done] }\n---\n');
+  const issues = validate(new Map([['x', bad]]), facets, '/data');
+  const single = issues.filter((i) => /one value at a time/.test(i.message));
+  assert.equal(single.length, 1);
+  assert.equal(single[0]!.severity, 'error');
+
+  const good = recordOf('---\nid: x\ntitle: X\nfacets: { status: [done] }\n---\n');
+  assert.equal(
+    validate(new Map([['x', good]]), facets, '/data').filter((i) => i.severity === 'error').length,
+    0,
+  );
+});
+
+test('a due that is not a date is refused', () => {
+  const facets = loadFacets(facetsFile('status: { values: [done], open: false }\n'));
+  const bad = recordOf('---\nid: x\ntitle: X\ndue: "next friday"\n---\n');
+  const issues = validate(new Map([['x', bad]]), facets, '/data');
+  assert.ok(issues.some((i) => i.severity === 'error' && /YYYY-MM-DD/.test(i.message)));
+});
+
+// ---------------------------------------------------------------- history
+
+test('ck log reads status transitions out of the diffs', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'cockpit-git-'));
+  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+  try {
+    mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+    git('init', '-q');
+    git('config', 'user.email', 't@t');
+    git('config', 'user.name', 'T');
+
+    const card = pathJoin(root, 'cards', 'ship.md');
+    writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [planning] }\n---\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'add ship');
+
+    writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [done] }\ndue: 2026-09-01\n---\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'finish ship');
+
+    const r = history(root, '1 year ago');
+    assert.deepEqual(r.created, ['ship']);
+    assert.deepEqual(r.finished, ['ship']);
+    // Newest first, and the transition is read from the diff rather than from
+    // `updated`, which only ever says that *something* changed.
+    const moved = r.commits[0]!.changes.find((c) => c.kind === 'status');
+    assert.ok(moved && moved.kind === 'status');
+    assert.equal(moved.from, 'planning');
+    assert.equal(moved.to, 'done');
+    const dated = r.commits[0]!.changes.find((c) => c.kind === 'due');
+    assert.ok(dated && dated.kind === 'due');
+    assert.equal(dated.to, '2026-09-01');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

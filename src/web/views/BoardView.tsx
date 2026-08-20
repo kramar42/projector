@@ -424,7 +424,7 @@ function CardTile({
         else onOpen(card.id);
       }}
     >
-      <CardBody card={card} size="card" showFacets={chips} />
+      <CardBody card={card} showFacets={chips} />
     </div>
   );
 }

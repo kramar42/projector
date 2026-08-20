@@ -10,16 +10,15 @@ import { dirname } from 'node:path';
 const SCHEMA = `
 CREATE TABLE records (
   id            TEXT PRIMARY KEY,
-  kind          TEXT NOT NULL,
   title         TEXT NOT NULL,
   file          TEXT NOT NULL,
   body          TEXT NOT NULL,
+  due           TEXT,
   created       TEXT,
   updated       TEXT,
+  -- Derived from the project: block, which is not a facet — so unlike kind and
+  -- project, this column is not shadowing a row in the facets table.
   is_project    INTEGER NOT NULL DEFAULT 0,
-  -- First value of the project facet, for display only. Grouping and filtering
-  -- go through the facets table, like every other facet.
-  project       TEXT,
   fingerprint   TEXT
 );
 CREATE TABLE facets (
@@ -49,6 +48,7 @@ CREATE TABLE cache (
   PRIMARY KEY (kind, ref)
 );
 CREATE INDEX idx_facets_lookup ON facets(facet, value);
+CREATE INDEX idx_records_due ON records(due);
 CREATE INDEX idx_edges_dst ON edges(dst, type);
 CREATE INDEX idx_links_record ON links(record_id);
 CREATE VIRTUAL TABLE fts USING fts5(id UNINDEXED, title, body, tokenize='porter unicode61');

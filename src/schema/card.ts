@@ -16,9 +16,7 @@ const repoSchema = z.object({
 });
 
 const projectSchema = z.object({
-  key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
   repos: z.array(repoSchema).optional(),
-  repos_replace: z.boolean().optional(),
   jira: z.string().optional(),
   branch: z.string().optional(),
 });
@@ -30,13 +28,13 @@ const edgeSchema = z.object({
 
 export const frontmatterSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug'),
-  kind: z.enum(['card', 'node']),
   title: z.string().min(1),
   facets: z.record(z.string(), z.unknown()).optional(),
   edges: z.array(edgeSchema).optional(),
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
   source_fingerprint: z.string().optional(),
+  due: z.union([z.string(), z.date()]).optional(),
   created: z.union([z.string(), z.date()]).optional(),
   updated: z.union([z.string(), z.date()]).optional(),
 });
@@ -45,7 +43,13 @@ export type ParseResult =
   | { ok: true; rec: Rec }
   | { ok: false; file: string; errors: string[] };
 
-/** Facet values are always arrays. A scalar in the file is lifted to `[scalar]`. */
+/**
+ * Facet values are always arrays. A scalar in the file is lifted to `[scalar]`.
+ *
+ * No facet is named here. `kind` is stored, read and written exactly like
+ * `priority`, which is the whole point of it being a facet — the parser, the
+ * filter, the histogram and the grouping all treat it as one more axis.
+ */
 function normaliseFacets(raw: unknown): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   if (!raw || typeof raw !== 'object') return out;
@@ -88,13 +92,13 @@ export function parseCard(file: string, text: string): ParseResult {
     ok: true,
     rec: {
       id: fm.id,
-      kind: fm.kind,
       title: fm.title,
       facets: normaliseFacets(fm.facets),
       edges: (fm.edges ?? []) as Edge[],
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
       source_fingerprint: fm.source_fingerprint,
+      due: asDate(fm.due),
       created: asDate(fm.created),
       updated: asDate(fm.updated),
       body,
@@ -131,7 +135,6 @@ export function listCardFiles(cardsDir: string): string[] {
 export function renderCard(rec: Omit<Rec, 'file'>): string {
   const fm: Record<string, unknown> = {
     id: rec.id,
-    kind: rec.kind,
     title: rec.title,
   };
   if (Object.keys(rec.facets).length) fm.facets = rec.facets;
@@ -139,6 +142,7 @@ export function renderCard(rec: Omit<Rec, 'file'>): string {
   if (rec.links.length) fm.links = rec.links.map((l) => l.raw);
   if (rec.project) fm.project = rec.project;
   if (rec.source_fingerprint) fm.source_fingerprint = rec.source_fingerprint;
+  if (rec.due) fm.due = rec.due;
   if (rec.created) fm.created = rec.created;
   if (rec.updated) fm.updated = rec.updated;
 

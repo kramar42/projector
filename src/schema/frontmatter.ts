@@ -5,13 +5,13 @@ const FENCE = /^---\r?\n/;
 /** Frontmatter key order, so every file reads the same way. */
 export const KEY_ORDER = [
   'id',
-  'kind',
   'title',
   'facets',
   'edges',
   'links',
   'project',
   'source_fingerprint',
+  'due',
   'created',
   'updated',
 ];

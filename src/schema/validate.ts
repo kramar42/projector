@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isKnownKind } from './links.ts';
 import { EDGE_TYPES, type Facets, type Issue, type Rec } from './types.ts';
-import { ancestorChains, isProject, parentsOf } from '../index/project.ts';
+import { isProject, kindOf, parentsOf } from '../index/project.ts';
 import { resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
 
@@ -56,16 +56,20 @@ export function validate(
           }
         }
       }
-      if (def.scope?.under) {
-        const under = def.scope.under;
-        const inScope = ancestorChains(rec.id, records).some((chain) => chain.includes(under));
-        if (!inScope) {
-          at(
-            `facets.${facet}`,
-            `"${facet}" is scoped to records beneath "${under}", and this record is not beneath it`,
-          );
-        }
+      // A single-valued facet held twice is not a record in two columns, it is a
+      // record in no coherent state — and a derived signal reading one of the
+      // two values disagrees with the board showing the other.
+      if (def.single && values.length > 1) {
+        at(
+          `facets.${facet}`,
+          `"${facet}" holds one value at a time, and this has ${values.length}: ${values.join(', ')}`,
+        );
       }
+    }
+
+    // --- due ---
+    if (rec.due !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(rec.due)) {
+      at('due', `due must be YYYY-MM-DD, not "${rec.due}"`);
     }
 
     // --- edges ---
@@ -108,10 +112,10 @@ export function validate(
   // independent, and a card may legitimately have either, both or neither.
   const projectKeys = new Set<string>();
   for (const rec of records.values()) {
-    if (rec.project) projectKeys.add(rec.project.key ?? rec.id);
+    if (rec.project) projectKeys.add(rec.id);
   }
   for (const rec of records.values()) {
-    if (rec.kind !== 'card') continue;
+    if (kindOf(rec) !== 'card') continue;
     const mine = rec.facets.project ?? [];
     // A project record is its own context, so a root project belongs to nothing
     // above it and that is not a problem to report.

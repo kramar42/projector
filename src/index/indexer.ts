@@ -50,8 +50,8 @@ export function reindex(dataRoot: string): IndexResult {
   const db = openDb(p.db, { fresh: true });
 
   const insRec = db.prepare(
-    `INSERT INTO records (id, kind, title, file, body, created, updated, is_project, project, fingerprint)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO records (id, title, file, body, due, created, updated, is_project, fingerprint)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insFacet = db.prepare('INSERT OR IGNORE INTO facets (record_id, facet, value) VALUES (?, ?, ?)');
   const insEdge = db.prepare('INSERT OR IGNORE INTO edges (src, dst, type) VALUES (?, ?, ?)');
@@ -62,14 +62,13 @@ export function reindex(dataRoot: string): IndexResult {
   for (const rec of records.values()) {
     insRec.run(
       rec.id,
-      rec.kind,
       rec.title,
       rec.file,
       rec.body,
+      rec.due ?? null,
       rec.created ?? null,
       rec.updated ?? null,
       isProject(rec) ? 1 : 0,
-      rec.facets.project?.[0] ?? null,
       rec.source_fingerprint ?? null,
     );
     for (const [facet, values] of Object.entries(rec.facets)) {

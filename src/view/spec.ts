@@ -14,7 +14,7 @@ export type Shape = 'board' | 'canvas' | 'table';
 export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
 export const VIAS: readonly Via[] = ['parent', 'member-of', 'blocks'];
 export const DIRS: readonly Dir[] = ['down', 'up', 'both'];
-export const EDGE_KINDS: readonly string[] = ['parent', 'blocks', 'relates', 'member-of'];
+export const EDGE_KINDS: readonly string[] = ['parent', 'blocks', 'member-of'];
 
 export interface ViewSpec {
   /** Set when this came from a saved view; absent for an ad-hoc query. */
@@ -139,35 +139,22 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
 // ---------------------------------------------------------------- saved views
 
 /**
- * A saved view file, in the P5 schema.
+ * Read a saved view file.
  *
- * `kind: board|canvas` from P1 is read as `shape`, and the P1 canvas keys
- * (`include.under`, `include.filter`, `defaultSize`) are read as the query they
- * always were — so the seven files written before P5 keep opening, and the first
- * save rewrites them in the new shape.
+ * One spelling per key. A view file and a URL describe the same thing, so this
+ * is the file half of `parseSpec` and nothing else — there is no second reading
+ * for keys an older version wrote.
  */
 export function specFromFile(name: string, raw: Record<string, unknown>): ViewSpec {
   const params: Record<string, string> = {};
-  const legacyKind = raw.kind === 'canvas' ? 'canvas' : raw.kind === 'board' ? 'board' : undefined;
-  const shape = one(String(raw.shape ?? ''), SHAPES) ?? legacyKind ?? 'board';
-  params.shape = shape;
+  params.shape = one(String(raw.shape ?? ''), SHAPES) ?? 'board';
 
-  const include = (raw.include ?? {}) as { filter?: Record<string, unknown>; under?: string };
-  const filter = (raw.filter ?? include.filter ?? {}) as Record<string, unknown>;
-  for (const [facet, value] of Object.entries(filter)) {
-    // The P1 spelling of "unblocked" was a filter key on a computed predicate;
-    // it is the `blocked` pseudo-facet now.
-    if (facet === 'blockedBy') {
-      if (value === 'none') params['f.blocked'] = 'clear';
-      continue;
-    }
+  for (const [facet, value] of Object.entries((raw.filter ?? {}) as Record<string, unknown>)) {
     const picked = Array.isArray(value) ? value.map(String) : [String(value)];
     params[`f.${facet}`] = picked.join(',');
   }
 
-  const focus = (raw.focus ?? (include.under ? { id: include.under } : undefined)) as
-    | { id?: string; via?: string; dir?: string; depth?: number }
-    | undefined;
+  const focus = raw.focus as { id?: string; via?: string; dir?: string; depth?: number } | undefined;
   if (focus?.id) {
     params.focus = String(focus.id);
     params.via = String(focus.via ?? 'parent');
@@ -175,21 +162,15 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
     if (focus.depth !== undefined) params.depth = String(focus.depth);
   }
 
-  // P1 wrote a single facet; P5 writes a list. Both read.
-  if (typeof raw.groupBy === 'string') params.group = raw.groupBy;
-  else if (Array.isArray(raw.groupBy)) params.group = raw.groupBy.map(String).join(',');
-  if (typeof raw.swimlanes === 'string' && params.group) params.group += `,${raw.swimlanes}`;
+  if (typeof raw.q === 'string') params.q = raw.q;
+  if (Array.isArray(raw.groupBy)) params.group = raw.groupBy.map(String).join(',');
   if (Array.isArray(raw.sort)) params.sort = raw.sort.map(String).join(',');
   if (typeof raw.uncategorised === 'string') params.uncategorised = raw.uncategorised;
+  if (typeof raw.connect === 'string') params.connect = raw.connect;
 
   const edges = (raw.edges ?? {}) as { show?: unknown };
   if (Array.isArray(edges.show)) params.edges = edges.show.map(String).join(',');
-
-  // `face: { chips }` was a wrapper around one key once `size` went; `cardFacets`
-  // and `columns` were earlier spellings of the same list.
-  const face = (raw.face ?? {}) as { chips?: unknown };
-  const chips = raw.chips ?? face.chips ?? raw.cardFacets ?? raw.columns;
-  if (Array.isArray(chips)) params.chips = chips.map(String).join(',');
+  if (Array.isArray(raw.chips)) params.chips = raw.chips.map(String).join(',');
 
   const spec = parseSpec(params);
   spec.name = name;
@@ -218,6 +199,9 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
     ...(q.uncategorised ? { uncategorised: q.uncategorised } : {}),
+    // Only worth writing when it differs from the shape's default, which is what
+    // `parseSpec` supplies on the way back in.
+    ...(spec.shape === 'canvas' && q.connect === 'none' ? { connect: 'none' } : {}),
     ...(spec.shape === 'canvas' ? { edges: { show: spec.edges } } : {}),
     ...(spec.chips.length ? { chips: spec.chips } : {}),
   };

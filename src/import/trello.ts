@@ -122,12 +122,11 @@ export function importTrello(
     report.projects.push(id);
     out.push({
       id,
-      kind: 'card',
       title: spec.title,
       facets: spec.facets,
       edges: [],
       links: [],
-      project: { key: spec.key },
+      project: {},
       created: today(),
       updated: today(),
       body: `\nImported from the Trello list "${clean(list.name)}".\n\n## Instructions\n\n_None recorded yet._\n`,
@@ -167,9 +166,8 @@ export function importTrello(
         sectionId = id;
         out.push({
           id,
-          kind: 'node',
           title: clean(section[1]!),
-          facets: {},
+          facets: { kind: ['node'] },
           edges: projectId ? [{ type: 'parent', to: projectId }] : [],
           links: [],
           created: today(),
@@ -196,7 +194,7 @@ export function importTrello(
 
       const parent = sectionId ?? projectId;
       const links: string[] = [];
-      if (card.shortUrl) links.push(`trello:${card.shortUrl}`);
+      if (card.shortUrl) links.push(card.shortUrl);
       if (isUrl) links.push(name);
 
       const bodyParts: string[] = [];
@@ -231,7 +229,6 @@ export function importTrello(
 
       out.push({
         id,
-        kind: 'card',
         title: isUrl ? name : clean(name) || name,
         facets,
         edges: parent ? [{ type: 'parent', to: parent }] : [],

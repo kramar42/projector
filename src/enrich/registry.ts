@@ -19,17 +19,15 @@ export function registry(dataRoot: string): Record<string, Fetcher> {
     'gh:commit': commitFetcher,
     claude: sessionFetcher,
     doc: docFetcher(dataRoot),
-    // slack, trello, cal, grafana and bare urls stay as parsed labels: each needs
-    // a credential or an API that earns its keep only once something asks for it.
+    // `slack` and bare urls stay as parsed labels. Slack is the one kind kept
+    // without a fetcher: it is common enough to be worth resolving one day, and
+    // a slack: ref is not interchangeable with the permalink it wraps.
   };
 }
 
 /** Kinds with no fetcher, listed so the UI can say why rather than look broken. */
 export const NOT_ENRICHED: Record<string, string> = {
   slack: 'Slack links open in Slack; no fetcher yet',
-  trello: 'kept for provenance during the migration',
-  cal: 'calendar enrichment not wired yet',
-  grafana: 'Grafana enrichment not wired yet',
   url: 'plain link',
 };
 

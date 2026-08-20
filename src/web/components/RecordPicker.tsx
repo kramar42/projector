@@ -63,7 +63,9 @@ export function RecordPicker({
           <button key={r.id} className="picker-item" onClick={() => onPick(r.id)}>
             <span className="picker-mark">{r.isProject ? '▣' : r.kind === 'node' ? '○' : '·'}</span>
             <span className="picker-title">{r.title}</span>
-            {r.projectKey && <span className="picker-proj">{r.projectKey}</span>}
+            {r.facets.project?.length ? (
+              <span className="picker-proj">{r.facets.project.join(', ')}</span>
+            ) : null}
           </button>
         ))}
         {!matches.length && <div className="picker-empty">nothing matches</div>}

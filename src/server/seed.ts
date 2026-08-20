@@ -2,7 +2,7 @@
  * What a brand-new vault starts with.
  *
  * The model, not somebody else's data: the facet vocabulary without this
- * workspace's project keys, people, or its Project A-scoped `layer` facet.
+ * workspace's project ids, people, or its Project A `layer` taxonomy.
  */
 
 export const SEED_FACETS = `# Facet vocabulary. This file is the single place column order lives —
@@ -11,26 +11,40 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   values:  declared order == column order in every board
 #   open:    true  → new values accepted
 #            false → the validator rejects anything not listed
-#   scope:   { under: <id> } → only valid on records beneath that record
+#   single:  true  → at most one value at a time
 #   valuesFrom: project-records → offer every record carrying a project: block
 #
 # Every facet is stored and written identically. There is deliberately no kind of
-# facet the app writes through some other mechanism.
+# facet the app writes through some other mechanism — kind and project included.
+
+# Work, or the scaffolding that organises it. An ordinary facet: it filters,
+# groups, drags and bulk-edits through the same code path as everything else.
+kind:
+  label: Kind
+  values: [card, node]
+  open: false
+  single: true
 
 priority:
   label: Priority
   values: [now, month, backlog, someday]
   open: false
+  single: true
 
+# Lifecycle only. "Blocked" and "waiting" are derived — from an unfinished blocks
+# edge and from a non-empty waiting_on — so they are not values here: storing
+# either beside the thing it is computed from gives two answers to one question.
 status:
   label: Status
-  values: [planning, active, waiting, blocked, frozen, done]
+  values: [planning, active, frozen, done, dropped]
   open: false
+  single: true
 
 energy:
   label: Energy
   values: [deep, shallow, decide, delegate]
   open: false
+  single: true
 
 waiting_on:
   label: Waiting on
@@ -39,28 +53,28 @@ waiting_on:
 
 domain:
   label: Domain
-  values: [eventing, identity, master-data, workflow, observability, lifecycle]
+  values: []
   open: true
 
 source:
   label: Source
-  values: [brain, trello, slack, jira, gmail, gdocs]
+  values: [brain, slack, jira, gmail, git]
   open: true
 
 tech:
   label: Tech
-  values: [k8s, aws, github, kafka, keycloak, quarkus, temporal, mongodb, devops]
+  values: []
   open: true
 
 owner:
   label: Owner
   values: []
   open: true
-
+  single: true
 
 # Which project(s) a card belongs to — an ordinary multi-valued facet, so a card
 # can be in two at once and inherits repos and instructions from both. Values are
-# the keys of records carrying a project: block. Parent edges are a separate
+# the ids of records carrying a project: block. Parent edges are a separate
 # thing: they mean decomposition and are what the canvas draws.
 project:
   label: Project
@@ -82,9 +96,9 @@ Agents can create and edit these files directly with Write/Edit. No API, no runn
 \`\`\`yaml
 ---
 id: project-a-kpow-fix          # required. lowercase slug, stable, immutable
-kind: card                # required. card = work, node = a thought
 title: Fix Kpow           # required
 facets:                   # every value is an array, even when there is one
+  kind: [card]            # card = work, node = scaffolding. An ordinary facet
   priority: [now]
   status: [active]
   tech: [k8s, kafka]
@@ -96,22 +110,33 @@ links:                    # read-only references, resolved and cached by the app
   - gh:pr:Acme/staging#412
   - claude:local_9e09a116-6b70-4c4a-8d9e-c2a61e52f4c4
   - doc:../../keycloak-consolidation-plan.md   # relative to the vault root
+due: 2026-09-01           # optional deadline
 created: 2026-08-19
 updated: 2026-08-19
 ---
 \`\`\`
 
+Only \`id\` and \`title\` are required. Everything else is optional, and a facet the vocabulary does not
+know is preserved rather than dropped — \`ck check\` reports it.
+
 ## Rules that matter
 
 - **Facet values are arrays.** A card with two values for the grouped facet appears in two columns.
-  That is the model working, not a mistake.
+  That is the model working, not a mistake — unless the facet declares \`single: true\`, which is how
+  \`status\` and \`priority\` say that holding two at once is incoherent rather than expressive.
 - **Facet names and values are validated** against \`../facets.yaml\`. A facet with \`open: false\` rejects
   new values.
-- **\`project\` is an ordinary facet.** \`project: [project-d, mapping]\` means the card belongs to both and
-  inherits the repos and instructions of both. Values are the keys of records carrying a \`project:\`
-  block. \`parent\` edges are a separate thing — they mean decomposition and are what the canvas draws.
-- **A scoped facet** only applies beneath the record named in its \`scope\`. \`layer\` in the work vault
-  is Project A taxonomy that way, not a global axis.
+- **\`kind\` is an ordinary facet.** \`card\` is work and appears on boards; \`node\` is scaffolding that
+  organises it. Nothing about it is special — it filters, groups and drags like \`priority\`.
+- **\`project\` is an ordinary facet too.** \`project: [project-d, mapping]\` means the card belongs to both
+  and inherits the repos and instructions of both. Values are the **ids** of records carrying a
+  \`project:\` block. \`parent\` edges are a separate thing — they mean decomposition and are what the
+  canvas draws. A card may have either, both or neither.
+- **\`due\` is a field, not a facet**, because a deadline is compared against today rather than matched
+  against a vocabulary. \`priority\` says what you intend to do next; \`due\` says what the world expects
+  regardless of intent.
+- **Blocked and waiting are never written.** Both are derived: \`blocked\` from an unfinished \`blocks\`
+  edge, \`waiting\` from a non-empty \`waiting_on\`. They appear in the filter panel like any other axis.
 - **\`doc:\` paths are relative to the vault root**, or absolute (\`/…\`, \`~/…\`). A document living
   outside the vault is reached with \`../\`.
 - **Arrangement is not here.** A card can appear on several canvases at different positions, and in a
@@ -121,12 +146,12 @@ updated: 2026-08-19
 ## Projects
 
 Any record may carry a \`project:\` block. That makes it a project: it owns configuration that its
-members inherit. Membership is the \`project\` facet naming its key. It works on cards as well as nodes,
-so a deliverable can be both tracked work and something others belong to.
+members inherit. Membership is the \`project\` facet naming its **id** — a project has no separate key.
+It works on cards as well as nodes, so a deliverable can be both tracked work and something others
+belong to.
 
 \`\`\`yaml
 project:
-  key: keycloak
   repos:
     - { path: ~/Code/work/staging, base: main }
   jira: PROJ
@@ -141,14 +166,15 @@ project record's body under an \`## Instructions\` heading.
 
 | Type | Meaning |
 |---|---|
-| \`parent\` | containment — gives the mind-map tree and the project hierarchy |
-| \`blocks\` | this must finish before the target. Powers \`ck next\` |
-| \`relates\` | soft association |
+| \`parent\` | decomposition — this record is part of that one. Gives the mind-map tree |
+| \`blocks\` | this must finish before the target. Powers the \`blocked\` axis and \`ck next\` |
+
+\`member-of\` is a third edge the canvas can draw, derived from the \`project\` facet and never stored.
 
 ## Link kinds
 
-\`jira:\` \`gh:pr:\` \`gh:branch:\` \`gh:commit:\` \`claude:\` \`doc:\` \`slack:\` \`trello:\` \`cal:\` \`grafana:\`,
-plus a bare \`https://…\` for anything else. All read-only.
+\`jira:\` \`gh:pr:\` \`gh:branch:\` \`gh:commit:\` \`claude:\` \`doc:\` \`slack:\`, plus a bare \`https://…\` for
+anything else. All read-only. A kind exists when something resolves it; everything else is a URL.
 `;
 
 /**
@@ -166,11 +192,27 @@ shape: board
 title: Home
 filter:
   kind: [card]
-  status: [planning, active, waiting, blocked]
+  status: [planning, active]
 groupBy: [priority]
 sort: [updated:desc]
 chips: [project, tech]
 uncategorised: end
+`,
+  },
+  {
+    path: 'due.yaml',
+    body: `# Deadlines, soonest first. \`due\` is a pseudo-facet over the \`due\` field —
+# the buckets are computed against today, so this view never goes stale.
+shape: board
+title: Due
+filter:
+  kind: [card]
+  status: [planning, active]
+  due: [overdue, today, week]
+groupBy: [due]
+sort: [due:asc]
+chips: [project, priority]
+uncategorised: hide
 `,
   },
   {
@@ -186,7 +228,8 @@ chips: [status, priority]
   },
   {
     path: 'unblocked.yaml',
-    body: `# Derived, not maintained by hand: \`blocked\` is computed from blocks edges.
+    body: `# Derived, not maintained by hand: \`blocked\` is computed from blocks edges
+# and \`waiting\` from waiting_on, so \`clear\` means neither applies.
 shape: board
 title: Unblocked now
 filter:

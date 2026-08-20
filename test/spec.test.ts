@@ -54,56 +54,33 @@ test('a stale bookmark opens rather than erroring', () => {
   assert.deepEqual(spec.edges, ['parent']);
 });
 
-test('the seven views written before P5 still open', () => {
-  const board = specFromFile('priority-lists', {
-    kind: 'board',
-    title: 'Priority lists',
-    filter: { status: ['planning', 'active', 'waiting', 'blocked'] },
-    groupBy: 'priority',
-    swimlanes: null,
-    cardFacets: ['project', 'tech'],
-    sort: ['updated:desc'],
-    uncategorised: 'end',
+test('a view file reads back as the query it was written from', () => {
+  const spec = specFromFile('due', {
+    shape: 'board',
+    title: 'Due',
+    filter: { kind: ['card'], due: ['overdue', 'today'] },
+    groupBy: ['due'],
+    sort: ['due:asc'],
+    uncategorised: 'hide',
+    chips: ['project'],
+    q: 'keycloak',
   });
-  assert.equal(board.shape, 'board');
-  assert.deepEqual(board.query.filter, { status: ['planning', 'active', 'waiting', 'blocked'] });
-  assert.deepEqual(board.query.groupBy, ['priority']);
-  assert.deepEqual(board.chips, ['project', 'tech']);
-
-  // `blockedBy: none` was a computed predicate in a filter; it is a pseudo-facet.
-  const unblocked = specFromFile('unblocked', {
-    kind: 'board',
-    filter: { status: ['planning', 'active'], blockedBy: 'none' },
-    groupBy: 'energy',
-  });
-  assert.deepEqual(unblocked.query.filter, { status: ['planning', 'active'], blocked: ['clear'] });
-
-  // `include.under` was always a traversal, so it reads as one.
-  const canvas = specFromFile('project-a', {
-    kind: 'canvas',
-    title: 'Project A',
-    layout: 'tree-lr',
-    include: { under: 'project-a' },
-    edges: { show: ['parent', 'blocks'] },
-  });
-  assert.equal(canvas.shape, 'canvas');
-  assert.deepEqual(canvas.query.focus, { id: 'project-a', via: 'parent', dir: 'down', depth: undefined });
-  assert.deepEqual(canvas.edges, ['parent', 'blocks']);
-
-  const filtered = specFromFile('trello', {
-    kind: 'canvas',
-    include: { filter: { source: ['trello'] } },
-    defaultSize: 'chip',
-  });
-  assert.deepEqual(filtered.query.filter, { source: ['trello'] });
-  // `defaultSize` was a face-size option and there is no longer one: a plain node
-  // renders as a chip and everything else as a card, from the record's nature.
-  assert.deepEqual(filtered.chips, []);
+  assert.equal(spec.shape, 'board');
+  assert.deepEqual(spec.query.filter, { kind: ['card'], due: ['overdue', 'today'] });
+  assert.deepEqual(spec.query.groupBy, ['due']);
+  assert.deepEqual(spec.query.sort, ['due:asc']);
+  assert.equal(spec.query.uncategorised, 'hide');
+  assert.deepEqual(spec.chips, ['project']);
+  // `q` used to be written and never read back, so a saved search vanished on
+  // the next open.
+  assert.equal(spec.query.q, 'keycloak');
 });
 
-test('a swimlane in an old file becomes the second grouping axis', () => {
-  const spec = specFromFile('matrix', { kind: 'board', groupBy: 'priority', swimlanes: 'project' });
-  assert.deepEqual(spec.query.groupBy, ['priority', 'project']);
+test('a canvas keeps `connect` across a save', () => {
+  const spec = parseSpec({ shape: 'canvas', connect: 'none' });
+  const file = specToFile(spec, 'Graph');
+  assert.equal(file.connect, 'none');
+  assert.equal(specFromFile('graph', file).query.connect, 'none');
 });
 
 test('saving writes the query half and never the arrangement', () => {

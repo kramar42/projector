@@ -9,7 +9,6 @@ import { loadFacets } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
-import { ancestorChains } from '../index/project.ts';
 import { EDGE_TYPES, type Edge, type EdgeType } from '../schema/types.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
 
@@ -59,6 +58,13 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** A deadline is compared, not matched, so it has to be a date and not a label. */
+function checkDue(due: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || Number.isNaN(Date.parse(due))) {
+    throw new Invalid(`due must be a YYYY-MM-DD date, not "${due}"`);
+  }
+}
+
 /** Apply several frontmatter keys in one atomic write, bumping `updated`. */
 function patchAll(file: string, patch: Record<string, unknown>): void {
   let text = readFileSync(file, 'utf8');
@@ -71,15 +77,12 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
 
 /**
  * Validate facet names and values against the vocabulary before writing.
- * A closed facet rejects unknown values; a scoped facet is only valid where it
- * applies. Every facet is writable — there is no special kind.
+ *
+ * A closed facet rejects unknown values and a single-valued one rejects a
+ * second. Every facet is writable and every facet is checked the same way —
+ * `kind` and `project` included. There is no special kind.
  */
-export function checkFacets(
-  root: string,
-  id: string,
-  facets: Record<string, string[]>,
-  records: Map<string, ReturnType<typeof Object>>,
-): void {
+export function checkFacets(root: string, facets: Record<string, string[]>): void {
   const defs = loadFacets(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
     const def = defs[name];
@@ -91,11 +94,8 @@ export function checkFacets(
         }
       }
     }
-    if (def.scope?.under && values.length) {
-      const chains = ancestorChains(id, records as never);
-      if (!chains.some((c) => c.includes(def.scope!.under))) {
-        throw new Invalid(`"${name}" only applies to records beneath "${def.scope.under}"`);
-      }
+    if (def.single && values.length > 1) {
+      throw new Invalid(`"${name}" holds one value at a time, and this sets ${values.length}`);
     }
   }
 }
@@ -107,7 +107,8 @@ export interface PatchCardInput {
   facets?: Record<string, string[]>;
   links?: string[];
   body?: string;
-  kind?: 'card' | 'node';
+  /** `YYYY-MM-DD`, or null to clear. */
+  due?: string | null;
   project?: Record<string, unknown> | null;
   baseMtime?: number;
 }
@@ -116,11 +117,9 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
   const file = fileFor(root, id);
   guard(file, input.baseMtime);
 
-  if (input.facets) {
-    const { records } = readAll(paths(root).cards);
-    checkFacets(root, id, input.facets, records as never);
-  }
+  if (input.facets) checkFacets(root, input.facets);
   if (input.title !== undefined && !input.title.trim()) throw new Invalid('title cannot be empty');
+  if (input.due) checkDue(input.due);
 
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title.trim();
@@ -130,7 +129,7 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
     patch.facets = Object.keys(clean).length ? clean : undefined;
   }
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
-  if (input.kind !== undefined) patch.kind = input.kind;
+  if (input.due !== undefined) patch.due = input.due ?? undefined;
   if (input.project !== undefined) patch.project = input.project ?? undefined;
 
   if (Object.keys(patch).length) patchAll(file, patch);
@@ -150,11 +149,11 @@ export function createCard(
   root: string,
   input: {
     title: string;
-    kind?: 'card' | 'node';
     parent?: string;
     facets?: Record<string, string[]>;
     body?: string;
     links?: string[];
+    due?: string;
     /**
      * A stable hash of whatever this card came from. A sweep that runs twice
      * must converge rather than refill the inbox, so a fingerprint already
@@ -176,16 +175,17 @@ export function createCard(
   }
   const id = uniqueId(slugify(title), new Set(records.keys()));
   const facets = input.facets ?? {};
-  if (Object.keys(facets).length) checkFacets(root, id, facets, records as never);
+  if (Object.keys(facets).length) checkFacets(root, facets);
+  if (input.due) checkDue(input.due);
 
   const text = renderCard({
     id,
-    kind: input.kind ?? 'card',
     title,
     facets,
     edges: input.parent ? [{ type: 'parent', to: input.parent }] : [],
     links: (input.links ?? []).map(parseLink),
     source_fingerprint: input.fingerprint,
+    due: input.due,
     created: today(),
     updated: today(),
     body: input.body ? `\n${input.body}\n` : '\n',
@@ -290,7 +290,7 @@ export function bulkFacet(
     const facets = { ...rec.facets };
     if (next.length) facets[facet] = next;
     else delete facets[facet];
-    checkFacets(root, id, next.length ? { [facet]: next } : {}, records as never);
+    checkFacets(root, next.length ? { [facet]: next } : {});
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
@@ -379,7 +379,8 @@ export function putFrontmatter(
     const arr = Array.isArray(v) ? v : [v];
     facets[k] = arr.filter((x) => x != null).map(String);
   }
-  checkFacets(root, id, facets, records as never);
+  checkFacets(root, facets);
+  if (typeof check.data.due === 'string') checkDue(check.data.due);
 
   const warnings: string[] = [];
   for (const e of check.data.edges ?? []) {

@@ -20,7 +20,7 @@ import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { EDGE_KINDS, type Patch } from '../query.ts';
-import { layoutTypes, manualLayout, sizeFor, treeLayout } from './layout.ts';
+import { layoutTypes, manualLayout, treeLayout } from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse } from '../types.ts';
 
@@ -34,9 +34,8 @@ import type { CardDTO, QueryResponse } from '../types.ts';
  * that quietly widens its own result set is a filter you stop trusting.
  */
 function RecordNode({ data }: NodeProps) {
-  const { card, size, chips, context, onOpen } = data as unknown as {
+  const { card, chips, context, onOpen } = data as unknown as {
     card: CardDTO;
-    size: 'chip' | 'card';
     chips: string[];
     context: boolean;
     onOpen: (id: string) => void;
@@ -46,7 +45,7 @@ function RecordNode({ data }: NodeProps) {
       {/* React Flow attaches edges to handles. Without them a custom node renders
           fine and every edge is silently dropped. */}
       <Handle type="target" position={Position.Left} />
-      <CardBody card={card} size={size} showFacets={chips} onOpen={onOpen} />
+      <CardBody card={card} showFacets={chips} onOpen={onOpen} />
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -57,13 +56,11 @@ const nodeTypes = { record: RecordNode };
 const EDGE_COLOUR: Record<string, string> = {
   parent: 'var(--edge-parent)',
   blocks: 'var(--edge-blocks)',
-  relates: 'var(--edge-relates)',
   'member-of': 'var(--edge-member)',
 };
 
 const DASH: Record<string, string | undefined> = {
   blocks: '6 4',
-  relates: '2 4',
   'member-of': '1 3',
 };
 
@@ -96,8 +93,8 @@ function buildEdges(
 
   return [...byPair.values()].map(({ src, dst, types }) => {
     // The most structural type wins the styling; the rest ride along in the title.
-    const lead = ['parent', 'member-of', 'blocks', 'relates'].find((t) => types.includes(t)) ?? types[0]!;
-    const colour = EDGE_COLOUR[lead] ?? 'var(--edge-relates)';
+    const lead = ['parent', 'member-of', 'blocks'].find((t) => types.includes(t)) ?? types[0]!;
+    const colour = EDGE_COLOUR[lead] ?? 'var(--edge-parent)';
     return {
       id: `${types.join('+')}:${src}->${dst}`,
       source: src,
@@ -137,7 +134,7 @@ export function CanvasView({
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [newEdgeType, setNewEdgeType] = useState<'parent' | 'blocks' | 'relates'>('parent');
+  const [newEdgeType, setNewEdgeType] = useState<'parent' | 'blocks'>('parent');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [naming, setNaming] = useState(false);
@@ -172,7 +169,6 @@ export function CanvasView({
         style: { width: p.w, height: p.h },
         data: {
           card,
-          size: sizeFor(card),
           chips: data.spec.chips,
           context: context.has(card.id),
           onOpen,
@@ -254,7 +250,7 @@ export function CanvasView({
     const title = prompt('New node — a thought, canvas only. Title:');
     if (!title?.trim()) return;
     try {
-      await api.createCard({ title: title.trim(), kind: 'node' });
+      await api.createCard({ title: title.trim(), facets: { kind: ['node'] } });
       reload();
     } catch (err) {
       setProblem((err as ApiError).message);
@@ -331,11 +327,10 @@ export function CanvasView({
             drag creates
             <select
               value={newEdgeType}
-              onChange={(e) => setNewEdgeType(e.target.value as 'parent' | 'blocks' | 'relates')}
+              onChange={(e) => setNewEdgeType(e.target.value as 'parent' | 'blocks')}
             >
               <option value="parent">parent</option>
               <option value="blocks">blocks</option>
-              <option value="relates">relates</option>
             </select>
           </label>
 

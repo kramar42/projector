@@ -1,6 +1,6 @@
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
-import { parentsOf, resolveProject } from '../index/project.ts';
+import { kindOf, parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
 import type { Resolved } from '../server/enrich.ts';
@@ -28,7 +28,6 @@ export interface CardContext {
   blockedBy: { id: string; title: string; done: boolean }[];
   /** Records this one unblocks, directly. */
   blocks: { id: string; title: string }[];
-  relates: { id: string; title: string }[];
   /** Links with whatever enrichment is cached. Never fetches. */
   links: { raw: string; kind: string; ref: string; enrichment?: Resolved }[];
   siblings: { id: string; title: string }[];
@@ -67,7 +66,7 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
 
   return {
     id: rec.id,
-    kind: rec.kind,
+    kind: kindOf(rec),
     title: rec.title,
     isProject: !!rec.project,
     file: rec.file.replace(p.root + '/', ''),
@@ -77,10 +76,9 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     parents: parentIds.map((pid) => records.get(pid)).filter((r): r is Rec => !!r).map(brief),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(id))
-      .map((r) => ({ id: r.id, title: r.title, kind: r.kind })),
+      .map((r) => ({ id: r.id, title: r.title, kind: kindOf(r) })),
     blockedBy: blockers.map((r) => ({ ...brief(r), done: isDone(r) })),
     blocks: edgesTo('blocks').map(brief),
-    relates: edgesTo('relates').map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
     siblings: siblings.map(brief),
   };
@@ -103,7 +101,7 @@ export function untriaged(dataRoot: string): Untriaged[] {
   const { records } = readAll(paths(dataRoot).cards);
   const out: Untriaged[] = [];
   for (const rec of records.values()) {
-    if (rec.kind !== 'card') continue;
+    if (kindOf(rec) !== 'card') continue;
     const reasons: string[] = [];
     if (!rec.facets.project?.length && !rec.project) reasons.push('no project');
     if (!rec.facets.priority?.length) reasons.push('no priority');
@@ -168,7 +166,6 @@ export function renderContext(ctx: CardContext): string {
     for (const b of ctx.blockedBy) L.push(`- ${b.done ? '✓' : '✗'} ${b.title}  \`${b.id}\``);
   }
   rel('Blocks', ctx.blocks);
-  rel('Relates to', ctx.relates);
 
   if (ctx.links.length) {
     L.push('');

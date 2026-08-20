@@ -18,88 +18,82 @@ import { NONE, focused, ftsQuery, memberEdges, runQuery, type Query } from '../s
 const CARDS: Record<string, string> = {
   project-b: `---
 id: project-b
-kind: card
 title: Project B
-facets: { status: [active] }
-project: { key: project-b }
+facets: { kind: [card], status: [active] }
+project: {}
 updated: 2026-08-19
 ---
 `,
   keycloak: `---
 id: keycloak
-kind: card
 title: Keycloak
-facets: { project: [project-b], status: [active], priority: [now] }
-project: { key: keycloak }
+facets: { kind: [card], project: [project-b], status: [active], priority: [now] }
+project: {}
 updated: 2026-08-19
 ---
 `,
   'kc-realms': `---
 id: kc-realms
-kind: card
 title: Realm provisioning
-facets: { project: [keycloak], status: [planning], priority: [month], tech: [keycloak] }
+facets: { kind: [card], project: [keycloak], status: [planning], priority: [month], tech: [keycloak] }
 updated: 2026-08-18
 ---
 `,
   project-a: `---
 id: project-a
-kind: card
 title: Project A
-facets: { status: [active] }
-project: { key: project-a }
+facets: { kind: [card], status: [active] }
+project: {}
 updated: 2026-08-01
 ---
 `,
   'project-a-eventing': `---
 id: project-a-eventing
-kind: node
 title: Eventing
+facets: { kind: [node] }
 edges: [{ type: parent, to: project-a }]
 updated: 2026-07-01
 ---
 `,
   'kafka-schema': `---
 id: kafka-schema
-kind: card
 title: Glue schema registry
-facets: { project: [project-a], priority: [now], status: [planning], tech: [kafka] }
+facets: { kind: [card], project: [project-a], priority: [now], status: [planning], tech: [kafka] }
 edges: [{ type: parent, to: project-a-eventing }]
 updated: 2026-08-20
 ---
 `,
   blocker: `---
 id: blocker
-kind: card
 title: Must land first
-facets: { status: [active], priority: [now] }
+facets: { kind: [card], status: [active], priority: [now] }
 edges: [{ type: blocks, to: blocked-card }]
 updated: 2026-08-20
 ---
 `,
   'blocked-card': `---
 id: blocked-card
-kind: card
 title: Waits on the blocker
-facets: { status: [planning], priority: [now], project: [project-a] }
+facets: { kind: [card], status: [planning], priority: [now], project: [project-a] }
 updated: 2026-08-20
 ---
 `,
   loose: `---
 id: loose
-kind: card
 title: No project and no priority
-facets: { status: [planning] }
+facets: { kind: [card], status: [planning] }
 updated: 2026-01-01
 ---
 `,
 };
 
 const FACETS = `
-priority: { label: Priority, values: [now, month, backlog], open: false }
-status:   { label: Status,   values: [planning, active, done], open: false }
-tech:     { label: Tech,     values: [keycloak, kafka], open: true }
-project:  { label: Project,  values: [], open: true, valuesFrom: project-records }
+kind:       { label: Kind,     values: [card, node], open: false, single: true }
+priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
+status:     { label: Status,   values: [planning, active, done], open: false, single: true }
+tech:       { label: Tech,     values: [keycloak, kafka], open: true }
+waiting_on: { label: Waiting on, values: [], open: true }
+project:    { label: Project,  values: [], open: true, valuesFrom: project-records }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
@@ -569,6 +563,115 @@ test('universe is what the filter is hiding, exactly', () => {
     const scoped = run({ focus: { id: 'project-a', via: 'parent', dir: 'down' } });
     assert.equal(scoped.universe, 3);
     assert.equal(scoped.total, 3);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- deadlines
+
+/**
+ * A second vault, because these axes need records the others must not see —
+ * adding a card to the shared fixture would move every count asserted above.
+ */
+const DATED: Record<string, string> = {
+  'ship-it': `---
+id: ship-it
+title: Ship it
+facets: { kind: [card], status: [active] }
+due: 2026-08-18
+updated: 2026-08-19
+---
+`,
+  'ask-person-a': `---
+id: ask-person-a
+title: Ask Person A
+facets: { kind: [card], status: [planning], waiting_on: [person-a] }
+due: 2026-08-24
+updated: 2026-08-19
+---
+`,
+  someday: `---
+id: someday
+title: No deadline
+facets: { kind: [card], status: [planning] }
+updated: 2026-08-19
+---
+`,
+  blocker: `---
+id: gate
+title: Gate
+facets: { kind: [card], status: [active] }
+edges: [{ type: blocks, to: someday }]
+updated: 2026-08-19
+---
+`,
+};
+
+function datedVault(): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'cockpit-dated-'));
+  mkdirSync(join(root, 'cards'), { recursive: true });
+  for (const [name, text] of Object.entries(DATED)) {
+    writeFileSync(join(root, 'cards', `${name}.md`), text, 'utf8');
+  }
+  writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('due buckets against today, and absence is the ordinary (none)', () => {
+  const { root, cleanup } = datedVault();
+  try {
+    // today is 2026-08-20 in this harness.
+    assert.deepEqual(ids(root, { filter: { due: ['overdue'] } }), ['ship-it']);
+    assert.deepEqual(ids(root, { filter: { due: ['week'] } }), ['ask-person-a']);
+    // No `undated` bucket: a record with no deadline has no value for the axis,
+    // so it is reached the same way every other absence is.
+    assert.deepEqual(ids(root, { filter: { due: [NONE] } }), ['gate', 'someday']);
+    assert.ok(!ids(root, { filter: { due: [NONE] } }).includes('ship-it'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('sorting by due puts the undated last in both directions', () => {
+  const { root, cleanup } = datedVault();
+  try {
+    const asc = open(root)({ sort: ['due:asc'] }).ids;
+    const desc = open(root)({ sort: ['due:desc'] }).ids;
+    assert.deepEqual(asc.slice(0, 2), ['ship-it', 'ask-person-a']);
+    assert.deepEqual(desc.slice(0, 2), ['ask-person-a', 'ship-it']);
+    // A deadline is a date, so "no deadline" is not the earliest one.
+    assert.ok(!['ship-it', 'ask-person-a'].includes(asc.at(-1)!));
+    assert.ok(!['ship-it', 'ask-person-a'].includes(desc.at(-1)!));
+  } finally {
+    cleanup();
+  }
+});
+
+test('blocked and waiting are both derived onto one axis', () => {
+  const { root, cleanup } = datedVault();
+  try {
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['someday']);
+    // `waiting` comes from waiting_on, never from a stored status value — there
+    // is no `status: waiting` for it to disagree with.
+    assert.deepEqual(ids(root, { filter: { blocked: ['waiting'] } }), ['ask-person-a']);
+    const clear = ids(root, { filter: { blocked: ['clear'] } });
+    assert.ok(!clear.includes('someday'));
+    assert.ok(!clear.includes('ask-person-a'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('kind is an ordinary facet, not a computed axis', () => {
+  const { root, cleanup } = vault();
+  try {
+    assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
+    // It reaches the filter panel as a stored facet — `pseudo` is false, which
+    // is what says it is no longer given a home of its own.
+    const kind = open(root)({}).counts.find((c) => c.facet === 'kind');
+    assert.ok(kind);
+    assert.equal(kind.pseudo, false);
   } finally {
     cleanup();
   }

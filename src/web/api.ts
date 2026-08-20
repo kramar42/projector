@@ -57,7 +57,8 @@ export interface PatchCard {
   facets?: Record<string, string[]>;
   links?: string[];
   body?: string;
-  kind?: 'card' | 'node';
+  /** `YYYY-MM-DD`, or `null` to clear. */
+  due?: string | null;
   /** `null` removes the block, so the record stops being a project. */
   project?: Record<string, unknown> | null;
   baseMtime?: number;
@@ -78,7 +79,6 @@ export const api = {
 
   createCard: (input: {
     title: string;
-    kind?: 'card' | 'node';
     parent?: string;
     facets?: Record<string, string[]>;
   }) => req<{ id: string }>('POST', '/api/card', input),

@@ -12,11 +12,11 @@ import type { FacetCount } from '../types.ts';
  *   facet's own selection lifted, so an unselected value still says what adding
  *   it would bring. Counted against the filtered set instead, every unselected
  *   value would read 0 and the panel would be a trapdoor.
- * - **`(none)` is a value.** 82 of 159 cards carry no project; reaching them is
- *   the single most useful thing in here.
+ * - **`(none)` is a value.** Most cards carry no project; reaching them is the
+ *   single most useful thing in here.
  * - **Empty facets are absent.** The server drops any facet with nothing behind
- *   it, which is what keeps `layer` (157 of 159 cards lack it) out of the way
- *   without a scope rule in the UI.
+ *   it, which is what keeps a niche taxonomy like `layer` out of the way — and
+ *   is why a facet needs no scoping rule of its own to stay out of the panel.
  * - **Selected facets come first**, so an active refinement is never scrolled
  *   out of sight.
  */

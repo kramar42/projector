@@ -11,10 +11,10 @@ import { ApiError } from '../api.ts';
  * Direct frontmatter editing.
  *
  * The chip-and-toggle UI only covers what it models — title, facets, links,
- * parent. The file can hold more than that: a `project:` block with repos and a
- * branch template, `repos_replace`, keys added later. Since the file is the
- * source of truth, the app must never be able to express less than it, so this
- * is the escape hatch for everything the panel does not draw.
+ * parent, due. The file can hold more than that: a `project:` block with repos
+ * and a branch template, keys added later. Since the file is the source of
+ * truth, the app must never be able to express less than it, so this is the
+ * escape hatch for everything the panel does not draw.
  *
  * The server validates before writing and refuses on anything the indexer would
  * reject, so a bad edit fails loudly instead of producing a broken card.

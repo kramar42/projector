@@ -9,39 +9,32 @@ export interface Placed {
   h: number;
 }
 
-const SIZE = {
-  chip: { w: 210, h: 44 },
-  card: { w: 268, h: 116 },
-} as const;
-
-export type SizeName = keyof typeof SIZE;
-
 /**
- * The size a record renders at, from its nature alone — not a view option.
+ * One face, for every record.
  *
- * A plain node is thinking scaffolding with no facets to draw, so a title is all
- * it needs. Everything else gets a card face.
+ * There used to be a smaller `chip` face for plain nodes, on the reasoning that
+ * a node has no facets to draw. It does not hold: a node carries facets like
+ * anything else, and how much of a record to draw is a property of the *view* —
+ * that is what `chips` is — not of the record. Two faces meant the same card
+ * changed shape depending on a stored field, which is the tell.
  *
- * There is deliberately no count-based rule. Shrinking cards once a canvas gets
- * busy would mean the same card looked different depending on how many neighbours
- * it happened to have, and past a hundred records nothing is legible at fit-zoom
- * in any size — you zoom in, or you narrow the query.
+ * There is deliberately no count-based rule either. Shrinking cards once a
+ * canvas gets busy would mean the same card looked different depending on how
+ * many neighbours it happened to have, and past a hundred records nothing is
+ * legible at fit-zoom in any size — you zoom in, or you narrow the query.
  */
-export function sizeFor(card: CardDTO): SizeName {
-  return card.kind === 'node' && !card.isProject ? 'chip' : 'card';
-}
+const FACE = { w: 268, h: 116 } as const;
 
-export function dims(card: CardDTO): { w: number; h: number } {
-  return SIZE[sizeFor(card)];
+export function dims(_card: CardDTO): { w: number; h: number } {
+  return FACE;
 }
 
 /**
  * Which edge types give a canvas its shape.
  *
  * `parent` is decomposition and `member-of` is membership — both are hierarchies,
- * so either can lay a graph out. `blocks` and `relates` are drawn but never fed
- * to dagre: a blocker pointing sideways across the tree would distort every rank
- * it crosses.
+ * so either can lay a graph out. `blocks` is drawn but never fed to dagre: a
+ * blocker pointing sideways across the tree would distort every rank it crosses.
  *
  * This has to follow what is *shown*, not just `parent`. A member-of canvas has
  * no parent edges at all, and laying it out by parent put 27 records in one
@@ -64,14 +57,11 @@ export function treeLayout(
   direction: 'LR' | 'TB' = 'LR',
   hierarchy: string[] = ['parent'],
 ): Map<string, Placed> {
-  // Tighter spacing when the graph is all chips, which is what a canvas of plain
-  // nodes is.
-  const tight = nodes.every((n) => sizeFor(n) === 'chip');
   const g = new dagre.graphlib.Graph();
   g.setGraph({
     rankdir: direction,
-    nodesep: tight ? 12 : 26,
-    ranksep: tight ? 80 : 110,
+    nodesep: 26,
+    ranksep: 110,
     marginx: 40,
     marginy: 40,
   });

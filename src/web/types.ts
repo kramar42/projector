@@ -3,12 +3,14 @@ export interface CardDTO {
   kind: 'card' | 'node';
   title: string;
   isProject: boolean;
-  projectKey: string | null;
   facets: Record<string, string[]>;
   links: { kind: string; ref: string; label: string; raw: string }[];
   progress: { done: number; total: number } | null;
   excerpt: string;
   body: string;
+  due: string | null;
+  /** Which bucket the deadline falls in, computed server-side (C8). */
+  dueIn: 'overdue' | 'today' | 'week' | 'later' | null;
   updated: string | null;
   childCount: number;
   blockedBy: { id: string; title: string; done: boolean }[];
@@ -19,7 +21,8 @@ export interface FacetDef {
   label: string;
   values: string[];
   open: boolean;
-  scope?: { under: string };
+  /** At most one value at a time — a vocabulary constraint, not a storage one. */
+  single: boolean;
   /** Vocabulary sourced from the data rather than a static list. */
   valuesFrom?: 'project-records';
 }
@@ -143,12 +146,6 @@ export interface CardDetail {
     chain: string[];
   } | null;
 }
-
-/**
- * How much of a record a face shows. Not a view option: a plain node has no
- * facets to draw, so it renders as a chip, and everything else as a card.
- */
-export type Size = 'chip' | 'card';
 
 // ---------------------------------------------------------------- enrichment
 

@@ -4,6 +4,13 @@ import type { Link } from './types.ts';
  * Link kinds the resolver understands. Everything here is read-only by
  * construction (C2): a kind is a way to *display* a remote thing, never to
  * write one.
+ *
+ * A kind earns its place by being *resolvable* — either something fetches it
+ * (see `src/enrich/registry.ts`) or it opens somewhere the app knows about.
+ * A kind that only ever renders its own text is a `url` with extra vocabulary,
+ * which is why `cal`, `grafana` and `trello` are gone: the first two never had
+ * a fetcher, and `trello` was import provenance, which is the `source` facet's
+ * job.
  */
 export const LINK_KINDS = [
   'jira',
@@ -13,15 +20,12 @@ export const LINK_KINDS = [
   'claude',
   'doc',
   'slack',
-  'trello',
-  'cal',
-  'grafana',
   'url',
 ] as const;
 
 export type LinkKind = (typeof LINK_KINDS)[number];
 
-const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'doc', 'slack', 'trello', 'cal', 'grafana'];
+const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'doc', 'slack'];
 
 /**
  * Parse a link string into kind and ref. A bare URL becomes kind `url`.
@@ -55,9 +59,7 @@ export function fallbackLabel(link: Link): string {
       return 'session ' + link.ref.slice(-6);
     case 'doc':
       return link.ref.split('/').pop() ?? link.ref;
-    case 'trello':
     case 'slack':
-    case 'grafana':
     case 'url':
       return shortUrl(link.ref);
     default:

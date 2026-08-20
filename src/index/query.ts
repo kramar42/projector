@@ -126,26 +126,56 @@ function daysSince(date: string | undefined, today: string): number | null {
   return Math.floor((b - a) / DAY);
 }
 
+export type DueBucket = 'overdue' | 'today' | 'week' | 'later';
+
+/**
+ * Which bucket a deadline falls in.
+ *
+ * Exported because the card face needs the same answer as the filter axis, and
+ * two definitions of "overdue" is one too many — the face asks this rather than
+ * comparing dates of its own.
+ */
+export function dueBucket(due: string | undefined, today: string): DueBucket | null {
+  const since = daysSince(due, today);
+  if (since === null) return null;
+  const days = -since;
+  if (days < 0) return 'overdue';
+  if (days === 0) return 'today';
+  return days <= 7 ? 'week' : 'later';
+}
+
 /**
  * Computed axes, offered in the filter panel exactly like the facets in
  * `facets.yaml`. Every one of them is deterministic (C8): a count, a date
  * comparison or the presence of an edge — never a judgement.
+ *
+ * Every one of them *computes*. `kind` used to sit here and simply returned a
+ * stored field, which made it a real facet given a bespoke home; it is declared
+ * in `facets.yaml` now and reaches the panel the ordinary way.
  */
 export const PSEUDO: Record<string, Pseudo> = {
-  kind: {
-    label: 'Kind',
-    values: ['card', 'node'],
-    of: (rec) => [rec.kind],
-  },
   type: {
     label: 'Type',
     values: ['project', 'plain'],
     of: (rec) => [rec.project ? 'project' : 'plain'],
   },
+  /**
+   * Why a record cannot proceed, if it cannot.
+   *
+   * Both reasons are *derived*, which is why neither is a `status` value any
+   * more: `blocked` is an unfinished `blocks` edge and `waiting` is a non-empty
+   * `waiting_on`. Storing either alongside the thing it is computed from gives
+   * two answers to one question, and nothing to arbitrate between them.
+   */
   blocked: {
     label: 'Blocked',
-    values: ['blocked', 'clear'],
-    of: (rec, ctx) => [ctx.blocked.has(rec.id) ? 'blocked' : 'clear'],
+    values: ['blocked', 'waiting', 'clear'],
+    of: (rec, ctx) => {
+      const why: string[] = [];
+      if (ctx.blocked.has(rec.id)) why.push('blocked');
+      if (rec.facets.waiting_on?.length) why.push('waiting');
+      return why.length ? why : ['clear'];
+    },
   },
   triage: {
     label: 'Triage',
@@ -165,6 +195,21 @@ export const PSEUDO: Record<string, Pseudo> = {
       const d = daysSince(rec.updated, ctx.today);
       if (d === null) return ['undated'];
       return [d <= 7 ? 'week' : d <= 31 ? 'month' : 'older'];
+    },
+  },
+  /**
+   * When a deadline falls, bucketed.
+   *
+   * A record with no `due` yields no value at all rather than an `undated`
+   * bucket, so "everything with no deadline" is the ordinary `(none)`
+   * refinement every other facet already has — one absence mechanism, not two.
+   */
+  due: {
+    label: 'Due',
+    values: ['overdue', 'today', 'week', 'later'],
+    of: (rec, ctx) => {
+      const bucket = dueBucket(rec.due, ctx.today);
+      return bucket ? [bucket] : [];
     },
   },
 };
@@ -348,7 +393,16 @@ function comparator(sort: string[] | undefined, facets: Facets, ctx: Ctx): Compa
   return (a, b) => {
     for (const { name, sign } of keys) {
       let cmp = 0;
-      if (name === 'updated' || name === 'created') {
+      if (name === 'due') {
+        // A card with no deadline sorts after every card that has one, in both
+        // directions — `due:desc` means "most urgent last", not "undated first".
+        const av = a.due ?? '';
+        const bv = b.due ?? '';
+        if (!av && !bv) cmp = 0;
+        else if (!av) cmp = 1 * sign;
+        else if (!bv) cmp = -1 * sign;
+        else cmp = av.localeCompare(bv);
+      } else if (name === 'updated' || name === 'created') {
         cmp = (a[name] ?? '').localeCompare(b[name] ?? '');
       } else if (name === 'title') {
         cmp = a.title.localeCompare(b.title);
@@ -615,7 +669,6 @@ export function projectRollups(records: Map<string, Rec>, today: string): Record
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;
-    const key = rec.project.key ?? rec.id;
     const reach = focused({ id: rec.id, via: 'member-of', dir: 'down' }, records);
     reach.delete(rec.id); // a project is not a member of itself
 
@@ -631,7 +684,7 @@ export function projectRollups(records: Map<string, Rec>, today: string): Record
     }
 
     out[rec.id] = {
-      direct: [...records.values()].filter((r) => projectsOf(r).includes(key)).length,
+      direct: [...records.values()].filter((r) => projectsOf(r).includes(rec.id)).length,
       total: reach.size,
       blocked,
       untriaged,

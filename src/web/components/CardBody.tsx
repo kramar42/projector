@@ -31,9 +31,6 @@ const LINK_GLYPH: Record<string, string> = {
   claude: 'AI',
   doc: 'doc',
   slack: 'sl',
-  trello: 'T',
-  cal: 'cal',
-  grafana: 'gr',
   url: '↗',
 };
 

@@ -1,6 +1,7 @@
 import { fallbackLabel } from '../schema/links.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
-import { isProject } from '../index/project.ts';
+import { isProject, kindOf } from '../index/project.ts';
+import { dueBucket, type DueBucket } from '../index/query.ts';
 
 /** What the web app receives for one record. Everything here is derived, never guessed (C8). */
 export interface CardDTO {
@@ -8,7 +9,6 @@ export interface CardDTO {
   kind: 'card' | 'node';
   title: string;
   isProject: boolean;
-  projectKey: string | null;
   facets: Record<string, string[]>;
   links: { kind: string; ref: string; label: string; raw: string }[];
   /** Checklist progress counted from the body's markdown task lists. */
@@ -17,6 +17,9 @@ export interface CardDTO {
   excerpt: string;
   /** Rendered lazily by the client; the raw body travels as-is. */
   body: string;
+  due: string | null;
+  /** Which `due` bucket, computed server-side so the face never re-derives it (C8). */
+  dueIn: DueBucket | null;
   updated: string | null;
   childCount: number;
   blockedBy: { id: string; title: string; done: boolean }[];
@@ -59,20 +62,22 @@ export function toDTO(
     childCount?: number;
     blockedBy?: { id: string; title: string; done: boolean }[];
     unblocks?: string[];
+    /** Overridable so a test does not depend on the day it runs. */
+    today?: string;
   } = {},
 ): CardDTO {
   return {
     id: rec.id,
-    kind: rec.kind,
+    kind: kindOf(rec),
     title: rec.title,
     isProject: isProject(rec),
-    // Convenience for chips and pickers; the facet itself is the truth.
-    projectKey: rec.facets.project?.[0] ?? null,
     facets: rec.facets,
     links: rec.links.map((l) => ({ ...l, label: fallbackLabel(l) })),
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),
     body: rec.body,
+    due: rec.due ?? null,
+    dueIn: dueBucket(rec.due, extra.today ?? new Date().toISOString().slice(0, 10)),
     updated: rec.updated ?? null,
     childCount: extra.childCount ?? 0,
     blockedBy: extra.blockedBy ?? [],

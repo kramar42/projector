@@ -32,7 +32,7 @@ For each card, in this order, stopping as soon as you have enough:
 1. The **title** — usually decisive. `keycloak Jira issues` → `keycloak`. `clean-up ecr` → `infra`.
 2. `ck context <id>` — the body, existing facets, links and any parent. A linked Jira issue's project
    key is strong evidence; an enriched link's title often says more than the card's own.
-3. The **project vocabulary**: `ck ls --group project` shows the real keys and how many cards each
+3. The **project vocabulary**: `ck ls --group project` shows the real ids and how many cards each
    holds. Prefer an existing key over a new one, every time.
 
 For a card titled with a bare URL (the research import left several), fetch the page title and
@@ -48,9 +48,14 @@ Present one table. Keep it scannable — id, then only what you are changing:
 
 Rules for what you may propose:
 
-- **Only project keys that already exist.** If a card clearly belongs to something with no project
+- **Only project ids that already exist.** If a card clearly belongs to something with no project
   record, say so in a separate line and offer to create the record — do not quietly pick a neighbour.
-- **`priority` and `status` are closed vocabularies.** Never propose a value outside them.
+- **`priority` and `status` are closed and single-valued.** Never propose a value outside them, and
+  never two at once — `ck set` refuses both.
+- **Never propose `status: blocked` or `waiting`.** Those are derived. A card held up by another card
+  gets a `blocks` edge from the blocker; one held up by a person gets `waiting_on`.
+- **Propose a `due` only when something external fixes the date** — a release, a meeting, a customer
+  commitment. A deadline you invented is worse than none, because the Due board will believe it.
 - **Leave a facet alone when the evidence is weak.** An honest blank beats a confident guess. Put
   those cards in a short "needs your brain" list under the table, with the one question that would
   settle each.

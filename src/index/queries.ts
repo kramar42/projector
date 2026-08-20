@@ -1,24 +1,24 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { facetRank, orderValues } from '../schema/facets.ts';
+import { facetRank } from '../schema/facets.ts';
 import type { Facets } from '../schema/types.ts';
 
+/**
+ * What SQL is still for.
+ *
+ * Filtering, grouping and counting all run in memory over the record map — see
+ * `src/index/query.ts` for why. What is left here is the two jobs SQLite is
+ * genuinely better at: full text, and the recursive `blocks` closure.
+ */
 export interface Row {
   id: string;
-  kind: string;
   title: string;
+  due: string | null;
   updated: string | null;
-  is_project: number;
-  project: string | null;
 }
 
-export const UNCATEGORISED = '(none)';
-
 export interface ListOpts {
-  groupBy?: string;
-  kind?: 'card' | 'node';
   /** facet → one of these values must be present. */
   filter?: Record<string, string[]>;
-  includeNodes?: boolean;
 }
 
 function filterClause(filter: Record<string, string[]> | undefined): { sql: string; args: string[] } {
@@ -37,18 +37,14 @@ function filterClause(filter: Record<string, string[]> | undefined): { sql: stri
 }
 
 export function listRecords(db: DatabaseSync, opts: ListOpts = {}): Row[] {
-  const { sql: fSql, args: fArgs } = filterClause(opts.filter);
-  const kindSql = opts.kind ? ' AND r.kind = ?' : opts.includeNodes ? '' : " AND r.kind = 'card'";
-  const args: string[] = [];
-  if (opts.kind) args.push(opts.kind);
-  const rows = db
+  const { sql, args } = filterClause(opts.filter);
+  return db
     .prepare(
-      `SELECT r.id, r.kind, r.title, r.updated, r.is_project, r.project
-       FROM records r WHERE 1=1${kindSql}${fSql}
+      `SELECT r.id, r.title, r.due, r.updated
+       FROM records r WHERE 1=1${sql}
        ORDER BY r.updated DESC NULLS LAST, r.id`,
     )
-    .all(...args, ...fArgs) as unknown as Row[];
-  return rows;
+    .all(...args) as unknown as Row[];
 }
 
 export function valuesFor(db: DatabaseSync, recordId: string, facet: string): string[] {
@@ -57,43 +53,6 @@ export function valuesFor(db: DatabaseSync, recordId: string, facet: string): st
       .prepare('SELECT value FROM facets WHERE record_id = ? AND facet = ? ORDER BY value')
       .all(recordId, facet) as unknown as { value: string }[]
   ).map((r) => r.value);
-}
-
-export interface Group {
-  value: string;
-  rows: Row[];
-}
-
-/**
- * Group rows by a facet. A row whose facet holds several values appears in
- * every matching group — that is the whole point of the model, not a special
- * case. Rows with no value for the facet land in a single trailing group.
- */
-export function groupBy(db: DatabaseSync, rows: Row[], facet: string, facets: Facets): Group[] {
-  const buckets = new Map<string, Row[]>();
-  const seen = new Set<string>();
-  const none: Row[] = [];
-
-  for (const row of rows) {
-    const vals = valuesFor(db, row.id, facet);
-    if (!vals.length) {
-      none.push(row);
-      continue;
-    }
-    for (const v of vals) {
-      seen.add(v);
-      const list = buckets.get(v) ?? [];
-      list.push(row);
-      buckets.set(v, list);
-    }
-  }
-
-  const ordered = orderValues(facets[facet], seen);
-  const groups: Group[] = ordered
-    .filter((v) => buckets.has(v))
-    .map((v) => ({ value: v, rows: buckets.get(v)! }));
-  if (none.length) groups.push({ value: UNCATEGORISED, rows: none });
-  return groups;
 }
 
 /** Ids that block `id`: sources of a `blocks` edge pointing at it. */
@@ -129,14 +88,25 @@ export function unblocks(db: DatabaseSync, id: string, maxDepth = 10): { id: str
 }
 
 /**
- * Actionable cards: open status, and no blocker that is not done.
- * Deterministic by construction (C8) — this is a query, never a judgement.
+ * Actionable cards: open status, nobody waited on, and no blocker that is not
+ * done. Deterministic by construction (C8) — this is a query, never a judgement.
+ *
+ * A deadline outranks an intention, so `due` sorts before `priority`: a card
+ * due tomorrow is next whatever bucket it was filed in. Cards with no deadline
+ * fall through to priority, which is where most of them live.
  */
 export function nextUp(db: DatabaseSync, facets: Facets): Row[] {
-  const open = listRecords(db, { filter: { status: ['planning', 'active'] } });
-  const unblocked = open.filter((r) => blockersOf(db, r.id).every((b) => b.done));
+  // `kind` is an ordinary facet, so cards-only is a filter like any other rather
+  // than a clause of its own.
+  const open = listRecords(db, { filter: { kind: ['card'], status: ['planning', 'active'] } });
+  const actionable = open.filter(
+    (r) => blockersOf(db, r.id).every((b) => b.done) && !valuesFor(db, r.id, 'waiting_on').length,
+  );
   const def = facets.priority;
-  return unblocked.sort((a, b) => {
+  return actionable.sort((a, b) => {
+    const da = a.due ?? '\uffff';
+    const dbv = b.due ?? '\uffff';
+    if (da !== dbv) return da.localeCompare(dbv);
     const pa = Math.min(...(valuesFor(db, a.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
     const pb = Math.min(...(valuesFor(db, b.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
     if (pa !== pb) return pa - pb;
@@ -147,7 +117,7 @@ export function nextUp(db: DatabaseSync, facets: Facets): Row[] {
 export function search(db: DatabaseSync, query: string, limit = 25): Row[] {
   return db
     .prepare(
-      `SELECT r.id, r.kind, r.title, r.updated, r.is_project, r.project
+      `SELECT r.id, r.title, r.due, r.updated
        FROM fts JOIN records r ON r.id = fts.id
        WHERE fts MATCH ? ORDER BY rank LIMIT ?`,
     )
@@ -158,8 +128,10 @@ export function counts(db: DatabaseSync): Record<string, number> {
   const one = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
   return {
     records: one('SELECT count(*) AS n FROM records'),
-    cards: one("SELECT count(*) AS n FROM records WHERE kind = 'card'"),
-    nodes: one("SELECT count(*) AS n FROM records WHERE kind = 'node'"),
+    // `kind` lives in the facets table like every other facet; there is no
+    // column shadowing it in `records`.
+    cards: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'card'"),
+    nodes: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'node'"),
     projects: one('SELECT count(*) AS n FROM records WHERE is_project = 1'),
     edges: one('SELECT count(*) AS n FROM edges'),
     links: one('SELECT count(*) AS n FROM links'),
