@@ -11,7 +11,7 @@ import { ago, firstLine } from '../src/enrich/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher } from '../src/enrich/claudeSession.ts';
-import { jiraFetcher } from '../src/enrich/jira.ts';
+import { jiraFetcher, statusTone as jiraStatusTone } from '../src/enrich/jira.ts';
 
 // ---------------------------------------------------------------- frontmatter
 
@@ -411,4 +411,16 @@ test('a bad issue key never reaches the network', async () => {
   delete process.env.COCKPIT_JIRA_URL;
   delete process.env.COCKPIT_JIRA_EMAIL;
   delete process.env.COCKPIT_JIRA_TOKEN;
+});
+
+test('jira status colour follows statusCategory, not workflow names', () => {
+  // Custom workflows make names useless; the category is stable.
+  assert.equal(jiraStatusTone('Preparation', 'new'), 'neutral');
+  assert.equal(jiraStatusTone('in review', 'indeterminate'), 'warn');
+  assert.equal(jiraStatusTone('Done', 'done'), 'good');
+  // Jira files abandonment under `done`; that is not a success.
+  assert.equal(jiraStatusTone("Won't do", 'done'), 'neutral');
+  assert.equal(jiraStatusTone('Cancelled', 'done'), 'neutral');
+  assert.equal(jiraStatusTone('Duplicate', 'done'), 'neutral');
+  assert.equal(jiraStatusTone('Anything', undefined), 'neutral');
 });

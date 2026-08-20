@@ -23,17 +23,31 @@ export function jiraConfig(): JiraConfig | null {
   return url && email && token ? { url, email, token } : null;
 }
 
-const STATUS_TONE: Record<string, Tone> = {
-  new: 'neutral',
-  'to do': 'neutral',
-  open: 'neutral',
-  'in progress': 'warn',
-  'in review': 'warn',
-  blocked: 'bad',
-  done: 'good',
-  closed: 'good',
-  resolved: 'good',
-};
+/**
+ * Colour a status without depending on workflow names.
+ *
+ * A Jira project may name its statuses anything — "in review", "Preparation", "Won't do" —
+ * so matching on names would mis-colour most of them. `statusCategory.key` is
+ * Jira's stable three-way split and travels across every project.
+ *
+ * One override on top of it: Jira files abandonment under `done`, so "Won't do"
+ * would otherwise read as success. An abandoned issue is not a green one.
+ */
+const ABANDONED = /won'?t\s*do|wontfix|cancel|reject|duplicate|obsolete|invalid/i;
+
+export function statusTone(name: string, category: string | undefined): Tone {
+  if (ABANDONED.test(name)) return 'neutral';
+  switch (category) {
+    case 'done':
+      return 'good';
+    case 'indeterminate':
+      return 'warn';
+    case 'new':
+      return 'neutral';
+    default:
+      return 'neutral';
+  }
+}
 
 interface IssueJson {
   key: string;
@@ -81,7 +95,9 @@ export const jiraFetcher: Fetcher = {
     const issue = (await res.json()) as IssueJson;
     const status = issue.fields.status?.name ?? '';
     const badges = [];
-    if (status) badges.push({ label: status, tone: STATUS_TONE[status.toLowerCase()] ?? 'neutral' });
+    if (status) {
+      badges.push({ label: status, tone: statusTone(status, issue.fields.status?.statusCategory?.key) });
+    }
     if (issue.fields.issuetype?.name) {
       badges.push({ label: issue.fields.issuetype.name, tone: 'neutral' as Tone });
     }
