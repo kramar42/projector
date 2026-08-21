@@ -408,17 +408,21 @@ test('counts are disjunctive, so a selection can be widened', () => {
     const of = (res: ReturnType<typeof run>, facet: string) =>
       Object.fromEntries(res.counts.find((c) => c.facet === facet)!.values.map((v) => [v.value, v.count]));
 
+    // `backlog` is declared and carried by nobody. It is listed at zero all the
+    // same: the panel says what the axis *is*, so a value can be selected before
+    // anything has it — and, more to the point, re-selected after being cleared.
     const open0 = run({});
-    assert.deepEqual(of(open0, 'priority'), { now: 4, month: 1, [NONE]: 4 });
+    assert.deepEqual(of(open0, 'priority'), { now: 4, month: 1, backlog: 0, [NONE]: 4 });
 
     const narrowed = run({ filter: { priority: ['month'] } });
     // priority's own counts are unchanged — the other values still say what
     // adding them would bring, which is the whole point.
-    assert.deepEqual(of(narrowed, 'priority'), { now: 4, month: 1, [NONE]: 4 });
+    assert.deepEqual(of(narrowed, 'priority'), { now: 4, month: 1, backlog: 0, [NONE]: 4 });
     // Another facet's counts do reflect the selection. Its zeros stay listed:
     // the universe has those values, so the panel says they exist and that
     // nothing currently matching has them.
-    assert.deepEqual(of(narrowed, 'status'), { planning: 1, active: 0, [NONE]: 0 });
+    // `done` is declared and unused here, so it too is listed at zero.
+    assert.deepEqual(of(narrowed, 'status'), { planning: 1, active: 0, done: 0, [NONE]: 0 });
   } finally {
     cleanup();
   }
@@ -862,6 +866,74 @@ test('the linked axis makes external references askable', () => {
     const axis = open(root)({}).counts.find((c) => c.facet === 'linked');
     assert.ok(axis);
     assert.equal(axis.pseudo, true);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * Clearing a filter must leave the control that set it.
+ *
+ * `due` is declared with buckets and carried by no record — the state the real
+ * vault is in, and `views/due.yaml` selects three of its buckets. The panel listed
+ * a value only if the data held it or the query had selected it, so on that view
+ * the three buckets were on screen *because they were selected*: unticking them
+ * removed them one by one, and unticking the last one removed the whole axis. The
+ * filter could be cleared and never put back.
+ */
+test('an axis the query names stays offered after its last value is cleared', () => {
+  const { root, cleanup } = vault();
+  try {
+    const run = open(root);
+    const due = (res: ReturnType<typeof run>) => res.counts.find((c) => c.facet === 'due');
+
+    // Nothing in this vault carries a due date, and the query is silent about it:
+    // an axis nobody uses and nobody asks for is not offered. That is the
+    // narrowing behaviour focus depends on, and it is unchanged.
+    assert.equal(due(run({})), undefined);
+
+    // Selected: offered, with every declared bucket, all at zero.
+    const picked = due(run({ filter: { due: ['overdue', 'today', 'week'] } }))!;
+    assert.deepEqual(
+      picked.values.map((v) => v.value),
+      ['overdue', 'today', 'week', 'later', NONE],
+    );
+    assert.deepEqual(
+      picked.values.filter((v) => v.selected).map((v) => v.value),
+      ['overdue', 'today', 'week'],
+    );
+
+    // Two cleared, one left: the cleared ones stay on screen, unticked.
+    const partly = due(run({ filter: { due: ['overdue'] } }))!;
+    assert.deepEqual(partly.values.map((v) => v.value), ['overdue', 'today', 'week', 'later', NONE]);
+
+    // All cleared. `due: []` is the query saying "explicitly nothing", which is
+    // not silence — so the axis is still there, and every bucket is re-selectable.
+    const cleared = due(run({ filter: { due: [] } }))!;
+    assert.deepEqual(cleared.values.map((v) => v.value), ['overdue', 'today', 'week', 'later', NONE]);
+    assert.deepEqual(cleared.values.filter((v) => v.selected), []);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * The board drew a column the panel would not offer.
+ *
+ * Grouping has always included every declared value, empty or not — an empty
+ * column is somewhere to drag to. The histogram did not, so a declared-but-unused
+ * value got a column and no way to filter by it. Two answers to "what values does
+ * this axis have", in one response.
+ */
+test('grouping and the panel agree about a declared value nobody carries', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ groupBy: ['priority'] });
+    const columns = res.groups!.map((g) => g.value);
+    const offered = res.counts.find((c) => c.facet === 'priority')!.values.map((v) => v.value);
+    assert.ok(columns.includes('backlog'), 'grouping draws the empty column');
+    assert.ok(offered.includes('backlog'), 'and the panel offers the same value');
+    assert.deepEqual(columns, offered, 'one answer, not two');
   } finally {
     cleanup();
   }

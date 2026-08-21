@@ -426,6 +426,7 @@ function histogram(
 
   for (const facet of names) {
     const selected = filter[facet] ?? [];
+    const pseudo = PSEUDO[facet];
 
     // Offered? Ask the universe, ignoring the facet filter entirely.
     let anywhere = false;
@@ -436,7 +437,21 @@ function histogram(
         seen.add(v);
       }
     }
-    if (!anywhere && !selected.length) continue;
+
+    // The axis's vocabulary: what it declares, plus any value the data holds that
+    // it did not. For an open facet with no `values:` this is just the data.
+    const declared = pseudo ? pseudo.values : orderValues(facets[facet], seen);
+
+    // An axis the *query mentions* stays offered, even with nothing selected on
+    // it. `f.due=` is the query saying "explicitly nothing here", which is a
+    // different statement from silence — and it is what stops the control
+    // disappearing while you are using it. Deselecting the last value used to
+    // remove the row, so there was no way left to put the filter back.
+    //
+    // Silence still narrows: an axis nothing in the universe carries and the query
+    // never names is not offered, which is what keeps a focus on one subtree from
+    // listing every axis in the vault.
+    if (!anywhere && !selected.length && !(facet in filter)) continue;
 
     // Counted how? Lift this facet's own selection, keep the rest.
     const rest = Object.fromEntries(Object.entries(filter).filter(([k]) => k !== facet));
@@ -448,14 +463,17 @@ function histogram(
       for (const v of values) tally.set(v, (tally.get(v) ?? 0) + 1);
     }
 
-    const pseudo = PSEUDO[facet];
-    const declared = pseudo ? pseudo.values : orderValues(facets[facet], seen);
     const withNone = tally.has(NONE) || selected.includes(NONE) || base.some((rec) => !valuesOf(rec, facet, ctx).length);
-    const values = [...declared, ...(withNone ? [NONE] : [])]
-      // Every value the universe holds stays listed even at zero, so the panel
-      // says what is available rather than only what is currently matching.
-      .filter((v) => seen.has(v) || v === NONE || selected.includes(v))
-      .map((v) => ({ value: v, count: tally.get(v) ?? 0, selected: selected.includes(v) }));
+    // Every declared value is listed, at zero if need be: the panel says what the
+    // axis *is*, not what happens to be matching. There used to be a filter here
+    // keeping only values the data held or the query had selected, which is what
+    // made a declared-but-unused value — `energy: delegate`, every bucket of an
+    // unused `due` — impossible to select even though grouping drew it a column.
+    const values = [...declared, ...(withNone ? [NONE] : [])].map((v) => ({
+      value: v,
+      count: tally.get(v) ?? 0,
+      selected: selected.includes(v),
+    }));
 
     if (values.some((v) => v.value !== NONE || v.selected)) {
       out.push({
