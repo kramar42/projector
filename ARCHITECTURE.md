@@ -22,22 +22,74 @@ number.
 | C9 | A view is a query, not a place | `view = filter × focus × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
 | C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?card=` |
 
-## The pipeline
+## The shape of it
 
-```
-cards/*.md, facets.yaml, views/**        ← source of truth. Git-tracked, agent-editable
-        │
-        ▼
-   read → validate → node:sqlite index (.index.db)
-        │                    derived and disposable; ck reindex is always correct
-        ▼
-   hono: /api/meta  /api/query  /api/card/:id  /api/view/:name
-        │                    re-read whenever a file changes
-        ▼
-   React: the sidebar composes the query │ board │ canvas │ table │ card panel
+```mermaid
+flowchart TB
+  subgraph vault["The vault — your files, git-tracked, the source of truth (C1)"]
+    direction LR
+    cards["cards/*.md<br/>facets · links · body"]
+    fac["facets.yaml<br/>type · values · single · buckets"]
+    vw["views/*.yaml<br/>saved query + arrangement"]
+  end
+
+  you["You, in a browser"]
+  agent["A Claude session<br/>/capture · /triage · /work"]
+
+  subgraph surfaces["Two surfaces — peers, not a stack"]
+    direction LR
+    ui["Web UI<br/>board · canvas · table · card panel"]
+    ck["ck<br/>one command per question"]
+  end
+
+  idx[("index.db · enrich.db<br/>derived and disposable — delete them and nothing is lost.<br/>The index is memoised on an exact stamp of every file it read")]
+
+  spec["ViewSpec — filter × focus × shape × show<br/>a URL, a saved view and CLI flags all parse into this one object,<br/>which is why the two surfaces cannot drift"]
+
+  subgraph engine["The engine"]
+    direction LR
+    q["query compiler<br/>runs in memory, so a computed axis is<br/>indistinguishable from a stored one"]
+    refs["reference graph<br/>walk · chains · cycle refusal<br/>every relation is a reference facet"]
+    proj["project resolution<br/>repos · jira · branch · instructions,<br/>inherited along the project facet"]
+  end
+
+  outside["Jira · GitHub · Claude transcripts · docs · git<br/>read-only, always (C2)"]
+
+  you --> ui
+  agent --> ck
+  vault --> idx
+  vw --> spec
+  ui --> spec
+  ck --> spec
+  fac --> q
+  spec --> q
+  idx --> q
+  q --> refs
+  refs --> proj
+
+  surfaces -.->|"writes: validated, atomic,<br/>409 on a concurrent edit"| cards
+  agent -.->|"or plain file writes — no API, no app running (C3)"| cards
+
+  idx <-->|"links, resolved lazily and cached with a TTL"| outside
+  proj -->|"ck work — a worktree per repo, plus a briefing"| outside
+  ck -->|"ck log — what actually changed"| outside
 ```
 
-The index is never authoritative — nothing in it survives a rebuild, and nothing needs to.
+Three things are worth reading off it.
+
+**The vault is three kinds of file, and only three.** Cards are content, `facets.yaml` is the
+vocabulary that constrains them, and a view is a saved query plus the arrangement that has nowhere
+else to live. Everything below the vault box is derived: delete both caches and `ck reindex` is
+always correct.
+
+**The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a `views/*.yaml` file and
+a set of `ck` flags parse into the same thing, so `ck ls --view unblocked` and opening that view in
+the browser are the same query by construction rather than by discipline.
+
+**The file format is a public API.** The app writes through a gate that validates against the
+vocabulary, writes a temp file and renames, and refuses a write whose file changed since it was read.
+An agent writes the same bytes with Write/Edit and no gate at all (C3) — which is why the gate exists:
+the two are expected to be editing the same card at the same time.
 
 ## Layout
 
