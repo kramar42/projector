@@ -31,7 +31,16 @@ export const realGit: Git = (args, cwd) => {
 };
 
 /** The branch a new worktree starts from: declared, else origin/HEAD, else HEAD. */
-export function resolveBase(repo: ProjectRepo, git: Git): string {
+/**
+ * The revision a new worktree branches from — `git worktree add -b <branch> <base>`.
+ *
+ * A *revision*, so `origin/main` keeps its prefix: branching from the remote tip
+ * is the point. `intake/git.ts` asks a different question of the same repo — which
+ * local branch name is the base, for comparing against `git branch` output — and
+ * its answer strips the prefix. Both are right; a comment there used to claim they
+ * were the same rule.
+ */
+export function worktreeBase(repo: ProjectRepo, git: Git): string {
   if (repo.base) return repo.base;
   const head = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], repo.path);
   if (head.ok && head.out.trim()) return head.out.trim();
@@ -69,7 +78,7 @@ export function addWorktree(
   const exists = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], repo.path).ok;
   const res = exists
     ? git(['worktree', 'add', target, branch], repo.path)
-    : git(['worktree', 'add', target, '-b', branch, resolveBase(repo, git)], repo.path);
+    : git(['worktree', 'add', target, '-b', branch, worktreeBase(repo, git)], repo.path);
 
   if (!res.ok) {
     const detail = (res.err.trim() || res.out.trim()).slice(0, 400);
@@ -124,8 +133,4 @@ export function branchFor(
   return cardId;
 }
 
-export function workspacePath(parent: string, projectKey: string, branch: string): string {
-  // A branch may contain slashes; a directory name may not.
-  const safe = branch.replace(/[^A-Za-z0-9._-]+/g, '-');
-  return join(parent, `${projectKey}-wt-${safe}`);
-}
+export { workspacePath } from './workspaceName.ts';

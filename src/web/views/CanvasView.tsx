@@ -21,6 +21,7 @@ import { CardBody } from '../components/CardBody.tsx';
 import { relations } from '../query.ts';
 import { connectOutcome } from '../../view/dropOutcome.ts';
 import { groupsFor, labelFor } from './groups.ts';
+import { edgesFor } from './edges.ts';
 import {
   CONTEXT_BAND,
   assignClusters,
@@ -95,35 +96,14 @@ const DASH: Record<string, string | undefined> = {
 };
 
 /**
- * One edge per pair of records, whatever the types.
- *
- * `parent` and `project` agreeing is the *expected* shape for a record inside a
- * project, so drawing both put two identical lines on top of each other with no
- * way to tell there were two. Collapsing them means a
- * pair that agrees reads as one relationship, and a pair that *disagrees* still
- * shows up as two separate edges pointing at different records, which is the case
- * worth seeing.
+ * Turn the decided edges into React Flow's shape. The decisions — pairing,
+ * direction, which type leads — are `edgesFor`; everything here is appearance.
  */
 function buildEdges(
   raw: { src: string; dst: string; type: string }[],
   hierarchy: string[],
 ): Edge[] {
-  const byPair = new Map<string, { src: string; dst: string; types: string[] }>();
-  for (const e of raw) {
-    // Hierarchy edges are stored child → parent and member → container. Drawn
-    // the other way, so the arrow points the way the graph opens.
-    const flip = hierarchy.includes(e.type);
-    const src = flip ? e.dst : e.src;
-    const dst = flip ? e.src : e.dst;
-    const key = `${src}\u0000${dst}`;
-    const found = byPair.get(key);
-    if (found) found.types.push(e.type);
-    else byPair.set(key, { src, dst, types: [e.type] });
-  }
-
-  return [...byPair.values()].map(({ src, dst, types }) => {
-    // The most structural type wins the styling; the rest ride along in the title.
-    const lead = ['parent', 'project', 'blocks'].find((t) => types.includes(t)) ?? types[0]!;
+  return edgesFor(raw, hierarchy).map(({ src, dst, types, lead }) => {
     const colour = RELATION_COLOUR[lead] ?? 'var(--rel-parent)';
     return {
       id: `${types.join('+')}:${src}->${dst}`,

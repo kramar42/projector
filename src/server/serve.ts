@@ -286,15 +286,6 @@ app.get('/api/card/:id', (c) => {
   });
 });
 
-/**
- * How many records name this one as their parent.
- *
- * Typed as `Rec` deliberately: this was `ReturnType<typeof Object>` with a cast
- * inside, which is how it went on reading `rec.edges` for a whole refactor after
- * that field stopped existing. An escape hatch in a signature is a place the
- * compiler has been told not to help.
- */
-
 // ---------------------------------------------------------------- writes
 //
 // Every mutating route lives here and does nothing but delegate to mutate.ts.

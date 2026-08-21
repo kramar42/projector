@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Facets } from '../schema/types.ts';
-import type { Shape } from '../schema/vocabulary.ts';
 import type { ViewSpec } from '../view/spec.ts';
+import { summariseViews, type SavedViewSummary } from '../view/spec.ts';
+export type { SavedViewSummary };
 import { counts } from '../index/queries.ts';
 import { enrichmentStats } from './enrich.ts';
 import { listVaults } from '../vault.ts';
@@ -25,26 +26,7 @@ export interface Meta {
   views: SavedViewSummary[];
 }
 
-/** A saved view as a picker needs it: enough to list and open, not to run. */
-export interface SavedViewSummary {
-  name: string;
-  title: string;
-  shape: Shape;
-}
 
-/**
- * One projection of the view list, used by both the meta route and the query
- * payload. `name` is optional on a `ViewSpec` because an ad-hoc spec has none;
- * a *saved* one always does, and falling back to the empty string here is what
- * stops the two routes disagreeing about which.
- */
-export function summariseViews(views: ViewSpec[]): SavedViewSummary[] {
-  return views.map((v) => ({
-    name: v.name ?? '',
-    title: v.title ?? v.name ?? '',
-    shape: v.shape,
-  }));
-}
 
 export function meta(
   root: string,

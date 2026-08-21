@@ -1,4 +1,4 @@
-import { lastTurn, listTranscripts, liveById, sessionState, summarise } from '../sources/claude.ts';
+import { listTranscripts, liveById, describeTranscript } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { evidenceFor } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
@@ -73,7 +73,12 @@ export const claudeChannel: Channel = {
         continue;
       }
 
-      const sum = summarise(t.file);
+      // One read of the transcript, and the state comes with it. This used to be
+      // `summarise` here and `sessionState(alive ?? false, lastTurn(file), …)`
+      // below — the same assembly the enrichment fetcher also wrote out, each
+      // opening the file twice.
+      const found = describeTranscript(t, s ?? null);
+      const sum = found.summary;
 
       // mtime found it; the transcript decides whether anything happened.
       //
@@ -111,7 +116,7 @@ export const claudeChannel: Channel = {
         fields: [
           { k: 'turns', v: String(sum.turns) },
           { k: 'last', v: ago(sum.lastAt ?? t.modifiedAt) },
-          { k: 'state', v: sessionState(s?.alive ?? false, lastTurn(t.file), sum.lastAt ?? t.modifiedAt) },
+          { k: 'state', v: found.state },
           { k: 'cwd', v: sum.cwd ?? '' },
           { k: 'branch', v: sum.branch ?? '' },
         ].filter((f) => f.v),

@@ -7,12 +7,13 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
 import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
-import { evidenceFor, fromWorkspacePath, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
+import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
+import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
+import { listTranscripts, sessionForCwd, describeTranscript } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
-import { workspacePath } from '../src/agent/worktree.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
 
 /**
@@ -503,4 +504,73 @@ test('the watermark store migrates in place rather than being replaced', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * The seam that was worked around instead of taken.
+ *
+ * Four `join(homedir(), …)` constants were computed at import, which pinned six
+ * exports to a real home directory — `src/intake/claude.ts` says so in a comment
+ * defending a per-rule extraction: *"the channel reads the real `~/.claude`, which
+ * a unit test has no business constructing."* It can now, so these are the first
+ * tests to reach `listTranscripts`, `statusOf` and `sessionForCwd` at all.
+ */
+test('a transcript store can be pointed somewhere a test built', () => {
+  const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
+  const prev = process.env.PROJECTOR_CLAUDE_HOME;
+  process.env.PROJECTOR_CLAUDE_HOME = home;
+  try {
+    mkdirSync(join(home, 'projects', '-Users-x-repo'), { recursive: true });
+    const file = join(home, 'projects', '-Users-x-repo', 'aaaabbbb-1111-2222-3333-444455556666.jsonl');
+    writeFileSync(
+      file,
+      [
+        JSON.stringify({ type: 'user', message: { role: 'user', content: 'add a due facet' }, cwd: '/Users/x/repo', gitBranch: 'feat/due', timestamp: '2026-08-20T10:00:00Z' }),
+        JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'done' }, timestamp: '2026-08-20T10:01:00Z' }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+
+    const found = listTranscripts({ since: new Date('2026-01-01') });
+    assert.equal(found.length, 1, 'the store the env var names is the store that is read');
+    assert.equal(found[0]!.uuid, 'aaaabbbb-1111-2222-3333-444455556666');
+
+    // And the assembly both consumers used to write out themselves.
+    const st = describeTranscript(found[0]!, null);
+    assert.equal(st.state, 'closed', 'no live process means closed, whatever the transcript says');
+    assert.equal(st.summary.opening, 'add a due facet');
+    assert.equal(st.summary.branch, 'feat/due');
+    assert.equal(st.lastAt, '2026-08-20T10:01:00Z', 'the transcript’s own time, not the file’s mtime');
+  } finally {
+    if (prev === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = prev;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Exact cwd beats a containing one, dead sessions are out, and so is the asking
+ * process.
+ *
+ * The containing case resolves by *list order*, and `liveSessions()` sorts most
+ * recently started first — so it is the newest containing session, not the
+ * nearest. Asserted as it behaves: the docstring used to say "nearest", which is a
+ * different rule and would pick the deeper directory.
+ */
+test('the session working here is found by precedence, not by luck', () => {
+  const sessions = [
+    { sessionId: 'newest-outer', pid: 1, cwd: '/Users/x', alive: true },
+    { sessionId: 'exact', pid: 2, cwd: '/Users/x/repo', alive: true },
+    { sessionId: 'self', pid: 3, cwd: '/Users/x/repo', alive: true },
+    { sessionId: 'dead-inner', pid: 4, cwd: '/Users/x/repo/deep', alive: false },
+  ];
+  const pick = (cwd: string, self?: number) => sessionForCwd(cwd, self, sessions)?.sessionId ?? null;
+
+  assert.equal(pick('/Users/x/repo', 3), 'exact', 'an exact match wins, and self is excluded');
+  assert.equal(pick('/Users/x/repo', 2), 'self', 'excluding one exact match leaves the other');
+  assert.equal(pick('/Users/x/repo/deep', 3), 'newest-outer', 'no exact match: first container in list order');
+  assert.equal(pick('/elsewhere'), null, 'nothing containing it is nothing');
+
+  // A dead session never wins, however well its directory matches.
+  assert.equal(pick('/Users/x/repo/deep/deeper', 3), 'newest-outer');
 });

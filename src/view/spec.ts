@@ -219,3 +219,30 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(spec.show.length ? { show: spec.show } : {}),
   };
 }
+
+/** A saved view as a picker needs it: enough to list and open, not to run. */
+export interface SavedViewSummary {
+  name: string;
+  title: string;
+  shape: Shape;
+}
+
+/**
+ * One projection of the view list, used by the meta route and the query payload.
+ *
+ * Here rather than in `src/server/` because it is a projection of a `ViewSpec` —
+ * a view concept that happened to be first used by a route. Having it there made
+ * `view/payload.ts` import `server/meta.ts`, which imports this file: a directory
+ * cycle that survived only because the client's re-export is `export type`, so
+ * erasure hid that `payload.ts` transitively reaches `node:sqlite`. `name` is optional on a `ViewSpec` because an ad-hoc spec has none;
+ * a *saved* one always does, and falling back to the empty string here is what
+ * stops the two routes disagreeing about which.
+ */
+export function summariseViews(views: ViewSpec[]): SavedViewSummary[] {
+  return views.map((v) => ({
+    name: v.name ?? '',
+    title: v.title ?? v.name ?? '',
+    shape: v.shape,
+  }));
+}
+

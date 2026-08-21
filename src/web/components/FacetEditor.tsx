@@ -29,17 +29,25 @@ export function FacetEditor({
   const [adding, setAdding] = useState('');
   const [picking, setPicking] = useState(false);
 
-  const set = (v: string | null) => onChange(v ? (def.single ? [v] : [...values, v]) : []);
+  /**
+   * Adding a value: a single-valued facet replaces, a multi-valued one appends.
+   *
+   * One helper because this was written out three times in this file — at `set`,
+   * `toggle` and `addNew` — which is three chances for one rule to drift.
+   */
+  const withValue = (v: string) => (def.single ? [v] : [...values, v]);
+
+  const set = (v: string | null) => onChange(v ? withValue(v) : []);
 
   const toggle = (v: string) => {
     if (values.includes(v)) return onChange(values.filter((x) => x !== v));
-    onChange(def.single ? [v] : [...values, v]);
+    onChange(withValue(v));
   };
 
   const addNew = () => {
     const v = adding.trim();
     if (!v || values.includes(v)) return;
-    onChange(def.single ? [v] : [...values, v]);
+    onChange(withValue(v));
     setAdding('');
   };
 

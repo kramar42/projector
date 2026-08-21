@@ -1,5 +1,5 @@
 import { DIRS, NONE, type Dir, type Shape } from '../schema/vocabulary.ts';
-import { specToParams, type ViewSpec } from './spec.ts';
+import { SPEC_PARAMS, specToParams, type ViewSpec } from './spec.ts';
 
 /**
  * Editing a view, as operations on a `ViewSpec`.
@@ -141,6 +141,26 @@ export function specToPatch(next: ViewSpec, saved: ViewSpec | null): Patch {
       patch[key] = a;
     }
   }
+  return patch;
+}
+
+/**
+ * Drop every override, optionally landing on a view.
+ *
+ * `SPEC_PARAMS` covers the fixed keys, and the facet filters have to come from
+ * somewhere too — they are `f.<facet>`, one per axis, so there is no fixed list of
+ * them. Both the URL's and the resolved spec's are cleared: iterating only the URL
+ * cannot clear a key the *saved view* supplies, and iterating only the spec cannot
+ * clear an override for an axis the spec no longer carries.
+ */
+export function blankQuery(spec: ViewSpec | null, search: string, view: string | null = null): Patch {
+  const patch: Patch = {};
+  for (const key of SPEC_PARAMS) patch[key] = null;
+  for (const facet of Object.keys(spec?.query.filter ?? {})) patch[`f.${facet}`] = null;
+  for (const key of new URLSearchParams(search.replace(/^\?/, '')).keys()) {
+    if (key.startsWith('f.')) patch[key] = null;
+  }
+  if (view) patch.view = view;
   return patch;
 }
 

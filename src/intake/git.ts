@@ -52,8 +52,16 @@ function authorFor(repo: string): string | null {
   return git(repo, ['config', 'user.email'])?.trim() || null;
 }
 
-/** `origin/HEAD` if it is known, else the checked-out branch. Same rule as `pj work`. */
-function baseBranch(repo: string): string {
+/**
+ * The base's *local branch name*, for comparing against `git branch` output.
+ *
+ * Bare, so `origin/main` becomes `main`: the names this is compared with come from
+ * `git branch --format=%(refname:short)`, which never carries a remote prefix.
+ * `pj work` asks a different question — the revision to branch from — and keeps
+ * the prefix. This comment used to claim they were the same rule; they are two
+ * rules that happen to run the same two git commands.
+ */
+function localBaseName(repo: string): string {
   const head = git(repo, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])?.trim();
   if (head) return head.replace(/^origin\//, '');
   return git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])?.trim() || 'main';
@@ -152,7 +160,7 @@ export const gitChannel: Channel = {
         missing.push(`${repo.path} (no git user.email)`);
         continue;
       }
-      const base = baseBranch(repo.path);
+      const base = localBaseName(repo.path);
       for (const c of commitsSince(repo.path, since, author)) {
         if (!examinedTo || c.date > examinedTo) examinedTo = c.date;
         const branch = c.branch || branchesContaining(repo.path, c.sha).find((b) => b !== base) || base;

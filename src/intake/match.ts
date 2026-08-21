@@ -2,6 +2,7 @@ import { basename, resolve } from 'node:path';
 import { resolvePath } from '../config.ts';
 import { search } from '../index/queries.ts';
 import type { Evidence, IntakeContext, Match } from './types.ts';
+import { fromWorkspacePath, slugBranch } from '../agent/workspaceName.ts';
 
 /**
  * Mechanical evidence for "is this more work on something already tracked".
@@ -42,23 +43,7 @@ function push(into: Match[], ctx: IntakeContext, id: string, why: string): void 
   into.push({ id, title: titleOf(ctx, id), why });
 }
 
-/**
- * `pj work` names a workspace `<project>-wt-<branch>`, so a working directory
- * inside one says which project and which branch without reading anything. The
- * branch went through `[^A-Za-z0-9._-]+ → -` on the way in, so it is compared
- * after the same substitution rather than reversed.
- */
-const WORKSPACE = /^(.+)-wt-(.+)$/;
 
-export function fromWorkspacePath(cwd: string): { project: string; branchSlug: string } | null {
-  for (const seg of resolve(cwd).split('/').reverse()) {
-    const m = WORKSPACE.exec(seg);
-    if (m) return { project: m[1]!, branchSlug: m[2]! };
-  }
-  return null;
-}
-
-const slug = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, '-');
 
 /** Cards reachable from a working directory: its worktree's project, or a repo's. */
 export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
@@ -72,7 +57,7 @@ export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
     // The branch half names the card in the common case, since `branchFor`
     // falls back to the card id.
     for (const rec of ctx.records.values()) {
-      if (slug(rec.id) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
+      if (slugBranch(rec.id) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
     }
   }
 

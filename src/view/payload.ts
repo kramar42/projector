@@ -5,9 +5,9 @@ import { parentsOf } from '../index/project.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
 import { refsOf } from '../index/refs.ts';
-import type { ViewSpec } from './spec.ts';
+import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
 import { toDTO, type CardDTO } from './dto.ts';
-import { summariseViews, type SavedViewSummary } from '../server/meta.ts';
+
 
 /**
  * The answer to a `ViewSpec`.
@@ -118,7 +118,7 @@ export function queryPayload(
     relations: relationsAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, facets, today),
+    rollups: projectRollups(records, facets),
     views: summariseViews(views),
   };
 }
@@ -155,6 +155,14 @@ export function applyOrder(ids: string[], order: string[] | undefined): string[]
   return [...pinned, ...ids.filter((id) => !seen.has(id))];
 }
 
+/**
+ * How many records name this one as their parent.
+ *
+ * Typed as `Rec` deliberately: this was `ReturnType<typeof Object>` with a cast
+ * inside, which is how it went on reading `rec.edges` for a whole refactor after
+ * that field stopped existing. An escape hatch in a signature is a place the
+ * compiler has been told not to help.
+ */
 export function countChildren(records: Map<string, Rec>, id: string): number {
   let n = 0;
   for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;

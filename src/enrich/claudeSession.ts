@@ -1,13 +1,4 @@
-import { statSync } from 'node:fs';
-import {
-  desktopSessionFor,
-  findTranscript,
-  lastTurn,
-  liveById,
-  sessionState,
-  summarise,
-  type SessionState,
-} from '../sources/claude.ts';
+import { desktopSessionFor, describeSession, type SessionState } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { unavailable, type Fetcher, type Tone } from './types.ts';
 
@@ -59,10 +50,10 @@ export const sessionFetcher: Fetcher = {
     const uuid = ref.replace(/^local_/, '').trim();
     if (!/^[0-9a-f-]{16,}$/i.test(uuid)) return unavailable(`"${ref}" is not a session id`);
 
-    const file = findTranscript(uuid);
-    const live = liveById().get(uuid);
+    const found = describeSession(uuid);
+    const live = found?.live ?? null;
 
-    if (!file) {
+    if (!found) {
       if (ref.startsWith('local_')) {
         return unavailable(
           'a local_… id comes from the desktop app and is not on disk — link the transcript uuid instead',
@@ -71,9 +62,8 @@ export const sessionFetcher: Fetcher = {
       return unavailable('no transcript found for that session id');
     }
 
-    const s = summarise(file);
-    const lastAt = s.lastAt ?? statSync(file).mtime.toISOString();
-    const badges: { label: string; tone: Tone }[] = [BADGE[sessionState(live?.alive ?? false, lastTurn(file), lastAt)]];
+    const { summary: s, lastAt } = found;
+    const badges: { label: string; tone: Tone }[] = [BADGE[found.state]];
     if (s.branch) badges.push({ label: s.branch, tone: 'accent' });
     return {
       label: live?.name ?? uuid.slice(0, 8),

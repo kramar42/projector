@@ -4,8 +4,8 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { CommitInput } from '../components/CommitInput.tsx';
 import { IconButton } from '../components/Button.tsx';
 import { type Patch } from '../query.ts';
-import { SPEC_PARAMS, type ViewSpec } from '../../view/spec.ts';
-import { patchIsEmpty, specToPatch } from '../../view/intents.ts';
+import type { ViewSpec } from '../../view/spec.ts';
+import { blankQuery, patchIsEmpty, specToPatch } from '../../view/intents.ts';
 import type { QueryResponse, SavedViewSummary } from '../types.ts';
 
 // ---------------------------------------------------------------- saved views
@@ -134,23 +134,4 @@ export function SavedViews({
 }
 
 
-/**
- * Drop every override, optionally landing on a view.
- *
- * `SPEC_PARAMS` covers the fixed keys, and the facet filters have to come from
- * somewhere too — they are `f.<facet>`, one per axis, so there is no fixed list of
- * them. Both the URL's and the resolved spec's are cleared: iterating only the URL
- * cannot clear a key the *saved view* supplies, and iterating only the spec cannot
- * clear an override for an axis the spec no longer carries.
- */
-function blankQuery(spec: ViewSpec | null, search: string, view: string | null = null): Patch {
-  const patch: Patch = {};
-  for (const key of SPEC_PARAMS) patch[key] = null;
-  for (const facet of Object.keys(spec?.query.filter ?? {})) patch[`f.${facet}`] = null;
-  for (const key of new URLSearchParams(search.replace(/^\?/, '')).keys()) {
-    if (key.startsWith('f.')) patch[key] = null;
-  }
-  if (view) patch.view = view;
-  return patch;
-}
 

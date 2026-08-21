@@ -32,7 +32,7 @@ import {
 import { resetWatermark } from '../intake/db.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
-import { sessionForCwd } from '../agent/session.ts';
+import { sessionForCwd } from '../sources/claude.ts';
 import { createCard, deleteCard, patchCard, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 

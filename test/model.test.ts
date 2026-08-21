@@ -37,7 +37,7 @@ import {
   addWorktree,
   appleScriptQuote,
   branchFor,
-  resolveBase,
+  worktreeBase,
   shellQuote,
   terminalScript,
   workspacePath,
@@ -503,9 +503,9 @@ test('base branch falls back from declared to origin/HEAD to HEAD', () => {
     const hit = Object.entries(out).find(([k]) => key.includes(k));
     return hit ? { ok: true, out: hit[1], err: '' } : { ok: false, out: '', err: 'no' };
   };
-  assert.equal(resolveBase({ path: '/r', base: 'dev' }, git({})), 'dev');
-  assert.equal(resolveBase({ path: '/r' }, git({ 'refs/remotes/origin/HEAD': 'origin/main\n' })), 'origin/main');
-  assert.equal(resolveBase({ path: '/r' }, git({ 'rev-parse --abbrev-ref': 'trunk\n' })), 'trunk');
+  assert.equal(worktreeBase({ path: '/r', base: 'dev' }, git({})), 'dev');
+  assert.equal(worktreeBase({ path: '/r' }, git({ 'refs/remotes/origin/HEAD': 'origin/main\n' })), 'origin/main');
+  assert.equal(worktreeBase({ path: '/r' }, git({ 'rev-parse --abbrev-ref': 'trunk\n' })), 'trunk');
 });
 
 test('a missing repo is reported per repo, never thrown', () => {

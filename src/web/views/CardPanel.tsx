@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { marked } from 'marked';
 import { ApiError, api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { RecordMark } from '../components/CardBody.tsx';
@@ -10,21 +9,7 @@ import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 import { Button, IconButton } from '../components/Button.tsx';
-
-/**
- * Render a card body to HTML.
- *
- * The source is escaped before markdown runs, so raw HTML in a card — whether
- * written by hand or by an agent — is displayed rather than executed. Cards are
- * local files, but they are also the one thing here that an automated process
- * writes, which is exactly where not to trust markup.
- */
-function render(md: string): string {
-  const escaped = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const html = marked.parse(escaped, { gfm: true, async: false });
-  // Relative asset paths resolve through the server's asset route.
-  return html.replace(/src="(assets\/[^"]+)"/g, 'src="/api/asset/$1"');
-}
+import { renderBody } from '../../view/markdown.ts';
 
 export function CardPanel({
   id,
@@ -389,7 +374,7 @@ export function CardPanel({
               </h3>
               {showBody === 'read' ? (
                 card.body.trim() ? (
-                  <div className="md" dangerouslySetInnerHTML={{ __html: render(card.body) }} />
+                  <div className="md" dangerouslySetInnerHTML={{ __html: renderBody(card.body) }} />
                 ) : (
                   <p className="hint">Empty. Switch to edit to write something.</p>
                 )

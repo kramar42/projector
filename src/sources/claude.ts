@@ -1,5 +1,5 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { firstLine } from './run.ts';
 
@@ -19,10 +19,28 @@ import { firstLine } from './run.ts';
  * not control.
  */
 
-const CLAUDE = join(homedir(), '.claude');
-const PROJECTS = join(CLAUDE, 'projects');
-const LIVE = join(CLAUDE, 'sessions');
-const DESKTOP = join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
+/**
+ * Where Claude keeps its state, as functions rather than constants.
+ *
+ * They were four `join(homedir(), …)` constants computed at import, which pinned
+ * six exports to a real home directory and made them untestable — `intake/claude.ts`
+ * documents the workaround it reached for instead: *"the channel reads the real
+ * `~/.claude`, which a unit test has no business constructing."*
+ *
+ * `PROJECTOR_CLAUDE_HOME` is the same shape of seam as `PROJECTOR_JIRA_URL` and
+ * `PROJECTOR_GIT_AUTHOR`, which this codebase already reads for exactly this
+ * reason. None of these is hot, so a function costs nothing.
+ */
+const claudeHome = () => process.env.PROJECTOR_CLAUDE_HOME || join(homedir(), '.claude');
+const projectsDir = () => join(claudeHome(), 'projects');
+const liveDir = () => join(claudeHome(), 'sessions');
+/**
+ * The desktop app's own store — a different vendor surface with its own id space
+ * (`local_<uuid>`), so it follows `PROJECTOR_CLAUDE_DESKTOP` separately.
+ */
+const desktopDir = () =>
+  process.env.PROJECTOR_CLAUDE_DESKTOP ||
+  join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
 
 export interface LiveSession {
   sessionId: string;
@@ -37,7 +55,7 @@ export interface LiveSession {
 }
 
 /** Signal 0 tests for existence without touching the process. */
-export function alive(pid: number): boolean {
+function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -52,13 +70,13 @@ export function alive(pid: number): boolean {
  * `claude:` fetcher wants the dead ones too, so it can say "idle" rather than
  * "not found".
  */
-export function liveSessions(): LiveSession[] {
-  if (!existsSync(LIVE)) return [];
+function liveSessions(): LiveSession[] {
+  if (!existsSync(liveDir())) return [];
   const out: LiveSession[] = [];
-  for (const f of readdirSync(LIVE)) {
+  for (const f of readdirSync(liveDir())) {
     if (!f.endsWith('.json')) continue;
     try {
-      const j = JSON.parse(readFileSync(join(LIVE, f), 'utf8')) as Partial<LiveSession>;
+      const j = JSON.parse(readFileSync(join(liveDir(), f), 'utf8')) as Partial<LiveSession>;
       if (!j.sessionId || !j.pid) continue;
       out.push({ ...j, sessionId: j.sessionId, pid: j.pid, cwd: j.cwd ?? '', alive: alive(j.pid) });
     } catch {
@@ -72,10 +90,10 @@ export function liveById(): Map<string, LiveSession> {
   return new Map(liveSessions().map((s) => [s.sessionId, s]));
 }
 
-export function findTranscript(uuid: string): string | null {
-  if (!existsSync(PROJECTS)) return null;
-  for (const dir of readdirSync(PROJECTS)) {
-    const p = join(PROJECTS, dir, `${uuid}.jsonl`);
+function findTranscript(uuid: string): string | null {
+  if (!existsSync(projectsDir())) return null;
+  for (const dir of readdirSync(projectsDir())) {
+    const p = join(projectsDir(), dir, `${uuid}.jsonl`);
     if (existsSync(p)) return p;
   }
   return null;
@@ -119,11 +137,11 @@ export function desktopSessionFor(uuid: string): DesktopSession | null {
 }
 
 function desktopSessionFiles(): string[] {
-  if (!existsSync(DESKTOP)) return [];
+  if (!existsSync(desktopDir())) return [];
   const out: string[] = [];
-  for (const org of readdirSync(DESKTOP)) {
-    for (const account of readdirSync(join(DESKTOP, org), { withFileTypes: true }).filter((e) => e.isDirectory())) {
-      const dir = join(DESKTOP, org, account.name);
+  for (const org of readdirSync(desktopDir())) {
+    for (const account of readdirSync(join(desktopDir(), org), { withFileTypes: true }).filter((e) => e.isDirectory())) {
+      const dir = join(desktopDir(), org, account.name);
       try {
         for (const f of readdirSync(dir)) if (f.endsWith('.json')) out.push(join(dir, f));
       } catch {
@@ -281,20 +299,20 @@ export interface Transcript {
  * is the expensive step and intake calls it only for what survives the window.
  */
 export function listTranscripts(opts: { since?: Date; limit?: number } = {}): Transcript[] {
-  if (!existsSync(PROJECTS)) return [];
+  if (!existsSync(projectsDir())) return [];
   const out: Transcript[] = [];
   const floor = opts.since?.getTime() ?? 0;
 
-  for (const slug of readdirSync(PROJECTS)) {
+  for (const slug of readdirSync(projectsDir())) {
     let files: string[];
     try {
-      files = readdirSync(join(PROJECTS, slug));
+      files = readdirSync(join(projectsDir(), slug));
     } catch {
       continue; // not a directory, or gone between the two reads
     }
     for (const f of files) {
       if (!f.endsWith('.jsonl')) continue;
-      const file = join(PROJECTS, slug, f);
+      const file = join(projectsDir(), slug, f);
       let st;
       try {
         st = statSync(file);
@@ -330,7 +348,7 @@ export interface TranscriptSummary {
  * Transcripts reach tens of megabytes, so this reads the file once and keeps
  * only what a chip needs rather than parsing the whole thing into memory.
  */
-export function summarise(file: string, maxBytes = 6 * 1024 * 1024): TranscriptSummary {
+function summarise(file: string, maxBytes = 6 * 1024 * 1024): TranscriptSummary {
   const raw = readFileSync(file, 'utf8');
   const text = raw.length > maxBytes ? raw.slice(0, maxBytes) : raw;
   let opening = '';
@@ -373,4 +391,84 @@ export function summarise(file: string, maxBytes = 6 * 1024 * 1024): TranscriptS
   // The full file's tail is the real last activity when the read was truncated.
   if (raw.length > maxBytes) lastAt = statSync(file).mtime.toISOString();
   return { opening: firstLine(opening.replace(/\s+/g, ' '), 160), cwd, branch, turns, firstAt, lastAt };
+}
+
+/**
+ * Everything one session is, in one call.
+ *
+ * Both consumers used to assemble this themselves — verbatim, including both
+ * `??` fallbacks:
+ *
+ *     sessionState(live?.alive ?? false, lastTurn(file), s.lastAt ?? <mtime>)
+ *
+ * and each also called `summarise` on the same file, so every transcript was read
+ * twice per consumer. The parts were public because the answer was not.
+ *
+ * Two entry points over one core, because the two callers hold different things:
+ * enrichment has a uuid and must look the transcript up, while the intake sweep is
+ * already iterating `listTranscripts()` and has the file and its mtime in hand.
+ * Making intake look up by uuid again would trade one duplication for a worse one.
+ */
+export interface SessionStatus {
+  state: SessionState;
+  summary: TranscriptSummary;
+  /** When the last turn landed — the transcript's own time, else the file's. */
+  lastAt: string;
+  live: LiveSession | null;
+}
+
+export function describeTranscript(
+  transcript: { file: string; modifiedAt?: string },
+  live: LiveSession | null,
+): SessionStatus {
+  const summary = summarise(transcript.file);
+  const lastAt =
+    summary.lastAt ?? transcript.modifiedAt ?? statSync(transcript.file).mtime.toISOString();
+  return {
+    state: sessionState(live?.alive ?? false, lastTurn(transcript.file), lastAt),
+    summary,
+    lastAt,
+    live,
+  };
+}
+
+/** The same, found by session id. Null when no transcript is on disk. */
+export function describeSession(uuid: string): SessionStatus | null {
+  const file = findTranscript(uuid);
+  if (!file) return null;
+  return describeTranscript({ file }, liveById().get(uuid) ?? null);
+}
+
+/**
+ * The live session working in a directory, or one containing it.
+ *
+ * This is how a session links itself back to its card: it knows its own working
+ * directory but not its own transcript id, and `sessions/<pid>.json` has both.
+ * Closing that loop is what makes a card's history accumulate instead of relying
+ * on someone remembering to paste an id.
+ *
+ * An exact match on the working directory wins. Failing that, the *first*
+ * containing directory in list order — and `liveSessions()` sorts most recently
+ * started first, so that is the newest containing session rather than the nearest
+ * one. Worth knowing: from `/x/repo/deep`, a session started later at `/x` beats
+ * an older one at `/x/repo`. `self` excludes the asking process. It lived in `src/agent/session.ts` — the last
+ * `agent/` → `sources/` edge, and a 29-line file whose only export was a query
+ * over the session list this file already owns. `sessionState` is a pure derived
+ * answer over the same data and was already here; no principle separated them.
+ *
+ * The `sessions` list arrives as a parameter so the precedence rule is testable
+ * without a home directory.
+ */
+export function sessionForCwd(
+  cwd: string,
+  self?: number,
+  sessions: LiveSession[] = liveSessions(),
+): LiveSession | null {
+  const want = resolve(cwd);
+  const candidates = sessions.filter((s) => s.alive && s.pid !== self);
+  return (
+    candidates.find((s) => s.cwd && resolve(s.cwd) === want) ??
+    candidates.find((s) => s.cwd && want.startsWith(resolve(s.cwd) + '/')) ??
+    null
+  );
 }

@@ -116,22 +116,11 @@ interface Pseudo {
 }
 
 
-/** Whole days between two `YYYY-MM-DD` dates, or null if the first is unparseable. */
 /** `daysBetween`, with the nullable date the `staleness` axis actually has. */
 function daysSince(date: string | undefined, today: string): number | null {
   return date ? daysBetween(date, today) : null;
 }
 
-/**
- * Computed axes, offered in the filter panel exactly like the facets in
- * `facets.yaml`. Every one of them is deterministic (C8): a count, a date
- * comparison or the presence of an edge — never a judgement.
- *
- * Every one of them *computes*, and every one computes over something a facet
- * cannot describe: a `project:` block, the reference graph, an absence, or the
- * app-written `updated` field. `due` used to sit here bucketing a stored value —
- * that is what an ordered facet's own `buckets` do now, so it left.
- */
 /**
  * Which of the three triage facets a record is actually missing.
  *
@@ -158,6 +147,16 @@ export function triageGaps(rec: Rec, isNode: boolean): string[] {
   return missing;
 }
 
+/**
+ * Computed axes, offered in the filter panel exactly like the facets in
+ * `facets.yaml`. Every one of them is deterministic (C8): a count, a date
+ * comparison or the presence of an edge — never a judgement.
+ *
+ * Every one of them *computes*, and every one computes over something a facet
+ * cannot describe: a `project:` block, the reference graph, an absence, or the
+ * app-written `updated` field. `due` used to sit here bucketing a stored value —
+ * that is what an ordered facet's own `buckets` do now, so it left.
+ */
 export const PSEUDO: Record<string, Pseudo> = {
   type: {
     label: 'Type',
@@ -298,14 +297,14 @@ function ftsIds(db: DatabaseSync, input: string): Set<string> | null {
 
 type Comparator = (a: Rec, b: Rec) => number;
 
-function comparator(sort: string[] | undefined, facets: Facets, ctx: Ctx): Comparator {
+function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
   const keys = (sort?.length ? sort : ['updated:desc']).map((s) => {
     const [name, dirRaw] = s.split(':');
     return { name: name ?? '', sign: dirRaw === 'desc' ? -1 : 1 };
   });
 
   const rankOf = (rec: Rec, name: string): number => {
-    const def = facets[name];
+    const def = ctx.facets[name];
     const values = valuesOf(rec, name, ctx);
     if (!values.length) return Number.MAX_SAFE_INTEGER;
     const pseudo = PSEUDO[name];
@@ -322,7 +321,7 @@ function comparator(sort: string[] | undefined, facets: Facets, ctx: Ctx): Compa
    * the earliest one, and reversing the sort must not make it the most urgent.
    */
   const ordered = (a: Rec, b: Rec, name: string, sign: number): number => {
-    const def = facets[name];
+    const def = ctx.facets[name];
     const av = rawOf(a, name);
     const bv = rawOf(b, name);
     if (!av.length && !bv.length) return 0;
@@ -335,7 +334,7 @@ function comparator(sort: string[] | undefined, facets: Facets, ctx: Ctx): Compa
   return (a, b) => {
     for (const { name, sign } of keys) {
       let cmp = 0;
-      if (isOrdered(facets[name])) {
+      if (isOrdered(ctx.facets[name])) {
         cmp = ordered(a, b, name, sign);
       } else if (name === 'updated' || name === 'created') {
         cmp = (a[name] ?? '').localeCompare(b[name] ?? '');
@@ -394,14 +393,6 @@ function matches(rec: Rec, filter: Record<string, string[]>, ctx: Ctx): boolean 
 /**
  * Disjunctive counts.
  *
- * A facet's own selection is lifted before counting its values, so the other
- * values still show what adding them would bring — count against the fully
- * filtered set instead and every unselected value reads 0, which makes the panel
- * a trapdoor you can narrow through but never widen.
- */
-/**
- * Disjunctive counts.
- *
  * Two separate questions, and conflating them is a trapdoor:
  *
  * **Which facets are offered** is decided by the *universe* — what focus and the
@@ -415,13 +406,8 @@ function matches(rec: Rec, filter: Record<string, string[]>, ctx: Ctx): boolean 
  * other one. Count against the fully filtered set instead and every unselected
  * value reads 0, so a selection could be narrowed but never widened.
  */
-function histogram(
-  base: Rec[],
-  filter: Record<string, string[]>,
-  facets: Facets,
-  ctx: Ctx,
-): FacetCount[] {
-  const names = [...Object.keys(facets), ...Object.keys(PSEUDO)];
+function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): FacetCount[] {
+  const names = [...Object.keys(ctx.facets), ...Object.keys(PSEUDO)];
   const out: FacetCount[] = [];
 
   for (const facet of names) {
@@ -440,7 +426,7 @@ function histogram(
 
     // The axis's vocabulary: what it declares, plus any value the data holds that
     // it did not. For an open facet with no `values:` this is just the data.
-    const declared = pseudo ? pseudo.values : orderValues(facets[facet], seen);
+    const declared = pseudo ? pseudo.values : orderValues(ctx.facets[facet], seen);
 
     // An axis the *query mentions* stays offered, even with nothing selected on
     // it. `f.due=` is the query saying "explicitly nothing here", which is a
@@ -478,7 +464,7 @@ function histogram(
     if (values.some((v) => v.value !== NONE || v.selected)) {
       out.push({
         facet,
-        label: pseudo?.label ?? facets[facet]?.label ?? facet,
+        label: pseudo?.label ?? ctx.facets[facet]?.label ?? facet,
         pseudo: Boolean(pseudo),
         values,
       });
@@ -528,7 +514,7 @@ export function runQuery(
   }
 
   const hits = universe.filter((rec) => matches(rec, filter, ctx));
-  hits.sort(comparator(query.sort, facets, ctx));
+  hits.sort(comparator(query.sort, ctx));
   const ids = hits.map((r) => r.id);
 
   const context: string[] = [];
@@ -620,7 +606,7 @@ export function runQuery(
     groups,
     axis,
     lanes,
-    counts: histogram(universe, filter, facets, ctx),
+    counts: histogram(universe, filter, ctx),
     total: ids.length,
     universe: universe.length,
     placements,
@@ -652,9 +638,14 @@ export interface Rollup {
 export function projectRollups(
   records: Map<string, Rec>,
   facets: Facets,
-  today: string,
 ): Record<string, Rollup> {
-  const ctx = buildCtx(records, facets, today);
+  // The two graph aggregates directly, rather than a whole `Ctx`. Building one
+  // meant taking a `today` this function never asks about — the clock rode in
+  // because it is welded to the vocabulary and the aggregates in one struct,
+  // which is the argument for splitting `Ctx` made by the code rather than by a
+  // reviewer.
+  const nodes = nodesIn(records, facets);
+  const waitedOn = blockedSet(records);
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;
@@ -667,8 +658,10 @@ export function projectRollups(
     for (const id of reach) {
       const member = records.get(id);
       if (!member) continue;
-      if (ctx.blocked.has(id)) blocked++;
-      if (!PSEUDO.triage!.of(member, ctx).includes('complete')) untriaged++;
+      if (waitedOn.has(id)) blocked++;
+      // `triageGaps` directly: reaching through the pseudo-facet needed a `Ctx`,
+      // and it is the same answer one layer less indirect.
+      if (triageGaps(member, nodes.has(id)).length) untriaged++;
       if (member.updated && (!touched || member.updated > touched)) touched = member.updated;
     }
 
