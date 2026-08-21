@@ -575,17 +575,14 @@ Used for a project's roll-up. It is the only bar in the system.
   and status is a 10px chip.
 - **Don't** dress the terminal up. Xoria and the mono labels are a working grammar, not a costume —
   no ASCII borders, scanlines, CRT glow, blinking cursors or fixed 80-column measures.
-- **Don't** use the accent for data structure. It marks live state and the app speaking. *Known
-  deviation:* `.cardface.is-project` currently draws its 3px left border in `accent`; per **The App
-  Voice Rule** that should be `hue-purple`, the project axis's own family. Treat it as a correction
-  pending, not a precedent.
-- **Don't** put `--ink` on a filled semantic background. `ink` and `bad`/`warn` are both light in dark
-  mode and both dark in light mode, so the pair never has contrast. Filled states take `ground`, the
-  way `.btn.primary` does. *Known deviation:* `.chip.is-overdue` and `.chip.is-today` set
-  `color: var(--ink)` on `bad` and `warn`, measuring 1.92:1 and 2.31:1 in light and 1.94:1 and
-  **1.03:1** in dark — the today chip is effectively invisible. Switching the declaration to
-  `var(--ground)` yields 7.58:1 to 14.35:1 across all four. It has gone unseen because no record
-  in the vault carries a `due` date yet.
+- **Don't** use the accent for data structure. It marks live state and the app speaking, and nothing
+  else. A record *being* a project is a property of the record, so `.cardface.is-project` draws its
+  left border in `hue-purple` — the project axis's own family — even though the two tokens hold the
+  same value in both themes.
+- **Don't** put `--ink` on a filled background. `ink` and the semantic hues follow the theme in the
+  same direction, so the pair never has contrast: `ink` on `bad` measured 1.92:1 in light, and `ink` on
+  `warn` **1.03:1** in dark — invisible. Every filled state takes `ground`, which is 7.58:1 at worst
+  across the same four combinations, and is what `.btn.primary` and the two bucket chips do.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
 - **Don't** interpolate a colour. Every value comes from `xoria256.yml`; the two exceptions
   (`rel-blocks` at `#b06060` in light, and the `chip-tint` mixes) are documented where they occur and

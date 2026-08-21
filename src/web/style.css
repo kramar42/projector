@@ -853,8 +853,14 @@ body {
   border-color: var(--rule-2);
 }
 
+/* The left border is the one place a face changes shape, and it always says
+   something about the record. So it takes the *facet's* hue, never `--accent`:
+   the accent is reserved for live state and for the app speaking — focus,
+   selection, a drop target — and a record being a project is neither. The two
+   tokens happen to hold the same value in both themes, so this is the naming
+   being made honest rather than a change of colour. */
 .cardface.is-project {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--hue-purple);
 }
 
 .cardface.is-blocked {
@@ -1064,15 +1070,23 @@ body {
 }
 
 /* An ordered facet draws its bucket, and the bucket is a class — so a deadline
-   colours itself without anything knowing that facet by name. */
+   colours itself without anything knowing that facet by name.
+
+   These are the system's only two filled chips, and a filled state takes
+   `--ground`, not `--ink`: both semantic hues follow the theme in the same
+   direction the text does, so ink-on-bad was 1.9:1 in light and ink-on-warn
+   1.03:1 in dark — the today chip was invisible against its own background.
+   Inverting to the ground colour is 7.6:1 at worst, which is what `.btn.primary`
+   already does with the accent. Nothing had seen it because no record carries a
+   `due` date yet. */
 .chip.is-overdue {
   background: var(--bad);
-  color: var(--ink);
+  color: var(--ground);
 }
 
 .chip.is-today {
   background: var(--warn);
-  color: var(--ink);
+  color: var(--ground);
 }
 
 .dateinput {
