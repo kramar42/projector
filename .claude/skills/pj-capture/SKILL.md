@@ -10,27 +10,21 @@ Read the `projector` skill first.
 
 **You propose. You do not apply.** Present the candidates, stop, wait.
 
-## 1. Where the last sweep got to
-
-```bash
-pj intake status --json
-```
-
-Per channel: the cursor, when it last ran, what it saw. Read `cursor` off the JSON rather than the
-padded table — that is the value you fetch Slack and Gmail from, and it has to be exact. **The cursor is why this is worth running
-more than once** — without it you are the thing deciding what counts as new, from a fixed window,
-every time.
-
-Losing `.intake.db` is not a disaster: a channel with no cursor falls back to its default window and
-`source_fingerprint` still stops every duplicate. Wider sweep, never a wrong one.
-
-## 2. Sweep
+## 1. Sweep
 
 ```bash
 pj intake --json            # every channel, each from its own cursor
 pj intake claude git        # or name them
 pj intake --since 2026-08-01 --limit 40
 ```
+
+Every channel's report carries the `cursor` it started from, Slack and Gmail included, so this is also
+where you read the cursor you fetch those two from. **The cursor is why this is worth running more than
+once** — without it you are the thing deciding what counts as new, from a fixed window, every time.
+`pj intake status` answers the same question without fetching, if you want the state and nothing else.
+
+Losing `.intake.db` is not a disaster: a channel with no cursor falls back to its default window and
+`source_fingerprint` still stops every duplicate. Wider sweep, never a wrong one.
 
 `pj` fetches three of the five itself. Say which you covered and which you skipped.
 
@@ -42,7 +36,7 @@ pj intake --since 2026-08-01 --limit 40
 | `slack` | **you, through the Slack MCP** | `D01234567` (his scratchpad) and `is:saved` |
 | `gmail` | **you, through the Gmail MCP** | vendor threads, forwarded meeting notes — commitments made to other people |
 
-For Slack and Gmail: take the cursor out of `pj intake status --json`, fetch **only since it**, and treat
+For Slack and Gmail: take the `cursor` off their report in the sweep, fetch **only since it**, and treat
 what you find exactly as `pj` treats the rest. Their fingerprints are `slack:<channel>/<ts>` and
 `gmail:<message-id>`.
 
@@ -57,7 +51,7 @@ pj intake known slack:D01234567/1784119823.993869 gmail:<message-id>
 It prints the cards carrying each ref, or `—`. `pj add --fingerprint` refuses a duplicate regardless,
 but checking first is what makes the proposal honest.
 
-## 3. Three answers, not one
+## 2. Three answers, not one
 
 Most of what a sweep returns is not a new card. For each candidate:
 
@@ -81,7 +75,7 @@ When linking, say which reason you are relying on, so a wrong call is visible be
 session linked to the wrong card puts its history somewhere nobody will look for it — move it with
 `pj link <wrong-card> --remove <ref>` then `pj link <right-card> <ref>`, rather than leaving it.
 
-## 4. Propose, then stop
+## 3. Propose, then stop
 
 One table:
 
@@ -103,7 +97,7 @@ Rules:
 
 Then **stop**.
 
-## 5. Apply, then move the cursors
+## 4. Apply, then move the cursors
 
 ```bash
 pj add "<title>" \
@@ -117,18 +111,24 @@ pj link <existing-card> "claude:<uuid>"
 Then, **and only once the proposal is resolved** — approved, or explicitly declined:
 
 ```bash
-pj intake commit --channel claude --cursor <nextCursor> --seen 9 --captured 2
+pj intake commit --advance --captured 2
 ```
 
-`<nextCursor>` is the channel's `nextCursor` from `pj intake --json` (the plain output prints it as
-"cursor would move to"). For Slack and Gmail it is the newest ts or date you actually read.
+That promotes what the sweep already recorded, for every channel it swept: the cursor it proposed and
+the number of items it examined were both `pj`'s own, and it kept them so you would not have to carry
+them between two processes. `--captured` is the one number it cannot know, because capture happened in
+between. Add `--channel <c>` to promote one deliberately.
+
+For Slack and Gmail, `pj` recorded the cursor it was given, which is the one it handed you — so if you
+read *past* it, say where you actually got to:
+`pj intake commit --channel slack --cursor <newest-ts-you-read>`.
 
 Three things to get right here:
 
-- **A `nextCursor` of `null` means do not move it.** A truncated run — more behind the cursor than the
-  limit showed — deliberately holds its place so the next sweep resumes there. Commit the counts, not
-  a cursor.
-- **Commit after, never before.** A sweep abandoned halfway must not swallow what it had listed.
+- **A held cursor is not a failure.** A truncated run — more behind the cursor than the limit showed —
+  deliberately keeps its place so the next sweep resumes there, and `--advance` reports it as held.
+- **Commit after, never before.** A sweep abandoned halfway must not swallow what it had listed. A
+  sweep records where it *would* go; nothing reads that until you promote it.
 - **Committing forgets the declines.** Once the cursor passes something you called "not a card", there
   is no record it was ever considered. If a rejection is worth keeping, make the card and set
   `status: archived` — that keeps the fingerprint, and the next sweep leaves it alone.

@@ -4,10 +4,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
-import { commitWatermark, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
+import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, fromWorkspacePath, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
-import { candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
+import { advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
@@ -115,8 +116,17 @@ test('a sweep writes no cards and moves no cursor', async () => {
     const before = reindex(root).records.size;
     await sweep(root, { only: ['claude', 'git'], limit: 3 });
     assert.equal(reindex(root).records.size, before);
-    // Proposing is not resolving: only `pj intake commit` moves a cursor.
-    assert.deepEqual(watermarks(root), []);
+
+    // Proposing is not resolving. A sweep now *records* where it would go, so the
+    // rows exist — but every cursor is still unset, and only `pj intake commit`
+    // promotes a proposal. Asserting the table is empty would be asserting the
+    // storage rather than the invariant.
+    const after = watermarks(root);
+    assert.deepEqual(after.map((w) => w.channel).sort(), ['claude', 'git']);
+    for (const w of after) {
+      assert.equal(w.cursor, null, `${w.channel}: a sweep must not move the cursor`);
+      assert.ok(w.pending, `${w.channel}: a sweep records what it would advance to`);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -426,6 +436,70 @@ test('every channel reports a status, and the text is rendered from it', () => {
     const text = renderStatus(root);
     for (const r of statusOf(root)) assert.match(text, new RegExp(r.channel));
     assert.match(text, /abc123/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The sweep records where it would go; `advance` promotes it.
+ *
+ * Resolving a sweep used to mean copying an opaque cursor — a Slack `ts`, a Gmail
+ * date — out of one process and typing it into the next, once per channel, with
+ * the counts retyped alongside. Both were `pj`'s own numbers. `captured` is the
+ * exception, because capture happens between the two calls.
+ */
+test('a recorded sweep is promoted once, and only once', () => {
+  const root = vault({});
+  try {
+    recordPending(root, 'slack', '1787229273.986369', 7);
+    recordPending(root, 'git', null, 3);
+
+    // Recorded is not advanced: nothing reads a pending value until it is promoted.
+    const before = watermarkFor(root, 'slack')!;
+    assert.equal(before.cursor, null, 'recording a proposal must not move the cursor');
+    assert.equal(before.pending?.cursor, '1787229273.986369');
+    assert.equal(before.pending?.seen, 7);
+
+    const first = advance(root, { captured: 2 });
+    assert.deepEqual(first.moved.map((m) => m.channel).sort(), ['git', 'slack']);
+    assert.deepEqual(first.withoutPending.sort(), ['claude', 'gmail', 'jira']);
+
+    const slack = watermarkFor(root, 'slack')!;
+    assert.equal(slack.cursor, '1787229273.986369', 'the proposed cursor is now the cursor');
+    assert.equal(slack.seen, 7, 'seen comes from the sweep, not from the caller');
+    assert.equal(slack.captured, 2, 'captured is the one number the caller supplies');
+    assert.equal(slack.pending, undefined, 'a promoted proposal is spent');
+
+    // A null proposal means hold: a truncated run has items behind its cursor.
+    assert.equal(watermarkFor(root, 'git')!.cursor, null);
+
+    // Promoting twice must not re-commit a cursor that has already moved.
+    const second = advance(root);
+    assert.deepEqual(second.moved, []);
+    assert.equal(watermarkFor(root, 'slack')!.captured, 2, 'the spent proposal left the counts alone');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** A store written before the pending columns existed gains them, keeping its cursors. */
+test('the watermark store migrates in place rather than being replaced', () => {
+  const root = vault({});
+  try {
+    commitWatermark(root, 'jira', '2026-08-18T13:32:49.967+0000', { seen: 1 });
+    const file = join(root, '.intake.db');
+    const raw = new DatabaseSync(file);
+    raw.exec('ALTER TABLE watermark DROP COLUMN pending_cursor');
+    raw.exec('ALTER TABLE watermark DROP COLUMN pending_seen');
+    raw.exec('ALTER TABLE watermark DROP COLUMN pending_at');
+    raw.close();
+    closeIntakeDb(root);
+
+    // Reopening runs the migration; the cursor that was already there survives it.
+    assert.equal(watermarkFor(root, 'jira')!.cursor, '2026-08-18T13:32:49.967+0000');
+    recordPending(root, 'jira', 'newer', 4);
+    assert.equal(watermarkFor(root, 'jira')!.pending?.cursor, 'newer');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

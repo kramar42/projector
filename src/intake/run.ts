@@ -1,7 +1,7 @@
 import { reindex } from '../index/indexer.ts';
 import { ago } from '../sources/run.ts';
 import { claudeChannel } from './claude.ts';
-import { commitWatermark, watermarkFor, watermarks } from './db.ts';
+import { commitWatermark, recordPending, watermarkFor, watermarks } from './db.ts';
 import { gitChannel } from './git.ts';
 import { jiraChannel } from './jira.ts';
 import { gmailChannel, slackChannel } from './mcp.ts';
@@ -89,15 +89,84 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
     const usable = Number.isFinite(since.getTime()) ? since : daysAgo(channel.defaultDays);
 
     const report = await channel.collect({ ...vault, since: usable, cursor: mark?.cursor ?? null, limit });
-    reports.push({
+    const resolved: ChannelReport = {
       ...report,
       // The cursor may only move to a boundary with nothing unexamined behind
       // it. A truncated run has exactly that, so it keeps the old one and the
       // next sweep resumes from the same place.
       nextCursor: report.truncated ? null : report.nextCursor,
-    });
+    };
+    reports.push(resolved);
+    // Recorded, not advanced. `pj intake commit --advance` promotes this once the
+    // proposal is resolved; until then nothing reads it.
+    recordPending(root, channel.name, resolved.nextCursor, seenIn(resolved));
   }
   return { reports, unknown };
+}
+
+/** What the run examined: everything it proposed, plus everything it declined. */
+function seenIn(r: ChannelReport): number {
+  return r.candidates.length + r.skipped.length;
+}
+
+export interface Advanced {
+  channel: string;
+  /** Null when the proposal was to hold — a truncated run, or a run that fetched nothing. */
+  cursor: string | null;
+  seen: number;
+  captured: number;
+  /** When the sweep that proposed this ran. */
+  proposedAt: string;
+}
+
+/**
+ * Promote what the last sweep proposed.
+ *
+ * The counts and the cursor were both `pj`'s to begin with — the agent was
+ * copying them out of one process and typing them into the next, and
+ * `pj-capture` carried a paragraph explaining the hand-carry. `captured` is the
+ * exception and stays a caller's argument: capture happens between the sweep and
+ * this call, through `pj add` and `pj link`, and nothing attributes those back to
+ * a channel.
+ */
+export function advance(
+  root: string,
+  opts: { channel?: string; captured?: number } = {},
+): { moved: Advanced[]; withoutPending: string[] } {
+  const marks = watermarks(root);
+  const wanted = opts.channel ? marks.filter((w) => w.channel === opts.channel) : marks;
+  const moved: Advanced[] = [];
+  for (const w of wanted) {
+    if (!w.pending) continue;
+    const after = commitWatermark(root, w.channel, w.pending.cursor, {
+      seen: w.pending.seen,
+      captured: opts.captured ?? 0,
+    });
+    moved.push({
+      channel: w.channel,
+      cursor: w.pending.cursor,
+      seen: after.seen,
+      captured: after.captured,
+      proposedAt: w.pending.at,
+    });
+  }
+  const names = opts.channel ? [opts.channel] : channelNames();
+  return { moved, withoutPending: names.filter((n) => !moved.some((m) => m.channel === n)) };
+}
+
+export function renderAdvance(a: { moved: Advanced[]; withoutPending: string[] }): string {
+  const L: string[] = [];
+  for (const m of a.moved) {
+    const when = ago(m.proposedAt) || 'just now';
+    L.push(
+      `${line(m.channel, 10)} ${m.cursor ? `cursor → ${m.cursor}` : 'cursor held (nothing new, or truncated)'}` +
+        `  · seen ${m.seen}, captured ${m.captured}  (proposed ${when})`,
+    );
+  }
+  if (a.withoutPending.length) {
+    L.push(`no sweep to promote for: ${a.withoutPending.join(', ')}`);
+  }
+  return L.join('\n');
 }
 
 /**
@@ -166,7 +235,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   }
   L.push(
     `${candidateCount(s)} candidate(s). Nothing is captured and no cursor has moved — ` +
-      `create what is worth a card, then: pj intake commit --channel <c> --cursor <v>`,
+      `create what is worth a card, then: pj intake commit --advance [--captured n]`,
   );
   return L.join('\n');
 }

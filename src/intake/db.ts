@@ -32,9 +32,35 @@ CREATE TABLE IF NOT EXISTS watermark (
   ran_at    TEXT NOT NULL,
   -- What the run saw and what came of it, for intake status. Advisory.
   seen      INTEGER NOT NULL DEFAULT 0,
-  captured  INTEGER NOT NULL DEFAULT 0
+  captured  INTEGER NOT NULL DEFAULT 0,
+  -- Where the last sweep *would* move the cursor to, and when it proposed that.
+  -- Written by a sweep, read only by \`commit --advance\`. A sweep still advances
+  -- nothing: an abandoned one leaves a pending value nobody promotes.
+  pending_cursor TEXT,
+  pending_seen   INTEGER,
+  pending_at     TEXT
 );
 `;
+
+/**
+ * Add the pending columns to a store that predates them.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to an existing table, and dropping
+ * this file to get the new shape would cost a real re-sweep — the watermarks in
+ * it are the only reason the next run does not re-propose three months of mail.
+ */
+function migrate(conn: DatabaseSync): void {
+  const have = new Set(
+    (conn.prepare('PRAGMA table_info(watermark)').all() as { name: string }[]).map((r) => r.name),
+  );
+  for (const [col, type] of [
+    ['pending_cursor', 'TEXT'],
+    ['pending_seen', 'INTEGER'],
+    ['pending_at', 'TEXT'],
+  ] as const) {
+    if (!have.has(col)) conn.exec(`ALTER TABLE watermark ADD COLUMN ${col} ${type}`);
+  }
+}
 
 const connections = new Map<string, DatabaseSync>();
 
@@ -47,8 +73,22 @@ export function openIntakeDb(dataRoot: string): DatabaseSync {
   const conn = new DatabaseSync(file);
   conn.exec('PRAGMA journal_mode = WAL;');
   conn.exec(SCHEMA);
+  migrate(conn);
   connections.set(file, conn);
   return conn;
+}
+
+/**
+ * Drop the cached handle for a vault, so the next call reopens.
+ *
+ * The connection is memoised per file, which means the schema work in
+ * `openIntakeDb` runs once per process — and a test that wants to assert the
+ * migration has no other way to make it run twice.
+ */
+export function closeIntakeDb(dataRoot: string): void {
+  const file = paths(dataRoot).intakeDb;
+  connections.get(file)?.close();
+  connections.delete(file);
 }
 
 export interface Watermark {
@@ -57,19 +97,71 @@ export interface Watermark {
   ranAt: string;
   seen: number;
   captured: number;
+  /** What the last sweep proposed, unpromoted. Null cursor means "hold where it is". */
+  pending?: Pending;
+}
+
+export interface Pending {
+  cursor: string | null;
+  seen: number;
+  at: string;
 }
 
 export function watermarks(dataRoot: string): Watermark[] {
   const rows = openIntakeDb(dataRoot)
-    .prepare('SELECT channel, cursor, ran_at, seen, captured FROM watermark ORDER BY channel')
-    .all() as unknown as { channel: string; cursor: string | null; ran_at: string; seen: number; captured: number }[];
+    .prepare(
+      `SELECT channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at
+         FROM watermark ORDER BY channel`,
+    )
+    .all() as unknown as {
+    channel: string;
+    cursor: string | null;
+    ran_at: string;
+    seen: number;
+    captured: number;
+    pending_cursor: string | null;
+    pending_seen: number | null;
+    pending_at: string | null;
+  }[];
   return rows.map((r) => ({
     channel: r.channel,
     cursor: r.cursor,
     ranAt: r.ran_at,
     seen: r.seen,
     captured: r.captured,
+    // `pending_at` is what makes a pending record exist: a truncated run records
+    // a null cursor on purpose, and that is not the same as never having swept.
+    ...(r.pending_at
+      ? { pending: { cursor: r.pending_cursor, seen: r.pending_seen ?? 0, at: r.pending_at } }
+      : {}),
   }));
+}
+
+/**
+ * Record what a sweep would advance this channel to, without advancing it.
+ *
+ * The sweep used to write nothing at all, which is why resolving one meant
+ * copying an opaque Slack `ts` from one process into the next by hand. It still
+ * advances nothing — a pending value is inert until `commitWatermark` promotes
+ * it — so an abandoned sweep swallows exactly as little as before.
+ */
+export function recordPending(
+  dataRoot: string,
+  channel: string,
+  cursor: string | null,
+  seen: number,
+): void {
+  const now = new Date().toISOString();
+  openIntakeDb(dataRoot)
+    .prepare(
+      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at)
+       VALUES (?, NULL, ?, 0, 0, ?, ?, ?)
+       ON CONFLICT(channel) DO UPDATE SET
+         pending_cursor = excluded.pending_cursor,
+         pending_seen   = excluded.pending_seen,
+         pending_at     = excluded.pending_at`,
+    )
+    .run(channel, now, cursor, seen, now);
 }
 
 export function watermarkFor(dataRoot: string, channel: string): Watermark | null {
@@ -104,7 +196,12 @@ export function commitWatermark(
          cursor   = COALESCE(excluded.cursor, watermark.cursor),
          ran_at   = excluded.ran_at,
          seen     = excluded.seen,
-         captured = excluded.captured`,
+         captured = excluded.captured,
+         -- A promoted proposal is spent. Leaving it would let a second
+         -- \`--advance\` re-commit a cursor that has already moved.
+         pending_cursor = NULL,
+         pending_seen   = NULL,
+         pending_at     = NULL`,
     )
     .run(channel, cursor, now, counts.seen ?? 0, counts.captured ?? 0);
   return watermarkFor(dataRoot, channel)!;

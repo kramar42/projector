@@ -455,12 +455,18 @@ pj intake                    # every channel, each from where it last got to
 pj intake claude git --json
 pj intake status
 pj intake known claude:abc-123          # which cards already carry this
-pj intake commit --channel claude --cursor 2026-08-21T09:00:00Z
+pj intake commit --advance --captured 2 # promote what that sweep recorded
 ```
 
-**`pj intake` writes nothing.** It creates no card and moves no cursor: `pj add`/`pj link` do the first
-after a human agrees, and `pj intake commit` does the second once the proposal is resolved. A run that
-fetched is not a run that was resolved, and an abandoned sweep must not swallow what it listed.
+**`pj intake` creates no card and moves no cursor.** `pj add`/`pj link` do the first after a human
+agrees, and `pj intake commit` does the second once the proposal is resolved. A run that fetched is not
+a run that was resolved, and an abandoned sweep must not swallow what it listed.
+
+What a sweep *does* write is where it **would** move each cursor to, alongside how many items it
+examined — both `pj`'s own numbers, and both previously carried from one process to the next by hand,
+once per channel. `--advance` promotes them. A pending proposal is inert until then, and promoting it
+spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
+between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the cards is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
@@ -573,7 +579,7 @@ one.
 | `pj enrich [<ref>…] [--all]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
-| `pj intake commit --channel c [--cursor v]` · `pj intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
+| `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj check` | validate every card file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 

@@ -17,11 +17,13 @@ import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
 import { cardContext, renderContext } from '../agent/context.ts';
 import {
+  advance,
   candidateCount,
   channelNames,
   commitWatermark,
   DEFAULT_LIMIT,
   known,
+  renderAdvance,
   renderStatus,
   statusOf,
   renderSweep,
@@ -109,8 +111,10 @@ const HELP = `pj — projector CLI${vaultNote}
   pj intake [<channel>...] [--since iso] [--limit n]
      [--json] [--verbose]                              what has happened elsewhere, since last time
   pj intake status [--json]                            per channel: cursor, last run, counts
-  pj intake commit --channel c [--cursor v]
-     [--seen n] [--captured n]                         move a channel's cursor, after a sweep is resolved
+  pj intake commit --advance [--channel c]
+     [--captured n]                                    move the cursor(s) the last sweep proposed
+  pj intake commit --channel c --cursor v
+     [--seen n] [--captured n]                         or say where by hand
   pj intake known <fingerprint>...                     which cards already carry these refs
   pj intake reset [--channel c]                        forget a cursor, back to the default window
 
@@ -568,7 +572,8 @@ try {
         'cursor',
         'seen',
         'captured',
-      ], ['json', 'verbose']);
+        'advance',
+      ], ['json', 'verbose', 'advance']);
       const [sub, ...channels] = rest;
 
       if (sub === 'status') {
@@ -578,10 +583,27 @@ try {
 
       if (sub === 'commit') {
         const channel = flags.get('channel')?.[0];
-        if (!channel) fail('pj intake commit --channel <c> [--cursor <v>]');
-        if (!channelNames().includes(channel)) {
+        if (channel && !channelNames().includes(channel)) {
           fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
         }
+
+        // `--advance` promotes what the sweep recorded, for every channel that has
+        // something to promote. The cursor and `seen` were pj's own numbers; the
+        // agent was copying them between two processes by hand.
+        if (flags.has('advance')) {
+          const capturedRaw = flags.get('captured')?.[0];
+          const res = advance(root, {
+            ...(channel ? { channel } : {}),
+            ...(capturedRaw && capturedRaw !== 'true' ? { captured: Number(capturedRaw) } : {}),
+          });
+          console.log(renderAdvance(res));
+          // Nothing to promote anywhere is a mistake worth noticing — a sweep was
+          // meant to come first.
+          if (!res.moved.length) process.exit(1);
+          break;
+        }
+
+        if (!channel) fail('pj intake commit --advance | --channel <c> [--cursor <v>]');
         const w = commitWatermark(root, channel, flags.get('cursor')?.[0] ?? null, {
           seen: Number(flags.get('seen')?.[0] ?? 0),
           captured: Number(flags.get('captured')?.[0] ?? 0),
