@@ -269,6 +269,8 @@ body {
   align-items: center;
   width: 62px;
   flex: none;
+  position: relative;
+  z-index: 1;
 }
 
 .rail-label-control .rail-label {
