@@ -412,6 +412,12 @@ provenance, which is the `source` facet's job. `slack:` is the one kind kept wit
 Slack ref is not interchangeable with the permalink it wraps, and it is common enough to be worth
 resolving.
 
+**Where a link opens does not depend on a fetcher.** Six of the eight kinds resolve an `href` from the
+ref alone — a fetcher adds a title, a status and a diff size, never the ability to click. The two that
+do not are the two with nowhere on the web to go: a Claude session and a local file. Both are reached
+the same way instead — a deep link where the machine has an app registered for one, and a copyable
+command where it does not.
+
 | Kind | Syntax | Source | Needs | TTL |
 |---|---|---|---|---|
 | `jira` | `jira:PROJ-303` | Jira REST | `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | 15 min |
@@ -419,14 +425,26 @@ resolving.
 | `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | — | 10 min |
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | — | never |
 | `claude` | `claude:<uuid>` | `~/.claude/projects/**` | — | 1 min |
-| `doc` | `doc:path.md` | filesystem | — | 30 s |
-| `slack` `url` | — | not fetched — parsed label only | — | — |
+| `doc` | `doc:path.md` | filesystem | `PROJECTOR_DOC_URL` to make it clickable | 30 s |
+| `slack` `url` | — | not fetched — the ref is already the URL | — | — |
 
 Every fetcher is read-only and runs server-side, so credentials stay out of the browser. Failures are
 cached too, so a link that cannot resolve says why once instead of retrying on every render.
 
-A `doc:` path is relative to the vault root, or absolute. A `claude:` link takes a session transcript
-uuid and resolves to its opening prompt, last activity, turn count, working directory, branch, and the
+A `doc:` path is relative to the vault root, or absolute. It cannot be a `file://` link — a browser
+will not navigate to one from an http page, and where it does anything at all it downloads a copy,
+which is not opening the document but making a second one. So a doc offers `open <path>`, macOS's own
+"hand this to whatever owns it", and becomes clickable when `PROJECTOR_DOC_URL` names an editor
+scheme. No scheme means "open with the default app", so guessing one would be choosing your editor
+for you:
+
+```bash
+export PROJECTOR_DOC_URL='cursor://file{path}'      # or vscode://file{path}
+export PROJECTOR_DOC_URL='obsidian://open?path={path}'
+```
+
+A `claude:` link takes a session transcript uuid and resolves to its opening prompt, last activity,
+turn count, working directory, branch, and either a `claude://` deep link into the desktop app or the
 `claude --resume` command to pick it back up.
 
 ```bash

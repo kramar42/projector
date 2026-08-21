@@ -4,6 +4,37 @@ import { unavailable, type Enrichment, type Fetcher } from './types.ts';
 import { resolveDoc } from '../vault.ts';
 
 /**
+ * How to open a file that is not a web page.
+ *
+ * `file://` is the obvious answer and the wrong one: a browser will not navigate
+ * to it from an http page, and where it does anything at all it downloads a copy
+ * — which is not opening the document, it is making a second one.
+ *
+ * So the same shape `claude:` uses. A **deep link** where the machine has an app
+ * registered for one, and a **command** where it does not. The difference is that
+ * no scheme means "open this file with whatever owns it": `vscode://`, `cursor://`
+ * and `obsidian://` each name one editor, so guessing would be picking the user's
+ * editor for them. `PROJECTOR_DOC_URL` lets them say — configuration, exactly as
+ * `PROJECTOR_JIRA_URL` names the Jira host — and until they do, the command is
+ * the answer that always works.
+ *
+ *   PROJECTOR_DOC_URL='cursor://file{path}'
+ *   PROJECTOR_DOC_URL='vscode://file{path}'
+ *   PROJECTOR_DOC_URL='obsidian://open?path={path}'
+ */
+function openers(abs: string): { action?: { label: string; href: string }; command: string } {
+  // `open` is macOS's own "hand this to whatever owns it", which is the only
+  // thing here that needs no configuration and no assumption about an editor.
+  const command = `open ${abs.includes(' ') ? JSON.stringify(abs) : abs}`;
+  const template = process.env.PROJECTOR_DOC_URL?.trim();
+  if (!template?.includes('{path}')) return { command };
+  return {
+    action: { label: '↗ open', href: template.replace('{path}', encodeURI(abs)) },
+    command,
+  };
+}
+
+/**
  * Local markdown documents — the design docs that are the real artifacts of the
  * domain-owner work with no Jira ticket. Filesystem only.
  */
@@ -35,6 +66,7 @@ export function docFetcher(dataRoot: string): Fetcher {
           { k: 'modified', v: ago(st.mtime.toISOString()) },
           { k: 'lines', v: String(head.split('\n').length >= 200 ? '200+' : head.split('\n').length) },
         ],
+        ...openers(path),
       } satisfies Enrichment;
     },
   };

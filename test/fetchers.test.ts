@@ -5,6 +5,10 @@ import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher } from '../src/enrich/claudeSession.ts';
 import { jiraFetcher, statusTone as jiraStatusTone } from '../src/enrich/jira.ts';
+import { docFetcher } from '../src/enrich/doc.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 
 /**
@@ -103,3 +107,57 @@ test('jira status colour follows statusCategory, not workflow names', () => {
   assert.equal(jiraStatusTone('Anything', undefined), 'neutral');
 });
 
+
+// ---------------------------------------------------------------- doc
+
+/**
+ * A doc is the one enriched kind that is not a web page, so the thing worth
+ * pinning is how you get into it.
+ *
+ * `file://` is not an option — a browser will not navigate to one from an http
+ * page, and where it does anything it downloads a copy. So the shape is the one
+ * `claude:` already uses: a deep link where an app is registered for one, and a
+ * command where none is. No URL scheme means "open with whatever owns this", so
+ * the deep link has to be configured rather than guessed.
+ */
+test('a doc offers a command always, and a deep link only when one is configured', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pj-doc-'));
+  writeFileSync(join(dir, 'note.md'), '# Title\n\nSome prose.\n', 'utf8');
+  const before = process.env.PROJECTOR_DOC_URL;
+  try {
+    delete process.env.PROJECTOR_DOC_URL;
+    const plain = await docFetcher(dir).fetch('note.md');
+    assert.ok(!isUnavailable(plain));
+    assert.equal(plain.command, `open ${join(dir, 'note.md')}`);
+    assert.equal(plain.action, undefined, 'no editor is assumed');
+    assert.equal(plain.url, undefined, 'never a file:// url');
+
+    process.env.PROJECTOR_DOC_URL = 'cursor://file{path}';
+    const configured = await docFetcher(dir).fetch('note.md');
+    assert.ok(!isUnavailable(configured));
+    assert.equal(configured.action?.href, `cursor://file${encodeURI(join(dir, 'note.md'))}`);
+    assert.ok(configured.command, 'the command survives alongside the deep link');
+
+    // A template that does not say where the path goes cannot be used.
+    process.env.PROJECTOR_DOC_URL = 'cursor://file';
+    const bad = await docFetcher(dir).fetch('note.md');
+    assert.ok(!isUnavailable(bad));
+    assert.equal(bad.action, undefined);
+  } finally {
+    if (before === undefined) delete process.env.PROJECTOR_DOC_URL;
+    else process.env.PROJECTOR_DOC_URL = before;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a path with a space is quoted so the command can be pasted', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pj-doc space-'));
+  writeFileSync(join(dir, 'a note.md'), '# T\n', 'utf8');
+  try {
+    const res = await docFetcher(dir).fetch('a note.md');
+    assert.ok(!isUnavailable(res));
+    assert.match(res.command!, /^open "/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
