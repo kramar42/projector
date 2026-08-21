@@ -36,6 +36,7 @@ import {
 import { buildBriefing } from '../src/agent/briefing.ts';
 import { countCards, initVault, looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
 import { resolveCliVault } from '../src/config.ts';
+import { patchCard } from '../src/server/mutate.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -534,7 +535,7 @@ test('the briefing names failed repos as out of scope and stops before building'
   assert.match(out, /out of scope[\s\S]*bad.*boom/);
   assert.match(out, /STOP/);
   assert.match(out, /deliberately left out/);
-  assert.match(out, /pj link-session c1/);
+  assert.match(out, /pj link c1 --session/);
 });
 
 // ---------------------------------------------------------------- vaults
@@ -1020,4 +1021,37 @@ test('a view naming an unknown axis is an error, in every position it can appear
     facets,
   );
   assert.deepEqual(good, [], 'a view built from declared axes must be clean');
+});
+
+/**
+ * `pj link` is the only writer of a card's `links`, and it goes through the gate.
+ *
+ * Three commands used to write that array. `link` and `unlink` patched
+ * frontmatter directly and so never bumped `updated`, while `link-session` went
+ * through `patchCard` and did — so attaching a Jira issue left a card reading as
+ * untouched, on a field README says "only ever says that *something* changed".
+ */
+test('linking bumps updated, and unlinking an absent ref refuses', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-link-'));
+  try {
+    mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+    writeFileSync(
+      pathJoin(root, 'cards', 'a.md'),
+      '---\nid: a\ntitle: Card A\nupdated: 2020-01-01\n---\nbody\n',
+      'utf8',
+    );
+    writeFileSync(pathJoin(root, 'facets.yaml'), 'status: { values: [planning, done] }\n', 'utf8');
+
+    patchCard(root, 'a', { links: ['jira:FOO-1'] });
+    const after = readFileSync(pathJoin(root, 'cards', 'a.md'), 'utf8');
+    assert.match(after, /links: \[jira:FOO-1\]/);
+    assert.doesNotMatch(after, /updated: 2020-01-01/, 'a write that leaves `updated` alone is the bug');
+    assert.match(after, /updated: \d{4}-\d{2}-\d{2}/);
+
+    // Emptying the array drops the key rather than storing `links: []`.
+    patchCard(root, 'a', { links: [] });
+    assert.doesNotMatch(readFileSync(pathJoin(root, 'cards', 'a.md'), 'utf8'), /links:/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

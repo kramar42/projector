@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
 import { loadFacets } from '../src/schema/facets.ts';
-import { NONE, focused, ftsQuery, runQuery, type Query } from '../src/index/query.ts';
+import { NONE, focused, ftsPrefixQuery, runQuery, type Query } from '../src/index/query.ts';
 import { adjacency, refsOf } from '../src/index/refs.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { SEED_VIEWS } from '../src/server/seed.ts';
@@ -488,15 +488,15 @@ test('full text composes with the filter instead of replacing it', () => {
 });
 
 test('a search box mid-keystroke cannot throw', () => {
-  assert.equal(ftsQuery('keyc'), '"keyc"*');
-  assert.equal(ftsQuery('kafka sche'), '"kafka" "sche"*');
+  assert.equal(ftsPrefixQuery('keyc'), '"keyc"*');
+  assert.equal(ftsPrefixQuery('kafka sche'), '"kafka" "sche"*');
   // Every FTS5 operator character is stripped rather than passed through.
-  assert.equal(ftsQuery('  '), null);
-  assert.equal(ftsQuery('"'), null);
-  assert.equal(ftsQuery('-'), null);
-  assert.equal(ftsQuery('a OR b'), '"a" "OR" "b"*');
-  assert.equal(ftsQuery('kc:realm'), '"kc" "realm"*');
-  assert.equal(ftsQuery('((((('), null);
+  assert.equal(ftsPrefixQuery('  '), null);
+  assert.equal(ftsPrefixQuery('"'), null);
+  assert.equal(ftsPrefixQuery('-'), null);
+  assert.equal(ftsPrefixQuery('a OR b'), '"a" "OR" "b"*');
+  assert.equal(ftsPrefixQuery('kc:realm'), '"kc" "realm"*');
+  assert.equal(ftsPrefixQuery('((((('), null);
 });
 
 test('punctuation alone is not a search, and never fails the request', () => {

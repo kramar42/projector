@@ -46,14 +46,21 @@ export function unblocks(db: DatabaseSync, id: string, maxDepth = 10): { id: str
     .all(id, maxDepth) as unknown as { id: string; depth: number }[];
 }
 
-export function search(db: DatabaseSync, query: string, limit = 25): Row[] {
-  return db
-    .prepare(
-      `SELECT r.id, r.title, r.updated
+/**
+ * Records matching an FTS query, most relevant first.
+ *
+ * `limit` is optional and there is no default. It used to default to 25, which
+ * intake passed deliberately and `pj search` did not pass at all — so the command
+ * silently truncated at 25 and printed that as the total. A caller that wants a
+ * cap says so.
+ */
+export function search(db: DatabaseSync, query: string, limit?: number): Row[] {
+  const sql =
+    `SELECT r.id, r.title, r.updated
        FROM fts JOIN records r ON r.id = fts.id
-       WHERE fts MATCH ? ORDER BY rank LIMIT ?`,
-    )
-    .all(query, limit) as unknown as Row[];
+       WHERE fts MATCH ? ORDER BY rank` + (limit === undefined ? '' : ' LIMIT ?');
+  const args = limit === undefined ? [query] : [query, limit];
+  return db.prepare(sql).all(...args) as unknown as Row[];
 }
 
 export function counts(db: DatabaseSync): Record<string, number> {

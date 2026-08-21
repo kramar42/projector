@@ -279,7 +279,7 @@ const FTS_SPECIAL = /["*(){}:^\-]/g;
  * MATCH throw, and a query that throws while you are still typing is a query
  * that looks broken.
  */
-export function ftsQuery(input: string): string | null {
+export function ftsPrefixQuery(input: string): string | null {
   const tokens = input
     .replace(FTS_SPECIAL, ' ')
     .split(/\s+/)
@@ -289,7 +289,7 @@ export function ftsQuery(input: string): string | null {
 }
 
 function ftsIds(db: DatabaseSync, input: string): Set<string> | null {
-  const match = ftsQuery(input);
+  const match = ftsPrefixQuery(input);
   if (match === null) return null;
   try {
     const rows = db.prepare('SELECT id FROM fts WHERE fts MATCH ?').all(match) as unknown as {

@@ -134,7 +134,7 @@ const NOISE = new Set(
  * distinctive survives — a query of pure noise matches everything, which is worse
  * than matching nothing.
  */
-export function ftsQuery(text: string, maxTokens = 12): string | null {
+export function ftsOverlapQuery(text: string, maxTokens = 12): string | null {
   const tokens: string[] = [];
   for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
     if (raw.length < 4 || NOISE.has(raw)) continue;
@@ -148,7 +148,7 @@ export function ftsQuery(text: string, maxTokens = 12): string | null {
 /** Cards whose text overlaps this text, by the vault's own full-text index. */
 export function matchText(ctx: IntakeContext, text: string | undefined, limit = 2): Match[] {
   if (!text) return [];
-  const q = ftsQuery(text);
+  const q = ftsOverlapQuery(text);
   if (!q) return [];
   try {
     return search(ctx.db, q, limit).map((r) => ({ id: r.id, title: r.title, why: 'text' }));

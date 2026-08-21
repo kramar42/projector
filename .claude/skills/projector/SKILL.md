@@ -66,7 +66,6 @@ alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
 ```bash
 pj context <id>              # everything: facets, project chain, repos, instructions, links, body
 pj context <id> --json       # same, machine-readable
-pj show <id>                 # compact
 pj ls --group project        # or any facet
 pj ls --focus project-a --via project --dir in    # the whole portfolio, transitively
 pj ls --focus project-a --via parent --dir in     # everything decomposed under it
@@ -78,7 +77,6 @@ pj ls --view unblocked       # actionable now: open, nobody waited on, no unfini
 pj ls --view triage --json   # cards missing project/priority/status, grouped by what is missing
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
-pj project <id>              # just the resolved project config
 pj enrich <ref> --force      # resolve a link's live state
 ```
 
@@ -94,8 +92,8 @@ pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
 pj set <id> --set 'project={}'      # this is how a record becomes a project
 pj rm <id>...                       # deletes, dropping every reference pointing at it
-pj link <id> <ref> [...]
-pj link-session <id>         # link the live Claude session working in this directory
+pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
+pj link <id> --session       # link the live Claude session working in this directory
 pj check                     # validate everything; run this after a batch of edits
 ```
 

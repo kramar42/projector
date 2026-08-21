@@ -1,17 +1,15 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths, resolveCliVault, resolvePath } from '../config.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { listCardFiles, writeCardFile } from '../schema/card.ts';
+import { listCardFiles } from '../schema/card.ts';
 import { formatIssues, validate, validateViews } from '../schema/validate.ts';
-import { patchKey } from '../schema/frontmatter.ts';
-import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
-import { resolveProject } from '../index/project.ts';
 import { counts, search } from '../index/queries.ts';
+import { ftsPrefixQuery } from '../index/query.ts';
 import { parseSpec, specToParams } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
 import { findView, loadViews, viewFiles } from '../server/views.ts';
@@ -96,17 +94,16 @@ const HELP = `pj — projector CLI${vaultNote}
   pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
      --dir out|in|both --depth n] [--json]          list records, grouped
-  pj show <id>                                         one record in full
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--parent id]
          [--facet f=v ...] [--link ref ...]
          [--fingerprint fp] [--body text]              create a record
-  pj link <id> <ref> [...]                             append links to a record
-  pj unlink <id> <ref> [...]                           remove links from a record
+  pj link <id> <ref> [...] [--remove]
+         [--session] [--cwd dir]                       add or remove links; --session names the
+                                                       live Claude session working here
   pj check                                             validate every card file and saved view
   pj reindex                                           rebuild the index, and report what it holds
-  pj search <query>                                    full-text search
-  pj project <id>                                      resolved project config for a record
+  pj search <query>                                    full-text search, most relevant first
   pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
 
   pj intake [<channel>...] [--since iso] [--limit n]
@@ -123,7 +120,6 @@ const HELP = `pj — projector CLI${vaultNote}
          [--set path=yaml ...]                         scripted edits, for skills
   pj rm <id>...                                        delete, dropping references to it
   pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
-  pj link-session <id> [--cwd dir]                     link the live session working here
 
   pj vaults                                            list known vaults
   pj vaults add <path> [--name n] [--create]           open a folder as a vault
@@ -151,6 +147,7 @@ function fail(message: string): never {
 function argFlags(
   argv: string[],
   known: readonly string[],
+  booleans: readonly string[] = [],
 ): { flags: Map<string, string[]>; rest: string[] } {
   const flags = new Map<string, string[]>();
   const rest: string[] = [];
@@ -165,6 +162,14 @@ function argFlags(
             : `unknown flag --${key}. This command takes none.`,
         );
         process.exit(1);
+      }
+      // A boolean never consumes what follows it. Otherwise `--remove jira:FOO-1`
+      // reads the ref as the flag's value and the positional list comes back
+      // empty — the flag parsed, the argument vanished, and the error message is
+      // about the wrong thing.
+      if (booleans.includes(key)) {
+        flags.set(key, [...(flags.get(key) ?? []), 'true']);
+        continue;
       }
       const next = argv[i + 1];
       // `--set project=` has to reach the command as an empty string, since that
@@ -211,7 +216,7 @@ function pad(s: string, n: number): string {
 function cmdLs(argv: string[]): void {
   const { flags } = argFlags(argv, [
     'view', 'group', 'filter', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'json',
-  ]);
+  ], ['json']);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
 
@@ -283,32 +288,6 @@ function cmdLs(argv: string[]): void {
   );
 }
 
-function cmdShow(argv: string[]): void {
-  const { rest } = argFlags(argv, []);
-  const id = rest[0] ?? '';
-  const { records } = readAll(p.cards);
-  const rec = records.get(id);
-  if (!rec) {
-    console.error(`no record with id "${id}"`);
-    process.exit(1);
-  }
-  console.log(`# ${rec.title}\n`);
-  console.log(`id       ${rec.id}`);
-  if (rec.project) console.log(`project  (owns config its members inherit)`);
-  console.log(`file     ${rec.file.replace(root + '/', '')}`);
-  for (const [f, v] of Object.entries(rec.facets)) console.log(`${pad(f, 8)} ${v.join(', ')}`);
-  if (rec.links.length) {
-    console.log('\nlinks');
-    for (const l of rec.links) console.log(`  ${pad(l.kind || '?', 10)} ${l.ref}`);
-  }
-  const proj = resolveProject(rec.id, records, root);
-  if (proj) {
-    console.log(`\nproject  ${proj.key}   chain: ${proj.chain.join(' → ')}`);
-    for (const r of proj.repos) console.log(`  repo   ${r.path}${r.base ? ` (${r.base})` : ''}`);
-  }
-  if (rec.body.trim()) console.log(`\n---\n${rec.body.trim()}`);
-}
-
 function cmdAdd(argv: string[]): void {
   const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'fingerprint']);
   const title = rest.join(' ').trim();
@@ -340,57 +319,64 @@ function cmdAdd(argv: string[]): void {
   console.log(`created cards/${res.id}.md (id: ${res.id})`);
 }
 
-function cmdLink(argv: string[]): void {
-  const { rest } = argFlags(argv, []);
-  const [id, ...refs] = rest;
-  if (!id || !refs.length) {
-    console.error('pj link <id> <ref> [...]');
-    process.exit(1);
-  }
-  const { records } = readAll(p.cards);
-  const rec = records.get(id);
-  if (!rec) {
-    console.error(`no record with id "${id}"`);
-    process.exit(1);
-  }
-  const existing = rec.links.map((l) => l.raw);
-  const merged = [...existing];
-  for (const r of refs) if (!merged.includes(r)) merged.push(r);
-  const text = readFileSync(rec.file, 'utf8');
-  writeCardFile(rec.file, patchKey(text, 'links', merged));
-  console.log(`${id}: ${merged.length} link(s)`);
-}
-
 /**
- * Remove links, the inverse of `cmdLink`.
+ * The one place a card's `links` array is written.
  *
- * Without this the only way to take a link off a card is `--set links=[...]`,
- * which means retyping every ref that stays — so one typo silently drops
- * provenance, and provenance is the whole point of a link. Moving a ref from one
- * card to another is ordinary organisational work, not an edge case.
+ * Three commands used to do this. `unlink` was `link`'s inverse with the same
+ * body, and `link-session` differed only in where the ref came from — the cwd
+ * rather than the argument list — which makes `--session` a way of *naming* a
+ * ref, not a separate operation.
  *
- * A ref that is not there is an error rather than a no-op: `pj unlink x jira:FOO-1`
- * reporting success while doing nothing is how you find out a month later that
- * the link is still on the other card.
+ * It writes through `patchCard`, which is the other half of collapsing them.
+ * `link` and `unlink` wrote frontmatter directly and so never bumped `updated`,
+ * while `link-session` went through the gate and did: attaching a Jira issue left
+ * a card reading as untouched since 2020, and README is explicit that `updated`
+ * "only ever says that *something* changed". One write path, one answer.
+ *
+ * A ref that is not there is an error rather than a no-op on `--remove`:
+ * `pj link x --remove jira:FOO-1` reporting success while doing nothing is how
+ * you find out a month later that the link is still on the other card.
  */
-function cmdUnlink(argv: string[]): void {
-  const { rest } = argFlags(argv, []);
-  const [id, ...refs] = rest;
-  if (!id || !refs.length) fail('pj unlink <id> <ref> [...]');
+function cmdLink(argv: string[]): void {
+  const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd'], ['remove', 'session']);
+  const [id, ...given] = rest;
+  if (!id) fail('pj link <id> <ref>... [--remove] [--session] [--cwd dir]');
+
+  const refs = [...given];
+  if (flags.has('session')) {
+    const cwd = flags.get('cwd')?.[0];
+    const dir = cwd && cwd !== 'true' ? cwd : process.cwd();
+    const found = sessionForCwd(dir, process.pid);
+    if (!found) fail(`no live Claude session found working in ${dir}`);
+    refs.push(`claude:${found.sessionId}`);
+  }
+  if (!refs.length) fail('pj link <id> <ref>... — nothing to add or remove');
+
   const { records } = readAll(p.cards);
   const rec = records.get(id);
   if (!rec) fail(`no record with id "${id}"`);
   const existing = rec.links.map((l) => l.raw);
-  const missing = refs.filter((r) => !existing.includes(r));
-  if (missing.length) {
-    fail(
-      `${id} does not link ${missing.join(', ')}.\nIt links: ${existing.join(', ') || '(nothing)'}`,
-    );
+
+  if (flags.has('remove')) {
+    const missing = refs.filter((r) => !existing.includes(r));
+    if (missing.length) {
+      fail(`${id} does not link ${missing.join(', ')}.\nIt links: ${existing.join(', ') || '(nothing)'}`);
+    }
+    const kept = existing.filter((l) => !refs.includes(l));
+    patchCard(root, id, { links: kept });
+    console.log(`${id}: removed ${refs.length}, ${kept.length} link(s) left`);
+    return;
   }
-  const kept = existing.filter((l) => !refs.includes(l));
-  const text = readFileSync(rec.file, 'utf8');
-  writeCardFile(rec.file, patchKey(text, 'links', kept));
-  console.log(`${id}: removed ${refs.length}, ${kept.length} link(s) left`);
+
+  const already = refs.filter((r) => existing.includes(r));
+  const merged = [...existing];
+  for (const r of refs) if (!merged.includes(r)) merged.push(r);
+  if (merged.length === existing.length) {
+    console.log(`${id} already links ${already.join(', ')}`);
+    return;
+  }
+  patchCard(root, id, { links: merged });
+  console.log(`${id}: ${merged.length} link(s)` + (already.length ? ` (${already.length} already there)` : ''));
 }
 
 function cmdCheck(): void {
@@ -432,45 +418,33 @@ function cmdReindex(): void {
   if (unreadable.length) console.log(`${unreadable.length} file(s) could not be parsed — run pj check`);
 }
 
+/**
+ * Ranked full-text search.
+ *
+ * `pj ls --q` answers the same "which records match this text" and answers it the
+ * same way now — same sanitiser, same records. What it cannot do is order by
+ * relevance: the comparator ranks a record by its own facet values, and a match
+ * score belongs to the result set rather than to any record in it. So this stays,
+ * as the ranked spelling, and pj-work resolving "which card did they mean" gets
+ * the best match first rather than the most recently touched.
+ *
+ * It used to pass raw input straight to FTS5 — `pj search 'foo('` died with a
+ * syntax error — and to truncate at `search()`'s default of 25 while printing 25
+ * as the total.
+ */
 function cmdSearch(argv: string[]): void {
   const { rest } = argFlags(argv, []);
-  const q = rest.join(' ').trim();
-  if (!q) {
-    console.error('pj search <query>');
-    process.exit(1);
+  const raw = rest.join(' ').trim();
+  if (!raw) fail('pj search <query>');
+  const q = ftsPrefixQuery(raw);
+  if (q === null) {
+    console.log(`no searchable words in "${raw}"`);
+    return;
   }
   const { db } = reindex(root);
   const rows = search(db, q);
   for (const r of rows) console.log(`${pad(r.id, 34)} ${r.title}`);
-  console.log(`\n${rows.length} match(es)`);
-}
-
-function cmdProject(argv: string[]): void {
-  const { rest } = argFlags(argv, []);
-  const id = rest[0] ?? '';
-  const { records } = readAll(p.cards);
-  if (!records.has(id)) {
-    console.error(`no record with id "${id}"`);
-    process.exit(1);
-  }
-  const proj = resolveProject(id, records, root);
-  if (!proj) {
-    console.log(`${id} has no project ancestor`);
-    return;
-  }
-  console.log(`key      ${proj.key}`);
-  console.log(`chain    ${proj.chain.join(' → ')}`);
-  console.log(`jira     ${proj.jira ?? '-'}`);
-  console.log(`branch   ${proj.branch ?? '-'}`);
-  console.log(`repos    ${proj.repos.length ? '' : '-'}`);
-  for (const r of proj.repos) {
-    const ok = existsSync(r.path) ? '' : '  (path not found)';
-    console.log(`  ${r.path}${r.base ? ` @ ${r.base}` : ''}${ok}`);
-  }
-  if (proj.instructions.length) {
-    console.log(`\ninstructions (${proj.instructions.length} block(s), root first)`);
-    for (const block of proj.instructions) console.log('\n' + block);
-  }
+  console.log(`\n${rows.length} match(es), most relevant first`);
 }
 
 // ---------------------------------------------------------------- dispatch
@@ -481,9 +455,6 @@ try {
   switch (cmd) {
     case 'ls':
       cmdLs(argv);
-      break;
-    case 'show':
-      cmdShow(argv);
       break;
     case 'log': {
       const { flags } = argFlags(argv, ['since']);
@@ -503,9 +474,6 @@ try {
     case 'link':
       cmdLink(argv);
       break;
-    case 'unlink':
-      cmdUnlink(argv);
-      break;
     case 'check':
       argFlags(argv, []);
       cmdCheck();
@@ -517,12 +485,9 @@ try {
     case 'search':
       cmdSearch(argv);
       break;
-    case 'project':
-      cmdProject(argv);
-      break;
 
     case 'vaults': {
-      const { flags, rest } = argFlags(argv, ['name', 'create']);
+      const { flags, rest } = argFlags(argv, ['name', 'create'], ['create']);
       const [sub, given] = rest;
       if (!sub || sub === 'list') {
         const vaults = listVaults();
@@ -559,7 +524,7 @@ try {
       process.exit(1);
     }
     case 'enrich': {
-      const { flags, rest } = argFlags(argv, ['all', 'force']);
+      const { flags, rest } = argFlags(argv, ['all', 'force'], ['all', 'force']);
       const { records } = readAll(p.cards);
       const refs = rest.length
         ? rest
@@ -603,7 +568,7 @@ try {
         'cursor',
         'seen',
         'captured',
-      ]);
+      ], ['json', 'verbose']);
       const [sub, ...channels] = rest;
 
       if (sub === 'status') {
@@ -667,7 +632,7 @@ try {
     }
 
     case 'context': {
-      const { flags, rest } = argFlags(argv, ['json']);
+      const { flags, rest } = argFlags(argv, ['json'], ['json']);
       const ctx = cardContext(rest[0] ?? '', root);
       if (!ctx) {
         console.error(`no record with id "${rest[0] ?? ''}"`);
@@ -765,7 +730,7 @@ try {
     }
 
     case 'work': {
-      const { flags, rest } = argFlags(argv, ['dry-run', 'no-open']);
+      const { flags, rest } = argFlags(argv, ['dry-run', 'no-open'], ['dry-run', 'no-open']);
       const id = rest[0];
       const ctx = id ? cardContext(id, root) : null;
       if (!ctx) {
@@ -840,36 +805,6 @@ try {
         console.error(`could not open Terminal: ${(err as Error).message}`);
         console.log(`run it yourself:\n  cd ${workspace} && claude "Read AGENT_BRIEFING.md and follow it exactly."`);
       }
-      break;
-    }
-
-    case 'link-session': {
-      const { flags, rest } = argFlags(argv, ['cwd']);
-      const id = rest[0];
-      if (!id) {
-        console.error('pj link-session <id> [--cwd dir]');
-        process.exit(1);
-      }
-      const cwd = flags.get('cwd')?.[0] ?? process.cwd();
-      const found = sessionForCwd(cwd, process.pid);
-      if (!found) {
-        console.error(`no live Claude session found working in ${cwd}`);
-        process.exit(1);
-      }
-      const { records } = readAll(p.cards);
-      const rec = records.get(id);
-      if (!rec) {
-        console.error(`no record with id "${id}"`);
-        process.exit(1);
-      }
-      const ref = `claude:${found.sessionId}`;
-      const existing = rec.links.map((l) => l.raw);
-      if (existing.includes(ref)) {
-        console.log(`${id} already links ${ref}`);
-        break;
-      }
-      patchCard(root, id, { links: [...existing, ref] });
-      console.log(`${id} → ${ref}${found.name ? ` (${found.name})` : ''}`);
       break;
     }
 

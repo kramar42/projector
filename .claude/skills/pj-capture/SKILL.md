@@ -78,7 +78,8 @@ each with the mechanical reason it matched:
   card. Never link on `text` alone; say what you think it is and let him say.
 
 When linking, say which reason you are relying on, so a wrong call is visible before it lands. A
-session linked to the wrong card puts its history somewhere nobody will look for it.
+session linked to the wrong card puts its history somewhere nobody will look for it — move it with
+`pj link <wrong-card> --remove <ref>` then `pj link <right-card> <ref>`, rather than leaving it.
 
 ## 4. Propose, then stop
 

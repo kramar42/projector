@@ -62,11 +62,11 @@ run themselves.
 
 ## 5. Close the loop
 
-The briefing already instructs the new session to run `pj link-session <id>` as its last step, so the
+The briefing already instructs the new session to run `pj link <id> --session` as its last step, so the
 card accumulates its own history. If you are *inside* a workspace and it has not happened yet:
 
 ```bash
-pj link-session <id>
+pj link <id> --session
 ```
 
 That finds the live session working in this directory and appends `claude:<uuid>` to the card, which

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
 import { commitWatermark, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
-import { evidenceFor, fromWorkspacePath, ftsQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
+import { evidenceFor, fromWorkspacePath, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
@@ -286,7 +286,7 @@ test('a transcript whose file was touched but had no activity is not new work', 
 // ------------------------------------------------------------------ FTS safety
 
 test('an opening prompt full of FTS operators produces a query, not a syntax error', () => {
-  const q = ftsQuery('fix the "keycloak" logout (NEAR: token) AND cookie -- please');
+  const q = ftsOverlapQuery('fix the "keycloak" logout (NEAR: token) AND cookie -- please');
   assert.ok(q);
   // Every token quoted, so nothing in a prompt can be read as an operator.
   assert.match(q!, /^"[a-z0-9]+"( OR "[a-z0-9]+")*$/);
@@ -295,8 +295,8 @@ test('an opening prompt full of FTS operators produces a query, not a syntax err
 
 test('a prompt with nothing distinctive left produces no query at all', () => {
   // A query of pure noise matches everything, which is worse than no match.
-  assert.equal(ftsQuery('can you please just fix this for me'), null);
-  assert.equal(ftsQuery('hi'), null);
+  assert.equal(ftsOverlapQuery('can you please just fix this for me'), null);
+  assert.equal(ftsOverlapQuery('hi'), null);
 });
 
 // -------------------------------------------------------------------- jira

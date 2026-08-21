@@ -563,22 +563,24 @@ one.
 | | |
 |---|---|
 | `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
-| `pj show <id>` | one record, with its resolved project config |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--set path=yaml` |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
-| `pj link <id> <ref> …` | append links |
-| `pj project <id>` | resolved project config and inherited instructions |
+| `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
 | `pj context <id> [--json]` | everything known about a card, assembled |
 | `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
-| `pj link-session <id>` | link the live Claude session working in this directory |
 | `pj enrich [<ref>…] [--all]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
 | `pj intake commit --channel c [--cursor v]` · `pj intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
 | `pj check` | validate every card file, and every saved view against the same vocabulary |
-| `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text |
+| `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
+
+`pj search` and `pj ls --q` match the same records through the same sanitiser and differ only in order:
+search ranks by relevance, which belongs to a result set rather than to any record in it, so it cannot
+be a sort key. `pj context` is the only way to read one card — `show` and `project` printed subsets of
+what it already assembles.
 
 The CLI and the app share one query compiler *and* one payload builder, so `pj ls --view unblocked` and
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`
