@@ -1,4 +1,4 @@
-import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { firstLine } from './run.ts';
@@ -161,6 +161,105 @@ function parseHead(head: string): DesktopSession | null {
     archived: /"isArchived":true/.test(head),
     lastFocusedAt: Number(head.match(/"lastFocusedAt":(\d+)/)?.[1] ?? 0),
   };
+}
+
+export interface Turn {
+  /** Whose move it is. `model` is the only state that means work is happening. */
+  waitingOn: 'model' | 'human';
+  /** When the record that decided it was written. */
+  at?: string;
+}
+
+/**
+ * Whose move it is, from the tail of a transcript.
+ *
+ * A live process is not a working agent. The desktop app keeps one per open
+ * chat, so `alive` says a session exists and nothing about whether it is doing
+ * anything — which is why a screen full of sessions all read as running.
+ *
+ * The last conversation record does say. The model owes the next record after a
+ * prompt, after a tool result, and while a tool it asked for is still running
+ * (an assistant turn that stopped at `tool_use` is not a finished turn); the
+ * human owes it once a turn ends, and an interrupt is the human taking the move
+ * back mid-turn. Everything else in the file — `mode`, `last-prompt`,
+ * `attachment`, the rest — is bookkeeping the session rewrites while nothing is
+ * happening, so it is skipped rather than read as activity.
+ *
+ * Only the tail is read: transcripts reach tens of megabytes and the answer is
+ * always in the last few records. Sidechains are skipped too — a subagent's
+ * records say what it is doing, not what the session is waiting on.
+ */
+export function lastTurn(file: string, tailBytes = 256 * 1024): Turn | null {
+  let fd;
+  try {
+    fd = openSync(file, 'r');
+    const size = fstatSync(fd).size;
+    const from = Math.max(0, size - tailBytes);
+    const buf = Buffer.alloc(size - from);
+    readSync(fd, buf, 0, buf.length, from);
+    const lines = buf.toString('utf8').split('\n');
+    // Reading from an offset lands mid-record, and half a record parses as none.
+    if (from > 0) lines.shift();
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const turn = readTurn(lines[i] ?? '');
+      if (turn) return turn;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function readTurn(line: string): Turn | null {
+  if (!line) return null;
+  let rec: Record<string, unknown>;
+  try {
+    rec = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (rec.isSidechain === true) return null;
+  const msg = rec.message as { stop_reason?: string; content?: unknown } | undefined;
+  const at = typeof rec.timestamp === 'string' ? rec.timestamp : undefined;
+  if (rec.type === 'assistant') return { waitingOn: msg?.stop_reason === 'tool_use' ? 'model' : 'human', at };
+  if (rec.type === 'user') return { waitingOn: interrupted(msg?.content) ? 'human' : 'model', at };
+  return null;
+}
+
+/** An interrupt is recorded as a user turn saying so, which is not a prompt. */
+function interrupted(content: unknown): boolean {
+  const isMarker = (t: unknown) => typeof t === 'string' && t.startsWith('[Request interrupted');
+  if (typeof content === 'string') return isMarker(content);
+  if (!Array.isArray(content)) return false;
+  return content.some((b) => b && typeof b === 'object' && isMarker((b as { text?: unknown }).text));
+}
+
+/**
+ * How long a turn can go quiet before "working" stops being credible. Above the
+ * ceiling on a single tool call, so a slow build still reads as work, while a
+ * session left mid-turn and later reopened by the desktop app does not.
+ */
+const STALL_MS = 15 * 60 * 1000;
+
+export type SessionState = 'working' | 'stalled' | 'waiting' | 'closed';
+
+/**
+ * What a session is doing, which is a different question from whether a process
+ * exists — all `alive` answers, and not much, since the desktop app keeps one
+ * per open chat. Working is the model owing the next record and the file saying
+ * so recently; waiting is a finished turn, where the move is the human's.
+ *
+ * The word, not a badge: the board draws it with a glyph and a colour and a
+ * sweep prints it as it is, and both should mean the same thing.
+ */
+export function sessionState(alive: boolean, turn: Turn | null, lastAt?: string): SessionState {
+  if (!alive) return 'closed';
+  if (turn?.waitingOn !== 'model') return 'waiting';
+  const at = turn.at ?? lastAt;
+  const quiet = at ? Date.now() - Date.parse(at) : 0;
+  return quiet > STALL_MS ? 'stalled' : 'working';
 }
 
 export interface Transcript {

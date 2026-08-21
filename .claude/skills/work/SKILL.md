@@ -70,7 +70,8 @@ ck link-session <id>
 ```
 
 That finds the live session working in this directory and appends `claude:<uuid>` to the card, which
-then renders on the board with its running state and last activity.
+then renders on the board with what it is doing — working, waiting on you, closed — and its last
+activity.
 
 ## What this does not do
 

@@ -1,5 +1,13 @@
 import { statSync } from 'node:fs';
-import { desktopSessionFor, findTranscript, liveById, summarise } from '../sources/claude.ts';
+import {
+  desktopSessionFor,
+  findTranscript,
+  lastTurn,
+  liveById,
+  sessionState,
+  summarise,
+  type SessionState,
+} from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { unavailable, type Fetcher, type Tone } from './types.ts';
 
@@ -36,6 +44,14 @@ function resume(uuid: string): { action?: { label: string; href: string }; comma
   return { command: `claude --resume ${uuid}` };
 }
 
+/** How the four states read on a card. The state itself is decided upstream. */
+const BADGE: Record<SessionState, { label: string; tone: Tone }> = {
+  working: { label: '● working', tone: 'good' },
+  stalled: { label: '◐ stalled', tone: 'warn' },
+  waiting: { label: '◐ waiting', tone: 'accent' },
+  closed: { label: '○ closed', tone: 'neutral' },
+};
+
 export const sessionFetcher: Fetcher = {
   // Cheap and local, so a short ttl costs nothing and keeps a running session fresh.
   ttl: 60,
@@ -56,12 +72,9 @@ export const sessionFetcher: Fetcher = {
     }
 
     const s = summarise(file);
-    const badges: { label: string; tone: Tone }[] = [
-      live?.alive ? { label: '● running', tone: 'good' } : { label: '○ idle', tone: 'neutral' },
-    ];
-    if (s.branch) badges.push({ label: s.branch, tone: 'accent' });
-
     const lastAt = s.lastAt ?? statSync(file).mtime.toISOString();
+    const badges: { label: string; tone: Tone }[] = [BADGE[sessionState(live?.alive ?? false, lastTurn(file), lastAt)]];
+    if (s.branch) badges.push({ label: s.branch, tone: 'accent' });
     return {
       label: live?.name ?? uuid.slice(0, 8),
       title: s.opening || '(no opening prompt recorded)',

@@ -10,6 +10,7 @@ import { evidenceFor, fromWorkspacePath, ftsQuery, matchBranch, matchCwd, repoIn
 import { candidateCount, channelNames, renderSweep, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
+import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
 import { workspacePath } from '../src/agent/worktree.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
 
@@ -320,4 +321,76 @@ test('a sweep says out loud that it captured nothing', async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * A session's state is read from the tail of its transcript, because the thing
+ * that is easy to read — a live process — is not the thing worth knowing. The
+ * desktop app keeps a process per open chat, so `alive` marks every chat as
+ * running; only the last conversation record says whether work is happening.
+ */
+function transcript(...records: unknown[]): string {
+  const dir = mkdtempSync(join(tmpdir(), 'ck-turn-'));
+  const file = join(dir, 'session.jsonl');
+  writeFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+  return file;
+}
+
+const at = '2026-08-21T12:00:00.000Z';
+const assistant = (stop: string) => ({ type: 'assistant', timestamp: at, message: { role: 'assistant', stop_reason: stop } });
+const user = (content: unknown) => ({ type: 'user', timestamp: at, message: { role: 'user', content } });
+
+test('a turn that stopped to call a tool is still the model working', () => {
+  assert.equal(lastTurn(transcript(user('go'), assistant('tool_use')))?.waitingOn, 'model');
+});
+
+test('a tool result hands the move back to the model', () => {
+  const result = user([{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }]);
+  assert.equal(lastTurn(transcript(assistant('tool_use'), result))?.waitingOn, 'model');
+});
+
+test('a finished turn is waiting on the human', () => {
+  assert.equal(lastTurn(transcript(user('go'), assistant('end_turn')))?.waitingOn, 'human');
+});
+
+test('an interrupt is the human taking the move back, not a prompt', () => {
+  const stop = user([{ type: 'text', text: '[Request interrupted by user]' }]);
+  assert.equal(lastTurn(transcript(assistant('tool_use'), stop))?.waitingOn, 'human');
+});
+
+test('bookkeeping the session rewrites while idle is not activity', () => {
+  const t = transcript(
+    user('go'),
+    assistant('end_turn'),
+    { type: 'last-prompt', lastPrompt: 'go' },
+    { type: 'mode', mode: 'normal' },
+    { type: 'atis-latch', atis: '' },
+  );
+  assert.equal(lastTurn(t)?.waitingOn, 'human');
+});
+
+test("a subagent's records say what it is doing, not what the session waits on", () => {
+  const t = transcript(user('go'), assistant('tool_use'), { ...assistant('end_turn'), isSidechain: true });
+  assert.equal(lastTurn(t)?.waitingOn, 'model');
+});
+
+test('a tail read that lands mid-record drops the half it cannot parse', () => {
+  const big = user('x'.repeat(4096));
+  const t = transcript(big, big, big, assistant('end_turn'));
+  // The read ends at EOF, so the last record is whole and the leading half goes.
+  assert.equal(lastTurn(t, 512)?.waitingOn, 'human');
+  // A window too small to hold even that says nothing rather than something wrong.
+  assert.equal(lastTurn(t, 40), null);
+});
+
+test('a process without a turn to work on is waiting, and none at all is closed', () => {
+  const now = new Date().toISOString();
+  const state = (alive: boolean, turn: Turn | null) => sessionState(alive, turn, now);
+  assert.equal(state(true, { waitingOn: 'model', at: now }), 'working');
+  assert.equal(state(true, { waitingOn: 'human', at: now }), 'waiting');
+  assert.equal(state(true, null), 'waiting');
+  assert.equal(state(false, { waitingOn: 'model', at: now }), 'closed');
+  // Owing a move it has not made for a quarter of an hour is not work.
+  const stale = new Date(Date.now() - 16 * 60 * 1000).toISOString();
+  assert.equal(state(true, { waitingOn: 'model', at: stale }), 'stalled');
 });

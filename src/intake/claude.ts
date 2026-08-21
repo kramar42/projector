@@ -1,4 +1,4 @@
-import { listTranscripts, liveById, summarise } from '../sources/claude.ts';
+import { lastTurn, listTranscripts, liveById, sessionState, summarise } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { evidenceFor } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
@@ -111,7 +111,7 @@ export const claudeChannel: Channel = {
         fields: [
           { k: 'turns', v: String(sum.turns) },
           { k: 'last', v: ago(sum.lastAt ?? t.modifiedAt) },
-          { k: 'state', v: s?.alive ? 'running' : 'idle' },
+          { k: 'state', v: sessionState(s?.alive ?? false, lastTurn(t.file), sum.lastAt ?? t.modifiedAt) },
           { k: 'cwd', v: sum.cwd ?? '' },
           { k: 'branch', v: sum.branch ?? '' },
         ].filter((f) => f.v),
