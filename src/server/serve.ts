@@ -275,6 +275,11 @@ app.get('/api/card/:id', (c) => {
     // The client sends this back on a write; a mismatch means an agent or an
     // editor changed the file meanwhile, and the write is refused (409).
     mtime: mtimeOf(rec.file),
+    // The raw frontmatter, from this same read. It used to have a route of its
+    // own, which meant the panel held two copies of one file with two mtimes:
+    // the chips refreshed on every write and the raw pane never did, so saving
+    // it reverted whatever the chips had just done. One read, one mtime.
+    yaml: split(readFileSync(rec.file, 'utf8')).yaml ?? '',
     parents: parentsOf(rec)
       .map((id) => records.get(id))
       .filter((r) => r)
@@ -436,17 +441,6 @@ app.delete('/api/view/:name', (c) => {
  * it directly. The write validates first and refuses rather than
  * saving something the indexer would then reject.
  */
-app.get('/api/card/:id/frontmatter', (c) => {
-  const root = vaultOf(c);
-  try {
-    const file = fileFor(root, c.req.param('id'));
-    const { yaml } = split(readFileSync(file, 'utf8'));
-    return c.json({ yaml: yaml ?? '', mtime: mtimeOf(file) });
-  } catch (err) {
-    return fail(c, err);
-  }
-});
-
 app.put('/api/card/:id/frontmatter', async (c) => {
   const root = vaultOf(c);
   try {

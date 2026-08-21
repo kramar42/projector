@@ -1659,6 +1659,25 @@ textarea { resize: vertical; font-family: inherit; }
 
 .hint { font-size: var(--text-body-sm); color: var(--ink-3); margin: 6px 0 0; font-style: italic; }
 
+/* A section whose list is computed rather than stored — the same `ƒ` the filter
+   panel puts on a pseudo-facet, so one mark means one thing in both places. It
+   sits beside the heading rather than floating right, because it annotates the
+   name; a control would float. */
+.derived {
+  font-family: var(--mono);
+  font-size: var(--text-title);
+  line-height: 1;
+  color: var(--ink-3);
+  font-style: italic;
+  margin-left: 5px;
+  cursor: help;
+}
+
+/* A section's action, in the corner a control lives in. It is a Button rather
+   than a tab: `.tab` says "you are in this mode", and refresh and edit-raw are
+   things you do, not modes you are in. */
+.section-do { float: right; }
+
 .tabs { float: right; display: inline-flex; gap: 2px; }
 .tab {
   appearance: none;
@@ -1707,7 +1726,7 @@ textarea { resize: vertical; font-family: inherit; }
   border-style: solid;
   border-color: var(--accent);
 }
-.linkedit { display: flex; flex-direction: column; gap: 4px; }
+.linkedit { display: flex; flex-direction: column; gap: 6px; }
 .linkedit input { width: 100%; font-size: var(--text-sm); }
 
 /* record picker */
@@ -1888,7 +1907,6 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .linkrow-note.is-bad { color: var(--bad); font-style: normal; }
 .linkrow-note.is-setup { color: var(--warn); font-style: normal; }
 
-.linkedit { gap: 6px; }
 
 /* ================================================================ vaults */
 

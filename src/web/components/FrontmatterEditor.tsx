@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { EditorView, keymap } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { useMemo, useState } from 'react';
 import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
 import { ApiError } from '../api.ts';
 import { Button } from './Button.tsx';
+import { useDocumentEditor } from './useDocumentEditor.ts';
 
 /**
  * Direct frontmatter editing.
@@ -23,78 +21,36 @@ export function FrontmatterEditor({
   cardId,
   yaml,
   onSave,
-  onSaved,
 }: {
   cardId: string;
   yaml: string;
-  onSave: (yaml: string) => Promise<{ warnings?: string[] }>;
-  onSaved?: () => void;
+  onSave: (yaml: string) => Promise<{ warnings: string[] }>;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const view = useRef<EditorView | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const saved = useRef(yaml);
 
-  const doSave = () => {
-    const text = view.current?.state.doc.toString() ?? '';
-    setSaving(true);
+  const extensions = useMemo(
+    () => [
+      StreamLanguage.define(yamlMode),
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    ],
+    [],
+  );
+
+  const { hostRef, dirty, saving, save } = useDocumentEditor({
+    docId: cardId,
+    value: yaml,
+    extensions,
+    onSave,
+  });
+
+  const run = () => {
     setProblem(null);
-    onSave(text)
-      .then((res) => {
-        saved.current = text;
-        setDirty(false);
-        setWarnings(res.warnings ?? []);
-        onSaved?.();
-      })
-      .catch((e: ApiError) => setProblem(e.message))
-      .finally(() => setSaving(false));
+    save().then(
+      (res) => setWarnings(res.warnings),
+      (e: ApiError) => setProblem(e.message),
+    );
   };
-  const saveRef = useRef(doSave);
-  saveRef.current = doSave;
-
-  useEffect(() => {
-    if (!host.current) return;
-    const v = new EditorView({
-      parent: host.current,
-      state: EditorState.create({
-        doc: yaml,
-        extensions: [
-          history(),
-          keymap.of([
-            { key: 'Mod-s', run: () => (saveRef.current(), true), preventDefault: true },
-            indentWithTab,
-            ...defaultKeymap,
-            ...historyKeymap,
-          ]),
-          StreamLanguage.define(yamlMode),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          EditorView.lineWrapping,
-          EditorView.updateListener.of((u) => {
-            if (u.docChanged) setDirty(u.state.doc.toString() !== saved.current);
-          }),
-        ],
-      }),
-    });
-    view.current = v;
-    return () => {
-      v.destroy();
-      view.current = null;
-    };
-    // The editor owns its document after mount, so `cardId` alone is the dependency.
-  }, [cardId]);
-
-  // Adopt an external change only when there is nothing unsaved to lose.
-  useEffect(() => {
-    if (!view.current || dirty) return;
-    if (yaml === view.current.state.doc.toString()) return;
-    saved.current = yaml;
-    view.current.dispatch({
-      changes: { from: 0, to: view.current.state.doc.length, insert: yaml },
-    });
-  }, [yaml, dirty]);
 
   return (
     <div className="editor">
@@ -102,9 +58,9 @@ export function FrontmatterEditor({
         The whole frontmatter, as it sits in the file. Validated on save — a bad edit is refused, not
         written. <code>id</code> cannot be changed here, because other records' edges point at it.
       </p>
-      <div ref={host} className="editor-host is-yaml" />
+      <div ref={hostRef} className="editor-host is-yaml" />
       <div className="editor-bar">
-        <Button tone="primary" onClick={doSave} disabled={!dirty || saving}>
+        <Button tone="primary" onClick={run} disabled={!dirty || saving}>
           {saving ? 'saving…' : dirty ? 'Save frontmatter' : 'Saved'}
         </Button>
         <span className="editor-hint">⌘S</span>
@@ -112,9 +68,7 @@ export function FrontmatterEditor({
       </div>
       {problem && <div className="banner is-bad">{problem}</div>}
       {warnings.length > 0 && (
-        <div className="banner is-conflict">
-          Saved, with warnings: {warnings.join('; ')}
-        </div>
+        <div className="banner is-conflict">Saved, with warnings: {warnings.join('; ')}</div>
       )}
     </div>
   );

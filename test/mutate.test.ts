@@ -166,6 +166,150 @@ test('a bulk write skips an id that is not a record rather than failing the batc
   }
 });
 
+// -------------------------------------------------------- one axis at a time
+
+/**
+ * The two forms of a facet write, and why both exist.
+ *
+ * `facets` is the whole map, replaced. `pj set` needs that, because it expresses
+ * every removal by omitting a key — `--facet f=`, a fully-consumed `--remove`,
+ * `--parent none`. Under a merge those three would silently stop removing.
+ *
+ * `facet` is one axis, merged over the file *after* the guard. The browser needs
+ * that: the map it holds is as old as its last render, so sending it back reverts
+ * whatever an agent changed on another axis in the meantime — and the write still
+ * satisfies `guard`, because the file it is racing was written inside the
+ * tolerance. That is a lost update with no conflict and no trace, which is the
+ * one outcome C3 says this module exists to prevent.
+ */
+test('a narrow write touches one axis and leaves an agent’s concurrent edit alone', () => {
+  const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
+  try {
+    // What the browser read, and what it still believes the map to be.
+    const base = mtimeOf(join(v.root, 'cards', 'a.md'));
+
+    // An agent edits another axis. Within the guard's tolerance, so no conflict:
+    // this is the race that has no 409 to catch it.
+    writeFileSync(
+      join(v.root, 'cards', 'a.md'),
+      card('a', 'priority: [now], tech: [kafka, quarkus]'),
+      'utf8',
+    );
+
+    patchCard(v.root, 'a', { facet: { name: 'status', values: ['done'] }, baseMtime: base });
+
+    const after = facetsOf(v.root, 'a');
+    assert.deepEqual(after.status, ['done'], 'the named axis is written');
+    assert.deepEqual(after.tech, ['kafka', 'quarkus'], 'the agent’s edit survives');
+    assert.deepEqual(after.priority, ['now'], 'an axis nobody touched is untouched');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a narrow write clears an axis by naming it empty, and validates the values it names', () => {
+  const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
+  try {
+    patchCard(v.root, 'a', { facet: { name: 'tech', values: [] } });
+    assert.equal(facetsOf(v.root, 'a').tech, undefined, 'an emptied axis is dropped, not stored as []');
+    assert.deepEqual(facetsOf(v.root, 'a').priority, ['now']);
+
+    assert.throws(
+      () => patchCard(v.root, 'a', { facet: { name: 'priority', values: ['nonsuch'] } }),
+      /priority/,
+      'the narrow form is not a way past the vocabulary',
+    );
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The same race, one level in: two edits to the *same* axis.
+ *
+ * Naming the axis is not enough on its own. A toggle that says "tech is now
+ * [k8s]" is still asserting the whole axis from a copy as old as its last render,
+ * so an agent adding a value to `tech` in between is reverted — inside the
+ * guard's tolerance, so there is no conflict and no trace. `add`/`remove` say
+ * what the click did instead, and a delta cannot revert what it never mentioned.
+ */
+test('a toggle removes the value it names without reverting one added beside it', () => {
+  const v = vault({ a: card('a', 'tech: [kafka]') });
+  try {
+    const base = mtimeOf(join(v.root, 'cards', 'a.md'));
+
+    // The user's panel rendered with tech: [kafka]. An agent then adds one.
+    writeFileSync(join(v.root, 'cards', 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
+
+    // The user clicks `kafka` off. Under `set` this would send [] and take
+    // `quarkus` with it.
+    patchCard(v.root, 'a', {
+      facet: { name: 'tech', values: ['kafka'], mode: 'remove' },
+      baseMtime: base,
+    });
+
+    assert.deepEqual(facetsOf(v.root, 'a').tech, ['quarkus'], 'the agent’s value survives');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('add is a union and remove is a difference, both against the file', () => {
+  const v = vault({ a: card('a', 'tech: [kafka]') });
+  try {
+    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['kafka'], mode: 'add' } });
+    assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka'], 'adding what is there is not a duplicate');
+
+    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['quarkus'], mode: 'add' } });
+    assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka', 'quarkus']);
+
+    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['nonsuch'], mode: 'remove' } });
+    assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka', 'quarkus'], 'removing an absent value is a no-op');
+
+    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['kafka', 'quarkus'], mode: 'remove' } });
+    assert.equal(facetsOf(v.root, 'a').tech, undefined, 'emptying the axis drops it');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * A single-valued axis is the one case where replacing is honest, and the
+ * vocabulary is what makes it so — `add` on `status` would produce two values and
+ * be refused, which is why the editor picks `set` from `def.single` rather than
+ * from the facet's name (C4).
+ */
+test('a single-valued axis refuses to accumulate, whatever mode asks', () => {
+  const v = vault({ a: card('a', 'status: [planning]') });
+  try {
+    patchCard(v.root, 'a', { facet: { name: 'status', values: ['done'], mode: 'set' } });
+    assert.deepEqual(facetsOf(v.root, 'a').status, ['done']);
+
+    assert.throws(
+      () => patchCard(v.root, 'a', { facet: { name: 'status', values: ['planning'], mode: 'add' } }),
+      /status/,
+    );
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The guard against fixing the two forms into one. `pj set` reads the record,
+ * mutates a copy of the map and sends it whole; if `facets` ever started merging,
+ * every removal it expresses would become a no-op — with no compile error.
+ */
+test('the whole-map form still replaces, so `pj set` can express a removal', () => {
+  const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
+  try {
+    patchCard(v.root, 'a', { facets: { priority: ['month'] } });
+    assert.deepEqual(facetsOf(v.root, 'a').priority, ['month']);
+    assert.equal(facetsOf(v.root, 'a').tech, undefined, 'an omitted key is a removal');
+  } finally {
+    v.cleanup();
+  }
+});
+
 // ---------------------------------------------------------------- validation
 
 /** The gate every write passes through, and it had no test of its own. */

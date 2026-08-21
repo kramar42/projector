@@ -1,0 +1,165 @@
+import { useCallback, useRef, useState } from 'react';
+import { ApiError, api } from '../api.ts';
+import {
+  baseOf,
+  bannerFor,
+  busyLabel,
+  classify,
+  heldBase,
+  idleStatus,
+  labelFor,
+  nextStatus,
+  planWrite,
+  type CardWrite,
+  type FacetMode,
+  type Plan,
+  type WriteStatus,
+} from './write.ts';
+
+/**
+ * The only place in the browser that names an endpoint for one card.
+ *
+ * `api.bulk` is deliberately not in this switch. That is the whole of "the panel
+ * writes one card" — the board's bulk bar keeps `POST /api/bulk` because it
+ * genuinely has many cards and no single mtime, and the panel can no longer
+ * borrow it by accident.
+ */
+function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: string[] }> {
+  switch (p.call) {
+    case 'patch':
+      return api.patchCard(id, p.body);
+    case 'frontmatter':
+      return api.putFrontmatter(id, p.yaml, p.baseMtime);
+    case 'delete':
+      return api.deleteCard(id).then(() => ({}));
+  }
+}
+
+/**
+ * One door for everything the panel writes about one card.
+ *
+ * What a caller must know:
+ *
+ * - **Every write carries a base mtime**, stamped by `planWrite`. There is no
+ *   unstamped path, and after this the panel imports no `api` at all, so there is
+ *   nothing left to make one with.
+ * - **The base is read at call time**, through refs. This is not tidiness: the
+ *   body editor builds its ⌘S handler once at mount and closes over whatever it
+ *   was handed, so a handler frozen at mount and one built this render must be
+ *   the same function reading the same numbers. They were not — ⌘S sent the
+ *   mount-time mtime, so the second ⌘S of a session failed while the Save button
+ *   beside it worked.
+ * - **Except `body`**, which carries `heldBase` — frozen while the editor is
+ *   dirty, because its document belongs to an older read.
+ * - **`press*` members return `void` and never reject**; failure lands in
+ *   `status`. `void` is not assignable to `Promise<void>`, so handing one to an
+ *   editor's `onSave` does not compile.
+ * - **`save*` members reject and record nothing.** Their controls report for
+ *   themselves, and a panel banner offering a Reload that does nothing while the
+ *   editor is dirty is a lie. One rule: a control that can report for itself does
+ *   not also raise a banner.
+ * - Every successful write reloads. `remove` calls `onGone` only if it succeeded.
+ * - The panel is mounted with `key={id}`, so this hook never sees an id change
+ *   and owns no reset logic.
+ */
+export interface CardWriter {
+  /**
+   * `mode` defaults to `set`, which is right for a control that replaces an axis
+   * — a date, a single-valued toggle, a parent. A control that toggles one value
+   * of a multi-valued axis must say `add` or `remove`, because "the axis is now
+   * exactly this" is a claim it cannot honestly make about a file it last read a
+   * render ago.
+   */
+  facet(name: string, values: string[], mode?: FacetMode): void;
+  title(next: string): void;
+  links(next: string[]): void;
+  projectBlock(block: Record<string, unknown> | null): void;
+  remove(): void;
+
+  body(next: string): Promise<void>;
+  frontmatter(yaml: string): Promise<{ warnings: string[] }>;
+
+  status: WriteStatus;
+  busy: string | null;
+  banner: ReturnType<typeof bannerFor>;
+  /** Clear a standing failure and refetch — the conflict banner's Reload. */
+  dismiss(): void;
+}
+
+export function usePanelWriter(o: {
+  id: string;
+  /** The freshest completed read's mtime; null until the first load lands. */
+  mtime: number | null;
+  reload: () => void;
+  /** True while the body editor holds unsaved text; freezes the body's base. */
+  bodyHeld: boolean;
+  onGone: () => void;
+}): CardWriter {
+  const [status, setStatus] = useState(idleStatus);
+  const read = useRef(o.mtime);
+  const wrote = useRef<number | null>(null);
+  const held = useRef<number | null>(null);
+  const live = useRef(o);
+  const seq = useRef(0);
+
+  // Assigned during render, exactly as `useLive` assigns its `loadRef`. `heldBase`
+  // is idempotent, so a StrictMode double render changes nothing.
+  read.current = o.mtime;
+  held.current = heldBase(held.current, baseOf(o.mtime, wrote.current), o.bodyHeld);
+  live.current = o;
+
+  const run = useCallback(async (w: CardWrite): Promise<{ warnings?: string[] }> => {
+    const at = w.kind === 'body' ? held.current : baseOf(read.current, wrote.current);
+    if (at === null) throw new ApiError('the card is not loaded yet', 0);
+    const res = await dispatch(live.current.id, planWrite(w, at));
+    if (typeof res.mtime === 'number') {
+      wrote.current = res.mtime;
+      // The editor is about to go clean on this text, so its base advances with it.
+      if (w.kind === 'body') held.current = res.mtime;
+    }
+    live.current.reload();
+    return res;
+  }, []);
+
+  /** Fire and report. Never rejects — the panel's banner is the whole report. */
+  const press = useCallback(
+    (w: CardWrite) => {
+      const n = ++seq.current;
+      setStatus((s) => nextStatus(s, { t: 'start', seq: n, label: labelFor(w) }));
+      run(w).then(
+        () => {
+          setStatus((s) => nextStatus(s, { t: 'settled', seq: n, failure: null }));
+          if (w.kind === 'delete') live.current.onGone();
+        },
+        (err: unknown) =>
+          setStatus((s) => nextStatus(s, { t: 'settled', seq: n, failure: classify(err) })),
+      );
+    },
+    [run],
+  );
+
+  return {
+    facet: useCallback(
+      (name, values, mode: FacetMode = 'set') => press({ kind: 'facet', name, values, mode }),
+      [press],
+    ),
+    title: useCallback((title) => press({ kind: 'title', title }), [press]),
+    links: useCallback((links) => press({ kind: 'links', links }), [press]),
+    projectBlock: useCallback((block) => press({ kind: 'projectBlock', block }), [press]),
+    remove: useCallback(() => press({ kind: 'delete' }), [press]),
+
+    body: useCallback((body) => run({ kind: 'body', body }).then(() => {}), [run]),
+    frontmatter: useCallback(
+      (yaml) => run({ kind: 'frontmatter', yaml }).then((r) => ({ warnings: r.warnings ?? [] })),
+      [run],
+    ),
+
+    status,
+    busy: busyLabel(status),
+    banner: bannerFor(status),
+    dismiss: useCallback(() => {
+      setStatus((s) => nextStatus(s, { t: 'dismiss' }));
+      live.current.reload();
+    }, []),
+  };
+}

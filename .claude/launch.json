@@ -1,0 +1,10 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "projector",
+      "url": "http://localhost:8092",
+      "port": 8092
+    }
+  ]
+}

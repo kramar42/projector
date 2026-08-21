@@ -50,6 +50,8 @@ export interface CardDetail {
   file: string;
   /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
   mtime: number;
+  /** The raw frontmatter, from the same read as `mtime` — one file, one answer. */
+  yaml: string;
   parents: { id: string; title: string }[];
   children: { id: string; title: string }[];
   project: ResolvedProject | null;

@@ -5,7 +5,7 @@ import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
-import { CardPanel } from './views/CardPanel.tsx';
+import { CardPanel } from './panel/CardPanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
@@ -193,6 +193,10 @@ export function App() {
         <main className="main">{content}</main>
         {openCard && (
           <CardPanel
+            // Keyed on the card, so switching records remounts the panel and
+            // every block in it. That is the reset: there is no list of state to
+            // keep in step, and so no list that can fall behind.
+            key={openCard}
             id={openCard}
             meta={meta}
             onClose={() => setOpenCard(null)}

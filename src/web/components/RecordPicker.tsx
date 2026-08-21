@@ -14,11 +14,22 @@ import type { CardDTO } from '../types.ts';
 export function RecordPicker({
   exclude = [],
   placeholder = 'search records…',
+  clearLabel,
   onPick,
   onCancel,
 }: {
   exclude?: string[];
   placeholder?: string;
+  /**
+   * The word for "pick nothing", when the caller has a use for it.
+   *
+   * It used to be an unconditional row reading "— no parent —", inside a
+   * component whose whole point is that it knows no facet by name. In the three
+   * callers that were not the parent it offered another axis's word and then did
+   * nothing at all when clicked. Omitted means no row, which is the honest
+   * default: a multi-valued facet clears by removing a chip.
+   */
+  clearLabel?: string;
   onPick: (id: string | null) => void;
   onCancel?: () => void;
 }) {
@@ -60,9 +71,11 @@ export function RecordPicker({
         }}
       />
       <div className="picker-list">
-        <button className="picker-item is-clear" onClick={() => onPick(null)}>
-          — no parent —
-        </button>
+        {clearLabel && (
+          <button className="picker-item is-clear" onClick={() => onPick(null)}>
+            {clearLabel}
+          </button>
+        )}
         {matches.map((r) => (
           <button key={r.id} className="picker-item" onClick={() => onPick(r.id)}>
             <span className="picker-mark">{markOf(r).glyph}</span>

@@ -129,9 +129,67 @@ export function checkFacets(
 
 // ---------------------------------------------------------------- operations
 
+/**
+ * One facet's values merged into a map, dropping the axis when it empties.
+ *
+ * An emptied facet is deleted rather than stored as `[]`, which is the rule the
+ * frontmatter writer expects — it was spelled out at `bulkMove` and `bulkFacet`
+ * and is now needed a third time, which is three chances for one rule to drift.
+ * Pure, so it is asserted directly rather than through a filesystem.
+ */
+export function withFacet(
+  current: Record<string, string[]>,
+  name: string,
+  values: string[],
+): Record<string, string[]> {
+  const next = { ...current };
+  if (values.length) next[name] = values;
+  else delete next[name];
+  return next;
+}
+
+/** How a caller means its values: replace the axis, or name a delta on it. */
+export type FacetMode = 'set' | 'add' | 'remove';
+
+/**
+ * One axis's next values, from what is on disk and what the caller asked for.
+ *
+ * `set` is the only mode that discards what it did not see. `add` and `remove`
+ * name a *delta*, which is what a toggle actually is — and the difference is not
+ * cosmetic: a chip click that says "the axis is now [k8s, temporal]" reverts a
+ * value an agent added since the click's own render, silently and inside the
+ * guard's tolerance. One that says "remove kafka" cannot.
+ */
+export function applyMode(current: string[], values: string[], mode: FacetMode): string[] {
+  if (mode === 'set') return [...values];
+  if (mode === 'add') return [...new Set([...current, ...values])];
+  return current.filter((v) => !values.includes(v));
+}
+
 export interface PatchCardInput {
   title?: string;
+  /**
+   * The whole map, replaced. `pj set` expresses every removal by omitting a key
+   * — `--facet f=`, a fully-consumed `--remove`, `--parent none` — so this
+   * meaning must not change. A caller sending one axis wants `facet` below.
+   */
   facets?: Record<string, string[]>;
+  /**
+   * One axis, merged over what is on disk *inside* the guard.
+   *
+   * The browser cannot know the whole map without re-reading the file, and the
+   * copy it holds is as old as its last render — sending it back reverts any
+   * other axis an agent changed in the meantime, silently, because the write
+   * still satisfies `guard`'s tolerance. Naming the one axis is what makes the
+   * panel's write as narrow as the edit that caused it (C3).
+   *
+   * `mode` narrows it the last step. Naming the axis still leaves the client
+   * asserting what that *whole axis* now holds, which is as old as its last
+   * render — so a toggle on `tech` reverts a value an agent added to `tech` a
+   * moment earlier, inside the guard's tolerance, with nothing to report.
+   * `add`/`remove` name the delta instead, and a toggle *is* a delta.
+   */
+  facet?: { name: string; values: string[]; mode?: FacetMode };
   links?: string[];
   body?: string;
   project?: Record<string, unknown> | null;
@@ -151,6 +209,18 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
     // Drop empty facets rather than storing an empty array.
     const clean = Object.fromEntries(Object.entries(input.facets).filter(([, v]) => v.length));
     patch.facets = Object.keys(clean).length ? clean : undefined;
+  }
+  if (input.facet) {
+    // Read *after* the guard, so this sees the file the guard just approved
+    // rather than the one the client last rendered. Everything the client does
+    // not name survives, which is the whole point of the narrow form.
+    const { records } = readAll(paths(root).cards);
+    const { name, values, mode = 'set' } = input.facet;
+    const current = records.get(id)?.facets ?? {};
+    const next = applyMode(current[name] ?? [], values, mode);
+    const merged = withFacet(current, name, next);
+    checkFacets(root, id, next.length ? { [name]: next } : {}, records);
+    patch.facets = Object.keys(merged).length ? merged : undefined;
   }
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
   if (input.project !== undefined) patch.project = input.project ?? undefined;
@@ -314,9 +384,7 @@ export function bulkMove(
     const current = rec.facets[facet] ?? [];
     const next = nextValues(current, from, to, mode);
     if (same(current, next)) continue;
-    const facets = { ...rec.facets };
-    if (next.length) facets[facet] = next;
-    else delete facets[facet];
+    const facets = withFacet(rec.facets, facet, next);
     checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
@@ -330,7 +398,7 @@ export function bulkFacet(
   ids: string[],
   facet: string,
   values: string[],
-  mode: 'set' | 'add' | 'remove',
+  mode: FacetMode,
 ): { changed: number } {
   const { records } = readAll(paths(root).cards);
   let changed = 0;
@@ -338,14 +406,9 @@ export function bulkFacet(
     const rec = records.get(id);
     if (!rec) continue;
     const current = rec.facets[facet] ?? [];
-    let next: string[];
-    if (mode === 'set') next = [...values];
-    else if (mode === 'add') next = [...new Set([...current, ...values])];
-    else next = current.filter((v) => !values.includes(v));
+    const next = applyMode(current, values, mode);
     if (same(current, next)) continue;
-    const facets = { ...rec.facets };
-    if (next.length) facets[facet] = next;
-    else delete facets[facet];
+    const facets = withFacet(rec.facets, facet, next);
     checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;

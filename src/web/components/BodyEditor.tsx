@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { EditorView, keymap, placeholder } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { useEffect, useMemo, useState } from 'react';
+import { EditorView, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { api } from '../api.ts';
 import { Button } from './Button.tsx';
+import { useDocumentEditor } from './useDocumentEditor.ts';
 
 /**
  * CodeMirror over the raw markdown, deliberately not a WYSIWYG.
@@ -23,119 +22,70 @@ export function BodyEditor({
 }: {
   cardId: string;
   value: string;
+  /** Rejects on failure. A save that cannot fail is a save that can lose text. */
   onSave: (body: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const view = useRef<EditorView | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const saved = useRef(value);
+
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      placeholder('Free-form markdown — description, links, checklists, pasted images.'),
+      // Paste an image and it lands in the card's own assets directory.
+      EditorView.domEventHandlers({
+        paste: (event, ev) => {
+          const files = [...(event.clipboardData?.files ?? [])].filter((f) =>
+            f.type.startsWith('image/'),
+          );
+          if (!files.length) return false;
+          event.preventDefault();
+          void Promise.all(files.map((f) => api.uploadAsset(cardId, f)))
+            .then((results) => {
+              const md = results.map((r) => `![](${r.path})`).join('\n');
+              ev.dispatch(ev.state.replaceSelection(md));
+              setNote(`attached ${results.length} image(s)`);
+              setTimeout(() => setNote(null), 1800);
+            })
+            .catch((e: Error) => setNote(e.message));
+          return true;
+        },
+      }),
+    ],
+    [cardId],
+  );
+
+  const { hostRef, dirty, saving, save } = useDocumentEditor({
+    docId: cardId,
+    value,
+    extensions,
+    onSave,
+  });
 
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
-  useEffect(() => {
-    if (!host.current) return;
+  // Report false on the way out, so the panel's close guard is not left warning
+  // about text that no longer exists — switching to `read` destroys the document.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-    const save = () => {
-      const text = view.current?.state.doc.toString() ?? '';
-      setSaving(true);
-      onSave(text)
-        .then(() => {
-          saved.current = text;
-          setDirty(false);
-          setNote('saved');
-          setTimeout(() => setNote(null), 1400);
-        })
-        .catch((e: Error) => setNote(e.message))
-        .finally(() => setSaving(false));
-      return true;
-    };
-
-    const v = new EditorView({
-      parent: host.current,
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          history(),
-          keymap.of([
-            { key: 'Mod-s', run: save, preventDefault: true },
-            { key: 'Mod-Enter', run: save, preventDefault: true },
-            indentWithTab,
-            ...defaultKeymap,
-            ...historyKeymap,
-          ]),
-          markdown(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          EditorView.lineWrapping,
-          placeholder('Free-form markdown — description, links, checklists, pasted images.'),
-          EditorView.updateListener.of((u) => {
-            if (u.docChanged) setDirty(u.state.doc.toString() !== saved.current);
-          }),
-          // Paste an image and it lands in the card's own assets directory.
-          EditorView.domEventHandlers({
-            paste: (event, ev) => {
-              const files = [...(event.clipboardData?.files ?? [])].filter((f) =>
-                f.type.startsWith('image/'),
-              );
-              if (!files.length) return false;
-              event.preventDefault();
-              void Promise.all(files.map((f) => api.uploadAsset(cardId, f)))
-                .then((results) => {
-                  const md = results.map((r) => `![](${r.path})`).join('\n');
-                  ev.dispatch(ev.state.replaceSelection(md));
-                  setNote(`attached ${results.length} image(s)`);
-                  setTimeout(() => setNote(null), 1800);
-                })
-                .catch((e: Error) => setNote(e.message));
-              return true;
-            },
-          }),
-        ],
-      }),
-    });
-    view.current = v;
-    return () => {
-      v.destroy();
-      view.current = null;
-    };
-    // The editor owns its document after mount; remounting on every keystroke
-    // would fight CodeMirror's own state, so `cardId` alone is the dependency.
-  }, [cardId]);
-
-  // An external change (an agent editing the same file) replaces the document,
-  // but only when there is nothing unsaved to lose.
-  useEffect(() => {
-    if (!view.current || dirty) return;
-    if (value === view.current.state.doc.toString()) return;
-    saved.current = value;
-    view.current.dispatch({
-      changes: { from: 0, to: view.current.state.doc.length, insert: value },
-    });
-  }, [value, dirty]);
-
-  const save = () => {
-    const text = view.current?.state.doc.toString() ?? '';
-    setSaving(true);
-    onSave(text)
-      .then(() => {
-        saved.current = text;
-        setDirty(false);
+  const run = () => {
+    save().then(
+      () => {
         setNote('saved');
         setTimeout(() => setNote(null), 1400);
-      })
-      .catch((e: Error) => setNote(e.message))
-      .finally(() => setSaving(false));
+      },
+      (e: Error) => setNote(e.message),
+    );
   };
 
   return (
     <div className="editor">
-      <div ref={host} className="editor-host" />
+      <div ref={hostRef} className="editor-host" />
       <div className="editor-bar">
-        <Button tone="primary" onClick={save} disabled={!dirty || saving}>
+        <Button tone="primary" onClick={run} disabled={!dirty || saving}>
           {saving ? 'saving…' : dirty ? 'Save' : 'Saved'}
         </Button>
         <span className="editor-hint">⌘S</span>

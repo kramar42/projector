@@ -55,14 +55,29 @@ const get = <T>(path: string) => req<T>('GET', path);
 
 export interface PatchCard {
   title?: string;
-  facets?: Record<string, string[]>;
   links?: string[];
   body?: string;
-  /** `YYYY-MM-DD`, or `null` to clear. */
-  due?: string | null;
   /** `null` removes the block, so the record stops being a project. */
   project?: Record<string, unknown> | null;
-  baseMtime?: number;
+  /**
+   * ONE facet, applied server-side to what is on disk.
+   *
+   * The whole-map form still exists on `PatchCardInput`, because `pj set` needs
+   * it — it rebuilds the map from a fresh read of the file it is about to write,
+   * and expresses every removal by omitting a key. The browser cannot do that
+   * honestly: its copy is as old as its last render, so sending it back reverts
+   * whatever an agent changed on another axis. So the browser cannot say it.
+   */
+  facet?: { name: string; values: string[]; mode: 'set' | 'add' | 'remove' };
+  /**
+   * Required here, optional on the server.
+   *
+   * The server has callers that legitimately have no single mtime to offer — the
+   * board's bulk bar writes many cards at once. The panel writes exactly one, so
+   * a write without a base is a lost update, and making the field required is
+   * what turns "someone remembered" into "it compiles".
+   */
+  baseMtime: number;
 }
 
 export const api = {
@@ -104,9 +119,6 @@ export const api = {
 
   clearEnrichment: (refs?: string[]) =>
     req<{ cleared: number }>('POST', '/api/enrich/clear', { refs }),
-
-  frontmatter: (id: string) =>
-    get<{ yaml: string; mtime: number }>(`/api/card/${encodeURIComponent(id)}/frontmatter`),
 
   putFrontmatter: (id: string, yaml: string, baseMtime?: number) =>
     req<{ mtime: number; warnings: string[] }>(
