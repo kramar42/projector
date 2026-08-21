@@ -220,7 +220,6 @@ function SavedViews({
         />
         {modified && (
           <span className="rail-dirty" title="This saved view has unsaved changes">
-            <span className="dirty-mark" aria-label="Modified">*</span>
             <button
               className="btn ghost tiny icon-button icon-check"
               title="write these changes into the saved view — its layout and card order are kept"
@@ -398,23 +397,8 @@ function SortRow({
         : '';
   return (
     <div className="rail-row" title={note}>
-      <label className="rail-label">Sort</label>
-      <div className="sort-input">
-        <select
-          className={`rail-select ${key ? 'has-sort-direction' : ''}`}
-          value={key}
-          onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
-        >
-          <option value="">—</option>
-          <option value="updated">updated</option>
-          <option value="created">created</option>
-          <option value="title">title</option>
-          {facets.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+      <div className="rail-label-control">
+        <label className="rail-label">Sort</label>
         {key && (
           <button
             className="btn ghost tiny sort-direction"
@@ -426,6 +410,21 @@ function SortRow({
           </button>
         )}
       </div>
+      <select
+        className="rail-select"
+        value={key}
+        onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
+      >
+        <option value="">—</option>
+        <option value="updated">updated</option>
+        <option value="created">created</option>
+        <option value="title">title</option>
+        {facets.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
