@@ -113,7 +113,9 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   const L: string[] = [];
 
   for (const r of s.reports) {
-    const from = r.cursor ? `since ${ago(r.cursor)}` : 'no watermark — default window';
+    // A cursor is opaque: `ago` reads the ISO ones, and a Slack ts prints as
+    // itself rather than as an empty "since".
+    const from = r.cursor ? `since ${ago(r.cursor) || r.cursor}` : 'no watermark — default window';
     L.push(`## ${r.channel}  (${from})`);
     if (!r.fetched) L.push(`   not fetched by ck: ${r.note ?? 'no reason given'}`);
     else if (r.note) L.push(`   ${r.note}`);

@@ -115,7 +115,10 @@ export const gitChannel: Channel = {
   defaultDays: 7,
 
   collect(ctx): ChannelReport {
-    const repos = repoIndex(ctx);
+    // One entry per path: `repoIndex` reports a repo once per project that
+    // declares it — which is what cwd matching wants and would make this scan
+    // `staging` twice, since both `project-a` and `mapping` name it.
+    const repos = [...new Map(repoIndex(ctx).map((r) => [r.path, r])).values()];
     const candidates: Candidate[] = [];
     const skipped: Skipped[] = [];
     let examinedTo: string | null = null;

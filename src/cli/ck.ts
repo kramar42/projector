@@ -20,6 +20,16 @@ import { importTodo } from '../import/todo.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
 import { cardContext, renderContext, untriaged } from '../agent/context.ts';
+import {
+  candidateCount,
+  channelNames,
+  commitWatermark,
+  DEFAULT_LIMIT,
+  renderStatus,
+  renderSweep,
+  sweep,
+} from '../intake/run.ts';
+import { resetWatermark } from '../intake/db.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
 import { sessionForCwd } from '../agent/session.ts';
@@ -76,6 +86,13 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   ck import todo <TODO.md>                             import a TODO.md
   ck stats                                             index counts
   ck enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
+
+  ck intake [<channel>...] [--since iso] [--limit n]
+     [--json] [--verbose]                              what has happened elsewhere, since last time
+  ck intake status                                     per channel: cursor, last run, counts
+  ck intake commit --channel c [--cursor v]
+     [--seen n] [--captured n]                         move a channel's cursor, after a sweep is resolved
+  ck intake reset [--channel c]                         forget a cursor, back to the default window
 
   ck context <id> [--json]                             everything known about a card, assembled
   ck untriaged [--json] [--limit n]                    cards needing attention, and why
@@ -573,6 +590,77 @@ try {
       }
       break;
     }
+    /**
+     * A sweep proposes; it never captures and never advances a cursor. Both are
+     * separate deliberate steps — `ck add`/`ck link` for the first, `ck intake
+     * commit` for the second — because a run that fetched is not a run that was
+     * resolved, and an abandoned sweep must not swallow what it listed.
+     */
+    case 'intake': {
+      const { flags, rest } = argFlags(argv, [
+        'since',
+        'limit',
+        'json',
+        'verbose',
+        'channel',
+        'cursor',
+        'seen',
+        'captured',
+      ]);
+      const [sub, ...channels] = rest;
+
+      if (sub === 'status') {
+        console.log(renderStatus(root));
+        break;
+      }
+
+      if (sub === 'commit') {
+        const channel = flags.get('channel')?.[0];
+        if (!channel) fail('ck intake commit --channel <c> [--cursor <v>]');
+        if (!channelNames().includes(channel)) {
+          fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
+        }
+        const w = commitWatermark(root, channel, flags.get('cursor')?.[0] ?? null, {
+          seen: Number(flags.get('seen')?.[0] ?? 0),
+          captured: Number(flags.get('captured')?.[0] ?? 0),
+        });
+        console.log(`${w.channel} cursor ${w.cursor ?? '(unchanged, none)'} — ran at ${w.ranAt}`);
+        break;
+      }
+
+      if (sub === 'reset') {
+        const channel = flags.get('channel')?.[0];
+        const n = resetWatermark(root, channel);
+        console.log(
+          n
+            ? `forgot ${n} cursor(s)${channel ? ` for ${channel}` : ''} — the next sweep uses the default window`
+            : 'nothing to forget',
+        );
+        break;
+      }
+
+      // No subcommand: the positional arguments are channel names.
+      const only = sub ? [sub, ...channels] : [];
+      const sinceRaw = flags.get('since')?.[0];
+      const since = sinceRaw ? new Date(sinceRaw) : undefined;
+      if (since && !Number.isFinite(since.getTime())) fail(`--since "${sinceRaw}" is not a date`);
+
+      const result = await sweep(root, {
+        only,
+        since,
+        limit: Number(flags.get('limit')?.[0] ?? DEFAULT_LIMIT),
+      });
+      if (result.unknown.length && !result.reports.length) {
+        fail(`unknown channel(s): ${result.unknown.join(', ')} — have ${channelNames().join(', ')}`);
+      }
+      if (flags.has('json')) {
+        console.log(JSON.stringify({ candidates: candidateCount(result), ...result }, null, 2));
+        break;
+      }
+      console.log(renderSweep(result, { verbose: flags.has('verbose') }));
+      break;
+    }
+
     case 'context': {
       const { flags, rest } = argFlags(argv, ['json']);
       const ctx = cardContext(rest[0] ?? '', root);
