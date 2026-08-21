@@ -155,15 +155,18 @@ show: [status, priority]
   },
   {
     path: 'unblocked.yaml',
-    body: `# Derived, not maintained by hand: \`blocked\` is computed from the blocks facet
-# and \`waiting\` from waiting_on, so \`clear\` means neither applies.
+    body: `# Actionable now: open, nobody waited on, no unfinished blocker.
+#
+# \`blocked\` is computed from the blocks facet and \`waiting\` from waiting_on, so
+# \`clear\` means neither applies. A deadline outranks an intention, so \`due\` sorts
+# before \`priority\`: a card due tomorrow is next whatever bucket it was filed in.
 shape: board
 title: Unblocked now
 filter:
   status: [planning, active]
   blocked: [clear]
-groupBy: [energy]
-sort: [priority:asc]
+sort: [due:asc, priority:asc, updated:desc]
+show: [project, priority]
 `,
   },
   {

@@ -14,7 +14,7 @@ If the user named one loosely, resolve it before doing anything:
 
 ```bash
 pj search "<what they said>"
-pj next                      # when they asked "what should I work on"
+pj ls --view unblocked       # when they asked "what should I work on"
 ```
 
 Confirm which card you landed on if there was any ambiguity. Never prepare a workspace for a guess.

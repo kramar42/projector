@@ -50,7 +50,7 @@ alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
 3. **`parent` is a reference facet too** — "this card is part of that one". Single-valued, drawn by the
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
    are independent, so a card may have either, both or neither. Set it with `--parent X`, which is
-   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers `pj next`.
+   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers the `unblocked` view.
 4. **There is no `kind`.** A record is not a class of thing. Whether it is work is whether it carries a
    `status` — which is what keeps a grouping record off a status-filtered board — and whether it
    contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
@@ -74,9 +74,8 @@ pj ls --group parent                        # or filter parent=X, or parent=(non
 pj ls --filter linked=jira                  # which records carry a Jira link
                                             # out = follows references, in = referenced by
 pj ls --filter status=active,planning
-pj next                      # open cards with no unfinished blocker
-pj untriaged --json          # cards missing project/priority/status, and why
-pj next                      # actionable now: deadline first, then priority
+pj ls --view unblocked       # actionable now: open, nobody waited on, no unfinished blocker
+pj ls --view triage --json   # cards missing project/priority/status, grouped by what is missing
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
 pj project <id>              # just the resolved project config

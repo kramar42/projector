@@ -6,18 +6,18 @@ import { forgetVault, initVault, listVaults, normalise, registerVault } from '..
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles, writeCardFile } from '../schema/card.ts';
-import { formatIssues, validate } from '../schema/validate.ts';
+import { formatIssues, validate, validateViews } from '../schema/validate.ts';
 import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
 import { resolveProject } from '../index/project.ts';
-import { counts, search, unblocks } from '../index/queries.ts';
-import { runQuery } from '../index/query.ts';
-import { layoutRelation, parseSpec, specToParams } from '../view/spec.ts';
-import { findView } from '../server/views.ts';
+import { counts, search } from '../index/queries.ts';
+import { parseSpec, specToParams } from '../view/spec.ts';
+import { queryPayload } from '../view/payload.ts';
+import { findView, loadViews, viewFiles } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
-import { cardContext, renderContext, untriaged } from '../agent/context.ts';
+import { cardContext, renderContext } from '../agent/context.ts';
 import {
   candidateCount,
   channelNames,
@@ -68,16 +68,16 @@ const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
 
   pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
-     --dir out|in|both --depth n]                   list records, grouped
+     --dir out|in|both --depth n] [--json] [--limit n]
+                                                       list records, grouped
   pj show <id>                                         one record in full
-  pj next                                              actionable cards: open and unblocked
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--parent id]
          [--facet f=v ...] [--link ref ...]
          [--fingerprint fp] [--body text]              create a record
   pj link <id> <ref> [...]                             append links to a record
   pj unlink <id> <ref> [...]                           remove links from a record
-  pj check                                             validate every card file
+  pj check                                             validate every card file and saved view
   pj reindex                                           rebuild the index from files
   pj search <query>                                    full-text search
   pj project <id>                                      resolved project config for a record
@@ -93,7 +93,6 @@ const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
   pj intake reset [--channel c]                        forget a cursor, back to the default window
 
   pj context <id> [--json]                             everything known about a card, assembled
-  pj untriaged [--json] [--limit n]                    cards needing attention, and why
   pj set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--parent id|none]
          [--set path=yaml ...]                         scripted edits, for skills
@@ -162,15 +161,22 @@ function pad(s: string, n: number): string {
 // ---------------------------------------------------------------- commands
 
 /**
- * `pj ls` runs the same compiler the sidebar does.
+ * `pj ls` runs the same compiler the sidebar does, and returns the same payload.
  *
  * The CLI has had `--filter f=v,v --group <facet>` since P0 — the web app is what
  * caught up. Sharing the compiler is what keeps them from drifting: a saved view
  * is a name both a human and an agent can say, and it means the same thing to
  * both.
+ *
+ * `--json` closes the other half. Without it this command could only *print*, so
+ * every question an agent needed as data grew a verb of its own — `next`,
+ * `untriaged`, `search` — and each new verb was a second implementation to drift.
+ * Two of those are saved views now, which is what they always were.
  */
 function cmdLs(argv: string[]): void {
-  const { flags } = argFlags(argv);
+  const { flags } = argFlags(argv, [
+    'view', 'group', 'filter', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'json', 'limit',
+  ]);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
 
@@ -202,32 +208,58 @@ function cmdLs(argv: string[]): void {
   }
 
   const spec = parseSpec(params);
-  const res = runQuery(db, records, facets, spec.query, {
-    connect: spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined,
-  });
-  const mark = (id: string) => {
-    const rec = records.get(id);
-    // A container is a record something points at, not a kind it declares.
-    return rec?.project ? 'P' : records.values().some((r) => (r.facets.parent ?? []).includes(id)) ? '+' : ' ';
-  };
-  const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${records.get(id)?.title ?? ''}`;
+  spec.name = named;
+  const limitRaw = flags.get('limit')?.[0];
+  const limit = limitRaw && limitRaw !== 'true' ? Number(limitRaw) : undefined;
+  if (limit !== undefined && !Number.isInteger(limit)) fail(`--limit "${limitRaw}" is not a whole number`);
 
-  if (!res.groups) {
-    for (const id of res.ids) console.log(`${pad(id, 34)} ${records.get(id)?.title ?? ''}`);
-    console.log(`\n${res.total} record(s) of ${res.universe}`);
+  // The same assembly the web app receives, from the same module (C9). A second
+  // shape for the CLI is how the two surfaces would start disagreeing about the
+  // answer, having been made unable to disagree about the question.
+  const payload = queryPayload(
+    { facets, db, records, views: loadViews(root) },
+    spec,
+    limit === undefined ? {} : { limit },
+  );
+
+  if (flags.has('json')) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  const title = (id: string) => payload.cards[id]?.title ?? '';
+  const mark = (id: string) => {
+    const card = payload.cards[id];
+    // A container is a record something points at, not a kind it declares.
+    return card?.isProject ? 'P' : (card?.childCount ?? 0) > 0 ? '+' : ' ';
+  };
+  const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${title(id)}`;
+  // "showing 5 of 30" rather than reporting 30 and listing 5: a truncated answer
+  // that looks complete is the whole reason `--limit` says so out loud.
+  const showing = payload.withheld ? `showing ${payload.ids.length} of ` : '';
+
+  if (!payload.groups) {
+    for (const id of payload.ids) console.log(`${pad(id, 34)} ${title(id)}`);
+    console.log(`\n${showing}${payload.total} record(s) of ${payload.universe}`);
     return;
   }
 
   const axes = spec.query.groupBy ?? [];
-  console.log(`# grouped by ${axes.join(' × ')}\n`);
-  for (const g of res.groups) {
-    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
+  console.log(`# grouped by ${axes.join(' \u00d7 ')}\n`);
+  for (const g of payload.groups) {
+    // The group's own count comes from the full result, so a truncated column
+    // says "5 of 12" rather than quietly restating the smaller number.
+    const full = payload.counts
+      .find((f) => f.facet === axes[0])
+      ?.values.find((v) => v.value === g.value)?.count;
+    const of = full !== undefined && full > g.ids.length ? ` of ${full}` : '';
+    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length}${of})`);
     for (const id of g.ids) console.log(line(id));
     console.log('');
   }
-  const extra = res.placements - res.total;
+  const extra = payload.placements - payload.total;
   console.log(
-    `${res.total} record(s) of ${res.universe} in ${res.groups.length} group(s)` +
+    `${showing}${payload.total} record(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
       (extra > 0 ? ` — ${extra} appear in more than one group` : ''),
   );
 }
@@ -254,38 +286,6 @@ function cmdShow(id: string): void {
     for (const r of proj.repos) console.log(`  repo   ${r.path}${r.base ? ` (${r.base})` : ''}`);
   }
   if (rec.body.trim()) console.log(`\n---\n${rec.body.trim()}`);
-}
-
-/**
- * Actionable cards: open status, nobody waited on, no unfinished blocker.
- *
- * It is one `runQuery` call because every clause already exists as vocabulary:
- * `blocked: [clear]` *is* "no unfinished blocker and nobody waited on", computed
- * by the same pseudo-facet the sidebar offers. A second implementation in SQL is
- * how this command spent two days filtering on `kind`, a facet P7 deleted.
- *
- * A deadline outranks an intention, so `due` sorts before `priority`: a card due
- * tomorrow is next whatever bucket it was filed in. Undated records sort last in
- * both directions, which the ordered-facet comparator already guarantees.
- */
-function cmdNext(): void {
-  const facets = loadFacets(p.facets);
-  const { db, records } = reindex(root);
-  const { ids } = runQuery(db, records, facets, {
-    filter: { status: ['planning', 'active'], blocked: ['clear'] },
-    sort: ['due:asc', 'priority:asc', 'updated:desc'],
-  });
-  console.log('# actionable now — open, nobody waited on, no unfinished blocker\n');
-  for (const id of ids) {
-    const rec = records.get(id)!;
-    const opens = unblocks(db, id).length;
-    console.log(
-      `  ${pad(rec.facets.due?.[0] ?? '', 11)}${pad(rec.facets.priority?.join(',') || '-', 9)}` +
-        ` ${pad(id, 32)} ${rec.title}` +
-        (opens ? `  (unblocks ${opens})` : ''),
-    );
-  }
-  console.log(`\n${ids.length} actionable`);
 }
 
 function cmdAdd(argv: string[]): void {
@@ -373,7 +373,15 @@ function cmdUnlink(argv: string[]): void {
 function cmdCheck(): void {
   const facets = loadFacets(p.facets);
   const { records, unreadable, duplicates } = readAll(p.cards);
-  const issues = validate(records, facets, root, { unreadable, duplicates });
+  const issues = [
+    ...validate(records, facets, root, { unreadable, duplicates }),
+    // A view is checked against the same vocabulary its cards are. Until it was,
+    // a filter naming a deleted facet matched nothing and reported success.
+    ...validateViews(
+      viewFiles(root).map(({ name, file }) => ({ spec: findView(root, name)!, file })),
+      facets,
+    ),
+  ];
   console.log(formatIssues(issues, root));
   if (issues.some((i) => i.severity === 'error')) process.exit(1);
 }
@@ -444,9 +452,6 @@ try {
       break;
     case 'show':
       cmdShow(argv[0] ?? '');
-      break;
-    case 'next':
-      cmdNext();
       break;
     case 'log': {
       const { flags } = argFlags(argv, ['since']);
@@ -638,20 +643,6 @@ try {
         process.exit(1);
       }
       console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
-      break;
-    }
-
-    case 'untriaged': {
-      const { flags } = argFlags(argv, ['json', 'limit']);
-      const limit = Number(flags.get('limit')?.[0] ?? 200);
-      const all = untriaged(root);
-      const list = all.slice(0, limit);
-      if (flags.has('json')) {
-        console.log(JSON.stringify({ total: all.length, shown: list.length, cards: list }, null, 2));
-        break;
-      }
-      for (const u of list) console.log(`${pad(u.id, 46)} ${pad(u.reasons.join(', '), 34)} ${u.title.slice(0, 50)}`);
-      console.log(`\n${all.length} card(s) need attention${all.length > list.length ? ` (showing ${list.length})` : ''}`);
       break;
     }
 

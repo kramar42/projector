@@ -1,0 +1,159 @@
+import type { DatabaseSync } from 'node:sqlite';
+import type { Facets, Rec } from '../schema/types.ts';
+import { isRef } from '../schema/facets.ts';
+import { parentsOf } from '../index/project.ts';
+import { blockersOf, unblocks } from '../index/queries.ts';
+import { projectRollups, runQuery } from '../index/query.ts';
+import { refsOf } from '../index/refs.ts';
+import { layoutRelation, type ViewSpec } from './spec.ts';
+import { toDTO, type CardDTO } from './dto.ts';
+
+/**
+ * The answer to a `ViewSpec`.
+ *
+ * `ViewSpec` is the one description of a view, shared by a URL, a `views/*.yaml`
+ * file and `pj` flags — this is the other half of that promise. The two surfaces
+ * could not drift on the *request* and drifted freely on the *response*, because
+ * this assembly lived inside the hono handler and the CLI had no way to reach it.
+ * One module, two adapters: `GET /api/query` and `pj ls --json`.
+ */
+export interface QueryPayload {
+  spec: ViewSpec;
+  /**
+   * Keyed by id, because a card in three columns is one card. P1 embedded the
+   * whole card per group and shipped it three times.
+   */
+  cards: Record<string, CardDTO>;
+  ids: string[];
+  context: string[];
+  groups: ReturnType<typeof runQuery>['groups'] | undefined;
+  axis: ReturnType<typeof runQuery>['axis'];
+  lanes: ReturnType<typeof runQuery>['lanes'];
+  counts: ReturnType<typeof runQuery>['counts'];
+  total: number;
+  universe: number;
+  placements: number;
+  layout: ReturnType<typeof layoutRelation> | null;
+  relations: { src: string; dst: string; type: string }[];
+  rollups: ReturnType<typeof projectRollups>;
+  views: { name: string; title?: string; shape: string }[];
+  /**
+   * How many records `--limit` withheld, or 0. Group counts are always taken
+   * from the full result, so a truncated column can still say "5 of 12".
+   */
+  withheld: number;
+}
+
+/**
+ * What the payload needs to exist.
+ *
+ * Dependencies are accepted rather than created: the server hands over its
+ * memoised handle — keyed on an exact stamp of every file it read — and the CLI
+ * builds its own. Loading `root` in here would quietly bypass that memo, and its
+ * contract forbids awaiting between the load and the last read of it.
+ */
+export interface PayloadDeps {
+  facets: Facets;
+  db: DatabaseSync;
+  records: Map<string, Rec>;
+  /** Every saved view, projected to what a picker needs. */
+  views: ViewSpec[];
+  /** Overridable so a test does not depend on the day it runs. */
+  today?: string;
+}
+
+export interface PayloadOptions {
+  /**
+   * Keep at most this many records, taken off the sorted list before grouping.
+   *
+   * A presentation concern, deliberately not part of `Query`: a view describes
+   * *which* records, and a board silently showing 40 of 191 would make every
+   * count on screen a guess (C8). Only a caller that renders a finite amount of
+   * text asks for it.
+   */
+  limit?: number;
+}
+
+export function queryPayload(
+  deps: PayloadDeps,
+  spec: ViewSpec,
+  opts: PayloadOptions = {},
+): QueryPayload {
+  const { facets, db, records, views } = deps;
+  const today = deps.today ?? new Date().toISOString().slice(0, 10);
+
+  // A graph has to stay connected to be readable; a column does not. Only a
+  // canvas honours it, and along the relation it is laid out by.
+  const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
+  const res = runQuery(db, records, facets, spec.query, { connect: layout });
+
+  const capped = opts.limit !== undefined && opts.limit >= 0 && opts.limit < res.ids.length;
+  const ids = capped ? res.ids.slice(0, opts.limit) : res.ids;
+  const keep = new Set(ids);
+  // Groups list only what survived, but their counts come from the full result,
+  // so truncation is visible rather than silently restating a smaller number.
+  const groups = capped
+    ? res.groups
+        ?.map((g) => ({ ...g, ids: g.ids.filter((id) => keep.has(id)) }))
+        .filter((g) => g.ids.length)
+    : res.groups;
+
+  const shown = [...ids, ...res.context];
+  const cards: Record<string, CardDTO> = {};
+  for (const id of shown) {
+    const rec = records.get(id);
+    if (!rec) continue;
+    cards[id] = toDTO(rec, {
+      facets,
+      today,
+      childCount: countChildren(records, id),
+      blockedBy: blockersOf(db, id),
+      unblocks: unblocks(db, id).map((u) => u.id),
+    });
+  }
+
+  return {
+    spec,
+    cards,
+    ids,
+    context: res.context,
+    groups,
+    axis: res.axis,
+    lanes: res.lanes,
+    counts: res.counts,
+    total: res.total,
+    universe: res.universe,
+    placements: res.placements,
+    // Computed here rather than in the client, so the relation a canvas lays out
+    // by and the one `connect` walked cannot come apart (C8).
+    layout: layout ?? null,
+    relations: relationsAmong(records, facets, new Set(shown), spec.show),
+    // Only a table asks for these, but they are cheap and deriving them here
+    // keeps every number on screen deterministic (C8).
+    rollups: projectRollups(records, facets, today),
+    views: views.map((v) => ({ name: v.name ?? '', title: v.title, shape: v.shape })),
+    withheld: res.ids.length - ids.length,
+  };
+}
+
+export function countChildren(records: Map<string, Rec>, id: string): number {
+  let n = 0;
+  for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;
+  return n;
+}
+
+function relationsAmong(
+  records: Map<string, Rec>,
+  facets: Facets,
+  ids: Set<string>,
+  show: string[],
+): { src: string; dst: string; type: string }[] {
+  const out: { src: string; dst: string; type: string }[] = [];
+  for (const via of show) {
+    if (!isRef(facets[via])) continue;
+    for (const e of refsOf(via, records)) {
+      if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
+    }
+  }
+  return out;
+}

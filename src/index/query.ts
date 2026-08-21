@@ -146,9 +146,10 @@ function daysSince(date: string | undefined, today: string): number | null {
  * off is a grouping, and giving a grouping a lifecycle puts a container on the
  * work board.
  *
- * Shared with `untriaged()` so the Triage axis and the CLI worklist cannot give
- * two answers to one question. They used to: only the CLI exempted a project
- * from `needs-project`.
+ * The one definition of "needs triage", behind the `triage` axis. The CLI used to
+ * carry a second copy in `untriaged()` — where only the CLI exempted a project
+ * from `needs-project` — until the worklist became `views/triage.yaml`, which
+ * both surfaces read.
  */
 export function triageGaps(rec: Rec, isNode: boolean): string[] {
   const missing: string[] = [];

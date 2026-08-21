@@ -8,7 +8,8 @@ import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
-import { validate } from '../src/schema/validate.ts';
+import { validate, validateViews } from '../src/schema/validate.ts';
+import { specFromFile } from '../src/view/spec.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
@@ -970,4 +971,53 @@ test('an empty declared value gets no band', () => {
   // would be decoration with no affordance.
   const boxes = clusterBoxes(assignClusters(nodes, groups), clusteredLayout(nodes, [], [], groups), groups);
   assert.deepEqual(boxes.map((b) => b.value), ['now']);
+});
+
+/**
+ * A view file naming a facet the vocabulary does not have.
+ *
+ * This is the `pj next` bug in its new address. That command spent two days
+ * filtering on `kind`, a facet P7 deleted, and an empty result is not an error —
+ * so moving the query out of TypeScript and into `views/*.yaml` would have moved
+ * the failure rather than fixing it. `pj check` reading views is what closes it.
+ */
+test('a view naming an unknown axis is an error, in every position it can appear', () => {
+  const facets = loadFacets(
+    facetsFile('status: { values: [planning, done] }\nparent: { type: ref }\n'),
+  );
+  const view = (raw: Record<string, unknown>) => [
+    { spec: specFromFile('v', raw), file: '/data/views/v.yaml' },
+  ];
+
+  const cases: [string, Record<string, unknown>][] = [
+    ['filter', { filter: { kind: ['task'] } }],
+    ['groupBy', { groupBy: ['kind'] }],
+    ['sort', { sort: ['kind:asc'] }],
+    ['show', { show: ['kind'] }],
+  ];
+  for (const [where, raw] of cases) {
+    const issues = validateViews(view(raw), facets);
+    assert.equal(issues.length, 1, `${where}: expected exactly one issue`);
+    assert.equal(issues[0]!.severity, 'error', `${where}: must be an error, not a warning`);
+    assert.match(issues[0]!.message, /kind/, `${where}: must name the offending axis`);
+  }
+
+  // `focus.via` is walked, so it has to be a reference facet specifically — a
+  // label facet parses fine and then traverses nothing.
+  const viaLabel = validateViews(view({ focus: { id: 'x', via: 'status', dir: 'in' } }), facets);
+  assert.equal(viaLabel.length, 1);
+  assert.match(viaLabel[0]!.message, /reference facet/);
+
+  // Pseudo-facets are legitimate axes, and every real position is accepted.
+  const good = validateViews(
+    view({
+      filter: { status: ['planning'], blocked: ['clear'] },
+      groupBy: ['triage'],
+      sort: ['status:asc', 'updated:desc', 'title:asc'],
+      show: ['parent', 'status'],
+      focus: { id: 'x', via: 'parent', dir: 'in' },
+    }),
+    facets,
+  );
+  assert.deepEqual(good, [], 'a view built from declared axes must be clean');
 });

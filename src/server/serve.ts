@@ -19,17 +19,14 @@ import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { isRef } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf } from '../index/project.ts';
-import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, unblocks } from '../index/queries.ts';
-import { toDTO } from './dto.ts';
 import { loadViews, findView } from './views.ts';
-import { projectRollups, runQuery } from '../index/query.ts';
-import { refsOf } from '../index/refs.ts';
-import { layoutRelation, parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
+import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
+import { countChildren, queryPayload } from '../view/payload.ts';
+import { toDTO } from '../view/dto.ts';
 import {
   Conflict,
   Invalid,
@@ -256,72 +253,9 @@ app.get('/api/query', (c) => {
   const spec = resolveSpec(root, c.req.url);
   if ('error' in spec) return c.json({ error: spec.error }, 404);
 
-  // A graph has to stay connected to be readable; a column does not. Only a
-  // canvas honours it, and along the relation it is laid out by.
-  const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
-  const res = runQuery(db, records, facets, spec.query, { connect: layout });
-
-  const shown = [...res.ids, ...res.context];
-  const cards: Record<string, ReturnType<typeof toDTO>> = {};
-  for (const id of shown) {
-    const rec = records.get(id);
-    if (!rec) continue;
-    cards[id] = toDTO(rec, {
-      facets,
-      childCount: countChildren(records, id),
-      blockedBy: blockersOf(db, id),
-      unblocks: unblocks(db, id).map((u) => u.id),
-    });
-  }
-
-  return c.json({
-    spec,
-    // Keyed by id, because a card in three columns is one card. P1 embedded the
-    // whole card per group and shipped it three times.
-    cards,
-    ids: res.ids,
-    context: res.context,
-    groups: res.groups,
-    axis: res.axis,
-    lanes: res.lanes,
-    counts: res.counts,
-    total: res.total,
-    universe: res.universe,
-    placements: res.placements,
-    // Computed here rather than in the client, so the relation a canvas lays out
-    // by and the one `connect` walked cannot come apart (C8).
-    layout: layout ?? null,
-    relations: relationsAmong(records, facets, new Set(shown), spec.show),
-    // Only a table asks for these, but they are cheap and deriving them here
-    // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, facets, new Date().toISOString().slice(0, 10)),
-    views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
-  });
+  return c.json(queryPayload({ facets, db, records, views }, spec));
 });
 
-/**
- * The relations to draw: every *reference* facet in `show`, with both ends shown.
- *
- * `show` mixes labels and references, and the filter to references is not
- * cosmetic: a label facet whose value happened to equal a record id would
- * otherwise read as a relation. `source: [git]` next to a record called `git` is
- * unlikely and would be a real bug.
- */
-function relationsAmong(
-  records: Map<string, Rec>,
-  facets: Facets,
-  ids: Set<string>,
-  show: string[],
-): { src: string; dst: string; type: string }[] {
-  const out: { src: string; dst: string; type: string }[] = [];
-  for (const via of show) {
-    if (!isRef(facets[via])) continue;
-    for (const e of refsOf(via, records)) {
-      if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
-    }
-  }
-  return out;
-}
 
 app.get('/api/card/:id', (c) => {
   const root = vaultOf(c);
@@ -359,11 +293,6 @@ app.get('/api/card/:id', (c) => {
  * that field stopped existing. An escape hatch in a signature is a place the
  * compiler has been told not to help.
  */
-function countChildren(records: Map<string, Rec>, id: string): number {
-  let n = 0;
-  for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;
-  return n;
-}
 
 // ---------------------------------------------------------------- writes
 //

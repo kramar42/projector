@@ -97,7 +97,7 @@ the two are expected to be editing the same card at the same time.
 |---|---|
 | `src/schema/` | card and facet types, frontmatter read/write, validation |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
-| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags |
+| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — and `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
 | `src/web/` | React: sidebar, three shapes, card panel |
 | `src/cli/` | `pj` |
@@ -109,8 +109,11 @@ the two are expected to be editing the same card at the same time.
 ## The query compiler
 
 `src/index/query.ts` is the whole engine, and `src/view/spec.ts` is the one description of a view —
-shared by the URL, a saved file and `pj` flags, so the three cannot drift. `pj ls --view unblocked` and
-opening that view in the browser go through the same code.
+shared by the URL, a saved file and `pj` flags, so the three cannot drift. `src/view/payload.ts` is the
+one *answer* to that description, shared by `GET /api/query` and `pj ls --json`: the request half could
+not drift while the response half was assembled inside a hono handler the CLI could not reach.
+`pj ls --view unblocked` and opening that view in the browser go through the same code, and now return
+the same thing.
 
 **Filtering runs in memory** over the record map rather than in SQL. Not a performance trade — at this
 scale both are free — it is what lets a pseudo-facet be indistinguishable from a real one. In SQL,
@@ -120,8 +123,12 @@ the two jobs it is genuinely better at: full text (FTS5) and the recursive `bloc
 now read the `facets` table, since a relation is a facet value like any other. `src/index/queries.ts`
 holds only those, plus `counts`. It used to also carry a general `listRecords`/`filterClause` pair — a
 second filtering engine, which is what this whole section says should not exist — and that is exactly
-where `pj next` went on filtering by `kind` for two days after P7 deleted it. `pj next` is now one
-`runQuery` call, because `blocked: [clear]` already means "no unfinished blocker and nobody waited on".
+where `pj next` went on filtering by `kind` for two days after P7 deleted it. It then spent a while as
+one `runQuery` call in `cmdNext` — right engine, wrong place, since a query written in TypeScript is a
+view that is a place rather than a query (C9). It is `views/unblocked.yaml` now, and `blocked: [clear]`
+already means "no unfinished blocker and nobody waited on". `pj check` validates every axis a view
+names, so the `kind` failure cannot recur in its new home: a filter naming an axis the vocabulary lost
+is an error, not an empty answer.
 
 **Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field. Moving it
 into `facets.yaml` showed it asserted two things the record already said — carrying a `status` is what

@@ -15,12 +15,15 @@ look for it.
 ## 1. Get the worklist from `pj`, not from a guess
 
 ```bash
-pj untriaged --json --limit 40
+pj ls --view triage --json --limit 40
 ```
 
-Each entry carries the reasons it surfaced. Work the list it gives you, most-incomplete first. Do
-not scan the cards directory yourself and do not invent a worklist — the query is the definition of
-untriaged.
+The view groups by `triage`, so each group names exactly what is missing — `needs-project`,
+`needs-priority`, `needs-status` — and a card short of two things appears under both. Work the groups
+it gives you. Do not scan the cards directory yourself and do not invent a worklist: the view *is* the
+definition of untriaged, and it is the same one the board shows.
+
+`--limit` truncates and says so, reporting `withheld` in the JSON and "showing N of M" in text.
 
 If the user named a subset ("just the Trello ones", "only the research links"), filter that list;
 say how many you filtered out.
@@ -34,9 +37,6 @@ For each card, in this order, stopping as soon as you have enough:
    key is strong evidence; an enriched link's title often says more than the card's own.
 3. The **project vocabulary**: `pj ls --group project` shows the real ids and how many cards each
    holds. Prefer an existing key over a new one, every time.
-
-For a card titled with a bare URL (the research import left several), fetch the page title and
-propose that as the title too.
 
 ## 3. Propose, then stop
 

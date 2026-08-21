@@ -7,6 +7,9 @@ import { reindex } from '../src/index/indexer.ts';
 import { loadFacets } from '../src/schema/facets.ts';
 import { NONE, focused, ftsQuery, runQuery, type Query } from '../src/index/query.ts';
 import { adjacency, refsOf } from '../src/index/refs.ts';
+import { specFromFile } from '../src/view/spec.ts';
+import { SEED_VIEWS } from '../src/server/seed.ts';
+import { parse } from 'yaml';
 
 /**
  * A vault of its own, so these assert the engine rather than whatever the real
@@ -824,6 +827,25 @@ test('actionable now is one query, and never silently empty', () => {
   } finally {
     cleanup();
   }
+});
+
+/**
+ * And the view file says the same thing.
+ *
+ * The query above used to live in `cmdNext`, where a typo was a compile error;
+ * it lives in `views/unblocked.yaml` now, where a typo is silence. `pj check`
+ * catches an axis the vocabulary never had — this catches the subtler one, a
+ * clause that parses but no longer means "actionable".
+ */
+test('the unblocked view parses to exactly the actionable query', () => {
+  const seeded = SEED_VIEWS.find((v) => v.path === 'unblocked.yaml');
+  assert.ok(seeded, 'no unblocked.yaml ships in SEED_VIEWS');
+  const spec = specFromFile('unblocked', parse(seeded.body) as Record<string, unknown>);
+
+  assert.deepEqual(spec.query.filter, { status: ['planning', 'active'], blocked: ['clear'] });
+  // A deadline outranks an intention, so `due` leads and undated records fall last.
+  assert.deepEqual(spec.query.sort, ['due:asc', 'priority:asc', 'updated:desc']);
+  assert.equal(spec.query.groupBy, undefined, 'a flat worklist, as `pj next` printed');
 });
 
 test('the linked axis makes external references askable', () => {

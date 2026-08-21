@@ -1,8 +1,6 @@
 import { paths } from '../config.ts';
-import { adjacency, nodesIn } from '../index/refs.ts';
+import { adjacency } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
-import { triageGaps } from '../index/query.ts';
-import { loadFacets } from '../schema/facets.ts';
 import { parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
@@ -88,37 +86,6 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
  * Cards a triage pass should look at, with the reason each one needs attention.
  * Deterministic, so a skill gets its worklist rather than inventing one.
  */
-export interface Untriaged {
-  id: string;
-  title: string;
-  reasons: string[];
-  facets: Record<string, string[]>;
-  /** A bare URL as a title is what the research import left behind. */
-  titleIsUrl: boolean;
-}
-
-/** How `triageGaps` names each absence, in the words a triage pass reads. */
-const REASON: Record<string, string> = {
-  'needs-project': 'no project',
-  'needs-priority': 'no priority',
-  'needs-status': 'no status',
-};
-
-export function untriaged(dataRoot: string): Untriaged[] {
-  const { records } = readAll(paths(dataRoot).cards);
-  const nodes = nodesIn(records, loadFacets(paths(dataRoot).facets));
-  const out: Untriaged[] = [];
-  for (const rec of records.values()) {
-    const reasons = triageGaps(rec, nodes.has(rec.id)).map((g) => REASON[g]!);
-    const titleIsUrl = /^https?:\/\//.test(rec.title);
-    if (titleIsUrl) reasons.push('title is a bare URL');
-    if (!reasons.length) continue;
-    out.push({ id: rec.id, title: rec.title, reasons, facets: rec.facets, titleIsUrl });
-  }
-  // Most-incomplete first: those are where a triage pass buys the most.
-  return out.sort((a, b) => b.reasons.length - a.reasons.length || a.id.localeCompare(b.id));
-}
-
 /** Render a context as markdown — what a briefing embeds and a human can read. */
 export function renderContext(ctx: CardContext): string {
   const L: string[] = [];
