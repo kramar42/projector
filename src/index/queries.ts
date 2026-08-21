@@ -1,6 +1,4 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { facetRank } from '../schema/facets.ts';
-import type { Facets } from '../schema/types.ts';
 
 /**
  * What SQL is still for.
@@ -14,45 +12,6 @@ export interface Row {
   id: string;
   title: string;
   updated: string | null;
-}
-
-export interface ListOpts {
-  /** facet → one of these values must be present. */
-  filter?: Record<string, string[]>;
-}
-
-function filterClause(filter: Record<string, string[]> | undefined): { sql: string; args: string[] } {
-  if (!filter || !Object.keys(filter).length) return { sql: '', args: [] };
-  const parts: string[] = [];
-  const args: string[] = [];
-  for (const [facet, values] of Object.entries(filter)) {
-    if (!values.length) continue;
-    const marks = values.map(() => '?').join(', ');
-    parts.push(
-      `EXISTS (SELECT 1 FROM facets f WHERE f.record_id = r.id AND f.facet = ? AND f.value IN (${marks}))`,
-    );
-    args.push(facet, ...values);
-  }
-  return { sql: parts.length ? ' AND ' + parts.join(' AND ') : '', args };
-}
-
-export function listRecords(db: DatabaseSync, opts: ListOpts = {}): Row[] {
-  const { sql, args } = filterClause(opts.filter);
-  return db
-    .prepare(
-      `SELECT r.id, r.title, r.updated
-       FROM records r WHERE 1=1${sql}
-       ORDER BY r.updated DESC NULLS LAST, r.id`,
-    )
-    .all(...args) as unknown as Row[];
-}
-
-export function valuesFor(db: DatabaseSync, recordId: string, facet: string): string[] {
-  return (
-    db
-      .prepare('SELECT value FROM facets WHERE record_id = ? AND facet = ? ORDER BY value')
-      .all(recordId, facet) as unknown as { value: string }[]
-  ).map((r) => r.value);
 }
 
 /** Ids that block `id`: records naming it in their `blocks` facet. */
@@ -85,34 +44,6 @@ export function unblocks(db: DatabaseSync, id: string, maxDepth = 10): { id: str
        SELECT n AS id, depth FROM chain WHERE depth > 0 ORDER BY depth, n`,
     )
     .all(id, maxDepth) as unknown as { id: string; depth: number }[];
-}
-
-/**
- * Actionable cards: open status, nobody waited on, and no blocker that is not
- * done. Deterministic by construction (C8) — this is a query, never a judgement.
- *
- * A deadline outranks an intention, so `due` sorts before `priority`: a card
- * due tomorrow is next whatever bucket it was filed in. Cards with no deadline
- * fall through to priority, which is where most of them live.
- */
-export function nextUp(db: DatabaseSync, facets: Facets): Row[] {
-  // `kind` is an ordinary facet, so cards-only is a filter like any other rather
-  // than a clause of its own.
-  const open = listRecords(db, { filter: { kind: ['card'], status: ['planning', 'active'] } });
-  const actionable = open.filter(
-    (r) => blockersOf(db, r.id).every((b) => b.done) && !valuesFor(db, r.id, 'waiting_on').length,
-  );
-  const def = facets.priority;
-  return actionable.sort((a, b) => {
-    // `due` is an ordinary facet now, so the deadline is read like any value.
-    const da = valuesFor(db, a.id, 'due')[0] ?? '\uffff';
-    const dbv = valuesFor(db, b.id, 'due')[0] ?? '\uffff';
-    if (da !== dbv) return da.localeCompare(dbv);
-    const pa = Math.min(...(valuesFor(db, a.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
-    const pb = Math.min(...(valuesFor(db, b.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
-    if (pa !== pb) return pa - pb;
-    return (b.updated ?? '').localeCompare(a.updated ?? '');
-  });
 }
 
 export function search(db: DatabaseSync, query: string, limit = 25): Row[] {

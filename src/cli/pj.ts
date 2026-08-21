@@ -11,7 +11,7 @@ import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
 import { resolveProject } from '../index/project.ts';
-import { counts, nextUp, search, unblocks, valuesFor } from '../index/queries.ts';
+import { counts, search, unblocks } from '../index/queries.ts';
 import { runQuery } from '../index/query.ts';
 import { layoutRelation, parseSpec, specToParams } from '../view/spec.ts';
 import { findView } from '../server/views.ts';
@@ -256,20 +256,36 @@ function cmdShow(id: string): void {
   if (rec.body.trim()) console.log(`\n---\n${rec.body.trim()}`);
 }
 
+/**
+ * Actionable cards: open status, nobody waited on, no unfinished blocker.
+ *
+ * It is one `runQuery` call because every clause already exists as vocabulary:
+ * `blocked: [clear]` *is* "no unfinished blocker and nobody waited on", computed
+ * by the same pseudo-facet the sidebar offers. A second implementation in SQL is
+ * how this command spent two days filtering on `kind`, a facet P7 deleted.
+ *
+ * A deadline outranks an intention, so `due` sorts before `priority`: a card due
+ * tomorrow is next whatever bucket it was filed in. Undated records sort last in
+ * both directions, which the ordered-facet comparator already guarantees.
+ */
 function cmdNext(): void {
   const facets = loadFacets(p.facets);
-  const { db } = reindex(root);
-  const rows = nextUp(db, facets);
+  const { db, records } = reindex(root);
+  const { ids } = runQuery(db, records, facets, {
+    filter: { status: ['planning', 'active'], blocked: ['clear'] },
+    sort: ['due:asc', 'priority:asc', 'updated:desc'],
+  });
   console.log('# actionable now — open, nobody waited on, no unfinished blocker\n');
-  for (const r of rows) {
-    const pr = valuesFor(db, r.id, 'priority').join(',') || '-';
-    const opens = unblocks(db, r.id).length;
+  for (const id of ids) {
+    const rec = records.get(id)!;
+    const opens = unblocks(db, id).length;
     console.log(
-      `  ${pad(valuesFor(db, r.id, 'due')[0] ?? '', 11)}${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` +
+      `  ${pad(rec.facets.due?.[0] ?? '', 11)}${pad(rec.facets.priority?.join(',') || '-', 9)}` +
+        ` ${pad(id, 32)} ${rec.title}` +
         (opens ? `  (unblocks ${opens})` : ''),
     );
   }
-  console.log(`\n${rows.length} actionable`);
+  console.log(`\n${ids.length} actionable`);
 }
 
 function cmdAdd(argv: string[]): void {
@@ -422,7 +438,6 @@ function cmdStats(): void {
 const cmd = rawCmd;
 const argv = rawArgv;
 try {
-  // eslint-disable-next-line no-lone-blocks
   switch (cmd) {
     case 'ls':
       cmdLs(argv);

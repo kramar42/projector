@@ -802,11 +802,35 @@ test('the blocked axis reads the blocks facet, and a done blocker stops blocking
   }
 });
 
+/**
+ * `pj next` is this query and nothing else.
+ *
+ * It spent two days answering nothing, because a second implementation in SQL
+ * filtered on `kind` — a facet P7 deleted — and an empty result is not an error.
+ * So this asserts the shape *and* that it is non-empty: a clause naming a facet
+ * the vocabulary no longer has would put it back to zero, silently.
+ */
+test('actionable now is one query, and never silently empty', () => {
+  const { root, cleanup } = vault();
+  try {
+    const actionable = ids(root, {
+      filter: { status: ['planning', 'active'], blocked: ['clear'] },
+    });
+    assert.ok(actionable.length > 0, 'no open, unblocked card — the filter matched nothing');
+    // Open and clear: in. Blocked, waited-on, and carrying no lifecycle: out.
+    assert.ok(actionable.includes('keycloak'));
+    assert.ok(!actionable.includes('blocked-card'), 'an unfinished blocker keeps it out');
+    assert.ok(!actionable.includes('project-a-eventing'), 'no status is not work');
+  } finally {
+    cleanup();
+  }
+});
+
 test('the linked axis makes external references askable', () => {
   const { root, cleanup } = vault();
   try {
-    // Every axis on a card was askable except this one, across the 90 records
-    // here that carry a link.
+    // Every axis on a card was askable except this one, across the records that
+    // carry a link — most of the real vault.
     assert.deepEqual(ids(root, { filter: { linked: ['jira'] } }), ['keycloak']);
     assert.deepEqual(ids(root, { filter: { linked: ['doc'] } }), ['kc-realms']);
     // A record with no links has no value, so absence is the ordinary (none).
