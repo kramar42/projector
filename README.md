@@ -535,8 +535,8 @@ one. The app has no built-in location and assumes no directory name: on first ru
 and remembers the choice, and the switcher at the top of the sidebar opens or adds others.
 
 Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, four
-starter views, a README of the conventions, and a `.gitignore` for the derived index and cache. A
-non-empty folder that is not a vault is refused.
+starter views, and a `.gitignore` for the derived index and cache. A non-empty folder that is not a
+vault is refused. No prose is written into a vault — the format lives in the `cockpit` skill.
 
 The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
 one that is on that list — so a page in your browser cannot point it at an arbitrary directory. It is
@@ -593,7 +593,6 @@ browser mean the same thing.
     fix-deploy.md                # a card
     eventing.md                  # a node, may carry a project: block
     assets/fix-deploy/error.png
-    README.md                    # the format, written into every new vault
   facets.yaml                    # facet vocabulary, order, constraints
   views/
     home.yaml  projects.yaml  …  # flat: a shape is a field, not a folder
@@ -635,9 +634,9 @@ vocabulary does not know is preserved rather than dropped.
 `priority` says what you intend to do next; `due` says what the world expects regardless of intent.
 Both are facets — the type is what tells the engine one is matched and the other compared.
 
-Every vault gets its own `cards/README.md` documenting all of this, so the format travels with the data
-rather than with the app. `ck check` validates every card and reports every problem at once, rather
-than stopping at the first.
+The format is documented once, in the `cockpit` skill — the audience for it is an agent editing files
+directly, and an agent already loads that. `ck check` validates every card and reports every problem at
+once, rather than stopping at the first.
 
 ## Facet vocabulary
 

@@ -13,7 +13,7 @@ import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../src/server/seed.ts';
+import { SEED_FACETS, SEED_VIEWS } from '../src/server/seed.ts';
 import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
@@ -33,9 +33,9 @@ import {
   workspacePath,
 } from '../src/agent/worktree.ts';
 import { buildBriefing } from '../src/agent/briefing.ts';
-import { looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
+import { countCards, initVault, looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
 import { resolveCliVault } from '../src/config.ts';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -771,13 +771,30 @@ test('every seeded file parses as what it claims to be', () => {
     assert.equal(facets[name]!.type, 'ref', `${name} should be a reference facet`);
     assert.equal(facets[name]!.values, undefined, `${name} should declare no values`);
   }
-  // The documented frontmatter has no `edges:` key — matched at line start, so
-  // prose *about* the old block does not trip this.
-  assert.ok(!/^edges:/m.test(SEED_README), 'the card format has no edges block');
   for (const view of SEED_VIEWS) {
     const y = parse(view.body) as Record<string, unknown>;
     assert.ok(y.shape, `${view.path} states its shape`);
     assert.ok(y.title, `${view.path} has a title`);
+  }
+});
+
+test('a new vault is seeded with a vocabulary and views, and no prose', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'ck-seed-'));
+  try {
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    assert.ok(existsSync(pathJoin(root, 'facets.yaml')));
+    assert.ok(existsSync(pathJoin(root, 'cards')));
+    assert.ok(existsSync(pathJoin(root, 'views')));
+    // No card-conventions README. That text was a copy of the `cockpit` skill,
+    // which an agent already has — and two places stating the format is one
+    // place to drift out of date.
+    assert.equal(existsSync(pathJoin(root, 'cards', 'README.md')), false);
+    // A seeded vault is a vault, and an empty one: the README used to be the
+    // only file in cards/, so this is what "no cards yet" now looks like.
+    assert.ok(looksLikeVault(root));
+    assert.equal(countCards(root), 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

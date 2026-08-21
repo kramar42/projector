@@ -48,7 +48,7 @@ import {
 } from './mutate.ts';
 import { watch } from 'chokidar';
 import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.ts';
-import { SEED_FACETS, SEED_README, SEED_VIEWS } from './seed.ts';
+import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 
 const PORT = Number(process.env.COCKPIT_PORT ?? 8092);
@@ -182,7 +182,7 @@ app.post('/api/vaults', async (c) => {
           409,
         );
       }
-      initVault(path, SEED_FACETS, SEED_README, SEED_VIEWS);
+      initVault(path, SEED_FACETS, SEED_VIEWS);
     }
     const entry = registerVault(path, body.name);
     ensureWatched(entry.path);

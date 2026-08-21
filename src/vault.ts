@@ -56,7 +56,14 @@ export function normalise(p: string): string {
   return resolve(resolvePath(p.trim(), process.cwd())).replace(/\/+$/, '') || '/';
 }
 
-/** A directory is a vault when it holds the things a vault is made of. */
+/**
+ * A directory is a vault when it holds the things a vault is made of.
+ *
+ * `README.md` is excluded because a folder full of markdown attracts one — not
+ * because the app puts one there. It no longer seeds a card-conventions README:
+ * that text was a copy of the `cockpit` skill, which an agent already has, and
+ * two places saying the same thing is one place to drift.
+ */
 export function countCards(path: string): number {
   const dir = paths(path).cards;
   if (!existsSync(dir)) return 0;
@@ -144,7 +151,6 @@ export function suggestName(path: string): string {
 export function initVault(
   path: string,
   seedFacets: string,
-  seedReadme: string,
   seedViews: { path: string; body: string }[] = [],
 ): void {
   const p = paths(path);
@@ -158,8 +164,6 @@ export function initVault(
   mkdirSync(p.assets, { recursive: true });
   mkdirSync(p.views, { recursive: true });
   if (!existsSync(p.facets)) writeFileSync(p.facets, seedFacets, 'utf8');
-  const readme = join(p.cards, 'README.md');
-  if (!existsSync(readme)) writeFileSync(readme, seedReadme, 'utf8');
   for (const v of seedViews) {
     const target = join(p.views, v.path);
     mkdirSync(dirname(target), { recursive: true });

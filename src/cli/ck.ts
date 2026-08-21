@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths, resolveCliVault, resolvePath } from '../config.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
-import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../server/seed.ts';
+import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles, renderCard, writeCardFile } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
@@ -582,7 +582,7 @@ try {
           process.exit(1);
         }
         const path = normalise(given);
-        if (flags.has('create')) initVault(path, SEED_FACETS, SEED_README, SEED_VIEWS);
+        if (flags.has('create')) initVault(path, SEED_FACETS, SEED_VIEWS);
         const entry = registerVault(path, flags.get('name')?.[0]);
         console.log(`${entry.name}  ${entry.path}`);
         break;

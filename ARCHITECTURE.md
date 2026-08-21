@@ -436,14 +436,16 @@ nothing else.
 
 ## Vault seeding
 
-`initVault` writes `cards/`, `facets.yaml`, four starter views, a `.gitignore`, and
-**`cards/README.md`** — the per-vault conventions document, from `SEED_README` in `src/server/seed.ts`.
-That file is where the card format is documented for whoever is editing files directly, so it travels
-with the data rather than with the app. `listCardFiles` excludes it by name, so it is never mistaken
-for a card.
+`initVault` writes `cards/`, `facets.yaml`, four starter views and a `.gitignore`. **No prose.**
 
-Keep it in step with the format: it and `src/schema/card.ts` are the two places the card shape is
-written down.
+It used to also write `cards/README.md`, a per-vault conventions document from `SEED_README`. That was
+a near-verbatim copy of the `cockpit` skill, and its only audience — an agent editing card files
+directly — already loads the skill. Two documents stating the card format is one document to drift, so
+the format is now written down in exactly two places that cannot disagree: `src/schema/card.ts`, which
+parses it, and the skill, which explains it.
+
+`listCardFiles` and `countCards` still exclude `README.md` by name. That guard stays because a folder
+full of markdown attracts a README, not because the app puts one there.
 
 ## Stack
 
