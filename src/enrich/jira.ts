@@ -1,27 +1,14 @@
-import { ago } from './run.ts';
+import { jiraBrowse, jiraGet } from '../sources/jira.ts';
+import { ago } from '../sources/run.ts';
 import { unavailable, type Enrichment, type Fetcher, type Tone } from './types.ts';
 
 /**
- * Jira, read-only, via the REST API.
+ * A `jira:` ref, resolved for display.
  *
- * Needs credentials the app cannot obtain for itself, so it degrades to a clear
- * "not configured" rather than failing: set `COCKPIT_JIRA_URL`,
- * `COCKPIT_JIRA_EMAIL` and `COCKPIT_JIRA_TOKEN` (an Atlassian API token) to turn
- * it on. Only GET is ever issued.
+ * The credential and the GET are `src/sources/jira.ts`, shared with intake. What
+ * is left here is the mapping to a chip — which is the part enrichment owns and
+ * intake has no use for.
  */
-
-interface JiraConfig {
-  url: string;
-  email: string;
-  token: string;
-}
-
-export function jiraConfig(): JiraConfig | null {
-  const url = process.env.COCKPIT_JIRA_URL?.replace(/\/+$/, '');
-  const email = process.env.COCKPIT_JIRA_EMAIL;
-  const token = process.env.COCKPIT_JIRA_TOKEN;
-  return url && email && token ? { url, email, token } : null;
-}
 
 /**
  * Colour a status without depending on workflow names.
@@ -49,7 +36,7 @@ export function statusTone(name: string, category: string | undefined): Tone {
   }
 }
 
-interface IssueJson {
+export interface IssueJson {
   key: string;
   fields: {
     summary?: string;
@@ -62,37 +49,21 @@ interface IssueJson {
   };
 }
 
+export const ISSUE_FIELDS = 'summary,status,issuetype,priority,assignee,updated,parent';
+
 export const jiraFetcher: Fetcher = {
   ttl: 900,
   async fetch(ref) {
-    const cfg = jiraConfig();
-    if (!cfg) {
-      return unavailable(
-        'Jira is not configured — set COCKPIT_JIRA_URL, COCKPIT_JIRA_EMAIL and COCKPIT_JIRA_TOKEN',
-        true,
-      );
-    }
     const key = ref.trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) return unavailable(`"${ref}" is not an issue key`);
 
-    const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
-    const fields = 'summary,status,issuetype,priority,assignee,updated,parent';
-    let res: Response;
-    try {
-      res = await fetch(`${cfg.url}/rest/api/3/issue/${key}?fields=${fields}`, {
-        headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
-        signal: AbortSignal.timeout(12_000),
-      });
-    } catch (err) {
-      return unavailable(`could not reach Jira: ${(err as Error).message}`);
+    const res = await jiraGet<IssueJson>(`/rest/api/3/issue/${key}`, { fields: ISSUE_FIELDS }, 12_000);
+    if (!res.ok) {
+      if (res.status === 404) return unavailable(`${key} not found, or not visible to this account`);
+      return unavailable(res.reason, res.needsSetup);
     }
-    if (res.status === 404) return unavailable(`${key} not found, or not visible to this account`);
-    if (res.status === 401 || res.status === 403) {
-      return unavailable('Jira rejected the credentials', true);
-    }
-    if (!res.ok) return unavailable(`Jira returned ${res.status}`);
 
-    const issue = (await res.json()) as IssueJson;
+    const issue = res.data;
     const status = issue.fields.status?.name ?? '';
     const badges = [];
     if (status) {
@@ -117,7 +88,7 @@ export const jiraFetcher: Fetcher = {
             : '',
         },
       ].filter((f) => f.v),
-      url: `${cfg.url}/browse/${issue.key}`,
+      url: jiraBrowse(issue.key) ?? undefined,
     } satisfies Enrichment;
   },
 };

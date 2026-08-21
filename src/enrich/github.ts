@@ -1,4 +1,4 @@
-import { ago, firstLine, gh } from './run.ts';
+import { ago, firstLine, gh } from '../sources/run.ts';
 import { isUnavailable, unavailable, type Fetcher, type Tone, type Unavailable } from './types.ts';
 
 /**

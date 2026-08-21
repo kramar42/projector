@@ -1,5 +1,14 @@
 import { execFile } from 'node:child_process';
 
+/**
+ * Read-only transport, shared by everything that reaches outside the vault.
+ *
+ * This lives in `src/sources/` rather than under `enrich/` because two different
+ * consumers need it and neither owns it: enrichment resolves a ref it was given,
+ * intake discovers refs it was not. Same credential, same subprocess, opposite
+ * question — so what is shared is the way out, not the store or the policy.
+ */
+
 export interface RunResult {
   ok: boolean;
   stdout: string;

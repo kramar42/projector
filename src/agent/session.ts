@@ -1,6 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { resolve } from 'node:path';
+import { liveSessions, type LiveSession } from '../sources/claude.ts';
 
 /**
  * Find the live Claude session working in a directory.
@@ -9,41 +8,11 @@ import { homedir } from 'node:os';
  * directory but not its own transcript id, and `~/.claude/sessions/<pid>.json`
  * has both. Closing that loop is what makes a card's history accumulate instead
  * of relying on someone remembering to paste an id.
+ *
+ * Reading those files is `src/sources/claude.ts` — this is only the cwd match.
  */
 
-const LIVE = join(homedir(), '.claude', 'sessions');
-
-export interface LiveSession {
-  sessionId: string;
-  pid: number;
-  cwd: string;
-  startedAt?: number;
-  name?: string;
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function liveSessions(): LiveSession[] {
-  if (!existsSync(LIVE)) return [];
-  const out: LiveSession[] = [];
-  for (const f of readdirSync(LIVE)) {
-    if (!f.endsWith('.json')) continue;
-    try {
-      const j = JSON.parse(readFileSync(join(LIVE, f), 'utf8')) as LiveSession;
-      if (j.sessionId && j.pid && alive(j.pid)) out.push(j);
-    } catch {
-      /* a half-written file is not worth failing over */
-    }
-  }
-  return out.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
-}
+export type { LiveSession };
 
 /**
  * The session whose working directory is `cwd`, or the nearest one containing it.
@@ -51,10 +20,10 @@ export function liveSessions(): LiveSession[] {
  */
 export function sessionForCwd(cwd: string, self?: number): LiveSession | null {
   const want = resolve(cwd);
-  const candidates = liveSessions().filter((s) => s.pid !== self);
+  const candidates = liveSessions().filter((s) => s.alive && s.pid !== self);
   return (
-    candidates.find((s) => resolve(s.cwd) === want) ??
-    candidates.find((s) => want.startsWith(resolve(s.cwd) + '/')) ??
+    candidates.find((s) => s.cwd && resolve(s.cwd) === want) ??
+    candidates.find((s) => s.cwd && want.startsWith(resolve(s.cwd) + '/')) ??
     null
   );
 }

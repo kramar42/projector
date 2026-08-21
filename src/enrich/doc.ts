@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { ago, firstLine } from './run.ts';
+import { ago, firstLine } from '../sources/run.ts';
 import { unavailable, type Enrichment, type Fetcher } from './types.ts';
 import { resolveDoc } from '../vault.ts';
 

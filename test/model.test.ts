@@ -18,7 +18,7 @@ import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
 import type { CardDTO } from '../src/web/types.ts';
-import { ago, firstLine } from '../src/enrich/run.ts';
+import { ago, firstLine } from '../src/sources/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher } from '../src/enrich/claudeSession.ts';
