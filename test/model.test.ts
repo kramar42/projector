@@ -16,6 +16,8 @@ import { parse } from 'yaml';
 import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../src/server/seed.ts';
 import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
+import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
+import type { CardDTO } from '../src/web/types.ts';
 import { ago, firstLine } from '../src/enrich/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
@@ -861,4 +863,66 @@ test('deleting a record drops every reference pointing at it', () => {
   } finally {
     cleanup();
   }
+});
+
+// ---------------------------------------------------------------- clusters
+
+const face = (id: string): CardDTO =>
+  ({ id, title: id, isProject: false, facets: {}, links: [], progress: null, excerpt: '', body: '',
+     due: null, dueIn: null, updated: null, childCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
+
+test('a record in several groups is clustered into the first the axis declares', () => {
+  const nodes = [face('a'), face('b'), face('c')];
+  const groups = [
+    { value: 'now', ids: ['a', 'b'] },
+    { value: 'month', ids: ['b'] },
+  ];
+  const assign = assignClusters(nodes, groups);
+  // A board draws `b` in both columns; a canvas cannot, because a record has one
+  // position. First declared wins, and the sidebar says how many that applies to.
+  assert.equal(assign.get('b'), 'now');
+  assert.equal(assign.get('a'), 'now');
+  // `c` matched no group — it is context, and gets a band of its own rather than
+  // being scattered through the others.
+  assert.equal(assign.get('c'), CONTEXT_BAND);
+});
+
+test('clusters stack without overlapping, context last', () => {
+  const nodes = ['a', 'b', 'c', 'd'].map(face);
+  const groups = [
+    { value: 'now', ids: ['a', 'b'] },
+    { value: 'month', ids: ['c'] },
+  ];
+  const placed = clusteredLayout(nodes, [], [], groups);
+  const boxes = clusterBoxes(assignClusters(nodes, groups), placed, groups);
+  assert.deepEqual(boxes.map((b) => b.value), ['now', 'month', CONTEXT_BAND]);
+  for (let i = 1; i < boxes.length; i++) {
+    assert.ok(boxes[i]!.y > boxes[i - 1]!.y + boxes[i - 1]!.h - 1, 'bands must not overlap');
+  }
+});
+
+test('a band is measured from where its members actually are', () => {
+  const nodes = ['a', 'b'].map(face);
+  const groups = [{ value: 'now', ids: ['a', 'b'] }];
+  const placed = clusteredLayout(nodes, [], [], groups);
+  const before = clusterBoxes(assignClusters(nodes, groups), placed, groups)[0]!;
+  // Dragging a card grows its band, because the box is derived from final
+  // positions rather than from the layout pass — which is what lets a saved
+  // arrangement and clustering coexist without agreeing about anything.
+  placed.set('b', { ...placed.get('b')!, x: 4000 });
+  const after = clusterBoxes(assignClusters(nodes, groups), placed, groups)[0]!;
+  assert.ok(after.w > before.w);
+});
+
+test('an empty declared value gets no band', () => {
+  const nodes = [face('a')];
+  const groups = [
+    { value: 'now', ids: ['a'] },
+    { value: 'someday', ids: [] },
+  ];
+  // A board draws an empty column because it is somewhere to drag a card *to*.
+  // Dragging on a canvas moves a position and changes no facet, so an empty band
+  // would be decoration with no affordance.
+  const boxes = clusterBoxes(assignClusters(nodes, groups), clusteredLayout(nodes, [], [], groups), groups);
+  assert.deepEqual(boxes.map((b) => b.value), ['now']);
 });

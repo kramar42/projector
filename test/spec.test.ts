@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NONE } from '../src/index/query.ts';
-import { parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
+import { layoutRelation, parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
 
 test('a spec survives the round trip through URL parameters', () => {
   const params = {
@@ -37,16 +37,6 @@ test('an empty selection is a statement, not an absent key', () => {
   // How a URL says "no status filter" over a default selection that had one.
   assert.deepEqual(parseSpec({ 'f.status': '' }).query.filter, { status: [] });
   assert.deepEqual(parseSpec({}).query.filter, {});
-});
-
-test('connect is a property of the shape, not a control', () => {
-  // A graph has to stay connected to be readable and a column does not, and
-  // nothing but a canvas ever honoured it — so it follows the shape and there is
-  // no key to set, save or forget.
-  assert.equal(parseSpec({ shape: 'canvas' }).query.connect, 'ancestors');
-  assert.equal(parseSpec({ shape: 'board' }).query.connect, 'none');
-  assert.equal(parseSpec({ shape: 'table' }).query.connect, 'none');
-  assert.equal(parseSpec({ shape: 'canvas', connect: 'none' }).query.connect, 'ancestors');
 });
 
 test('a stale bookmark opens rather than erroring', () => {
@@ -134,4 +124,19 @@ test('an explicitly empty focus overrides a saved one', () => {
   // Absent, for contrast: the saved focus survives, which is right for every
   // other parameter and wrong for a control with a clear button.
   assert.deepEqual(parseSpec(specToParams(saved)).query.focus, saved.query.focus);
+});
+
+test('a canvas lays out by the first reference facet in show', () => {
+  const facets = {
+    priority: { label: 'Priority', values: ['now'], open: false, single: true, ref: false },
+    parent: { label: 'Part of', values: [], open: true, single: true, ref: true },
+    project: { label: 'Project', values: [], open: true, single: false, ref: true },
+  };
+  // Labels are skipped: they name no records to lay out. Order in `show` is the
+  // control — `parent` first is a decomposition tree, `project` first the
+  // portfolio — and the same answer decides what `connect` walks for context.
+  assert.equal(layoutRelation(['priority', 'parent', 'project'], facets), 'parent');
+  assert.equal(layoutRelation(['project', 'parent'], facets), 'project');
+  assert.equal(layoutRelation(['priority'], facets), undefined);
+  assert.equal(layoutRelation([], facets), undefined);
 });

@@ -28,7 +28,7 @@ import { toDTO } from './dto.ts';
 import { loadViews, viewFileFor, findView } from './views.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
 import { refsOf } from '../index/refs.ts';
-import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
+import { layoutRelation, parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
 import {
   Conflict,
   Invalid,
@@ -255,7 +255,10 @@ app.get('/api/query', (c) => {
   const spec = resolveSpec(root, c.req.url);
   if ('error' in spec) return c.json({ error: spec.error }, 404);
 
-  const res = runQuery(db, records, facets, spec.query);
+  // A graph has to stay connected to be readable; a column does not. Only a
+  // canvas honours it, and along the relation it is laid out by.
+  const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
+  const res = runQuery(db, records, facets, spec.query, { connect: layout });
 
   const shown = [...res.ids, ...res.context];
   const cards: Record<string, ReturnType<typeof toDTO>> = {};
@@ -283,6 +286,9 @@ app.get('/api/query', (c) => {
     total: res.total,
     universe: res.universe,
     placements: res.placements,
+    // Computed here rather than in the client, so the relation a canvas lays out
+    // by and the one `connect` walked cannot come apart (C8).
+    layout: layout ?? null,
     edges: edgesAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).

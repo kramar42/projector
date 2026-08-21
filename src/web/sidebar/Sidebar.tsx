@@ -585,9 +585,24 @@ function ActiveStats({
       {data.context.length > 0 && (
         <> · <span title="unmatched ancestors kept so the graph stays connected">{data.context.length} for context</span></>
       )}
-      {data.placements > data.total && (
-        <> · <span title="a card whose grouped facet holds several values appears in each matching group">{data.placements - data.total} extra placements</span></>
-      )}
+      {data.placements > data.total &&
+        (data.spec.shape === 'canvas' ? (
+          <>
+            {' '}
+            ·{' '}
+            <span title="a record has one position, so a card in several groups is drawn in the first the axis declares">
+              {data.placements - data.total} drawn in their first group only
+            </span>
+          </>
+        ) : (
+          <>
+            {' '}
+            ·{' '}
+            <span title="a card whose grouped facet holds several values appears in each matching group">
+              {data.placements - data.total} extra placements
+            </span>
+          </>
+        ))}
       {extra > 0 && (
         <button className="btn ghost tiny" onClick={() => patch(clearFilters(search, saved))}>
           clear

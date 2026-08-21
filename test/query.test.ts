@@ -110,7 +110,8 @@ function vault(): { root: string; cleanup: () => void } {
 function open(root: string) {
   const { db, records } = reindex(root);
   const facets = loadFacets(join(root, 'facets.yaml'));
-  return (query: Query) => runQuery(db, records, facets, query, { today: '2026-08-20' });
+  return (query: Query, connect?: string) =>
+    runQuery(db, records, facets, query, { today: '2026-08-20', connect });
 }
 
 function ids(root: string, query: Query): string[] {
@@ -418,15 +419,20 @@ test('an axis absent from the universe is not offered; a selected one always is'
   }
 });
 
-test('connect=ancestors adds context, never matches', () => {
+test('connect adds context along the relation it is given, never as matches', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
-    const res = run({ filter: { tech: ['kafka'] }, connect: 'ancestors' });
+    const res = run({ filter: { tech: ['kafka'] } }, 'parent');
     assert.deepEqual(res.ids, ['kafka-schema']);
     // The chain up to the root comes back separately, so the count stays honest.
     assert.deepEqual([...res.context].sort(), ['project-a', 'project-a-eventing']);
     assert.equal(res.total, 1);
+
+    // A different relation is a different chain — which is the whole point of
+    // passing one. Laying a canvas out by `project` while pulling context along
+    // `parent` showed a graph the layout did not follow.
+    assert.deepEqual([...run({ filter: { tech: ['kafka'] } }, 'project').context].sort(), ['project-a']);
     assert.deepEqual(run({ filter: { tech: ['kafka'] } }).context, []);
   } finally {
     cleanup();

@@ -20,7 +20,14 @@ import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { relations, type Patch } from '../query.ts';
-import { layoutTypes, manualLayout, treeLayout } from './layout.ts';
+import {
+  CONTEXT_BAND,
+  assignClusters,
+  clusterBoxes,
+  clusteredLayout,
+  manualLayout,
+  treeLayout,
+} from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse, Meta } from '../types.ts';
 
@@ -51,7 +58,23 @@ function RecordNode({ data }: NodeProps) {
   );
 }
 
-const nodeTypes = { record: RecordNode };
+/**
+ * The band behind a cluster, when a canvas is grouped.
+ *
+ * Not a React Flow parent node: those make member positions relative, and a
+ * saved arrangement stores absolute ones. A plain node behind everything keeps
+ * arrangement working untouched.
+ */
+function ClusterNode({ data }: NodeProps) {
+  const { value } = data as unknown as { value: string };
+  return (
+    <div className={`cluster ${value === CONTEXT_BAND ? 'is-context' : ''}`}>
+      <span className="cluster-label">{value}</span>
+    </div>
+  );
+}
+
+const nodeTypes = { record: RecordNode, cluster: ClusterNode };
 
 const EDGE_COLOUR: Record<string, string> = {
   parent: 'var(--edge-parent)',
@@ -152,10 +175,21 @@ export function CanvasView({
     // Stored positions only ever come from a saved view. An ad-hoc query has no
     // file to hold arrangement, so it is auto-laid-out — naming a view is what
     // buys manual positioning (C9).
-    const hierarchy = layoutTypes(data.spec.show, meta.facets);
-    const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.edges, stored, hierarchy)
+    // Computed by the server, not here: the relation a canvas lays out by is the
+    // same one `connect` walked for context, and two computations of that could
+    // disagree.
+    const hierarchy = data.layout ? [data.layout] : [];
+    // `groupBy` used to be accepted and ignored here, so switching shape never
+    // dropped the parameter. It draws now: one band per value of the primary
+    // axis, in the order the facet declares.
+    const groups = data.groups?.filter((g) => !g.lane) ?? [];
+    const clustered = groups.length > 0;
+    const auto = clustered
+      ? clusteredLayout(shown, data.edges, hierarchy, groups)
       : treeLayout(shown, data.edges, 'LR', hierarchy);
+    const placed = Object.keys(stored).length
+      ? manualLayout(shown, data.edges, stored, hierarchy, auto)
+      : auto;
 
     const rfNodes: Node[] = shown.map((card) => {
       const p = placed.get(card.id)!;
@@ -178,7 +212,23 @@ export function CanvasView({
       };
     });
 
-    return { nodes: rfNodes, edges: buildEdges(data.edges, hierarchy) };
+    const bands: Node[] = clustered
+      ? clusterBoxes(assignClusters(shown, groups), placed, groups).map((c) => ({
+          id: `cluster:${c.value}`,
+          type: 'cluster',
+          position: { x: c.x, y: c.y },
+          width: c.w,
+          height: c.h,
+          style: { width: c.w, height: c.h },
+          draggable: false,
+          selectable: false,
+          zIndex: -1,
+          data: { value: c.value },
+        }))
+      : [];
+
+    // Bands first, so a record is always drawn over its own background.
+    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.edges, hierarchy) };
   }, [data, onOpen]);
 
   useEffect(() => {

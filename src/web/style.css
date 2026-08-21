@@ -1027,6 +1027,35 @@ body {
   background: var(--ground);
 }
 
+/*
+ * A cluster band. Drawn behind its members and never interactive — it is the
+ * grouping axis made visible, not a thing you can move.
+ */
+.cluster {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--rule-2);
+  border-radius: 10px;
+  background: var(--surface-2);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.cluster.is-context {
+  border-style: dashed;
+  opacity: 0.35;
+}
+
+.cluster-label {
+  position: absolute;
+  top: 5px;
+  left: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
 .react-flow__node {
   font-family: var(--sans);
   cursor: pointer;

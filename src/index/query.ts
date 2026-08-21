@@ -45,12 +45,6 @@ export interface Query {
   /** `facet:asc` ranks by declared order, not alphabetically. */
   sort?: string[];
   /**
-   * Keep ancestors of matched records even when they do not match, so a graph
-   * stays a graph. They come back as `context`, never as matches — a filter that
-   * quietly widens its own result set is a filter you stop trusting.
-   */
-  connect?: 'ancestors' | 'none';
-  /**
    * A grouping option, not a board option — it reads identically for a board's
    * columns and a table's sections.
    */
@@ -447,6 +441,18 @@ function histogram(
 export interface RunOpts {
   /** Overridable so a test does not depend on the day it runs. */
   today?: string;
+  /**
+   * Keep ancestors of matched records along this relation, even when they do not
+   * match, so a graph stays a graph. They come back as `context`, never as
+   * matches — a filter that quietly widens its own result set is one you stop
+   * trusting.
+   *
+   * A run option rather than a query key: it is decided by the *shape* and the
+   * vocabulary together, which the query half knows nothing about. Passing the
+   * relation rather than a flag is what stops a canvas laying out along one
+   * hierarchy and pulling context from another.
+   */
+  connect?: string;
 }
 
 export function runQuery(
@@ -477,8 +483,8 @@ export function runQuery(
   const ids = hits.map((r) => r.id);
 
   const context: string[] = [];
-  if (query.connect === 'ancestors') {
-    const { out: up } = adjacency('parent', records);
+  if (opts.connect) {
+    const { out: up } = adjacency(opts.connect, records);
     const have = new Set(ids);
     for (const id of ids) {
       // Ancestors only, and drawn as context: a filtered graph that renders as

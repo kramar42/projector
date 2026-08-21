@@ -257,8 +257,12 @@ them used once.
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`
 comes before `month`.
 
-A canvas does not draw clusters yet, but it keeps the setting, so switching shape and back never loses
-it.
+A canvas draws them as **bands**, stacked in the order the facet declares. A record has one position,
+so a card whose grouped facet holds several values is drawn in the *first* group it belongs to — and
+the footer says how many that applies to, rather than letting the canvas quietly disagree with the
+board. Records kept for context matched no group, so they get a band of their own. An empty declared
+value gets no band: an empty board column is somewhere to drag a card *to*, and dragging on a canvas
+moves a position without changing any facet.
 
 ## search
 
@@ -313,14 +317,16 @@ bar.
 
 So "card in two columns" is always a gesture, never an accident.
 
-**Canvas.** A tree laid out from its roots, plus free positioning once saved. Every record draws the
-same face — how much of a record to show is a property of the view, which is what `show` is, so a card
+**Canvas.** A tree laid out from its roots, plus free positioning once saved — and bands when the query
+is grouped. Every record draws the same face — how much of a record to show is a property of the view, which is what `show` is, so a card
 never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw first — decomposition (`parent`) or membership (`project`).
 
 Filtering a graph means **match plus context**: unmatched ancestors are kept so the tree stays
-connected, drawn muted and counted separately, so a filtered graph still reads as a graph.
+connected, drawn muted and counted separately, so a filtered graph still reads as a graph. They are
+walked along the relation the canvas is *laid out by*, so a portfolio canvas never pulls in context
+from the decomposition tree.
 
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** card counts, blocked,

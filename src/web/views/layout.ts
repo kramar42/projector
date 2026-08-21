@@ -30,23 +30,6 @@ export function dims(_card: CardDTO): { w: number; h: number } {
 }
 
 /**
- * Which relation gives a canvas its shape: the **first reference facet** in
- * `show`.
- *
- * A hierarchy can lay a graph out and a cross-cutting relation cannot — a
- * blocker pointing sideways across the tree distorts every rank it crosses — but
- * which is which is a property of the view rather than of the relation. Put
- * `parent` before `blocks` and you get a decomposition tree with dependencies
- * drawn over it; put `project` first and you get the portfolio.
- *
- * Label facets in `show` are skipped, since they name no records to lay out.
- */
-export function layoutTypes(show: string[], facets: Record<string, { ref: boolean }>): string[] {
-  const first = show.find((name) => facets[name]?.ref);
-  return first ? [first] : [];
-}
-
-/**
  * Left-to-right tree layout via dagre, which reproduces the shape of the
  * original mind-map.
  */
@@ -108,8 +91,9 @@ export function manualLayout(
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
   hierarchy: string[] = ['parent'],
+  computed?: Map<string, Placed>,
 ): Map<string, Placed> {
-  const fallback = treeLayout(nodes, edges, 'LR', hierarchy);
+  const fallback = computed ?? treeLayout(nodes, edges, 'LR', hierarchy);
   const out = new Map<string, Placed>();
   for (const n of nodes) {
     const s = stored[n.id];
@@ -118,6 +102,134 @@ export function manualLayout(
       ...base,
       x: s?.x ?? base.x,
       y: s?.y ?? base.y,
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- clusters
+
+/** Where the records that matched nothing on the grouping axis are drawn. */
+export const CONTEXT_BAND = '(context)';
+
+export interface Cluster {
+  value: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const PAD = 26;
+const LABEL = 24;
+/**
+ * The vertical step between two bands' *contents*.
+ *
+ * A box is drawn `PAD + LABEL` above its topmost member and `PAD` below its
+ * lowest, so the step has to clear both or consecutive boxes overlap. This is
+ * that sum plus a visible gap.
+ */
+const BAND = PAD * 2 + LABEL + 20;
+
+/**
+ * Which cluster each record is drawn in.
+ *
+ * A record with several values on the grouping axis belongs to several groups —
+ * that is the model working, and a board draws it in each. A canvas cannot: a
+ * node has one position. So it is drawn in the **first** group the axis declares,
+ * and the sidebar says how many records that applies to rather than letting the
+ * count quietly disagree with the board.
+ *
+ * Records kept for context matched no group at all, so they get a band of their
+ * own instead of being scattered through the others.
+ */
+export function assignClusters(
+  nodes: CardDTO[],
+  groups: { value: string; ids: string[] }[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const g of groups) {
+    for (const id of g.ids) if (!out.has(id)) out.set(id, g.value);
+  }
+  for (const n of nodes) if (!out.has(n.id)) out.set(n.id, CONTEXT_BAND);
+  return out;
+}
+
+/** The cluster values that actually hold something, in axis order. */
+function bands(assign: Map<string, string>, groups: { value: string }[]): string[] {
+  const live = new Set(assign.values());
+  const declared = groups.map((g) => g.value).filter((v) => live.has(v));
+  return live.has(CONTEXT_BAND) ? [...declared, CONTEXT_BAND] : declared;
+}
+
+/**
+ * Lay each cluster out on its own, then stack the clusters vertically.
+ *
+ * Only edges with both ends inside a cluster feed dagre: one crossing the
+ * boundary would drag a member toward a rank in another cluster and pull the
+ * band apart.
+ */
+export function clusteredLayout(
+  nodes: CardDTO[],
+  edges: { src: string; dst: string; type: string }[],
+  hierarchy: string[],
+  groups: { value: string; ids: string[] }[],
+): Map<string, Placed> {
+  const assign = assignClusters(nodes, groups);
+  const placed = new Map<string, Placed>();
+  let top = 0;
+
+  for (const value of bands(assign, groups)) {
+    const members = nodes.filter((n) => assign.get(n.id) === value);
+    if (!members.length) continue;
+    const ids = new Set(members.map((m) => m.id));
+    const inner = treeLayout(
+      members,
+      edges.filter((e) => ids.has(e.src) && ids.has(e.dst)),
+      'LR',
+      hierarchy,
+    );
+    const xs = [...inner.values()].map((p) => p.x);
+    const ys = [...inner.values()].map((p) => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    let bottom = top;
+    for (const [id, p] of inner) {
+      const moved = { ...p, x: p.x - minX, y: p.y - minY + top };
+      placed.set(id, moved);
+      bottom = Math.max(bottom, moved.y + moved.h);
+    }
+    top = bottom + BAND;
+  }
+  return placed;
+}
+
+/**
+ * The box drawn behind each cluster, from where its members actually are.
+ *
+ * Derived from final positions rather than from the layout pass, so a dragged
+ * card grows its band and a saved arrangement is respected without the two
+ * needing to agree about anything.
+ */
+export function clusterBoxes(
+  assign: Map<string, string>,
+  placed: Map<string, Placed>,
+  groups: { value: string }[],
+): Cluster[] {
+  const out: Cluster[] = [];
+  for (const value of bands(assign, groups)) {
+    const members = [...placed.entries()].filter(([id]) => assign.get(id) === value);
+    if (!members.length) continue;
+    const x = Math.min(...members.map(([, p]) => p.x));
+    const y = Math.min(...members.map(([, p]) => p.y));
+    const right = Math.max(...members.map(([, p]) => p.x + p.w));
+    const bottom = Math.max(...members.map(([, p]) => p.y + p.h));
+    out.push({
+      value,
+      x: x - PAD,
+      y: y - PAD - LABEL,
+      w: right - x + PAD * 2,
+      h: bottom - y + PAD * 2 + LABEL,
     });
   }
   return out;

@@ -63,7 +63,6 @@ export interface Query {
   /** Primary axis, then the secondary one — board lanes, table sub-sections. */
   groupBy?: string[];
   sort?: string[];
-  connect?: 'ancestors' | 'none';
   uncategorised?: 'end' | 'start' | 'hide';
 }
 
@@ -132,6 +131,8 @@ export interface QueryResponse {
   /** What focus and search left, before the facet filter. */
   universe: number;
   placements: number;
+  /** The relation a canvas lays out by — the first reference facet in `show`. */
+  layout: string | null;
   edges: { src: string; dst: string; type: string }[];
   rollups?: Record<string, Rollup>;
   views: SavedView[];

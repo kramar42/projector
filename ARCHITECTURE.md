@@ -188,8 +188,12 @@ a label is a chip and a column, a reference is those *and* a line, and the first
 lays the canvas out. Two keys meant "why does my canvas draw nothing" was answered by the one you
 forgot.
 
-**`connect` follows the shape.** Only a canvas ever honoured it, so it is not a query key and there is
-nothing to set, save or lose.
+**`connect` follows the shape *and* the relation drawn.** Only a canvas honours it, so it is not a
+query key — it is a run option carrying the relation to walk, decided by the shape and the vocabulary
+together, which the query half knows nothing about. Passing the relation rather than a flag is what
+stops a canvas laying out along one hierarchy and pulling context from another. `layoutRelation` is the
+single answer to *which relation*, computed server-side and sent as `layout`, so the client never
+recomputes it.
 
 **Conflicts are refused, not merged.** A card read into the panel carries its file mtime; a write sends
 it back and a mismatch is a 409. This matters because an agent may be editing the same file in another
@@ -198,9 +202,16 @@ window (C3).
 **Grouping is one function called twice.** A second axis is a position in `groupBy`, not a separate
 `swimlanes` concept, which is why a matrix needed no new code path. Every value a facet declares gets a
 group, empty or not — a board missing a declared column reads as though it did not exist, and an empty
-column is somewhere to drag a card to. A canvas cannot cluster yet because
-a node has one position and a card multi-valued on the grouped facet cannot sit in two clusters —
-`groupBy` is accepted and ignored there so switching shape never drops the parameter.
+column is somewhere to drag a card to.
+
+A canvas draws groups as **bands**. It cannot honour a multi-valued placement, because a record has one
+position, so it draws the card in the first group the axis declares and the footer reports the count
+rather than letting the two shapes disagree silently. An empty declared value gets no band: an empty
+column is somewhere to *drag to*, and a canvas drag moves a position without changing a facet, so an
+empty band would be decoration with no affordance. The bands are plain nodes behind the records rather
+than React Flow parents — a parent makes member positions relative, and a saved arrangement stores
+absolute ones. Boxes are measured from where members finally are, so a dragged card grows its band and
+clustering needs no agreement with the arrangement.
 
 ## What it writes
 

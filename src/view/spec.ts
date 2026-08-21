@@ -1,4 +1,5 @@
 import { NONE, type Dir, type Focus, type Query } from '../index/query.ts';
+import type { Facets } from '../schema/types.ts';
 
 /**
  * The one description of a view, shared by the three places that describe one:
@@ -102,9 +103,6 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   if (uncategorised) query.uncategorised = uncategorised;
 
   const shape = one(params.shape, SHAPES) ?? 'board';
-  // A graph has to stay connected to be readable; a column does not. Not a
-  // query key: only a canvas honours it, so it belongs to the shape.
-  query.connect = shape === 'canvas' ? 'ancestors' : 'none';
 
   return {
     shape,
@@ -114,6 +112,23 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
     // enumerating what exists. An unknown one draws nothing.
     show: list(params.show),
   };
+}
+
+/**
+ * Which relation gives a canvas its shape: the **first reference facet** in
+ * `show`.
+ *
+ * A hierarchy can lay a graph out and a cross-cutting relation cannot — a
+ * blocker pointing sideways distorts every rank it crosses — but which is which
+ * is a property of the view, not of the relation. Put `parent` before `blocks`
+ * and you get a decomposition tree with dependencies drawn over it; put
+ * `project` first and you get the portfolio.
+ *
+ * The same answer decides which relation `connect` keeps ancestors along, so a
+ * canvas cannot lay out along one hierarchy and pull context from another.
+ */
+export function layoutRelation(show: string[], facets: Facets): string | undefined {
+  return show.find((name) => facets[name]?.ref);
 }
 
 // ---------------------------------------------------------------- serialising

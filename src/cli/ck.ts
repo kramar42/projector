@@ -14,7 +14,7 @@ import { readAll, reindex } from '../index/indexer.ts';
 import { resolveProject } from '../index/project.ts';
 import { counts, nextUp, search, unblocks, valuesFor } from '../index/queries.ts';
 import { runQuery } from '../index/query.ts';
-import { parseSpec, specToParams } from '../view/spec.ts';
+import { layoutRelation, parseSpec, specToParams } from '../view/spec.ts';
 import { findView } from '../server/views.ts';
 import { importTrello } from '../import/trello.ts';
 import { importTodo } from '../import/todo.ts';
@@ -210,7 +210,9 @@ function cmdLs(argv: string[]): void {
   }
 
   const spec = parseSpec(params);
-  const res = runQuery(db, records, facets, spec.query);
+  const res = runQuery(db, records, facets, spec.query, {
+    connect: spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined,
+  });
   const mark = (id: string) => {
     const rec = records.get(id);
     // A container is a record something points at, not a kind it declares.
