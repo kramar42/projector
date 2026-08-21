@@ -46,6 +46,15 @@ typography:
     fontWeight: 650
     lineHeight: 1.3
     letterSpacing: "-0.015em"
+  lg:
+    fontSize: "15px"
+  root:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: "14px"
+    lineHeight: 1.45
+  lede:
+    fontSize: "13.5px"
+    lineHeight: 1.55
   title:
     fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: "13px"
@@ -54,32 +63,30 @@ typography:
   body:
     fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: "12.5px"
-    fontWeight: 400
     lineHeight: 1.45
-  body-compact:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+  body-sm:
     fontSize: "12px"
-    fontWeight: 400
     lineHeight: 1.4
+  sm:
+    fontSize: "11.5px"
+  xs:
+    fontSize: "11px"
   meta:
     fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
     fontSize: "10.5px"
-    fontWeight: 400
     letterSpacing: "0.08em"
+  chip:
+    fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+    fontSize: "10px"
+    letterSpacing: "0.01em"
   label:
     fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
     fontSize: "9.5px"
     fontWeight: 500
     letterSpacing: "0.1em"
-  chip:
-    fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
-    fontSize: "10px"
-    fontWeight: 400
-    letterSpacing: "0.01em"
   micro:
     fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
     fontSize: "9px"
-    fontWeight: 400
     letterSpacing: "0.04em"
 rounded:
   xs: "2px"
@@ -87,6 +94,7 @@ rounded:
   md: "4px"
   base: "5px"
   lg: "6px"
+  badge: "7px"
   xl: "8px"
   pill: "10px"
 spacing:
@@ -314,6 +322,9 @@ A property of a record is drawn in that facet's own hue.
 sans-serif`)
 **Label / Mono Font:** the system mono stack (`ui-monospace, 'SF Mono', Menlo, Consolas, monospace`)
 
+Every step is a `--text-*` custom property in `src/web/style.css`, and `test/theme.test.ts` fails on a
+raw px font-size — so the names below are the handles, not descriptions of them.
+
 **Character:** two system stacks and no webfont, which is the correct answer for a local tool that must
 paint instantly and look native beside a terminal. The expression is not in the faces — it is in the
 scale, which is unusually small and unusually finely stepped, and in the strict division of labour
@@ -353,9 +364,14 @@ ribbon. A count that shifts width when it increments is a count you cannot read 
 **The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The record marks
 sit at `0.8em` with `line-height: 1`, baseline-aligned, plus a per-glyph `translateY` derived from
 where its ink actually centres: `·` centres at `0.347em` of its own size, `○` and `▣` at `0.260em`, and
-lowercase text at `0.254em` of *its* size, which is where `0.03em` and `-0.058em` come from. The same
-applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are tuned
-individually (14px check, 15px close, 16px revert, 17px add) so they read as one family.
+lowercase text at `0.254em` of *its* size, which is where `0.03em` and `-0.058em` come from.
+
+The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
+tuned individually (14px check, 15px close, 16px revert, 17px add) so they read as one family — but
+those metrics deliberately do **not** live here. The glyph set is closed, so the table in
+`src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
+a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
+type scale, which is why the scale test does not police them.
 
 ## Layout
 
@@ -433,11 +449,12 @@ without moving anything — the border is already spoken for.
 ## Shapes
 
 Radius rises with the size of the thing it is applied to, and the ladder is the whole form language:
-**3px** on a chip, link chip or inline `code`; **4px** on a date input, a filter row, a hover
-highlight; **5px** on every control — button, input, select, reference row, banner, rail item; **6px**
-on a card face, the picker and the minimap; **8px** on a container — a column, a popover, the bulk bar,
-the canvas toolbar; **10px** on a count badge and a canvas band. Nothing is a full pill and nothing is
-square.
+`--radius-sm` **3px** on a chip, link chip or inline `code`; `--radius-md` **4px** on a date input, a
+filter row, a hover highlight; `--radius-base` **5px** on every control — button, input, select,
+reference row, banner, rail item; `--radius-lg` **6px** on a card face, the picker and the minimap;
+`--radius-badge` **7px** on a facet badge; `--radius-xl` **8px** on a container — a column, a popover,
+the bulk bar, the canvas toolbar; `--radius-pill` **10px** on a count badge and a canvas band; and
+`--radius-xs` **2px** on the progress track alone. Nothing is a full pill and nothing is square.
 
 Borders carry three distinct meanings, and the difference between them is the form language doing real
 work:
@@ -554,8 +571,9 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Do** give every count `font-variant-numeric: tabular-nums`.
 - **Do** reach for the tonal stack before a shadow. `ground → surface → surface-2 → surface-3` is four
   levels of depth and covers every case that is not literally floating.
-- **Do** keep new type inside the nine roles. If something needs a tenth size, it probably needs an
-  existing one.
+- **Do** reach for an existing `--text-*` step. Fourteen is already more than a scale needs; if
+  something seems to need a fifteenth, it almost certainly needs one of the fourteen. Adding a step is
+  a deliberate act that `test/theme.test.ts` will make you perform on purpose.
 - **Do** measure a glyph you place in a text run, and write the measurement down in a comment beside
   the constant.
 - **Do** clamp overlays with `min(px, vw)` when a window might be narrow.

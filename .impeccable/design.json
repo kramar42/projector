@@ -470,6 +470,18 @@
         "displayName": "Headline",
         "purpose": "The open record's title in the card panel. The largest type in normal use."
       },
+      "lg": {
+        "displayName": "Large",
+        "purpose": "The title textarea while editing, and the sort-direction arrow."
+      },
+      "root": {
+        "displayName": "Root",
+        "purpose": "`body`: an inheritance root, not a used size. Almost nothing renders at it."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "The vault gate's opening paragraph, at a 60ch measure."
+      },
       "title": {
         "displayName": "Title",
         "purpose": "A record's title on a face, in a column or on the canvas. Two-line clamp on a canvas node."
@@ -478,21 +490,29 @@
         "displayName": "Body",
         "purpose": "The working size: buttons, inputs, table cells, reference rows, panel prose. The 14px on body is an inheritance root, not a used size."
       },
-      "body-compact": {
-        "displayName": "Body Compact",
+      "body-sm": {
+        "displayName": "Body Small",
         "purpose": "One step down for anything in a long vertical list: filter rows, rail selects, excerpts, kv values."
+      },
+      "sm": {
+        "displayName": "Small",
+        "purpose": "Small buttons, inline code, the date input, the bulk-bar count."
+      },
+      "xs": {
+        "displayName": "Extra small",
+        "purpose": "Tiny buttons, column counts, cluster labels, table numbers."
       },
       "meta": {
         "displayName": "Meta",
         "purpose": "A face's meta line, and the panel's kv keys in uppercase."
       },
-      "label": {
-        "displayName": "Label",
-        "purpose": "The signature. Panel section heads, table headers, lane heads, rail labels. Tracking widens with prominence: 0.1em in rails and tables, 0.13em in the panel, 0.14em at the gate."
-      },
       "chip": {
         "displayName": "Chip",
         "purpose": "Every facet chip and link chip."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The signature. Panel section heads, table headers, lane heads, rail labels. Tracking widens with prominence: 0.1em in rails and tables, 0.13em in the panel, 0.14em at the gate."
       },
       "micro": {
         "displayName": "Micro",
@@ -724,7 +744,7 @@
       "Do put mono on anything the app says — labels, keys, counts, chips, column names, table headers — and sans on anything a human typed.",
       "Do give every count font-variant-numeric: tabular-nums.",
       "Do reach for the tonal stack before a shadow. ground → surface → surface-2 → surface-3 is four levels of depth and covers every case that is not literally floating.",
-      "Do keep new type inside the nine roles. If something needs a tenth size, it probably needs an existing one.",
+      "Do reach for an existing --text-* step. Fourteen is already more than a scale needs; adding a fifteenth is a deliberate act that test/theme.test.ts will make you perform on purpose.",
       "Do measure a glyph you place in a text run, and write the measurement down in a comment beside the constant.",
       "Do clamp overlays with min(px, vw) when a window might be narrow.",
       "Do let motion exist exactly where a mouse gesture would feel broken without it — dragging a card, panning or zooming the canvas, collapsing the rail. Regrouping, re-sorting and filtering are instant."

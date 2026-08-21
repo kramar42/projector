@@ -32,11 +32,11 @@ function vault(docs: Record<string, string> = {}): { root: string; cleanup: () =
 test('awaiting refresh means the fetch has actually landed', async () => {
   const { root, cleanup } = vault({ 'a.md': '# Written down\n\nbody\n' });
   try {
-    assert.equal(readCached(root, ['doc:notes/a.md'])[0].state, 'missing');
+    assert.equal(readCached(root, ['doc:notes/a.md'])[0]!.state, 'missing');
     await refresh({ dataRoot: root }, ['doc:notes/a.md']);
     // The assertion the old signature could not support: `refresh` returned void,
     // so awaiting it resolved immediately and the cache was still empty here.
-    const [item] = readCached(root, ['doc:notes/a.md']);
+    const item = readCached(root, ['doc:notes/a.md'])[0]!;
     assert.equal(item.state, 'fresh');
     assert.equal(item.data?.label, 'a.md');
   } finally {
@@ -52,7 +52,7 @@ test('nothing to fetch resolves promptly, and claims nothing landed', async () =
     // used to return without a word.
     await refresh({ dataRoot: root, onRefreshed: () => signalled++ }, ['slack:C0123/1700000000.000100']);
     assert.equal(signalled, 0, 'no fetch happened, so nothing was invalidated');
-    assert.equal(readCached(root, ['slack:C0123/1700000000.000100'])[0].state, 'unsupported');
+    assert.equal(readCached(root, ['slack:C0123/1700000000.000100'])[0]!.state, 'unsupported');
   } finally {
     cleanup();
   }
@@ -65,11 +65,11 @@ test('a second pass over a fresh ref resolves without refetching', async () => {
     const opts = { dataRoot: root, onRefreshed: () => signalled++ };
     await refresh(opts, ['doc:notes/b.md']);
     assert.equal(signalled, 1, 'the first pass fetched, so it signalled');
-    const first = readCached(root, ['doc:notes/b.md'])[0].fetchedAt;
+    const first = readCached(root, ['doc:notes/b.md'])[0]!.fetchedAt;
 
     await refresh(opts, ['doc:notes/b.md']);
     assert.equal(signalled, 1, 'the second pass had nothing to do and said so by staying quiet');
-    assert.equal(readCached(root, ['doc:notes/b.md'])[0].fetchedAt, first, 'and it did not rewrite the row');
+    assert.equal(readCached(root, ['doc:notes/b.md'])[0]!.fetchedAt, first, 'and it did not rewrite the row');
   } finally {
     cleanup();
   }
@@ -79,7 +79,7 @@ test('a ref that cannot resolve is cached as an error rather than retried', asyn
   const { root, cleanup } = vault();
   try {
     await refresh({ dataRoot: root }, ['doc:notes/absent.md']);
-    const [item] = readCached(root, ['doc:notes/absent.md']);
+    const item = readCached(root, ['doc:notes/absent.md'])[0]!;
     assert.equal(item.state, 'error', 'a failure is cached like a success');
     assert.match(item.error ?? '', /no file at/);
     assert.notEqual(item.state, 'missing', 'otherwise every render retries it');
@@ -94,12 +94,12 @@ test('force refetches a ref that is already fresh', async () => {
     let signalled = 0;
     const opts = { dataRoot: root, onRefreshed: () => signalled++ };
     await refresh(opts, ['doc:notes/c.md']);
-    assert.equal(readCached(root, ['doc:notes/c.md'])[0].data?.title, 'One');
+    assert.equal(readCached(root, ['doc:notes/c.md'])[0]!.data?.title, 'One');
 
     writeFileSync(join(root, 'notes', 'c.md'), '# Two\n', 'utf8');
     await refresh(opts, ['doc:notes/c.md'], true);
     assert.equal(signalled, 2);
-    assert.equal(readCached(root, ['doc:notes/c.md'])[0].data?.title, 'Two');
+    assert.equal(readCached(root, ['doc:notes/c.md'])[0]!.data?.title, 'Two');
   } finally {
     cleanup();
   }
