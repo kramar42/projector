@@ -49,7 +49,9 @@ The index is never authoritative — nothing in it survives a rebuild, and nothi
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
 | `src/web/` | React: sidebar, three shapes, card panel |
 | `src/cli/` | `ck` |
+| `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
+| `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
 | `src/agent/` | card context assembly, worktree workspaces, briefings, git history |
 | `src/import/` | one-time Trello and TODO.md importers |
 
@@ -177,6 +179,39 @@ nowhere to hang a label, a weight or a reason on a relationship. `Edge` was `{ty
 used more, and a reason for a blocker belongs in the body — accepted knowingly, since it is the one
 thing the collapse gave up.
 
+**Three SQLite files, three lifecycles.** `.index.db` is derived from the card files and rebuilt from
+scratch whenever they change — C1 means it can never be the authority, so it needs no migration.
+`.enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of data that took a second
+to fetch. `.intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
+the last three months, so it cannot be rebuilt from anything and cannot be thrown away casually.
+
+Merging any two of them breaks whichever has the shorter life: enrichment in the index would be
+discarded on every reindex, and watermarks in the enrichment cache would be discarded by
+`clearEnrichment`.
+
+**A watermark is not load-bearing, and that is what makes it safe to keep at all.** It is the one piece
+of state cockpit holds that is not derived from the card files. Correctness does not rest on it:
+`source_fingerprint` is what stops a duplicate, and it stops one whether or not a cursor knows the
+item exists. So the watermark only decides how far back to *look* — losing it degrades a sweep to a
+default window, which is noisier and never wrong. Nothing about the work has two answers, so C1 is
+untouched.
+
+**A cursor may only move to a boundary with nothing unexamined behind it.** A cursor is one value, so a
+channel that returned the *newest* N items and then advanced would step over everything older it never
+looked at. Channels therefore work **oldest-first from the cursor**, and a run truncated by its limit
+holds its cursor where it was: the next sweep resumes at the same place, and the backlog drains through
+fingerprint dedup rather than through the cursor. `ck intake` is also the only command that reads
+external state and writes nothing at all — advancing a cursor is a separate explicit step, because a
+run that fetched is not a run that was resolved.
+
+**Enrichment and intake are mirror images that share only the way out.** Enrichment is given a ref and
+answers how to display it; intake is given a channel and a cursor and answers which refs nobody has
+filed. Same Jira token, same `~/.claude/projects`, opposite question. `src/sources/` holds what is
+genuinely common — the credential, the subprocess, the transcript parser — and neither directory
+imports the other. Two of the five intake channels have no fetcher here at all: Slack and Gmail are
+read by an agent through MCP, and `ck` keeps their cursors anyway, because a watermark is a property of
+where the sweep got to and not of who did the fetching.
+
 **Instructions are configuration, not prose.** They live in the `project:` block. They were once a
 `## Instructions` heading in the body matched by regex — the only place where renaming a heading
 silently changed behaviour, with nothing to validate against. The body is free-form again (C6): the app
@@ -265,7 +300,9 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST /api/card/:id/asset` | one file under `cards/assets/<id>/` | never overwrites: the name is a content hash |
 | `ck import …` | new card files; skips any id already present | never edits or deletes an existing card |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app | never touches a vault's contents |
-| everything else | `.index.db` and `.enrich.db` only | never touches a card file |
+| `ck intake` | nothing at all | proposes; it writes no card and moves no cursor |
+| `ck intake commit` | one row in `.intake.db` | never a card, and never on its own initiative |
+| everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a card file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
 mutation functions, so there is no code path to write back.
@@ -285,6 +322,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/cards/**` | card files, and assets under `cards/assets/<id>/` | you create or edit a card |
 | `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
+| `<vault>/.intake.db` | where each intake channel last got to | only `ck intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$COCKPIT_WORKSPACES/<card>/` (default `~/Code/wt/`) | `ck work` worktrees and `AGENT_BRIEFING.md` | only `ck work` |
 
@@ -295,16 +333,17 @@ sees half a file. The registry is written the same way.
 
 | Path | Why | Surface |
 |---|---|---|
-| `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link to its transcript | read-only |
+| `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link, and discovering sessions that moved | read-only |
 | any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
 | any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
-| a project's declared `repos` | `ck work`, through `git` | `git worktree`, `git fetch` |
+| a project's declared `repos` | `ck work`, through `git`; `ck intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
 
 `doc:` and the folder picker are the two places a path outside the vault is reachable, and both are
 deliberate: a `doc:` ref is something you typed, and a picker that cannot leave one directory cannot
 pick a folder. Neither reads anything you have not named.
 
-**Subprocesses:** `git` (worktrees in declared repos, and `log`/`cat-file` in the vault for `ck log`),
+**Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `ck log`, and
+`log`/`branch`/`config`/`remote` in declared repos for `ck intake git`),
 `gh` (`pr view`, `api` GETs), and `osascript` (opening a terminal, `ck work` only). No shell — `execFile` with an argument array, so
 nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
 because a path may contain a quote.
@@ -316,7 +355,9 @@ because a path may contain a quote.
 | `COCKPIT_DATA` | the vault, for the CLI |
 | `COCKPIT_PORT` | server port (default 8092) |
 | `COCKPIT_WORKSPACES` | where `ck work` puts worktrees (default `~/Code/wt`) |
-| `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | Jira enrichment; absent means Jira links show their key and nothing more |
+| `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
+| `COCKPIT_INTAKE_JQL` | overrides the JQL `ck intake jira` searches with |
+| `COCKPIT_GIT_AUTHOR` | whose commits `ck intake git` looks for (default: each repo's own `user.email`) |
 
 No credential is read from anywhere but the environment, and none reaches the browser: enrichment
 responses carry the resolved fields, never the token.
@@ -386,6 +427,7 @@ written down.
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
 | `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |
+| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
 and not whatever the cards happen to say today. `tsconfig` runs with `noUnusedLocals` and

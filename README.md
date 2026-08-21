@@ -433,6 +433,54 @@ ck enrich <ref> --force
 
 ---
 
+# Intake
+
+Enrichment's mirror image. Enrichment is handed a ref and answers *how to show it*; intake is handed a
+channel and a cursor and answers *which refs nobody has filed*. Same Jira token, same
+`~/.claude/projects`, opposite question — so the two share `src/sources/` and nothing else.
+
+| Channel | Source | Unit | Fingerprint |
+|---|---|---|---|
+| `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` |
+| `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` |
+| `jira` | JQL, `COCKPIT_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` |
+| `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` |
+| `gmail` | **not fetched here** — an agent, through MCP | a thread | `gmail:<message-id>` |
+
+```bash
+ck intake                    # every channel, each from where it last got to
+ck intake claude git --json
+ck intake status
+ck intake known claude:abc-123          # which cards already carry this
+ck intake commit --channel claude --cursor 2026-08-21T09:00:00Z
+```
+
+**`ck intake` writes nothing.** It creates no card and moves no cursor: `ck add`/`ck link` do the first
+after a human agrees, and `ck intake commit` does the second once the proposal is resolved. A run that
+fetched is not a run that was resolved, and an abandoned sweep must not swallow what it listed.
+
+**A watermark is not what makes this correct.** `source_fingerprint` on the cards is — it stops a
+duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
+so deleting `.intake.db` degrades a sweep to a default window: noisier, never wrong. That is also why
+it is its own file rather than a table in `.enrich.db`, which is a cache and is meant to be
+throwaway-able.
+
+Channels work **oldest-first from the cursor**, and a run truncated by `--limit` holds its cursor: a
+cursor is one value, so it may only advance to a boundary with nothing unexamined behind it.
+
+**What `ck` decides, and what it does not.** It decides only what is decidable — a ref already on a
+card, a fingerprint already captured, a session too short to be work. Everything else arrives as
+`evidence`, and each match carries the mechanical reason it matched: `cwd`, `worktree`, `branch`,
+`mentions PROJ-303`, `text`. There is no score and no verdict, because the failure that would make this
+useless is a confident wrong one — a session linked to the wrong card puts its history where nobody will
+look. Choosing between card, link and neither is `/capture`'s job, out loud.
+
+Two channels have no fetcher here at all. Slack and Gmail are read by an agent through MCP — a second
+token in a second place to rotate buys nothing — but `ck` still keeps their cursors, because a
+watermark is a property of where the sweep got to, not of who fetched.
+
+---
+
 # Agents
 
 Cards are plain files, so an agent can create and edit them directly with no API and no app running.
@@ -463,7 +511,7 @@ accumulates its own history.
 | | |
 |---|---|
 | `/cockpit` | the model and the `ck` surface — read by the others, and on its own for ad-hoc card work |
-| `/capture` | sweep Slack, Jira, Gmail and git into new cards, deduplicated by fingerprint |
+| `/capture` | sweep the five intake channels; each candidate becomes a card, a link on an existing card, or nothing |
 | `/triage` | give incomplete cards a project, priority and status |
 | `/work` | start work on a card |
 
@@ -472,6 +520,11 @@ approved. A wrong project assignment hides a card in a column nobody will look i
 leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
 is why a rejected card gets `status: dropped` rather than being deleted: deleting it destroys the
 fingerprint with it, and the next sweep creates it again.
+
+`/capture` reads its candidates from `ck intake` rather than deciding what is new itself, and it makes
+one decision per candidate that `ck` deliberately does not: **card, link, or neither.** A Claude session
+is usually not new work — it is more of something already tracked, or a question that was answered — and
+only "already on a card" is a fact. The rest is a judgement, made on evidence it has to quote.
 
 ---
 
@@ -520,6 +573,9 @@ one.
 | `ck work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
 | `ck link-session <id>` | link the live Claude session working in this directory |
 | `ck enrich [<ref>…] [--all]` | resolve link enrichment |
+| `ck intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
+| `ck intake status` · `ck intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
+| `ck intake commit --channel c [--cursor v]` · `ck intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
 | `ck check` | validate every card file |
 | `ck reindex` · `ck stats` · `ck search <q>` | rebuild the index · counts · full text |
 | `ck import trello <file.json>` · `ck import todo <TODO.md>` | one-time imports |
