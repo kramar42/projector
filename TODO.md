@@ -12,17 +12,31 @@ Facets are typed: `label · ref · date · number`, with `buckets` on the ordere
 ordinary facet, range filters work on any ordered facet, and the type picks the editing control. See
 [P8.md](P8.md).
 
-## Next
+## Not now
 
-- **The expression language**, deferred out of P8. Moving the four pseudo-facets — `type`, `blocked`,
-  `triage`, `staleness` — into `facets.yaml` needs one, and its hardest case cannot be a per-record
-  expression at all: `blocked` requires the aggregate pass that scans every record's `blocks`
-  references, so it needs engine-backed built-ins whatever the syntax. Worth asking first whether it is
-  wanted: four well-tested functions in `query.ts` are not obviously worse than four expressions in
-  YAML for a single-user app whose author edits both.
-- **Per-column summaries**, after the expression language and not before. Bases lets a view declare `summaries` per property
-  — count, sum, average — over whatever the view selected, where ours has `projectRollups`: the same
-  idea hardcoded for one entity type and four fixed numbers. Half of what it needs now exists —
-  `type: number` makes `sum` and `average` mean something — and the other half is the expression
-  language, since a summary *is* an expression over a result set. Built before that it would be
-  count-only, which `projectRollups` already does for the one table that shows it.
+- **The expression language.** Moving the four remaining pseudo-facets — `type`, `blocked`, `triage`,
+  `staleness` — into `facets.yaml` needs one, and its hardest case cannot be a per-record expression at
+  all: `blocked` requires the aggregate pass over every record's `blocks` references. Since P8 the case
+  is weaker anyway: each of the four computes over something a facet *cannot* describe — a `project:`
+  block, the reference graph, an absence, the app-written `updated` — so `PSEUDO` has a coherent
+  residual job rather than being a holding pen.
+- **Per-column summaries.** Not blocked on the expression language, which was the wrong reason: a
+  built-in summary is a *named aggregate* — count, sum, average, min, max — and needs no parser, and
+  `type: number` now exists so the arithmetic ones would mean something.
+
+  Two better reasons to wait. **It would not retire `projectRollups`**: `direct`/`total` is a
+  transitive walk over the membership graph, not an aggregate over the visible result set, so a summary
+  mechanism sits beside the special case instead of absorbing it — the opposite of what P6–P8 each did.
+  And **there is nothing to aggregate**: one ordered facet, no record carrying it, no numeric facet, so
+  the arithmetic summaries would ship with zero users. What is left — count with a predicate — mostly
+  duplicates the counts already on a board column, a table section and the project table.
+
+  Revisit when a numeric facet exists or deadlines are in use, i.e. when there is a question on screen
+  that cannot be answered.
+
+## The model is done for now
+
+P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the
+model is presently known to be wrong, and the next useful work is likely to be *using* it rather than
+changing it — 10 `ck check` warnings left, `energy` set on a handful of records, `owner` declared and
+unused, no deadlines set anywhere.
