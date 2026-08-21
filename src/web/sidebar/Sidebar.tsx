@@ -398,8 +398,23 @@ function SortRow({
         : '';
   return (
     <div className="rail-row" title={note}>
-      <div className="rail-label-control">
-        <label className="rail-label">Sort</label>
+      <label className="rail-label">Sort</label>
+      <div className="sort-input">
+        <select
+          className={`rail-select ${key ? 'has-sort-direction' : ''}`}
+          value={key}
+          onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
+        >
+          <option value="">—</option>
+          <option value="updated">updated</option>
+          <option value="created">created</option>
+          <option value="title">title</option>
+          {facets.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
         {key && (
           <button
             className="btn ghost tiny sort-direction"
@@ -411,21 +426,6 @@ function SortRow({
           </button>
         )}
       </div>
-      <select
-        className="rail-select"
-        value={key}
-        onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
-      >
-        <option value="">—</option>
-        <option value="updated">updated</option>
-        <option value="created">created</option>
-        <option value="title">title</option>
-        {facets.map((f) => (
-          <option key={f.value} value={f.value}>
-            {f.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
@@ -546,7 +546,8 @@ function FocusSection({
         ) : (
           <PopoverButton
             className="focusbtn"
-            minWidth={280}
+            minWidth={320}
+            fitContent
             label="everything"
             render={(close) => (
               <RecordPicker

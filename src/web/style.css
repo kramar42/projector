@@ -244,6 +244,7 @@ body {
   font-size: 10px;
   color: var(--ink-3);
   padding: 0 2px;
+  text-align: center;
 }
 
 .rail-row {
@@ -263,26 +264,31 @@ body {
   flex: none;
 }
 
-.rail-label-control {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  width: 62px;
-  flex: none;
+.sort-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
-.rail-label-control .rail-label {
-  width: auto;
-  flex: none;
+.sort-input .rail-select {
+  width: 100%;
+}
+
+.sort-input .rail-select.has-sort-direction {
+  padding-right: 28px;
 }
 
 .sort-direction {
+  position: absolute;
+  top: 50%;
+  right: 3px;
   padding: 0;
   width: 16px;
   height: 20px;
   color: var(--ink-2);
   font-size: 15px !important;
   line-height: 1 !important;
+  transform: translateY(-50%);
 }
 
 .rail-select {
@@ -386,6 +392,7 @@ body {
   font-size: 10px;
   color: var(--ink-3);
   line-height: 1.6;
+  text-align: center;
 }
 
 .rail-active b {
@@ -421,6 +428,7 @@ body {
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(20, 15, 35, 0.18);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 5px;
   display: flex;
   flex-direction: column;
@@ -462,27 +470,12 @@ body {
   gap: 5px;
 }
 
-.popbtn-caret {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  color: var(--ink-3);
-  flex: none;
-  font-size: 0;
-}
-
-.popbtn-caret::before,
 .facet-caret::before {
   content: '';
   width: 6px;
   height: 6px;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
-}
-
-.popbtn-caret::before {
-  transform: rotate(45deg) translate(-1px, -1px);
 }
 
 .vaultbtn {
@@ -1709,8 +1702,8 @@ textarea { resize: vertical; font-family: inherit; }
 .picker-item:hover { background: var(--surface-2); color: var(--ink); }
 .picker-item.is-clear { color: var(--ink-3); font-style: italic; }
 .picker-mark { font-family: var(--mono); font-size: 10px; color: var(--ink-3); flex: none; }
-.picker-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker-proj { font-family: var(--mono); font-size: 9.5px; color: var(--accent); flex: none; }
+.picker-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-proj { font-family: var(--mono); font-size: 9.5px; color: var(--accent); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-empty { font-size: 12px; color: var(--ink-3); padding: 6px 7px; font-style: italic; }
 
 /* body editor */

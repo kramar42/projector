@@ -24,14 +24,15 @@ interface Rect {
 const GAP = 6;
 const MARGIN = 12;
 
-function place(anchor: HTMLElement, panel: HTMLElement | null, minWidth: number): Rect {
+function place(anchor: HTMLElement, panel: HTMLElement | null, minWidth: number, fitContent: boolean): Rect {
   const a = anchor.getBoundingClientRect();
   const wanted = panel?.scrollHeight ?? 0;
   const below = window.innerHeight - a.bottom - GAP - MARGIN;
   const above = a.top - GAP - MARGIN;
   const flip = wanted > below && above > below;
 
-  const width = Math.max(a.width, minWidth);
+  const naturalWidth = fitContent ? panel?.scrollWidth ?? 0 : 0;
+  const width = Math.min(window.innerWidth - MARGIN * 2, Math.max(a.width, minWidth, naturalWidth));
   return {
     top: flip ? Math.max(MARGIN, a.top - GAP - Math.min(wanted, above)) : a.bottom + GAP,
     left: Math.min(Math.max(MARGIN, a.left), Math.max(MARGIN, window.innerWidth - width - MARGIN)),
@@ -46,6 +47,7 @@ export function Popover({
   onClose,
   children,
   minWidth = 220,
+  fitContent = false,
   className = '',
 }: {
   open: boolean;
@@ -53,6 +55,8 @@ export function Popover({
   onClose: () => void;
   children: ReactNode;
   minWidth?: number;
+  /** Let a picker menu grow to its content, while still respecting the viewport. */
+  fitContent?: boolean;
   className?: string;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -61,12 +65,12 @@ export function Popover({
   // Measure after the panel exists but before paint, or it appears at 0,0 first.
   useLayoutEffect(() => {
     if (!open || !anchor) return setRect(null);
-    setRect(place(anchor, panel.current, minWidth));
-  }, [open, anchor, minWidth, children]);
+    setRect(place(anchor, panel.current, minWidth, fitContent));
+  }, [open, anchor, minWidth, fitContent, children]);
 
   useEffect(() => {
     if (!open || !anchor) return;
-    const reposition = () => setRect(place(anchor, panel.current, minWidth));
+    const reposition = () => setRect(place(anchor, panel.current, minWidth, fitContent));
     // `true` catches scrolling inside the sidebar, not just the window.
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition);
@@ -92,7 +96,7 @@ export function Popover({
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointer, true);
     };
-  }, [open, anchor, minWidth, onClose]);
+  }, [open, anchor, minWidth, fitContent, onClose]);
 
   if (!open || !anchor) return null;
   return createPortal(
@@ -123,6 +127,7 @@ export function PopoverButton({
   title,
   className = '',
   minWidth,
+  fitContent,
   panelClassName,
   render,
 }: {
@@ -130,6 +135,7 @@ export function PopoverButton({
   title?: string;
   className?: string;
   minWidth?: number;
+  fitContent?: boolean;
   panelClassName?: string;
   render: (close: () => void) => ReactNode;
 }) {
@@ -145,15 +151,13 @@ export function PopoverButton({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="popbtn-label">{label}</span>
-        <span className="popbtn-caret" aria-hidden="true">
-          ▾
-        </span>
       </button>
       <Popover
         open={open}
         anchor={ref.current}
         onClose={() => setOpen(false)}
         minWidth={minWidth}
+        fitContent={fitContent}
         className={panelClassName ?? ''}
       >
         {render(() => setOpen(false))}
