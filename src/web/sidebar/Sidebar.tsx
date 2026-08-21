@@ -220,9 +220,9 @@ function SavedViews({
         />
         {modified && (
           <span className="rail-dirty" title="This saved view has unsaved changes">
-            <span aria-label="Modified">*</span>
+            <span className="dirty-mark" aria-label="Modified">*</span>
             <button
-              className="btn ghost tiny icon-button"
+              className="btn ghost tiny icon-button icon-check"
               title="write these changes into the saved view — its layout and card order are kept"
               aria-label="Save changes to this view"
               onClick={() => void save(current!.name!, current!.title)}
@@ -230,7 +230,7 @@ function SavedViews({
               ✓
             </button>
             <button
-              className="btn ghost tiny icon-button"
+              className="btn ghost tiny icon-button icon-revert"
               title="discard the overrides and go back to the saved view"
               aria-label="Revert changes to this view"
               onClick={() => patch(blankQuery(params, current?.name ?? null))}
@@ -536,7 +536,7 @@ function FocusSection({
               {title}
             </button>
             <button
-              className="btn ghost tiny"
+              className="btn ghost tiny icon-button icon-close"
               title="clear the focus"
               onClick={() => patch(clearFocus(saved))}
             >

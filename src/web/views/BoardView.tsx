@@ -308,7 +308,7 @@ function Column({
       <header className="column-head">
         <span className="column-name">{value === NONE ? 'no value' : value || 'all'}</span>
         <span className="column-count">{group.ids.length}</span>
-        <button className="btn ghost tiny" title="new card here" onClick={() => setAdding(true)}>
+        <button className="btn ghost tiny icon-button icon-add" title="new card here" onClick={() => setAdding(true)}>
           +
         </button>
       </header>

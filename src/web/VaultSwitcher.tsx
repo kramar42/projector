@@ -81,7 +81,7 @@ function VaultMenu({
           </button>
           {v.path !== meta.vault && (
             <button
-              className="btn ghost tiny"
+              className="btn ghost tiny icon-button icon-close"
               title="stop tracking this vault (the folder is untouched)"
               onClick={() => void forget(v.path)}
             >

@@ -69,7 +69,7 @@ function Facet({
   return (
     <section className={`facet ${open ? 'is-open' : ''} ${selected.length ? 'is-active' : ''}`}>
       <button className="facet-head" onClick={() => setOpen((v) => !v)}>
-        <span className="facet-caret">{open ? '▾' : '▸'}</span>
+        <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
         <span className="facet-label">{facet.label}</span>
         {facet.pseudo && (
           <span className="facet-pseudo" title="computed from the cards, not stored on them">

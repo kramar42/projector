@@ -143,7 +143,7 @@ export function CardPanel({
               </div>
             ))}
           {busy && <span className="panel-busy">{busy}…</span>}
-          <button className="btn ghost panel-x" onClick={onClose} aria-label="Close">
+          <button className="btn ghost panel-x icon-button icon-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
@@ -434,7 +434,7 @@ function LinkRow({ raw, onRemove }: { raw: string; onRemove: () => void }) {
           </span>
         ))}
         {res?.state === 'stale' && <span className="badge tone-warn" title="refreshing">stale</span>}
-        <button className="btn ghost tiny" title="remove this link" onClick={onRemove}>
+        <button className="btn ghost tiny icon-button icon-close" title="remove this link" onClick={onRemove}>
           ✕
         </button>
       </div>
