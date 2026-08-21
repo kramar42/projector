@@ -13,7 +13,7 @@
     "pj": "node src/cli/pj.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "dev": "node src/server/serve.ts",
+    "dev": "node --watch src/server/serve.ts",
     "dev:web": "vite",
     "build": "vite build",
     "serve": "node src/server/serve.ts"

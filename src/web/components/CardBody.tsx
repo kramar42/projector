@@ -181,7 +181,7 @@ export function CardBody({
  * grouping record off a board was the status filter, not the kind. C11 — nothing
  * derivable is also stored.
  */
-export function markOf(card: CardDTO): { glyph: string; role: string; means: string } {
+export function markOf(card: Marked): { glyph: string; role: string; means: string } {
   if (card.isProject) {
     return {
       glyph: '▣',
@@ -199,7 +199,21 @@ export function markOf(card: CardDTO): { glyph: string; role: string; means: str
   return { glyph: '·', role: 'leaf', means: 'nothing is part of this one' };
 }
 
-export function RecordMark({ card }: { card: CardDTO }) {
+/**
+ * The two counts a mark is read from.
+ *
+ * Narrower than `CardDTO` on purpose: a reference facet resolves to a title and
+ * these two numbers, not to a whole card, and the panel drawing its own
+ * two-way `isProject ? ▣ : ·` was how `○` went missing from every reference —
+ * a record named as a parent has children by definition, so the one mark that
+ * should have been commonest never appeared at all.
+ */
+export interface Marked {
+  isProject: boolean;
+  childCount: number;
+}
+
+export function RecordMark({ card }: { card: Marked }) {
   // The role is also a class, because each glyph needs its own optical nudge —
   // see `.recordmark` in style.css.
   const { glyph, role, means } = markOf(card);

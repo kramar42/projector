@@ -292,7 +292,10 @@ app.get('/api/card/:id', (c) => {
         .flatMap(([, ids]) => ids)
         .map((id) => records.get(id))
         .filter((r) => r !== undefined)
-        .map((r) => [r.id, { title: r.title, isProject: isProject(r) }]),
+        .map((r) => [
+          r.id,
+          { title: r.title, isProject: isProject(r), childCount: countChildren(records, r.id) },
+        ]),
     ),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))

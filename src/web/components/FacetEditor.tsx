@@ -3,6 +3,7 @@ import { RecordPicker } from './RecordPicker.tsx';
 import type { CardDetail, FacetDef } from '../types.ts';
 import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
+import { RecordMark } from './CardBody.tsx';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -94,18 +95,13 @@ export function FacetEditor({
               // to remove on click and say so only in a hover title, which put
               // "go to this card" and "unlink this card" on the same gesture.
               <span key={v} className="refchip">
-                {/* `▣` when the record owns a project block, `·` otherwise. The
-                    `○` case needs a child count this payload does not carry, and
-                    inventing a fourth mark to cover that would be worse than
-                    under-reporting with the vocabulary that already exists. */}
-                <span
-                  className={`recordmark ${refs?.[v]?.isProject ? 'is-project' : 'is-leaf'}`}
-                  aria-hidden="true"
-                >
-                  {refs?.[v]?.isProject ? '▣' : '·'}
-                </span>
+                {/* The mark sits inside the button, because it is part of the
+                    record's identity rather than a control beside it — the same
+                    order a card face and the panel title lead with, and the
+                    arrangement the per-glyph optical nudges were measured for. */}
                 <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
-                  {refs?.[v]?.title ?? v}
+                  <RecordMark card={refs?.[v] ?? { isProject: false, childCount: 0 }} />
+                  <span className="refchip-title">{refs?.[v]?.title ?? v}</span>
                 </button>
                 <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
               </span>

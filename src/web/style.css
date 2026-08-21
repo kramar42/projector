@@ -1757,33 +1757,40 @@ textarea { resize: vertical; font-family: inherit; }
    — and One Hue Per Axis means a family serves exactly one, so a shared chip
    colour for all three would say "project" about two axes that are not it.
    What a reference *is* is carried by the record mark and the title, which is
-   the same grammar a card face and a table row use. */
+   the same grammar a card face and a table row use.
+
+   `align-items: baseline` and no font-size of its own, because that is what the
+   mark's optical constants assume: `.recordmark` already sets `0.8em`, and a
+   second declaration here compounded it to `0.64em`, which shrinks the glyph and
+   scales its `em`-denominated nudge along with it. Every other holder of a mark
+   — `.cardface-head`, `.panel-title` — aligns on the baseline for the same
+   reason. */
 .refchip-go {
   appearance: none;
   border: 0;
   background: none;
   cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
   font-family: var(--sans);
   font-size: var(--text-body-sm);
+  line-height: 1.35;
   color: var(--ink-2);
   padding: 1.5px 2px 1.5px 6px;
+  text-align: left;
+}
+
+.refchip-title {
   max-width: 26ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
 }
 
 .refchip-go:hover { color: var(--ink); }
 .refchip .btn.tiny { padding: 0 4px 0 2px; }
-
-/* The mark that says what the record is, at the size the surrounding text sets —
-   the same `▣ / ○ / ·` vocabulary as every other surface. See `.recordmark` for
-   where the optical nudges come from. */
-.refchip .recordmark {
-  padding-left: 6px;
-  font-size: 0.8em;
-}
 /* Sized to its placeholder rather than to a round number, so it reads as one more
    chip in the row instead of a gap at the end. It grows when focused. */
 .facetedit-add input {
