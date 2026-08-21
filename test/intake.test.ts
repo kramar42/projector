@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
 import { commitWatermark, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, fromWorkspacePath, ftsQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
-import { candidateCount, channelNames, renderSweep, sweep } from '../src/intake/run.ts';
+import { candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
@@ -393,4 +393,40 @@ test('a process without a turn to work on is waiting, and none at all is closed'
   // Owing a move it has not made for a quarter of an hour is not work.
   const stale = new Date(Date.now() - 16 * 60 * 1000).toISOString();
   assert.equal(state(true, { waitingOn: 'model', at: stale }), 'stalled');
+});
+
+/**
+ * `pj intake status --json` used to be accepted and ignored, so pj-capture read
+ * the cursor it fetches Slack and Gmail from out of a padded table. The renderer
+ * reads this now, which is what keeps the two from disagreeing.
+ */
+test('every channel reports a status, and the text is rendered from it', () => {
+  const root = vault({});
+  try {
+    const rows = statusOf(root);
+    assert.deepEqual(
+      rows.map((r) => r.channel).sort(),
+      channelNames().slice().sort(),
+      'a channel missing from status is a channel whose cursor cannot be read',
+    );
+    for (const r of rows) {
+      assert.equal(r.cursor, null, 'a fresh vault has committed no cursor');
+      assert.equal(r.ranAt, null);
+      assert.ok(r.defaultDays > 0, 'a channel with no cursor falls back to a window');
+    }
+
+    commitWatermark(root, 'git', 'abc123', { seen: 4, captured: 1 });
+    const after = statusOf(root).find((r) => r.channel === 'git')!;
+    assert.equal(after.cursor, 'abc123');
+    assert.equal(after.seen, 4);
+    assert.equal(after.captured, 1);
+    assert.ok(after.ranAt, 'a committed channel records when it ran');
+
+    // The table is a view of the same rows, not a second query.
+    const text = renderStatus(root);
+    for (const r of statusOf(root)) assert.match(text, new RegExp(r.channel));
+    assert.match(text, /abc123/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

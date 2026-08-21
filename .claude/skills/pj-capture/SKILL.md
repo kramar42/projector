@@ -13,10 +13,11 @@ Read the `projector` skill first.
 ## 1. Where the last sweep got to
 
 ```bash
-pj intake status
+pj intake status --json
 ```
 
-Per channel: the cursor, when it last ran, what it saw. **The cursor is why this is worth running
+Per channel: the cursor, when it last ran, what it saw. Read `cursor` off the JSON rather than the
+padded table — that is the value you fetch Slack and Gmail from, and it has to be exact. **The cursor is why this is worth running
 more than once** — without it you are the thing deciding what counts as new, from a fixed window,
 every time.
 
@@ -41,7 +42,7 @@ pj intake --since 2026-08-01 --limit 40
 | `slack` | **you, through the Slack MCP** | `D01234567` (his scratchpad) and `is:saved` |
 | `gmail` | **you, through the Gmail MCP** | vendor threads, forwarded meeting notes — commitments made to other people |
 
-For Slack and Gmail: take the cursor out of `pj intake status`, fetch **only since it**, and treat
+For Slack and Gmail: take the cursor out of `pj intake status --json`, fetch **only since it**, and treat
 what you find exactly as `pj` treats the rest. Their fingerprints are `slack:<channel>/<ts>` and
 `gmail:<message-id>`.
 

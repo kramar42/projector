@@ -15,15 +15,13 @@ look for it.
 ## 1. Get the worklist from `pj`, not from a guess
 
 ```bash
-pj ls --view triage --json --limit 40
+pj ls --view triage --json
 ```
 
 The view groups by `triage`, so each group names exactly what is missing — `needs-project`,
 `needs-priority`, `needs-status` — and a card short of two things appears under both. Work the groups
 it gives you. Do not scan the cards directory yourself and do not invent a worklist: the view *is* the
 definition of untriaged, and it is the same one the board shows.
-
-`--limit` truncates and says so, reporting `withheld` in the JSON and "showing N of M" in text.
 
 If the user named a subset ("just the Trello ones", "only the research links"), filter that list;
 say how many you filtered out.

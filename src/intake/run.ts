@@ -171,14 +171,45 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   return L.join('\n');
 }
 
-export function renderStatus(root: string): string {
+export interface ChannelStatus {
+  channel: string;
+  /** Null when the channel has never been committed, and the window applies instead. */
+  cursor: string | null;
+  defaultDays: number;
+  ranAt: string | null;
+  seen: number;
+  captured: number;
+}
+
+/**
+ * Where each channel got to.
+ *
+ * Separate from `renderStatus` because a skill reads this to find the cursor it
+ * must fetch from, and it was reading it out of a padded table: `--json` was
+ * accepted on `pj intake status` and silently ignored, so an agent scraped
+ * fixed-width columns for a value it needed exactly right.
+ */
+export function statusOf(root: string): ChannelStatus[] {
   const marks = new Map(watermarks(root).map((w) => [w.channel, w]));
-  const L: string[] = ['channel    cursor                          last run          seen  captured'];
-  for (const c of CHANNELS) {
+  return CHANNELS.map((c) => {
     const w = marks.get(c.name);
+    return {
+      channel: c.name,
+      cursor: w?.cursor ?? null,
+      defaultDays: c.defaultDays,
+      ranAt: w?.ranAt ?? null,
+      seen: w?.seen ?? 0,
+      captured: w?.captured ?? 0,
+    };
+  });
+}
+
+export function renderStatus(root: string): string {
+  const L: string[] = ['channel    cursor                          last run          seen  captured'];
+  for (const s of statusOf(root)) {
     L.push(
-      `${line(c.name, 10)} ${line(w?.cursor ?? `— (default ${c.defaultDays}d window)`, 31)} ` +
-        `${line(w ? ago(w.ranAt) : 'never', 17)} ${String(w?.seen ?? 0).padStart(4)}  ${String(w?.captured ?? 0).padStart(8)}`,
+      `${line(s.channel, 10)} ${line(s.cursor ?? `— (default ${s.defaultDays}d window)`, 31)} ` +
+        `${line(s.ranAt ? ago(s.ranAt) : 'never', 17)} ${String(s.seen).padStart(4)}  ${String(s.captured).padStart(8)}`,
     );
   }
   return L.join('\n');

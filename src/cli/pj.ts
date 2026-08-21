@@ -25,6 +25,7 @@ import {
   DEFAULT_LIMIT,
   known,
   renderStatus,
+  statusOf,
   renderSweep,
   sweep,
 } from '../intake/run.ts';
@@ -59,17 +60,42 @@ function vaultOrExit(): string {
   return res.root;
 }
 
-// `pj vaults` manages the registry and so must not require a vault itself.
-const NO_VAULT_NEEDED = new Set(['vaults', 'help', '']);
-const root = NO_VAULT_NEEDED.has(rawCmd ?? '') ? '' : vaultOrExit();
+/**
+ * `pj vaults` manages the registry, so requiring a vault first is circular.
+ */
+const NO_VAULT_NEEDED = new Set(['vaults', '']);
+/**
+ * Help resolves a vault but never dies for want of one.
+ *
+ * `--help` was missing from the set above, so it resolved *and exited 1* — and
+ * the one thing the skills invoke it for is finding out which vault an
+ * invocation would act on, which is precisely the ambiguous case that exits.
+ * Naming the vault is the useful half, so the header still does it when the
+ * answer is unambiguous and says why when it is not.
+ */
+const HELP_CMDS = new Set(['help', '--help', '-h']);
+const asking = HELP_CMDS.has(rawCmd ?? '');
+const soft = asking ? resolveCliVault(process.argv, listVaults().filter((v) => v.exists)) : null;
+const root = asking
+  ? soft && 'root' in soft
+    ? soft.root
+    : ''
+  : NO_VAULT_NEEDED.has(rawCmd ?? '')
+    ? ''
+    : vaultOrExit();
 const p = paths(root || '/nonexistent');
 
-const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
+const vaultNote = root
+  ? `  (vault: ${root})`
+  : soft && 'error' in soft
+    ? `  (no vault chosen: ${soft.error.split('\n')[0]!.replace(/:$/, '')})`
+    : '';
+
+const HELP = `pj — projector CLI${vaultNote}
 
   pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
-     --dir out|in|both --depth n] [--json] [--limit n]
-                                                       list records, grouped
+     --dir out|in|both --depth n] [--json]          list records, grouped
   pj show <id>                                         one record in full
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--parent id]
@@ -78,15 +104,14 @@ const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
   pj link <id> <ref> [...]                             append links to a record
   pj unlink <id> <ref> [...]                           remove links from a record
   pj check                                             validate every card file and saved view
-  pj reindex                                           rebuild the index from files
+  pj reindex                                           rebuild the index, and report what it holds
   pj search <query>                                    full-text search
   pj project <id>                                      resolved project config for a record
-  pj stats                                             index counts
   pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
 
   pj intake [<channel>...] [--since iso] [--limit n]
      [--json] [--verbose]                              what has happened elsewhere, since last time
-  pj intake status                                     per channel: cursor, last run, counts
+  pj intake status [--json]                            per channel: cursor, last run, counts
   pj intake commit --channel c [--cursor v]
      [--seen n] [--captured n]                         move a channel's cursor, after a sweep is resolved
   pj intake known <fingerprint>...                     which cards already carry these refs
@@ -110,9 +135,12 @@ const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
 /**
  * Split flags from positional arguments.
  *
- * `known` is not optional courtesy. An unrecognised flag used to be dropped
- * silently, so `pj set x --project '{}'` printed a success line and did nothing
- * — the sort of failure you only find by checking the file afterwards.
+ * `known` is required, and that is the point. An unrecognised flag used to be
+ * dropped silently, so `pj set x --project '{}'` printed a success line and did
+ * nothing — the sort of failure you only find by checking the file afterwards.
+ * The fix shipped as an *optional* parameter, so `ls`, `vaults` and `enrich`
+ * never took it, and `pj ls --json` was accepted and ignored right up until
+ * `--json` became real. A command taking no flags passes `[]`; nothing opts out.
  */
 /** Report and stop. A CLI that half-applies a bad batch is worse than one that refuses. */
 function fail(message: string): never {
@@ -122,7 +150,7 @@ function fail(message: string): never {
 
 function argFlags(
   argv: string[],
-  known?: readonly string[],
+  known: readonly string[],
 ): { flags: Map<string, string[]>; rest: string[] } {
   const flags = new Map<string, string[]>();
   const rest: string[] = [];
@@ -130,8 +158,12 @@ function argFlags(
     const a = argv[i]!;
     if (a.startsWith('--')) {
       const key = a.slice(2);
-      if (known && !known.includes(key)) {
-        console.error(`unknown flag --${key}. This command takes: ${known.map((k) => '--' + k).join(' ')}`);
+      if (!known.includes(key)) {
+        console.error(
+          known.length
+            ? `unknown flag --${key}. This command takes: ${known.map((k) => '--' + k).join(' ')}`
+            : `unknown flag --${key}. This command takes none.`,
+        );
         process.exit(1);
       }
       const next = argv[i + 1];
@@ -172,10 +204,13 @@ function pad(s: string, n: number): string {
  * every question an agent needed as data grew a verb of its own — `next`,
  * `untriaged`, `search` — and each new verb was a second implementation to drift.
  * Two of those are saved views now, which is what they always were.
+ *
+ * No `--limit`: at 191 records nothing needs truncating, and a cap that has no
+ * users is a cap whose interaction with grouping nobody is checking.
  */
 function cmdLs(argv: string[]): void {
   const { flags } = argFlags(argv, [
-    'view', 'group', 'filter', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'json', 'limit',
+    'view', 'group', 'filter', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'json',
   ]);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
@@ -209,18 +244,11 @@ function cmdLs(argv: string[]): void {
 
   const spec = parseSpec(params);
   spec.name = named;
-  const limitRaw = flags.get('limit')?.[0];
-  const limit = limitRaw && limitRaw !== 'true' ? Number(limitRaw) : undefined;
-  if (limit !== undefined && !Number.isInteger(limit)) fail(`--limit "${limitRaw}" is not a whole number`);
 
   // The same assembly the web app receives, from the same module (C9). A second
   // shape for the CLI is how the two surfaces would start disagreeing about the
   // answer, having been made unable to disagree about the question.
-  const payload = queryPayload(
-    { facets, db, records, views: loadViews(root) },
-    spec,
-    limit === undefined ? {} : { limit },
-  );
+  const payload = queryPayload({ facets, db, records, views: loadViews(root) }, spec);
 
   if (flags.has('json')) {
     console.log(JSON.stringify(payload, null, 2));
@@ -234,37 +262,30 @@ function cmdLs(argv: string[]): void {
     return card?.isProject ? 'P' : (card?.childCount ?? 0) > 0 ? '+' : ' ';
   };
   const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${title(id)}`;
-  // "showing 5 of 30" rather than reporting 30 and listing 5: a truncated answer
-  // that looks complete is the whole reason `--limit` says so out loud.
-  const showing = payload.withheld ? `showing ${payload.ids.length} of ` : '';
 
   if (!payload.groups) {
     for (const id of payload.ids) console.log(`${pad(id, 34)} ${title(id)}`);
-    console.log(`\n${showing}${payload.total} record(s) of ${payload.universe}`);
+    console.log(`\n${payload.total} record(s) of ${payload.universe}`);
     return;
   }
 
   const axes = spec.query.groupBy ?? [];
   console.log(`# grouped by ${axes.join(' \u00d7 ')}\n`);
   for (const g of payload.groups) {
-    // The group's own count comes from the full result, so a truncated column
-    // says "5 of 12" rather than quietly restating the smaller number.
-    const full = payload.counts
-      .find((f) => f.facet === axes[0])
-      ?.values.find((v) => v.value === g.value)?.count;
-    const of = full !== undefined && full > g.ids.length ? ` of ${full}` : '';
-    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length}${of})`);
+    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
     for (const id of g.ids) console.log(line(id));
     console.log('');
   }
   const extra = payload.placements - payload.total;
   console.log(
-    `${showing}${payload.total} record(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
+    `${payload.total} record(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
       (extra > 0 ? ` — ${extra} appear in more than one group` : ''),
   );
 }
 
-function cmdShow(id: string): void {
+function cmdShow(argv: string[]): void {
+  const { rest } = argFlags(argv, []);
+  const id = rest[0] ?? '';
   const { records } = readAll(p.cards);
   const rec = records.get(id);
   if (!rec) {
@@ -320,7 +341,8 @@ function cmdAdd(argv: string[]): void {
 }
 
 function cmdLink(argv: string[]): void {
-  const [id, ...refs] = argv;
+  const { rest } = argFlags(argv, []);
+  const [id, ...refs] = rest;
   if (!id || !refs.length) {
     console.error('pj link <id> <ref> [...]');
     process.exit(1);
@@ -352,7 +374,8 @@ function cmdLink(argv: string[]): void {
  * the link is still on the other card.
  */
 function cmdUnlink(argv: string[]): void {
-  const [id, ...refs] = argv;
+  const { rest } = argFlags(argv, []);
+  const [id, ...refs] = rest;
   if (!id || !refs.length) fail('pj unlink <id> <ref> [...]');
   const { records } = readAll(p.cards);
   const rec = records.get(id);
@@ -386,18 +409,32 @@ function cmdCheck(): void {
   if (issues.some((i) => i.severity === 'error')) process.exit(1);
 }
 
+/**
+ * Rebuild the index, and report what it holds.
+ *
+ * The report iterates `counts()` rather than naming its keys. It used to name
+ * them, and P7 renamed three — `cards`, `nodes` and `edges` became `containers`
+ * and `relations` when relations became facets — so this printed `undefined`
+ * three times for four commits. Nothing caught it: no skill calls it and no test
+ * covered it, and `pj stats` survived the same commit only because it already
+ * looped. That is the whole argument for one command here instead of two, and for
+ * this one being the looping one.
+ */
 function cmdReindex(): void {
   const { db, unreadable } = reindex(root);
   const c = counts(db);
-  console.log(
-    `indexed ${c.records} record(s): ${c.cards} card(s), ${c.nodes} node(s), ` +
-      `${c.projects} project(s), ${c.edges} edge(s), ${c.links} link(s)`,
-  );
+  console.log(`indexed ${c.records} record(s)`);
+  for (const [k, v] of Object.entries(c)) {
+    if (k === 'records') continue;
+    console.log(`  ${pad(k, 14)} ${v}`);
+  }
+  console.log(`  ${pad('files', 14)} ${listCardFiles(p.cards).length}`);
   if (unreadable.length) console.log(`${unreadable.length} file(s) could not be parsed — run pj check`);
 }
 
 function cmdSearch(argv: string[]): void {
-  const q = argv.join(' ').trim();
+  const { rest } = argFlags(argv, []);
+  const q = rest.join(' ').trim();
   if (!q) {
     console.error('pj search <query>');
     process.exit(1);
@@ -408,7 +445,9 @@ function cmdSearch(argv: string[]): void {
   console.log(`\n${rows.length} match(es)`);
 }
 
-function cmdProject(id: string): void {
+function cmdProject(argv: string[]): void {
+  const { rest } = argFlags(argv, []);
+  const id = rest[0] ?? '';
   const { records } = readAll(p.cards);
   if (!records.has(id)) {
     console.error(`no record with id "${id}"`);
@@ -434,13 +473,6 @@ function cmdProject(id: string): void {
   }
 }
 
-function cmdStats(): void {
-  const { db } = reindex(root);
-  const c = counts(db);
-  for (const [k, v] of Object.entries(c)) console.log(`${pad(k, 14)} ${v}`);
-  console.log(`${pad('files', 14)} ${listCardFiles(p.cards).length}`);
-}
-
 // ---------------------------------------------------------------- dispatch
 
 const cmd = rawCmd;
@@ -451,7 +483,7 @@ try {
       cmdLs(argv);
       break;
     case 'show':
-      cmdShow(argv[0] ?? '');
+      cmdShow(argv);
       break;
     case 'log': {
       const { flags } = argFlags(argv, ['since']);
@@ -475,23 +507,22 @@ try {
       cmdUnlink(argv);
       break;
     case 'check':
+      argFlags(argv, []);
       cmdCheck();
       break;
     case 'reindex':
+      argFlags(argv, []);
       cmdReindex();
       break;
     case 'search':
       cmdSearch(argv);
       break;
     case 'project':
-      cmdProject(argv[0] ?? '');
-      break;
-    case 'stats':
-      cmdStats();
+      cmdProject(argv);
       break;
 
     case 'vaults': {
-      const { flags, rest } = argFlags(argv);
+      const { flags, rest } = argFlags(argv, ['name', 'create']);
       const [sub, given] = rest;
       if (!sub || sub === 'list') {
         const vaults = listVaults();
@@ -528,7 +559,7 @@ try {
       process.exit(1);
     }
     case 'enrich': {
-      const { flags, rest } = argFlags(argv);
+      const { flags, rest } = argFlags(argv, ['all', 'force']);
       const { records } = readAll(p.cards);
       const refs = rest.length
         ? rest
@@ -576,7 +607,7 @@ try {
       const [sub, ...channels] = rest;
 
       if (sub === 'status') {
-        console.log(renderStatus(root));
+        console.log(flags.has('json') ? JSON.stringify(statusOf(root), null, 2) : renderStatus(root));
         break;
       }
 
@@ -842,6 +873,12 @@ try {
       break;
     }
 
+    // Asking for help is not a failed command, so it exits 0; a typo still does not.
+    case 'help':
+    case '--help':
+    case '-h':
+      console.log(HELP);
+      break;
     default:
       console.log(HELP);
       if (cmd) process.exitCode = 1;

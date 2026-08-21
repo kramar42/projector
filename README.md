@@ -562,7 +562,7 @@ one.
 
 | | |
 |---|---|
-| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--json] [--limit n]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives; `--limit` truncates and says so |
+| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj show <id>` | one record, with its resolved project config |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
@@ -575,10 +575,10 @@ one.
 | `pj link-session <id>` | link the live Claude session working in this directory |
 | `pj enrich [<ref>…] [--all]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
-| `pj intake status` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
+| `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
 | `pj intake commit --channel c [--cursor v]` · `pj intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
 | `pj check` | validate every card file, and every saved view against the same vocabulary |
-| `pj reindex` · `pj stats` · `pj search <q>` | rebuild the index · counts · full text |
+| `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text |
 
 The CLI and the app share one query compiler *and* one payload builder, so `pj ls --view unblocked` and
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`

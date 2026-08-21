@@ -37,11 +37,6 @@ export interface QueryPayload {
   relations: { src: string; dst: string; type: string }[];
   rollups: ReturnType<typeof projectRollups>;
   views: { name: string; title?: string; shape: string }[];
-  /**
-   * How many records `--limit` withheld, or 0. Group counts are always taken
-   * from the full result, so a truncated column can still say "5 of 12".
-   */
-  withheld: number;
 }
 
 /**
@@ -62,23 +57,7 @@ export interface PayloadDeps {
   today?: string;
 }
 
-export interface PayloadOptions {
-  /**
-   * Keep at most this many records, taken off the sorted list before grouping.
-   *
-   * A presentation concern, deliberately not part of `Query`: a view describes
-   * *which* records, and a board silently showing 40 of 191 would make every
-   * count on screen a guess (C8). Only a caller that renders a finite amount of
-   * text asks for it.
-   */
-  limit?: number;
-}
-
-export function queryPayload(
-  deps: PayloadDeps,
-  spec: ViewSpec,
-  opts: PayloadOptions = {},
-): QueryPayload {
+export function queryPayload(deps: PayloadDeps, spec: ViewSpec): QueryPayload {
   const { facets, db, records, views } = deps;
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
 
@@ -87,18 +66,7 @@ export function queryPayload(
   const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
   const res = runQuery(db, records, facets, spec.query, { connect: layout });
 
-  const capped = opts.limit !== undefined && opts.limit >= 0 && opts.limit < res.ids.length;
-  const ids = capped ? res.ids.slice(0, opts.limit) : res.ids;
-  const keep = new Set(ids);
-  // Groups list only what survived, but their counts come from the full result,
-  // so truncation is visible rather than silently restating a smaller number.
-  const groups = capped
-    ? res.groups
-        ?.map((g) => ({ ...g, ids: g.ids.filter((id) => keep.has(id)) }))
-        .filter((g) => g.ids.length)
-    : res.groups;
-
-  const shown = [...ids, ...res.context];
+  const shown = [...res.ids, ...res.context];
   const cards: Record<string, CardDTO> = {};
   for (const id of shown) {
     const rec = records.get(id);
@@ -115,9 +83,9 @@ export function queryPayload(
   return {
     spec,
     cards,
-    ids,
+    ids: res.ids,
     context: res.context,
-    groups,
+    groups: res.groups,
     axis: res.axis,
     lanes: res.lanes,
     counts: res.counts,
@@ -132,7 +100,6 @@ export function queryPayload(
     // keeps every number on screen deterministic (C8).
     rollups: projectRollups(records, facets, today),
     views: views.map((v) => ({ name: v.name ?? '', title: v.title, shape: v.shape })),
-    withheld: res.ids.length - ids.length,
   };
 }
 
