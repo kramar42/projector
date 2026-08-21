@@ -19,8 +19,13 @@ import { appRoot, looksLikeVault, paths, resolvePath } from './config.ts';
  *
  * It is the only thing the app writes outside a vault, and it holds nothing but
  * paths you have opened — delete it and you lose the list, nothing else.
+ *
+ * `PROJECTOR_VAULTS` points it elsewhere, which is what makes `pj vaults`
+ * testable: without it a test of `vaults add` would edit the list you actually
+ * use. A function rather than a constant so a test can set the variable after
+ * import, as with `PROJECTOR_CLAUDE_HOME` and `PROJECTOR_JIRA_URL`.
  */
-const REGISTRY = join(appRoot, 'vaults.json');
+const registryFile = () => process.env.PROJECTOR_VAULTS || join(appRoot, 'vaults.json');
 
 export interface VaultEntry {
   path: string;
@@ -36,9 +41,9 @@ export interface VaultInfo extends VaultEntry {
 }
 
 function readRegistry(): VaultEntry[] {
-  if (!existsSync(REGISTRY)) return [];
+  if (!existsSync(registryFile())) return [];
   try {
-    const j = JSON.parse(readFileSync(REGISTRY, 'utf8')) as { vaults?: VaultEntry[] };
+    const j = JSON.parse(readFileSync(registryFile(), 'utf8')) as { vaults?: VaultEntry[] };
     return (j.vaults ?? []).filter((v) => v && typeof v.path === 'string');
   } catch {
     return [];
@@ -46,9 +51,9 @@ function readRegistry(): VaultEntry[] {
 }
 
 function writeRegistry(vaults: VaultEntry[]): void {
-  const tmp = `${REGISTRY}.tmp-${process.pid}`;
+  const tmp = `${registryFile()}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify({ vaults }, null, 2) + '\n', 'utf8');
-  renameSync(tmp, REGISTRY);
+  renameSync(tmp, registryFile());
 }
 
 /** Canonical form of a user-supplied path: `~` expanded, absolute, no trailing slash. */
@@ -212,4 +217,4 @@ export function browse(path: string): { path: string; entries: { name: string; i
   return { path: p, entries };
 }
 
-export { REGISTRY, looksLikeVault };
+export { registryFile, looksLikeVault };

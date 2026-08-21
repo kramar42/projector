@@ -1,0 +1,290 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+/**
+ * The CLI, run as a binary.
+ *
+ * 845 lines and no test until now, and the three bugs it shipped were each in a
+ * layer a unit test does not reach: `reindex` interpolated `counts()` keys that a
+ * rename had removed and printed `undefined` three times (a *render* bug);
+ * `ls`, `vaults` and `enrich` called the flag parser without a known-list, so a
+ * typo was dropped in silence (a *wiring* bug); and `--help` resolved a vault
+ * before printing, so it died in the one case it exists for (a *dispatch* bug).
+ *
+ * Unit-testing `argFlags` would have caught none of the three. Spawning does,
+ * because argv and stdout *are* this module's interface. It costs ~140 ms a call,
+ * which is the price of testing the thing rather than a part of it.
+ */
+
+const CLI = new URL('../src/cli/pj.ts', import.meta.url).pathname;
+
+interface Run {
+  out: string;
+  code: number;
+}
+
+function vault(): { root: string; registry: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'pj-cli-'));
+  mkdirSync(join(root, 'cards'), { recursive: true });
+  writeFileSync(
+    join(root, 'facets.yaml'),
+    'status: { label: Status, values: [planning, active, done], open: false, single: true }\n' +
+      'priority: { label: Priority, values: [now, later], open: false, single: true }\n' +
+      'parent: { label: Part of, type: ref, single: true }\n',
+    'utf8',
+  );
+  const card = (id: string, body: string) =>
+    writeFileSync(join(root, 'cards', `${id}.md`), body, 'utf8');
+  card('alpha', '---\nid: alpha\ntitle: Alpha\nfacets: { status: [planning], priority: [now] }\n---\nfirst\n');
+  card('beta', '---\nid: beta\ntitle: Beta\nfacets: { status: [active] }\n---\nsecond\n');
+  // The registry is redirected so `pj vaults` cannot touch the real one.
+  const registry = join(root, 'registry.json');
+  return { root, registry, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function run(args: string[], env: Record<string, string> = {}): Run {
+  try {
+    const out = execFileSync('node', [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { out, code: 0 };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; status?: number };
+    return { out: (e.stdout ?? '') + (e.stderr ?? ''), code: e.status ?? 1 };
+  }
+}
+
+// ---------------------------------------------------------------- rendering
+
+/**
+ * `pj reindex` named `counts()`'s keys, and P7 renamed three of them. It printed
+ * `undefined card(s), undefined node(s) … undefined edge(s)` for four commits,
+ * because no caller and no test ever looked.
+ */
+test('reindex reports real numbers, never the word undefined', () => {
+  const v = vault();
+  try {
+    const r = run(['--vault', v.root, 'reindex']);
+    assert.equal(r.code, 0);
+    assert.doesNotMatch(r.out, /undefined/, r.out);
+    assert.match(r.out, /indexed 2 record\(s\)/);
+    // Every line after the first is a name and a number.
+    for (const line of r.out.trim().split('\n').slice(1)) {
+      assert.match(line, /^\s{2}\S+\s+\d+$/, `"${line}" should be a label and a count`);
+    }
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('ls prints what it found, and --json is the payload the app receives', () => {
+  const v = vault();
+  try {
+    const plain = run(['--vault', v.root, 'ls']);
+    assert.match(plain.out, /2 record\(s\) of 2/);
+    assert.match(plain.out, /alpha/);
+
+    const json = JSON.parse(run(['--vault', v.root, 'ls', '--json']).out);
+    assert.deepEqual(json.ids.sort(), ['alpha', 'beta']);
+    assert.equal(json.cards.alpha.title, 'Alpha');
+    // The keys the web client depends on.
+    for (const key of ['spec', 'savedSpec', 'cards', 'ids', 'groups', 'counts', 'total', 'rollups']) {
+      assert.ok(key in json, `--json must carry ${key}`);
+    }
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('grouping prints one section per declared value, empty ones included', () => {
+  const v = vault();
+  try {
+    const r = run(['--vault', v.root, 'ls', '--group', 'priority']);
+    assert.match(r.out, /## now \(1\)/);
+    // `later` is declared and carried by nobody; it is still a group.
+    assert.match(r.out, /## later \(0\)/);
+    assert.match(r.out, /in \d+ group\(s\)/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- wiring
+
+/**
+ * A mistyped flag used to be dropped in silence, so `pj ls --grup priority`
+ * reported success and returned an ungrouped list. Every command refuses one now,
+ * and a command that takes none says so.
+ */
+test('every command refuses a flag it does not know', () => {
+  const v = vault();
+  try {
+    const commands = [
+      ['ls'], ['log'], ['add', 'x'], ['link', 'alpha', 'jira:A-1'], ['check'], ['reindex'],
+      ['search', 'x'], ['vaults'], ['enrich', 'jira:A-1'], ['intake'], ['context', 'alpha'],
+      ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'],
+    ];
+    for (const cmd of commands) {
+      const r = run(['--vault', v.root, ...cmd, '--nonsense'], { PROJECTOR_VAULTS: v.registry });
+      assert.match(r.out, /unknown flag --nonsense/, `pj ${cmd[0]} accepted it: ${r.out.slice(0, 120)}`);
+      assert.equal(r.code, 1, `pj ${cmd[0]} should exit 1`);
+    }
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a boolean flag does not swallow the argument after it', () => {
+  const v = vault();
+  try {
+    // `--remove` is boolean: the ref must stay a positional, not become its value.
+    run(['--vault', v.root, 'link', 'alpha', 'jira:A-1']);
+    const r = run(['--vault', v.root, 'link', 'alpha', '--remove', 'jira:A-1']);
+    assert.match(r.out, /removed 1/, r.out);
+    assert.equal(r.code, 0);
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- dispatch
+
+/**
+ * `--help` was missing from the set of commands that need no vault, so it
+ * resolved one first — and died with "several vaults are registered" in exactly
+ * the case the skills invoke it for.
+ */
+test('help prints without a vault, and says which one it would use', () => {
+  const v = vault();
+  try {
+    // Two registered and none named: resolution is ambiguous, help must still print.
+    const two = join(v.root, 'other');
+    mkdirSync(join(two, 'cards'), { recursive: true });
+    writeFileSync(join(two, 'facets.yaml'), 'status: { values: [planning] }\n', 'utf8');
+    run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: v.registry });
+    run(['vaults', 'add', two], { PROJECTOR_VAULTS: v.registry });
+
+    for (const form of ['help', '--help', '-h']) {
+      const r = run([form], { PROJECTOR_VAULTS: v.registry });
+      assert.equal(r.code, 0, `pj ${form} should exit 0`);
+      assert.match(r.out, /pj — projector CLI/);
+      assert.match(r.out, /no vault chosen/, 'it says why rather than dying');
+      assert.match(r.out, /pj ls/, 'and still lists the commands');
+    }
+
+    // One registered: the header names it.
+    const one = join(v.root, 'solo.json');
+    run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: one });
+    assert.match(run(['--help'], { PROJECTOR_VAULTS: one }).out, /\(vault: /);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('an unknown command prints help and fails; no command prints help and does not', () => {
+  const v = vault();
+  try {
+    const env = { PROJECTOR_VAULTS: v.registry };
+
+    // With a vault, an unknown command reaches the dispatch and falls through to
+    // help — and still exits 1, because a typo is not a request for help.
+    const bogus = run(['--vault', v.root, 'nonsuch'], env);
+    assert.equal(bogus.code, 1);
+    assert.match(bogus.out, /pj ls/, 'it shows what it does understand');
+
+    // Naming nothing at all is a request for help, and exits 0.
+    const bare = run(['--vault', v.root], env);
+    assert.equal(bare.code, 0, 'asking for nothing is not an error');
+    assert.match(bare.out, /pj ls/);
+
+    // Without a resolvable vault, a command that needs one fails on that first —
+    // before dispatch, so no help is printed. That is the vault error's job.
+    const noVault = run(['nonsuch'], env);
+    assert.equal(noVault.code, 1);
+    assert.doesNotMatch(noVault.out, /pj ls/, 'the vault error stands alone');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a deleted command stays deleted', () => {
+  const v = vault();
+  try {
+    for (const gone of ['next', 'untriaged', 'stats', 'show', 'project', 'unlink', 'link-session']) {
+      const r = run(['--vault', v.root, gone, 'alpha']);
+      assert.equal(r.code, 1, `pj ${gone} should be gone`);
+    }
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- the registry
+
+/** Only possible because `PROJECTOR_VAULTS` exists; without it this edits the real list. */
+test('vaults add and forget round-trip through the registry', () => {
+  const v = vault();
+  try {
+    const env = { PROJECTOR_VAULTS: v.registry };
+    assert.match(run(['vaults'], env).out, /no vaults yet/);
+
+    run(['vaults', 'add', v.root, '--name', 'scratch'], env);
+    const listed = run(['vaults'], env);
+    assert.match(listed.out, /scratch/);
+    assert.match(listed.out, /2 card\(s\)/);
+
+    assert.match(run(['vaults', 'forget', v.root], env).out, /forgot/);
+    assert.match(run(['vaults'], env).out, /no vaults yet/);
+    assert.match(run(['vaults', 'forget', v.root], env).out, /not tracked/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a single registered vault is used without --vault', () => {
+  const v = vault();
+  try {
+    const env = { PROJECTOR_VAULTS: v.registry };
+    run(['vaults', 'add', v.root], env);
+    assert.match(run(['ls'], env).out, /2 record\(s\)/, 'unambiguous means no flag needed');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- exit codes
+
+test('check exits 1 on an error and 0 on warnings alone', () => {
+  const v = vault();
+  try {
+    assert.equal(run(['--vault', v.root, 'check']).code, 0, 'a sound vault passes');
+
+    // A view naming an axis the vocabulary does not have.
+    mkdirSync(join(v.root, 'views'), { recursive: true });
+    writeFileSync(join(v.root, 'views', 'broken.yaml'), 'shape: board\nfilter:\n  kind: [task]\n', 'utf8');
+    const bad = run(['--vault', v.root, 'check']);
+    assert.equal(bad.code, 1);
+    assert.match(bad.out, /no facet or computed axis "kind"/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a command naming a card that does not exist fails rather than inventing one', () => {
+  const v = vault();
+  try {
+    for (const cmd of [['context', 'ghost'], ['set', 'ghost', '--facet', 'status=done'], ['rm', 'ghost']]) {
+      const r = run(['--vault', v.root, ...cmd]);
+      assert.equal(r.code, 1, `pj ${cmd[0]} ghost should fail`);
+      assert.match(r.out, /ghost/);
+    }
+  } finally {
+    v.cleanup();
+  }
+});

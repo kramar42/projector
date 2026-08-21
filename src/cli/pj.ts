@@ -6,7 +6,8 @@ import { forgetVault, initVault, listVaults, normalise, registerVault } from '..
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles } from '../schema/card.ts';
-import { formatIssues, validate, validateViews } from '../schema/validate.ts';
+import { formatIssues, validate } from '../schema/validate.ts';
+import { validateViews } from '../view/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
