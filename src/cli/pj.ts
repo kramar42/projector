@@ -539,12 +539,7 @@ try {
         process.exit(1);
       }
       // Kick off the fetches, wait for the queue to drain, then report.
-      await new Promise<void>((done) => {
-        let settled = false;
-        refresh({ dataRoot: root, onRefreshed: () => { settled = true; done(); } }, refs, flags.has('force'));
-        // Nothing to fetch (all fresh) means onRefreshed never fires.
-        setTimeout(() => { if (!settled) done(); }, 60_000);
-      });
+      await refresh({ dataRoot: root }, refs, flags.has('force'));
       for (const item of readCached(root, refs)) {
         const d = item.data;
         const badges = (d?.badges ?? []).map((b) => b.label).join(' ');

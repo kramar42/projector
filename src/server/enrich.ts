@@ -72,7 +72,14 @@ const flightKey = (root: string, ref: string) => `${root}\u0000${ref}`;
 
 export interface EnrichOptions {
   dataRoot: string;
-  /** Called once a batch of refreshes has landed, so the client can re-ask. */
+  /**
+   * Called once a batch of refreshes has **landed**, so the client can re-ask.
+   *
+   * This is an invalidation signal, not a completion one: it fires only when
+   * something was actually fetched and stored. "The queue has drained" is what
+   * `refresh`'s returned promise says, and conflating the two cost a caller a
+   * minute per run — see the note on `refresh`.
+   */
   onRefreshed?: () => void;
 }
 
@@ -155,8 +162,19 @@ function store(dataRoot: string, ref: string, kind: string, value: Enrichment | 
  *
  * Failures are cached like successes: a ref that cannot resolve should say so
  * once and stop being retried on every render.
+ *
+ * **Returns a promise that resolves when the queue has drained**, including
+ * immediately when there was nothing to fetch. The server ignores it — a read
+ * never waits on the network — and `pj enrich` awaits it.
+ *
+ * It used to return `void`, so the only way to know the work had finished was
+ * `onRefreshed` — which fires on exactly one of this function's two exits. The
+ * early return below is the other, and it is the *common* case: an already-fresh
+ * ref, one already in flight, or a kind with no fetcher. `pj enrich` therefore
+ * raced the callback against a 60-second fallback timer and lost every time,
+ * which is how a command whose work took 0ms took a minute to come back.
  */
-export function refresh(opts: EnrichOptions, refs: string[], force = false): void {
+export function refresh(opts: EnrichOptions, refs: string[], force = false): Promise<void> {
   const fetchers = registry(opts.dataRoot);
   const todo: { ref: string; kind: string }[] = [];
 
@@ -168,11 +186,11 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): voi
     if (inFlight.has(flightKey(opts.dataRoot, r))) continue;
     todo.push({ ref: r, kind: link.kind });
   }
-  if (!todo.length) return;
+  if (!todo.length) return Promise.resolve();
 
   for (const t of todo) inFlight.add(flightKey(opts.dataRoot, t.ref));
 
-  void (async () => {
+  return (async () => {
     // Small concurrency: these are subprocesses and HTTP calls, and a board can
     // reference dozens of links at once.
     const queue = [...todo];

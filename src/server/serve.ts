@@ -518,7 +518,9 @@ app.post('/api/enrich', async (c) => {
     const opts = { dataRoot: root, onRefreshed: () => bumpEnriched(root) };
     // Read first so the answer is immediate, then kick off the work.
     const items = readCached(root, refs);
-    refresh(opts, refs, body.force === true);
+    // Deliberately not awaited: the answer above is the response, and the fetches
+    // announce themselves through `onRefreshed` when they land.
+    void refresh(opts, refs, body.force === true);
     return c.json({ items });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 500);
