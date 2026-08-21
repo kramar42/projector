@@ -56,6 +56,7 @@ Rules for what you may propose:
   gets a `blocks` edge from the blocker; one held up by a person gets `waiting_on`.
 - **Propose a `due` only when something external fixes the date** — a release, a meeting, a customer
   commitment. A deadline you invented is worse than none, because the Due board will believe it.
+  It is an ordinary facet: `ck set <id> --facet due=2026-09-01`.
 - **Leave a facet alone when the evidence is weak.** An honest blank beats a confident guess. Put
   those cards in a short "needs your brain" list under the table, with the one question that would
   settle each.

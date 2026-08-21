@@ -176,11 +176,21 @@ reject `status: [planning, done]` — a record in no coherent state, which `buil
 a board draws it in planning. That matters because the primary writer is an agent making plain file
 writes (C3): a model that cannot refuse an incoherent state accumulates them.
 
-**A deadline is a field, not a facet.** A facet is a declared vocabulary matched for membership; `due`
-is compared against today. `priority` says what you intend to do next, `due` says what the world
-expects regardless of intent, and the two disagree often enough to need both. The four `due` buckets
-have one definition, in `dueBucket` — the card face asks it rather than comparing dates of its own, so
-the face and the filter panel cannot disagree about where "overdue" begins.
+**A facet has a type, and storage is uniform anyway.** `label · ref · date · number` say what values
+*are*; the file still holds strings and the engine still holds `string[]`. That is what makes typing
+cheap: a facet is read in exactly two places — `valuesOf` for what an axis shows, `rankOf`/`ordered`
+for how it sorts — so the type is consulted twice rather than everywhere.
+
+**An ordered facet presents buckets and compares raw.** A date has as many values as there are days, so
+filtering and grouping see the buckets it declares while sorting and range filters see the value.
+`f.due=overdue` and `f.due=>2026-09-01` are lexically distinct, so there is nothing to disambiguate.
+`orderValues` reads the bucket order from `buckets` — without that it fell through to alphabetical,
+which put `later` first.
+
+**`created` and `updated` stay fields.** A facet is *user-declared vocabulary*; those two are written
+by the app on every save and belong in no filter panel. That line is why `due` could move out of the
+frontmatter root and they cannot, and it is what leaves `staleness` a pseudo-facet: it computes over
+`updated`, which is not vocabulary. Computing over app-written metadata is `PSEUDO`'s residual role.
 
 **One face, for every record**, and one list saying what it shows. `chips` and `edges.show` asked the
 same question — *which facets does this view surface* — and how each is drawn follows from what it is:

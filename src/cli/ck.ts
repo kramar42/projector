@@ -67,8 +67,7 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   ck log [--since "1 week ago"]                        what changed, from git history
   ck add <title> [--id slug] [--parent id]
          [--facet f=v ...] [--link ref ...]
-         [--due YYYY-MM-DD] [--fingerprint fp]
-         [--body text]                                 create a record
+         [--fingerprint fp] [--body text]              create a record
   ck link <id> <ref> [...]                             append links to a record
   ck check                                             validate every card file
   ck reindex                                           rebuild the index from files
@@ -83,7 +82,6 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   ck untriaged [--json] [--limit n]                    cards needing attention, and why
   ck set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--parent id|none]
-         [--due YYYY-MM-DD|none]
          [--set path=yaml ...]                         scripted edits, for skills
   ck rm <id>...                                        delete, dropping references to it
   ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
@@ -251,7 +249,6 @@ function cmdShow(id: string): void {
   console.log(`id       ${rec.id}`);
   if (rec.project) console.log(`project  (owns config its members inherit)`);
   console.log(`file     ${rec.file.replace(root + '/', '')}`);
-  if (rec.due) console.log(`due      ${rec.due}`);
   for (const [f, v] of Object.entries(rec.facets)) console.log(`${pad(f, 8)} ${v.join(', ')}`);
   if (rec.links.length) {
     console.log('\nlinks');
@@ -274,7 +271,7 @@ function cmdNext(): void {
     const pr = valuesFor(db, r.id, 'priority').join(',') || '-';
     const opens = unblocks(db, r.id).length;
     console.log(
-      `  ${pad(r.due ?? '', 11)}${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` +
+      `  ${pad(valuesFor(db, r.id, 'due')[0] ?? '', 11)}${pad(pr, 9)} ${pad(r.id, 32)} ${r.title}` +
         (opens ? `  (unblocks ${opens})` : ''),
     );
   }
@@ -282,7 +279,7 @@ function cmdNext(): void {
 }
 
 function cmdAdd(argv: string[]): void {
-  const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'due', 'fingerprint']);
+  const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'fingerprint']);
   const title = rest.join(' ').trim();
   if (!title) {
     console.error('ck add <title>');
@@ -302,7 +299,6 @@ function cmdAdd(argv: string[]): void {
     facets,
     links: flags.get('link') ?? [],
     body: flags.get('body')?.[0],
-    due: flags.get('due')?.[0],
     fingerprint,
   });
   if (res.existed) {
@@ -615,11 +611,11 @@ try {
     }
 
     case 'set': {
-      const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'parent', 'due', 'set']);
+      const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'parent', 'set']);
       if (!rest.length) {
         console.error(
           'ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]\n' +
-            '                [--parent id|none] [--due YYYY-MM-DD|none] [--set path=yaml]',
+            '                [--parent id|none] [--set path=yaml]',
         );
         process.exit(1);
       }
@@ -667,13 +663,11 @@ try {
         }
 
         const title = flags.get('title')?.[0];
-        const due = flags.get('due')?.[0];
         const touchesFacets =
           flags.has('facet') || flags.has('add') || flags.has('remove') || flags.has('parent');
-        if (title || due !== undefined || touchesFacets) {
+        if (title || touchesFacets) {
           patchCard(root, id, {
             ...(title ? { title } : {}),
-            ...(due !== undefined ? { due: due === 'none' ? null : due } : {}),
             ...(touchesFacets ? { facets } : {}),
           });
         }

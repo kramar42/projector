@@ -88,13 +88,14 @@ updated: 2026-01-01
 };
 
 const FACETS = `
-parent:     { label: Part of,  ref: true, single: true }
-blocks:     { label: Blocks,   ref: true }
+parent:     { label: Part of,  type: ref, single: true }
+blocks:     { label: Blocks,   type: ref }
+due:        { label: Due, type: date, single: true, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }
 priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
 status:     { label: Status,   values: [planning, active, done], open: false, single: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
 waiting_on: { label: Waiting on, values: [], open: true }
-project:    { label: Project,  ref: true }
+project:    { label: Project,  type: ref }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
@@ -588,16 +589,14 @@ const DATED: Record<string, string> = {
   'ship-it': `---
 id: ship-it
 title: Ship it
-facets: { status: [active] }
-due: 2026-08-18
+facets: { status: [active], due: [2026-08-18] }
 updated: 2026-08-19
 ---
 `,
   'ask-person-a': `---
 id: ask-person-a
 title: Ask Person A
-facets: { status: [planning], waiting_on: [person-a] }
-due: 2026-08-24
+facets: { status: [planning], waiting_on: [person-a], due: [2026-08-24] }
 updated: 2026-08-19
 ---
 `,
@@ -627,7 +626,7 @@ function datedVault(): { root: string; cleanup: () => void } {
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-test('due buckets against today, and absence is the ordinary (none)', () => {
+test('an ordered facet presents buckets and compares raw', () => {
   const { root, cleanup } = datedVault();
   try {
     // today is 2026-08-20 in this harness.
@@ -728,14 +727,14 @@ test('a value naming a record that does not exist is not a reference', () => {
   }
 });
 
-test('a reference facet declares no vocabulary of its own', () => {
+test('only a label facet declares a vocabulary of its own', () => {
   const { root, cleanup } = vault();
   try {
     const def = loadFacets(join(root, 'facets.yaml')).project!;
-    // `ref` implies `open` — a vault cannot enumerate its record ids in advance
-    // — and a declared list would be a mistake, so it is dropped rather than
-    // half-honoured.
-    assert.equal(def.ref, true);
+    // Only a `label` has a declared vocabulary: a reference's is the vault and
+    // an ordered facet's is unbounded, so both imply `open` and a declared list
+    // on either is dropped rather than half-honoured.
+    assert.equal(def.type, 'ref');
     assert.equal(def.open, true);
     assert.deepEqual(def.values, []);
   } finally {

@@ -50,8 +50,8 @@ export function reindex(dataRoot: string): IndexResult {
   const db = openDb(p.db, { fresh: true });
 
   const insRec = db.prepare(
-    `INSERT INTO records (id, title, file, body, due, created, updated, is_project, fingerprint)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO records (id, title, file, body, created, updated, is_project, fingerprint)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insFacet = db.prepare('INSERT OR IGNORE INTO facets (record_id, facet, value) VALUES (?, ?, ?)');
   const insLink = db.prepare('INSERT INTO links (record_id, kind, ref, raw) VALUES (?, ?, ?, ?)');
@@ -64,7 +64,6 @@ export function reindex(dataRoot: string): IndexResult {
       rec.title,
       rec.file,
       rec.body,
-      rec.due ?? null,
       rec.created ?? null,
       rec.updated ?? null,
       isProject(rec) ? 1 : 0,

@@ -1,5 +1,6 @@
 import { NONE, type Dir, type Focus, type Query } from '../index/query.ts';
 import type { Facets } from '../schema/types.ts';
+import { isRef } from '../schema/facets.ts';
 
 /**
  * The one description of a view, shared by the three places that describe one:
@@ -128,7 +129,7 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
  * canvas cannot lay out along one hierarchy and pull context from another.
  */
 export function layoutRelation(show: string[], facets: Facets): string | undefined {
-  return show.find((name) => facets[name]?.ref);
+  return show.find((name) => isRef(facets[name]));
 }
 
 // ---------------------------------------------------------------- serialising

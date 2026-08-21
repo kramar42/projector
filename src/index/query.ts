@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { facetRank, orderValues } from '../schema/facets.ts';
+import { bucketOf, compareValues, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, refsOf, walk } from './refs.ts';
@@ -102,6 +102,7 @@ interface Ctx {
   records: Map<string, Rec>;
   /** Records with at least one blocker that is not done. */
   blocked: Set<string>;
+  facets: Facets;
   today: string;
 }
 
@@ -122,32 +123,15 @@ function daysSince(date: string | undefined, today: string): number | null {
   return Math.floor((b - a) / DAY);
 }
 
-export type DueBucket = 'overdue' | 'today' | 'week' | 'later';
-
-/**
- * Which bucket a deadline falls in.
- *
- * Exported because the card face needs the same answer as the filter axis, and
- * two definitions of "overdue" is one too many — the face asks this rather than
- * comparing dates of its own.
- */
-export function dueBucket(due: string | undefined, today: string): DueBucket | null {
-  const since = daysSince(due, today);
-  if (since === null) return null;
-  const days = -since;
-  if (days < 0) return 'overdue';
-  if (days === 0) return 'today';
-  return days <= 7 ? 'week' : 'later';
-}
-
 /**
  * Computed axes, offered in the filter panel exactly like the facets in
  * `facets.yaml`. Every one of them is deterministic (C8): a count, a date
  * comparison or the presence of an edge — never a judgement.
  *
- * Every one of them *computes*. `kind` used to sit here and simply returned a
- * stored field, which made it a real facet given a bespoke home; it is declared
- * in `facets.yaml` now and reaches the panel the ordinary way.
+ * Every one of them *computes*, and every one computes over something a facet
+ * cannot describe: a `project:` block, the reference graph, an absence, or the
+ * app-written `updated` field. `due` used to sit here bucketing a stored value —
+ * that is what an ordered facet's own `buckets` do now, so it left.
  */
 export const PSEUDO: Record<string, Pseudo> = {
   type: {
@@ -194,13 +178,6 @@ export const PSEUDO: Record<string, Pseudo> = {
     },
   },
   /**
-   * When a deadline falls, bucketed.
-   *
-   * A record with no `due` yields no value at all rather than an `undated`
-   * bucket, so "everything with no deadline" is the ordinary `(none)`
-   * refinement every other facet already has — one absence mechanism, not two.
-   */
-  /**
    * Which kinds of external reference a record carries.
    *
    * Every axis on a card was askable except this one: 90 of 157 records here
@@ -212,34 +189,41 @@ export const PSEUDO: Record<string, Pseudo> = {
     values: [...LINK_KINDS],
     of: (rec) => [...new Set(rec.links.map((l) => l.kind).filter(Boolean))],
   },
-  due: {
-    label: 'Due',
-    values: ['overdue', 'today', 'week', 'later'],
-    of: (rec, ctx) => {
-      const bucket = dueBucket(rec.due, ctx.today);
-      return bucket ? [bucket] : [];
-    },
-  },
 };
 
 export function isPseudo(facet: string): boolean {
   return facet in PSEUDO;
 }
 
-/** Every record's values for one axis, real or computed. */
+/**
+ * Every record's values for one axis, as the axis presents them.
+ *
+ * An **ordered facet presents buckets and compares raw**: a date has as many
+ * values as there are days, so filtering and grouping see `overdue · today ·
+ * week · later` while sorting and range filters see the date itself. That is the
+ * one place the two representations differ, and `rankOf` is the other side of it.
+ */
 function valuesOf(rec: Rec, facet: string, ctx: Ctx): string[] {
   const pseudo = PSEUDO[facet];
   if (pseudo) return pseudo.of(rec, ctx);
+  const raw = rec.facets[facet] ?? [];
+  const def = ctx.facets[facet];
+  if (!def?.buckets?.length) return raw;
+  return [...new Set(raw.map((v) => bucketOf(def, v, ctx.today)))];
+}
+
+/** The stored values, unbucketed — what sorting and range filters compare. */
+function rawOf(rec: Rec, facet: string): string[] {
   return rec.facets[facet] ?? [];
 }
 
-function buildCtx(records: Map<string, Rec>, today: string): Ctx {
+function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx {
   const blocked = new Set<string>();
   for (const { src, dst } of refsOf('blocks', records)) {
     // `src blocks dst`, so an unfinished record blocks each of its targets.
     if (!records.get(src)?.facets.status?.includes('done')) blocked.add(dst);
   }
-  return { records, blocked, today };
+  return { records, blocked, facets, today };
 }
 
 // ---------------------------------------------------------------- traversal
@@ -314,18 +298,28 @@ function comparator(sort: string[] | undefined, facets: Facets, ctx: Ctx): Compa
     return Math.min(...values.map((v) => (order ? indexOrLast(order, v) : facetRank(def, v))));
   };
 
+  /**
+   * An ordered facet sorts by its raw value, not its bucket.
+   *
+   * A record carrying none sorts last in *both* directions: "no deadline" is not
+   * the earliest one, and reversing the sort must not make it the most urgent.
+   */
+  const ordered = (a: Rec, b: Rec, name: string, sign: number): number => {
+    const def = facets[name];
+    const av = rawOf(a, name);
+    const bv = rawOf(b, name);
+    if (!av.length && !bv.length) return 0;
+    if (!av.length) return 1 * sign;
+    if (!bv.length) return -1 * sign;
+    const pick = (vs: string[]) => vs.reduce((lo, v) => (compareValues(def, v, lo) < 0 ? v : lo));
+    return compareValues(def, pick(av), pick(bv));
+  };
+
   return (a, b) => {
     for (const { name, sign } of keys) {
       let cmp = 0;
-      if (name === 'due') {
-        // A card with no deadline sorts after every card that has one, in both
-        // directions — `due:desc` means "most urgent last", not "undated first".
-        const av = a.due ?? '';
-        const bv = b.due ?? '';
-        if (!av && !bv) cmp = 0;
-        else if (!av) cmp = 1 * sign;
-        else if (!bv) cmp = -1 * sign;
-        else cmp = av.localeCompare(bv);
+      if (isOrdered(facets[name])) {
+        cmp = ordered(a, b, name, sign);
       } else if (name === 'updated' || name === 'created') {
         cmp = (a[name] ?? '').localeCompare(b[name] ?? '');
       } else if (name === 'title') {
@@ -346,15 +340,35 @@ function indexOrLast(order: string[], value: string): number {
 
 // ---------------------------------------------------------------- the compiler
 
+/** `>2026-09-01` / `<=5` — a comparison rather than a value to match. */
+const RANGE = /^(<=|>=|<|>)(.+)$/;
+
+/**
+ * Does any raw value satisfy the comparison?
+ *
+ * Only an ordered facet can be compared, and it is compared *raw* — the bucket
+ * is what the panel offers, the value is what a range means.
+ */
+function inRange(rec: Rec, facet: string, op: string, bound: string, ctx: Ctx): boolean {
+  const def = ctx.facets[facet];
+  if (!isOrdered(def)) return false;
+  return rawOf(rec, facet).some((v) => {
+    const c = compareValues(def, v, bound);
+    return op === '<' ? c < 0 : op === '<=' ? c <= 0 : op === '>' ? c > 0 : c >= 0;
+  });
+}
+
 function matches(rec: Rec, filter: Record<string, string[]>, ctx: Ctx): boolean {
   for (const [facet, wanted] of Object.entries(filter)) {
     if (!wanted.length) continue;
     const have = valuesOf(rec, facet, ctx);
-    // `(none)` is a selectable refinement, not a value — 82 cards carry no
+    // `(none)` is a selectable refinement, not a value — most cards carry no
     // project, and reaching them is the point of having it.
-    const ok = have.length
-      ? have.some((v) => wanted.includes(v))
-      : wanted.includes(NONE);
+    const ok = wanted.some((w) => {
+      const range = RANGE.exec(w);
+      if (range) return inRange(rec, facet, range[1]!, range[2]!, ctx);
+      return have.length ? have.includes(w) : w === NONE;
+    });
     if (!ok) return false;
   }
   return true;
@@ -462,7 +476,7 @@ export function runQuery(
   query: Query,
   opts: RunOpts = {},
 ): QueryResult {
-  const ctx = buildCtx(records, opts.today ?? new Date().toISOString().slice(0, 10));
+  const ctx = buildCtx(records, facets, opts.today ?? new Date().toISOString().slice(0, 10));
   const filter = query.filter ?? {};
 
   // Focus and full text bound the universe; the facet filter refines inside it.
@@ -600,8 +614,12 @@ export interface Rollup {
  * Transitive membership is the `project` walk, which is the same traversal the
  * focus control uses — not a second notion of hierarchy.
  */
-export function projectRollups(records: Map<string, Rec>, today: string): Record<string, Rollup> {
-  const ctx = buildCtx(records, today);
+export function projectRollups(
+  records: Map<string, Rec>,
+  facets: Facets,
+  today: string,
+): Record<string, Rollup> {
+  const ctx = buildCtx(records, facets, today);
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;

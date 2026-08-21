@@ -401,7 +401,7 @@ function FacetsSection({
   const available = Object.entries(meta.facets).map(([name, def]) => ({
     name,
     label: def.label,
-    ref: def.ref,
+    ref: def.type === 'ref',
   }));
   const table = data?.spec.shape === 'table';
   const canvas = data?.spec.shape === 'canvas';

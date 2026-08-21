@@ -1,7 +1,8 @@
 import { fallbackLabel } from '../schema/links.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
 import { isProject } from '../index/project.ts';
-import { dueBucket, type DueBucket } from '../index/query.ts';
+import { bucketOf } from '../schema/facets.ts';
+import type { Facets } from '../schema/types.ts';
 
 /** What the web app receives for one record. Everything here is derived, never guessed (C8). */
 export interface CardDTO {
@@ -16,13 +17,29 @@ export interface CardDTO {
   excerpt: string;
   /** Rendered lazily by the client; the raw body travels as-is. */
   body: string;
-  due: string | null;
-  /** Which `due` bucket, computed server-side so the face never re-derives it (C8). */
-  dueIn: DueBucket | null;
+  /**
+   * The bucket each ordered facet's values fall in, keyed by facet.
+   *
+   * Computed here so a face never re-derives it (C8) — and generically, so the
+   * chip a `due` facet draws says "overdue" without anything in the client
+   * knowing that facet by name.
+   */
+  buckets: Record<string, string[]>;
   updated: string | null;
   childCount: number;
   blockedBy: { id: string; title: string; done: boolean }[];
   unblocks: string[];
+}
+
+/** Bucketed values for every facet that declares buckets. */
+function bucketsOf(rec: Rec, facets: Facets, today: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [name, def] of Object.entries(facets)) {
+    if (!def.buckets?.length) continue;
+    const raw = rec.facets[name];
+    if (raw?.length) out[name] = [...new Set(raw.map((v) => bucketOf(def, v, today)))];
+  }
+  return out;
 }
 
 const TASK = /^\s*[-*]\s+\[( |x|X)\]\s+/gm;
@@ -61,6 +78,7 @@ export function toDTO(
     childCount?: number;
     blockedBy?: { id: string; title: string; done: boolean }[];
     unblocks?: string[];
+    facets?: Facets;
     /** Overridable so a test does not depend on the day it runs. */
     today?: string;
   } = {},
@@ -74,8 +92,7 @@ export function toDTO(
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),
     body: rec.body,
-    due: rec.due ?? null,
-    dueIn: dueBucket(rec.due, extra.today ?? new Date().toISOString().slice(0, 10)),
+    buckets: bucketsOf(rec, extra.facets ?? {}, extra.today ?? new Date().toISOString().slice(0, 10)),
     updated: rec.updated ?? null,
     childCount: extra.childCount ?? 0,
     blockedBy: extra.blockedBy ?? [],

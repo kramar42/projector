@@ -148,7 +148,7 @@ export const DIRS = ['out', 'in', 'both'] as const;
  */
 export function relations(meta: Meta): string[] {
   return Object.entries(meta.facets)
-    .filter(([, def]) => def.ref)
+    .filter(([, def]) => def.type === 'ref')
     .map(([name]) => name);
 }
 

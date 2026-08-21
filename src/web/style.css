@@ -955,26 +955,14 @@ body {
   cursor: help;
 }
 
-/* A deadline, on the face. Only `overdue`, `today` and `week` draw at all — a
-   face that badges every date says nothing about the one that has passed. */
-.due {
-  flex: none;
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 10px;
-  border-radius: 8px;
-  padding: 1px 6px;
-  cursor: help;
-  background: var(--surface-3);
-  color: var(--ink-3);
-}
-
-.due.is-overdue {
+/* An ordered facet draws its bucket, and the bucket is a class — so a deadline
+   colours itself without anything knowing that facet by name. */
+.chip.is-overdue {
   background: var(--bad);
   color: var(--ink);
 }
 
-.due.is-today {
+.chip.is-today {
   background: var(--warn);
   color: var(--ink);
 }
@@ -987,14 +975,6 @@ body {
   border: 1px solid var(--rule-2);
   border-radius: 4px;
   padding: 1px 5px;
-}
-
-.dueinput.is-overdue {
-  border-color: var(--bad);
-}
-
-.dueinput.is-today {
-  border-color: var(--warn);
 }
 
 .unblocks {

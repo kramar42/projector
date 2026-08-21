@@ -28,7 +28,6 @@ export const frontmatterSchema = z.object({
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
   source_fingerprint: z.string().optional(),
-  due: z.union([z.string(), z.date()]).optional(),
   created: z.union([z.string(), z.date()]).optional(),
   updated: z.union([z.string(), z.date()]).optional(),
 });
@@ -91,7 +90,6 @@ export function parseCard(file: string, text: string): ParseResult {
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
       source_fingerprint: fm.source_fingerprint,
-      due: asDate(fm.due),
       created: asDate(fm.created),
       updated: asDate(fm.updated),
       body,
@@ -134,7 +132,6 @@ export function renderCard(rec: Omit<Rec, 'file'>): string {
   if (rec.links.length) fm.links = rec.links.map((l) => l.raw);
   if (rec.project) fm.project = rec.project;
   if (rec.source_fingerprint) fm.source_fingerprint = rec.source_fingerprint;
-  if (rec.due) fm.due = rec.due;
   if (rec.created) fm.created = rec.created;
   if (rec.updated) fm.updated = rec.updated;
 

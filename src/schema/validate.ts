@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { isKnownKind } from './links.ts';
+import { isRef } from './facets.ts';
 import type { Facets, Issue, Rec } from './types.ts';
 import { isProject } from '../index/project.ts';
 import { wouldCycle } from '../index/refs.ts';
@@ -69,7 +70,23 @@ export function validate(
       // A reference facet's values are record ids. A value that resolves to
       // nothing is a warning rather than an error — an agent may write a card
       // before the one it points at exists.
-      if (def.ref) {
+      // A typed facet's values have to *be* what the type says, or every
+      // comparison downstream is guessing.
+      if (def.type === 'date') {
+        for (const v of values) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) {
+            at(`facets.${facet}`, `"${facet}" is a date facet, and "${v}" is not YYYY-MM-DD`);
+          }
+        }
+      }
+      if (def.type === 'number') {
+        for (const v of values) {
+          if (!Number.isFinite(Number(v))) {
+            at(`facets.${facet}`, `"${facet}" is a number facet, and "${v}" is not a number`);
+          }
+        }
+      }
+      if (isRef(def)) {
         for (const v of values) {
           if (v === rec.id) at(`facets.${facet}`, `"${facet}" points at its own record`);
           else if (!records.has(v)) {
@@ -81,10 +98,6 @@ export function validate(
       }
     }
 
-    // --- due ---
-    if (rec.due !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(rec.due)) {
-      at('due', `due must be YYYY-MM-DD, not "${rec.due}"`);
-    }
 
     // --- links ---
     for (const l of rec.links) {

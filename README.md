@@ -42,12 +42,24 @@ index.
 Storage is uniform; the **vocabulary** is where the constraints live. `open: false` refuses a value the
 list does not declare, and `single: true` refuses a second value at all — because `status: [planning,
 done]` is not a card in two columns, it is a card in no coherent state, and the thing writing most of
-these files is an agent (C3). `priority`, `status`, `energy`, `owner` and `parent` are single;
+these files is an agent (C3). `priority`, `status`, `energy`, `owner`, `parent` and `due` are single;
 `project`, `blocks`, `tech`, `domain`, `waiting_on` and `source` are not.
+
+A facet also declares a **type**, which says what its values *are*:
+
+| | | |
+|---|---|---|
+| `label` | a member of the declared `values` list | sorts in declared order |
+| `ref` | a record id in this vault | also traversable — see below |
+| `date` | `YYYY-MM-DD` | sorts chronologically |
+| `number` | | sorts numerically, not as text |
+
+The file still holds strings and memory still holds `string[]`; the type governs *interpretation*. That
+is what makes it cheap — the engine reads a facet in exactly two places.
 
 ## Pseudo-facets
 
-Five axes are computed rather than stored, and appear in the filter panel indistinguishable from real
+Four axes are computed rather than stored, and appear in the filter panel indistinguishable from real
 facets:
 
 | | Values | Derived from |
@@ -55,11 +67,12 @@ facets:
 | `type` | `project`, `plain` | presence of a `project:` block |
 | `blocked` | `blocked`, `waiting`, `clear` | an unfinished `blocks` edge · a non-empty `waiting_on` |
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
-| `due` | `overdue`, `today`, `week`, `later` | `due` against today |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a record carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
-Each is a count, a date comparison or the presence of an edge — never a judgement. `type=project`
+Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
+absence, or the app-written `updated` field. Each is a count, a date comparison or the presence of a
+reference — never a judgement. `type=project`
 *is* the projects view, and `triage` turns the untriaged pile into something you can drag out of.
 
 **Every one of them computes.** Nothing derivable is also storable, which is why there is no
@@ -67,6 +80,28 @@ Each is a count, a date comparison or the presence of an edge — never a judgem
 `waiting_on` — `status` is lifecycle alone. A record with no `due` has no value on that axis rather
 than an `undated` bucket of its own, so "no deadline" is the same `(none)` refinement every other
 facet already has.
+
+## Ordered facets present buckets and compare raw
+
+A date has as many values as there are days, so a filter panel listing them is useless and a board
+grouped by one gets a column per day. An ordered facet therefore declares its own **buckets**:
+
+```yaml
+due:
+  type: date
+  single: true
+  buckets: { overdue: -1, today: 0, week: 7 }   # days from today
+  overflow: later
+```
+
+Filtering and grouping see `overdue · today · week · later`; sorting and range filters see the date.
+The two are lexically distinct in a query — `f.due=overdue` is a bucket, `f.due=>2026-09-01` is a
+range — so there is nothing to disambiguate. On a face the chip shows the value and *wears* the bucket,
+so a passed deadline reads exactly and still colours itself red.
+
+`due` was a top-level field until facets were typed, because the argument for a field was that a facet
+is a string set matched for membership while a date needs comparison. Typing dissolved it. `created`
+and `updated` stay fields: a facet is vocabulary you declare, and those are written by the app.
 
 ## There is only a record
 
@@ -462,12 +497,12 @@ one.
 
 | | |
 |---|---|
-| `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n]` | list records, through the same query compiler the app uses |
+| `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet |
 | `ck show <id>` | one record, with its resolved project config |
 | `ck next` | open cards with nobody waited on and no unfinished blocker, deadline first |
 | `ck log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
-| `ck add <title> [--parent] [--facet f=v] [--link ref] [--due d] [--fingerprint fp]` | create a record |
-| `ck set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--due d\|none`, `--set path=yaml` |
+| `ck add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
+| `ck set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--set path=yaml` |
 | `ck rm <id>…` | delete, dropping every reference pointing at it |
 | `ck link <id> <ref> …` | append links |
 | `ck project <id>` | resolved project config and inherited instructions |
@@ -513,11 +548,11 @@ facets:
   parent: [eventing]              # reference facets: values are record ids
   blocks: [conduktor-config]
   project: [platform]
+  due: [2026-09-01]               # a date facet: compared, not matched
 links:
   - jira:PROJ-303
   - gh:pr:ORG/services#412
   - doc:notes/schema-registry.md
-due: 2026-09-01
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -533,9 +568,8 @@ the app counts them for the progress bar and never rewrites them.
 never changes, though the filename may drift from it. Facet values are always arrays, and a facet the
 vocabulary does not know is preserved rather than dropped.
 
-`due` is a **field, not a facet**, and the distinction is the point: a facet is a declared vocabulary
-matched for membership, while a date is compared against today. `priority` says what you intend to do
-next; `due` says what the world expects regardless of intent.
+`priority` says what you intend to do next; `due` says what the world expects regardless of intent.
+Both are facets — the type is what tells the engine one is matched and the other compared.
 
 Every vault gets its own `cards/README.md` documenting all of this, so the format travels with the data
 rather than with the app. `ck check` validates every card and reports every problem at once, rather

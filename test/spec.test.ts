@@ -127,11 +127,8 @@ test('an explicitly empty focus overrides a saved one', () => {
 });
 
 test('a canvas lays out by the first reference facet in show', () => {
-  const facets = {
-    priority: { label: 'Priority', values: ['now'], open: false, single: true, ref: false },
-    parent: { label: 'Part of', values: [], open: true, single: true, ref: true },
-    project: { label: 'Project', values: [], open: true, single: false, ref: true },
-  };
+  const def = (type: 'label' | 'ref') => ({ label: type, type, values: [], open: true, single: false });
+  const facets = { priority: def('label'), parent: def('ref'), project: def('ref') };
   // Labels are skipped: they name no records to lay out. Order in `show` is the
   // control — `parent` first is a decomposition tree, `project` first the
   // portfolio — and the same answer decides what `connect` walks for context.

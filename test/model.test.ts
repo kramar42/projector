@@ -9,7 +9,7 @@ import { parseLink } from '../src/schema/links.ts';
 import { extractInstructions, projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { validate } from '../src/schema/validate.ts';
-import { loadFacets } from '../src/schema/facets.ts';
+import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
@@ -82,10 +82,10 @@ test('patchKey restores canonical key order for a newly added key', () => {
   assert.deepEqual(keys, ['id', 'title', 'facets', 'updated']);
 });
 
-test('due sits between the references and the timestamps', () => {
-  const text = join('id: x\ntitle: T\ncreated: 2026-01-01\n', '\n');
-  const keys = [...patchKey(text, 'due', '2026-09-01').matchAll(/^([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(keys, ['id', 'title', 'due', 'created']);
+test('a facet the vocabulary does not know is preserved, not dropped', () => {
+  const res = parseCard('/f.md', '---\nid: x\ntitle: T\nfacets: { invented: [a] }\n---\n');
+  assert.ok(res.ok);
+  assert.deepEqual(res.rec.facets.invented, ['a']);
 });
 
 test('scalar arrays serialize on one line', () => {
@@ -617,11 +617,13 @@ test('a record declares no class of thing; only id and title are required', () =
   assert.equal('kind' in bare.rec.facets, false);
 });
 
-test('due round-trips as a date, and a yaml date is not a timestamp', () => {
-  const res = parseCard('/d.md', '---\nid: d\ntitle: D\ndue: 2026-09-01\n---\n');
+test('a yaml date in a facet round-trips as a date, not a timestamp', () => {
+  const res = parseCard('/d.md', '---\nid: d\ntitle: D\nfacets: { due: [2026-09-01] }\n---\n');
   assert.ok(res.ok);
-  assert.equal(res.rec.due, '2026-09-01');
-  assert.match(renderCard({ ...res.rec }), /^due: 2026-09-01$/m);
+  // Storage is uniform — the file holds a string and the *type* governs what it
+  // means — so a YAML date must not arrive as an ISO timestamp.
+  assert.deepEqual(res.rec.facets.due, ['2026-09-01']);
+  assert.match(renderCard({ ...res.rec }), /due: \[2026-09-01\]/);
 });
 
 // ---------------------------------------------------------------- validation
@@ -656,11 +658,36 @@ test('a single-valued facet holding two values is an error, not a card in two co
   );
 });
 
-test('a due that is not a date is refused', () => {
-  const facets = loadFacets(facetsFile('status: { values: [done], open: false }\n'));
-  const bad = recordOf('---\nid: x\ntitle: X\ndue: "next friday"\n---\n');
+test('a typed value must be what the type says', () => {
+  const facets = loadFacets(
+    facetsFile('due: { type: date, single: true }\nestimate: { type: number }\n'),
+  );
+  const bad = recordOf(
+    '---\nid: x\ntitle: X\nfacets: { due: ["next friday"], estimate: [big] }\n---\n',
+  );
   const issues = validate(new Map([['x', bad]]), facets, '/data');
-  assert.ok(issues.some((i) => i.severity === 'error' && /YYYY-MM-DD/.test(i.message)));
+  assert.ok(issues.some((i) => i.severity === 'error' && /not YYYY-MM-DD/.test(i.message)));
+  assert.ok(issues.some((i) => i.severity === 'error' && /not a number/.test(i.message)));
+
+  const good = recordOf('---\nid: x\ntitle: X\nfacets: { due: [2026-09-01], estimate: [3] }\n---\n');
+  assert.equal(validate(new Map([['x', good]]), facets, '/data').filter((i) => i.severity === 'error').length, 0);
+});
+
+test('an ordered facet orders by its buckets, not alphabetically', () => {
+  const def = loadFacets(
+    facetsFile('due: { type: date, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }\n'),
+  ).due!;
+  // Falling through to alphabetical put `later` first, which is exactly backwards.
+  assert.deepEqual(orderValues(def, ['later', 'week', 'overdue', 'today']), [
+    'overdue', 'today', 'week', 'later',
+  ]);
+  assert.equal(bucketOf(def, '2026-08-19', '2026-08-21'), 'overdue');
+  assert.equal(bucketOf(def, '2026-08-21', '2026-08-21'), 'today');
+  assert.equal(bucketOf(def, '2026-08-24', '2026-08-21'), 'week');
+  assert.equal(bucketOf(def, '2026-12-01', '2026-08-21'), 'later');
+  // No buckets declared: the value is its own bucket.
+  const plain = loadFacets(facetsFile('when: { type: date }\n')).when!;
+  assert.equal(bucketOf(plain, '2026-08-19', '2026-08-21'), '2026-08-19');
 });
 
 // ---------------------------------------------------------------- history
@@ -679,7 +706,7 @@ test('ck log reads status transitions out of the diffs', () => {
     git('add', '-A');
     git('commit', '-qm', 'add ship');
 
-    writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [done] }\ndue: 2026-09-01\n---\n', 'utf8');
+    writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [done], due: [2026-09-01] }\n---\n', 'utf8');
     git('add', '-A');
     git('commit', '-qm', 'finish ship');
 
@@ -746,7 +773,7 @@ test('every seeded file parses as what it claims to be', () => {
   }
   // Reference facets declare no values, and every relation is one.
   for (const name of ['parent', 'blocks', 'project']) {
-    assert.equal(facets[name]!.ref, true, `${name} should be a reference facet`);
+    assert.equal(facets[name]!.type, 'ref', `${name} should be a reference facet`);
     assert.equal(facets[name]!.values, undefined, `${name} should declare no values`);
   }
   // The documented frontmatter has no `edges:` key — matched at line start, so
@@ -775,7 +802,11 @@ test('the seeded vocabulary covers every facet the seeded views use', () => {
 function scratchVault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(pathJoin(tmpdir(), 'ck-set-'));
   mkdirSync(pathJoin(root, 'cards'), { recursive: true });
-  writeFileSync(pathJoin(root, 'facets.yaml'), 'status: { values: [planning, done], open: false, single: true }\n', 'utf8');
+  writeFileSync(
+    pathJoin(root, 'facets.yaml'),
+    'status: { values: [planning, done], open: false, single: true }\ndue: { type: date, single: true }\n',
+    'utf8',
+  );
   writeFileSync(
     pathJoin(root, 'cards', 'x.md'),
     '---\nid: x\n# a comment worth keeping\ntitle: X\nfacets: { status: [planning] }\n---\n\nbody\n',
@@ -828,7 +859,7 @@ test('--set is validated against the result, not the input', () => {
     assert.throws(() => patchFields(root, 'x', { 'facets.status': '[planning, done]' }), /one value at a time/);
     assert.throws(() => patchFields(root, 'x', { id: 'y' }), /id cannot be changed/);
     assert.throws(() => patchFields(root, 'x', { 'facets.nope': '[a]' }), /unknown facet/);
-    assert.throws(() => patchFields(root, 'x', { due: '"next friday"' }), /YYYY-MM-DD/);
+    assert.throws(() => patchFields(root, 'x', { 'facets.due': '["next friday"]' }), /not YYYY-MM-DD/);
     assert.throws(() => patchFields(root, 'x', { 'title.deep': 'x' }), /not a mapping/);
   } finally {
     cleanup();
@@ -851,7 +882,7 @@ test('a caller-supplied id is honoured or refused, never silently changed', () =
 test('deleting a record drops every reference pointing at it', () => {
   const { root, cleanup } = scratchVault();
   try {
-    writeFileSync(pathJoin(root, 'facets.yaml'), 'parent: { ref: true, single: true }\n', 'utf8');
+    writeFileSync(pathJoin(root, 'facets.yaml'), 'parent: { type: ref, single: true }\n', 'utf8');
     createCard(root, { title: 'Container', id: 'box' });
     createCard(root, { title: 'Inside', id: 'thing', parent: 'box' });
     const { removedEdges } = deleteCard(root, 'box');
@@ -868,8 +899,8 @@ test('deleting a record drops every reference pointing at it', () => {
 // ---------------------------------------------------------------- clusters
 
 const face = (id: string): CardDTO =>
-  ({ id, title: id, isProject: false, facets: {}, links: [], progress: null, excerpt: '', body: '',
-     due: null, dueIn: null, updated: null, childCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
+  ({ id, title: id, isProject: false, facets: {}, buckets: {}, links: [], progress: null,
+     excerpt: '', body: '', updated: null, childCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
 
 test('a record in several groups is clustered into the first the axis declares', () => {
   const nodes = [face('a'), face('b'), face('c')];

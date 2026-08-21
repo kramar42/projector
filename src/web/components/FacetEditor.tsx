@@ -9,10 +9,10 @@ import type { FacetDef } from '../types.ts';
  * new value typed in. A `single` facet picks one and replaces rather than
  * accumulating, so `status` cannot end up holding `planning` and `done` at once.
  *
- * A **reference** facet holds record ids, so its vocabulary is the whole vault
- * and a toggle list is the wrong control — it picks a record instead. That falls
- * out of `ref`, so `project` needs no handling of its own here, and a reference
- * facet declared tomorrow gets the same editor for free.
+ * The **type** picks the control, so no facet is named here: a reference holds
+ * record ids and gets a record picker, a date gets a date input, and everything
+ * else gets the toggle list. `due` needed a bespoke field in the panel before it
+ * was typed; now a date facet declared tomorrow gets the same editor for free.
  */
 export function FacetEditor({
   name,
@@ -27,6 +27,8 @@ export function FacetEditor({
 }) {
   const [adding, setAdding] = useState('');
   const [picking, setPicking] = useState(false);
+
+  const set = (v: string | null) => onChange(v ? (def.single ? [v] : [...values, v]) : []);
 
   const toggle = (v: string) => {
     if (values.includes(v)) return onChange(values.filter((x) => x !== v));
@@ -44,7 +46,7 @@ export function FacetEditor({
   // they can be removed rather than silently hidden.
   const extras = values.filter((v) => !def.values.includes(v));
 
-  if (def.ref) {
+  if (def.type === 'ref') {
     return (
       <div className="facetedit">
         <div className="facetedit-label">{def.label}</div>
@@ -71,6 +73,28 @@ export function FacetEditor({
             }}
           />
         )}
+        <input type="hidden" name={name} />
+      </div>
+    );
+  }
+
+  if (def.type === 'date') {
+    return (
+      <div className="facetedit">
+        <div className="facetedit-label">{def.label}</div>
+        <div className="facetedit-values">
+          <input
+            type="date"
+            className="dueinput"
+            value={values[0] ?? ''}
+            onChange={(e) => set(e.target.value || null)}
+          />
+          {values[0] && (
+            <button className="btn ghost small" onClick={() => set(null)}>
+              clear
+            </button>
+          )}
+        </div>
         <input type="hidden" name={name} />
       </div>
     );

@@ -7,26 +7,27 @@ export interface CardDTO {
   progress: { done: number; total: number } | null;
   excerpt: string;
   body: string;
-  due: string | null;
-  /** Which bucket the deadline falls in, computed server-side (C8). */
-  dueIn: 'overdue' | 'today' | 'week' | 'later' | null;
+  /** Bucketed values per ordered facet, computed server-side (C8). */
+  buckets: Record<string, string[]>;
   updated: string | null;
   childCount: number;
   blockedBy: { id: string; title: string; done: boolean }[];
   unblocks: string[];
 }
 
+/** What a facet's values are. Storage is uniform; the type governs meaning. */
+export type FacetType = 'label' | 'ref' | 'date' | 'number';
+
 export interface FacetDef {
   label: string;
+  type: FacetType;
   values: string[];
   open: boolean;
   /** At most one value at a time — a vocabulary constraint, not a storage one. */
   single: boolean;
-  /**
-   * The values are record ids, so the facet is traversable as well as
-   * filterable: it draws on a canvas, walks under `focus`, and refuses a cycle.
-   */
-  ref: boolean;
+  /** Named ranges an ordered facet presents itself as, in order. */
+  buckets?: { name: string; upTo: number }[];
+  overflow?: string;
 }
 
 export interface Meta {

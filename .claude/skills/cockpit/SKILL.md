@@ -35,8 +35,10 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
    contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
 5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
    from a non-empty `waiting_on`; neither is a status. `status` is lifecycle only.
-6. **`due` is a field, not a facet.** `priority` is what you intend to do next; `due` is what the world
-   expects regardless. Set it with `ck set <id> --due YYYY-MM-DD`, clear it with `--due none`.
+6. **A facet declares a `type`** — `label` (the default), `ref`, `date` or `number`. `due` is a date
+   facet: `ck set <id> --facet due=2026-09-01`, cleared with `--facet due=`. An ordered facet presents
+   **buckets** on an axis and compares raw values, so `--filter due=overdue` and
+   `--filter due=">2026-09-01"` are both valid and mean different things.
 
 ## Reading
 
@@ -67,8 +69,8 @@ re-derive those by reading files.
 ## Writing
 
 ```bash
-ck add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--due d] [--fingerprint fp] [--body text]
-ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due d|none]
+ck add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--fingerprint fp] [--body text]
+ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]
 ck set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
 ck set <id> --set 'project={}'      # this is how a record becomes a project
 ck rm <id>...                       # deletes, dropping every reference pointing at it

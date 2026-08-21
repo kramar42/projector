@@ -207,34 +207,6 @@ export function CardPanel({
               <dd><code>{card.id}</code></dd>
               <dt>file</dt>
               <dd><code>{data.file}</code></dd>
-              <dt>due</dt>
-              <dd>
-                {/* A date input, not a facet chip: a deadline is compared
-                    against today rather than matched against a vocabulary. */}
-                <input
-                  type="date"
-                  className={`dueinput ${card.dueIn ? `is-${card.dueIn}` : ''}`}
-                  value={card.due ?? ''}
-                  onChange={(e) => {
-                    const next = e.target.value || null;
-                    void run('setting due', () =>
-                      api.patchCard(card.id, { due: next, baseMtime: data.mtime }),
-                    );
-                  }}
-                />
-                {card.due && (
-                  <button
-                    className="btn ghost small"
-                    onClick={() =>
-                      void run('clearing due', () =>
-                        api.patchCard(card.id, { due: null, baseMtime: data.mtime }),
-                      )
-                    }
-                  >
-                    clear
-                  </button>
-                )}
-              </dd>
               {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
             </dl>
 

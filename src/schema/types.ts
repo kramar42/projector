@@ -39,15 +39,6 @@ export interface Rec {
   links: Link[];
   project?: ProjectBlock;
   source_fingerprint?: string;
-  /**
-   * A deadline, `YYYY-MM-DD`.
-   *
-   * A field rather than a facet, and the distinction is the point: a facet is a
-   * declared vocabulary of strings tested for membership, while a date needs
-   * range comparison against today. `priority` says what you intend to do next;
-   * `due` says what the world expects regardless of intent.
-   */
-  due?: string;
   created?: string;
   updated?: string;
   /** Everything below the frontmatter, byte-preserved. */
@@ -68,8 +59,23 @@ export interface ResolvedProject {
   chain: string[];
 }
 
+/**
+ * What a facet's values *are*.
+ *
+ * Storage is uniform — every value is a string in the file and a `string[]` in
+ * memory — and the type governs interpretation. That is what keeps this cheap:
+ * the engine reads a facet in exactly two places, `valuesOf` and `rankOf`.
+ *
+ * - `label`  a member of a declared vocabulary. Sorts in declared order.
+ * - `ref`    a record id in this vault, so the facet is also traversable.
+ * - `date`   `YYYY-MM-DD`. Sorts chronologically, filters by bucket or by range.
+ * - `number` sorts numerically rather than as text.
+ */
+export type FacetType = 'label' | 'ref' | 'date' | 'number';
+
 export interface FacetDef {
   label: string;
+  type: FacetType;
   values: string[];
   open: boolean;
   /**
@@ -83,18 +89,21 @@ export interface FacetDef {
    */
   single: boolean;
   /**
-   * The values of this facet are record ids in this vault.
+   * Named ranges an ordered facet presents itself as, in order.
    *
-   * A reference facet is a facet — it filters, groups, drags and bulk-edits
-   * through the same code path as `priority` — and it is *also* traversable,
-   * which is what edges used to be for. `open` is implied and `values` is
-   * meaningless, since a vocabulary of record ids cannot be declared in advance.
+   * A date has as many values as there are days, so a filter panel listing them
+   * is useless and a board grouped by one gets a column per day. What an axis
+   * wants from an ordered value is a bucket: **an ordered facet presents buckets
+   * and compares raw.** Filtering and grouping see the names; sorting and range
+   * filters see the value.
    *
-   * Cycles are always refused. Every reference facet that exists needs it:
-   * `project` for config inheritance, and `parent` for tree layout once it moves
-   * here too.
+   * The number is an inclusive upper bound — days from today for a `date`, the
+   * value itself for a `number` — and anything past the last one falls in
+   * `overflow`.
    */
-  ref: boolean;
+  buckets?: { name: string; upTo: number }[];
+  /** What a value past the last bucket is called. */
+  overflow?: string;
 }
 
 export type Facets = Record<string, FacetDef>;

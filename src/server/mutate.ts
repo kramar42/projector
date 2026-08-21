@@ -6,6 +6,7 @@ import { paths, resolvePath } from '../config.ts';
 import { frontmatterSchema, listCardFiles, loadCard, renderCard, writeCardFile } from '../schema/card.ts';
 import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
+import { isRef } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
@@ -59,13 +60,6 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** A deadline is compared, not matched, so it has to be a date and not a label. */
-function checkDue(due: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || Number.isNaN(Date.parse(due))) {
-    throw new Invalid(`due must be a YYYY-MM-DD date, not "${due}"`);
-  }
-}
-
 /** Apply several frontmatter keys in one atomic write, bumping `updated`. */
 function patchAll(file: string, patch: Record<string, unknown>): void {
   let text = readFileSync(file, 'utf8');
@@ -106,7 +100,22 @@ export function checkFacets(
     if (def.single && values.length > 1) {
       throw new Invalid(`"${name}" holds one value at a time, and this sets ${values.length}`);
     }
-    if (def.ref && records) {
+    // A typed value has to *be* what the type says, or every comparison
+    // downstream is guessing. This is where `checkDue` used to live, hardcoded
+    // to one field name.
+    if (def.type === 'date') {
+      for (const v of values) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) {
+          throw new Invalid(`"${name}" is a date facet, and "${v}" is not YYYY-MM-DD`);
+        }
+      }
+    }
+    if (def.type === 'number') {
+      for (const v of values) {
+        if (!Number.isFinite(Number(v))) throw new Invalid(`"${name}" is a number facet, and "${v}" is not a number`);
+      }
+    }
+    if (isRef(def) && records) {
       for (const v of values) {
         if (v === id) throw new Invalid(`"${name}" cannot point at its own record`);
         if (wouldCycle(id, v, (cur) => records.get(cur)?.facets[name] ?? [])) {
@@ -124,8 +133,6 @@ export interface PatchCardInput {
   facets?: Record<string, string[]>;
   links?: string[];
   body?: string;
-  /** `YYYY-MM-DD`, or null to clear. */
-  due?: string | null;
   project?: Record<string, unknown> | null;
   baseMtime?: number;
 }
@@ -136,7 +143,6 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
 
   if (input.facets) checkFacets(root, id, input.facets, readAll(paths(root).cards).records);
   if (input.title !== undefined && !input.title.trim()) throw new Invalid('title cannot be empty');
-  if (input.due) checkDue(input.due);
 
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title.trim();
@@ -146,7 +152,6 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
     patch.facets = Object.keys(clean).length ? clean : undefined;
   }
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
-  if (input.due !== undefined) patch.due = input.due ?? undefined;
   if (input.project !== undefined) patch.project = input.project ?? undefined;
 
   if (Object.keys(patch).length) patchAll(file, patch);
@@ -172,7 +177,6 @@ export function createCard(
     facets?: Record<string, string[]>;
     body?: string;
     links?: string[];
-    due?: string;
     /**
      * A stable hash of whatever this card came from. A sweep that runs twice
      * must converge rather than refill the inbox, so a fingerprint already
@@ -203,7 +207,6 @@ export function createCard(
   // value rather than a separate structure.
   const facets = { ...(input.facets ?? {}), ...(input.parent ? { parent: [input.parent] } : {}) };
   if (Object.keys(facets).length) checkFacets(root, id, facets, records);
-  if (input.due) checkDue(input.due);
 
   const text = renderCard({
     id,
@@ -211,7 +214,6 @@ export function createCard(
     facets,
     links: (input.links ?? []).map(parseLink),
     source_fingerprint: input.fingerprint,
-    due: input.due,
     created: today(),
     updated: today(),
     body: input.body ? `\n${input.body}\n` : '\n',
@@ -229,7 +231,7 @@ export function deleteCard(root: string, id: string): { removedEdges: number } {
   const p = paths(root);
   const { records } = readAll(p.cards);
   const refFacets = Object.entries(loadDefs(p.facets))
-    .filter(([, def]) => def.ref)
+    .filter(([, def]) => isRef(def))
     .map(([name]) => name);
   let removedEdges = 0;
 
@@ -400,7 +402,6 @@ export function patchFields(
     facets[k] = (Array.isArray(v) ? v : [v]).filter((x) => x != null).map(String);
   }
   checkFacets(root, id, facets, readAll(paths(root).cards).records);
-  if (typeof check.data.due === 'string') checkDue(check.data.due);
 
   for (const key of touched) patchAll(file, { [key]: fm[key] });
   return { mtime: mtimeOf(file) };
@@ -455,7 +456,6 @@ export function putFrontmatter(
     facets[k] = arr.filter((x) => x != null).map(String);
   }
   checkFacets(root, id, facets, records);
-  if (typeof check.data.due === 'string') checkDue(check.data.due);
 
   // Self-reference and cycles are already refused by `checkFacets`; a value
   // naming a record that does not exist yet is only a warning, because an agent
@@ -463,7 +463,7 @@ export function putFrontmatter(
   const warnings: string[] = [];
   const defs = loadDefs(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
-    if (!defs[name]?.ref) continue;
+    if (!isRef(defs[name])) continue;
     for (const v of values) {
       if (!records.has(v)) warnings.push(`"${name}" names "${v}", which is not a record yet`);
     }

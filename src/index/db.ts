@@ -13,7 +13,6 @@ CREATE TABLE records (
   title         TEXT NOT NULL,
   file          TEXT NOT NULL,
   body          TEXT NOT NULL,
-  due           TEXT,
   created       TEXT,
   updated       TEXT,
   -- Derived from the project: block, which is not a facet — so unlike kind and
@@ -42,7 +41,6 @@ CREATE TABLE cache (
   PRIMARY KEY (kind, ref)
 );
 CREATE INDEX idx_facets_lookup ON facets(facet, value);
-CREATE INDEX idx_records_due ON records(due);
 CREATE INDEX idx_links_record ON links(record_id);
 CREATE VIRTUAL TABLE fts USING fts5(id UNINDEXED, title, body, tokenize='porter unicode61');
 `;

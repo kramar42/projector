@@ -13,7 +13,6 @@ import type { Facets } from '../schema/types.ts';
 export interface Row {
   id: string;
   title: string;
-  due: string | null;
   updated: string | null;
 }
 
@@ -41,7 +40,7 @@ export function listRecords(db: DatabaseSync, opts: ListOpts = {}): Row[] {
   const { sql, args } = filterClause(opts.filter);
   return db
     .prepare(
-      `SELECT r.id, r.title, r.due, r.updated
+      `SELECT r.id, r.title, r.updated
        FROM records r WHERE 1=1${sql}
        ORDER BY r.updated DESC NULLS LAST, r.id`,
     )
@@ -105,8 +104,9 @@ export function nextUp(db: DatabaseSync, facets: Facets): Row[] {
   );
   const def = facets.priority;
   return actionable.sort((a, b) => {
-    const da = a.due ?? '\uffff';
-    const dbv = b.due ?? '\uffff';
+    // `due` is an ordinary facet now, so the deadline is read like any value.
+    const da = valuesFor(db, a.id, 'due')[0] ?? '\uffff';
+    const dbv = valuesFor(db, b.id, 'due')[0] ?? '\uffff';
     if (da !== dbv) return da.localeCompare(dbv);
     const pa = Math.min(...(valuesFor(db, a.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
     const pb = Math.min(...(valuesFor(db, b.id, 'priority').map((v) => facetRank(def, v)) || []), Number.MAX_SAFE_INTEGER);
@@ -118,7 +118,7 @@ export function nextUp(db: DatabaseSync, facets: Facets): Row[] {
 export function search(db: DatabaseSync, query: string, limit = 25): Row[] {
   return db
     .prepare(
-      `SELECT r.id, r.title, r.due, r.updated
+      `SELECT r.id, r.title, r.updated
        FROM fts JOIN records r ON r.id = fts.id
        WHERE fts MATCH ? ORDER BY rank LIMIT ?`,
     )

@@ -19,6 +19,7 @@ import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
+import { isRef } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf } from '../index/project.ts';
@@ -266,6 +267,7 @@ app.get('/api/query', (c) => {
     const rec = records.get(id);
     if (!rec) continue;
     cards[id] = toDTO(rec, records, {
+      facets,
       childCount: countChildren(records, id),
       blockedBy: blockersOf(db, id),
       unblocks: unblocks(db, id).map((u) => u.id),
@@ -292,7 +294,7 @@ app.get('/api/query', (c) => {
     edges: edgesAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, new Date().toISOString().slice(0, 10)),
+    rollups: projectRollups(records, facets, new Date().toISOString().slice(0, 10)),
     views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
   });
 });
@@ -313,7 +315,7 @@ function edgesAmong(
 ): { src: string; dst: string; type: string }[] {
   const out: { src: string; dst: string; type: string }[] = [];
   for (const via of show) {
-    if (!facets[via]?.ref) continue;
+    if (!isRef(facets[via])) continue;
     for (const e of refsOf(via, records)) {
       if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
     }
@@ -329,6 +331,7 @@ app.get('/api/card/:id', (c) => {
   const project = resolveProject(rec.id, records, root);
   return c.json({
     card: toDTO(rec, records, {
+      facets,
       childCount: countChildren(records, rec.id),
       blockedBy: blockersOf(db, rec.id),
       unblocks: unblocks(db, rec.id).map((u) => u.id),

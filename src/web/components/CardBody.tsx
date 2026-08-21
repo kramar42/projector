@@ -34,8 +34,28 @@ const LINK_GLYPH: Record<string, string> = {
   url: '↗',
 };
 
-export function FacetChip({ facet, value }: { facet: string; value: string }) {
-  return <span className={`chip ${FACET_TONE[facet] ?? 'facet-muted'}`}>{value}</span>;
+/**
+ * One facet value on a face.
+ *
+ * An ordered facet draws its **bucket** rather than its value: a chip saying
+ * `2026-09-01` tells you nothing a chip saying `overdue` does not, and the
+ * bucket is also a class, so a deadline can colour itself. The bucket is
+ * computed on the server (C8), so nothing here knows any facet by name.
+ */
+export function FacetChip({
+  facet,
+  value,
+  bucket,
+}: {
+  facet: string;
+  value: string;
+  bucket?: string;
+}) {
+  return (
+    <span className={`chip ${FACET_TONE[facet] ?? 'facet-muted'} ${bucket ? `is-${bucket}` : ''}`}>
+      {value}
+    </span>
+  );
 }
 
 /**
@@ -91,23 +111,6 @@ function Progress({ done, total }: { done: number; total: number }) {
   );
 }
 
-/**
- * A deadline, once it is close enough to matter.
- *
- * `later` draws nothing: a face that badges every date says nothing about the
- * one that is overdue. The bucket is computed on the server (C8), so this and
- * the `due` filter axis can never disagree about where the boundary falls.
- */
-export function DueBadge({ card }: { card: CardDTO }) {
-  if (!card.due || !card.dueIn || card.dueIn === 'later') return null;
-  const label = card.dueIn === 'overdue' ? 'overdue' : card.dueIn === 'today' ? 'today' : card.due;
-  return (
-    <span className={`due is-${card.dueIn}`} title={`due ${card.due}`}>
-      {label}
-    </span>
-  );
-}
-
 export function CardBody({
   card,
   showFacets,
@@ -126,13 +129,14 @@ export function CardBody({
       <div className="cardface-head">
         <KindMark card={card} />
         <span className="cardface-title">{card.title}</span>
-        <DueBadge card={card} />
       </div>
 
       {facetKeys.length > 0 && (
         <div className="chiprow">
           {facetKeys.map((f) =>
-            card.facets[f]!.map((v) => <FacetChip key={`${f}:${v}`} facet={f} value={v} />),
+            card.facets[f]!.map((v, i) => (
+              <FacetChip key={`${f}:${v}`} facet={f} value={v} bucket={card.buckets[f]?.[i]} />
+            )),
           )}
         </div>
       )}

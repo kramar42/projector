@@ -12,9 +12,17 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   open:    true  → new values accepted
 #            false → the validator rejects anything not listed
 #   single:  true  → at most one value at a time
-#   ref:     true  → the values are record ids in this vault, so the facet is
-#                    also traversable: it lays out a canvas, walks under focus,
-#                    and refuses a cycle. open is implied and values ignored.
+#   type:    label  → a member of the declared values list (the default)
+#            ref    → a record id, so the facet is also traversable: it lays out
+#                     a canvas, walks under focus, and refuses a cycle
+#            date   → YYYY-MM-DD, compared rather than matched
+#            number → sorts numerically rather than as text
+#   buckets: named ranges an ordered facet presents itself as, in order. The
+#            number is an inclusive upper bound — days from today for a date —
+#            and anything past the last one is overflow.
+#
+# ref, date and number declare no values: their vocabularies are the vault and
+# the number line.
 #
 # Every facet is stored and written identically, project and the relations
 # included. There is deliberately no kind of facet the app writes through some
@@ -27,7 +35,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # container is the shape every gesture already assumed.
 parent:
   label: Part of
-  ref: true
+  type: ref
   single: true
 
 # What must finish before the target. Its transitive closure is what ck next
@@ -35,7 +43,18 @@ parent:
 # question is always the inverse, which the derived blocked axis answers.
 blocks:
   label: Blocks
-  ref: true
+  type: ref
+
+# A deadline. priority says what you intend to do next; due says what the
+# world expects regardless of intent, so it is compared against today rather than
+# matched against a list. buckets is what an axis shows: filtering and grouping
+# see the names, sorting and a range filter (f.due=>2026-09-01) see the date.
+due:
+  label: Due
+  type: date
+  single: true
+  buckets: { overdue: -1, today: 0, week: 7 }
+  overflow: later
 
 priority:
   label: Priority
@@ -90,7 +109,7 @@ owner:
 # it means decomposition, and config is inherited through project alone.
 project:
   label: Project
-  ref: true
+  type: ref
 `;
 
 export const SEED_README = `# Card conventions
@@ -114,12 +133,12 @@ facets:                   # every value is an array, even when there is one
   parent: [project-a-eventing]  # a reference facet: values are record ids
   blocks: [project-a-conduktor-config]
   project: [project-a]
+  due: [2026-09-01]       # a date facet: compared against today, not matched
 links:                    # read-only references, resolved and cached by the app
   - jira:PROJ-303
   - gh:pr:Acme/staging#412
   - claude:local_9e09a116-6b70-4c4a-8d9e-c2a61e52f4c4
   - doc:../../keycloak-consolidation-plan.md   # relative to the vault root
-due: 2026-09-01           # optional deadline
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -145,9 +164,12 @@ know is preserved rather than dropped — \`ck check\` reports it.
 - **\`parent\` and \`project\` are independent.** \`parent\` is decomposition — this card is *part of*
   that one. \`project\` is membership, and the only thing repos and instructions are inherited through.
   A card may have either, both or neither.
-- **\`due\` is a field, not a facet**, because a deadline is compared against today rather than matched
-  against a vocabulary. \`priority\` says what you intend to do next; \`due\` says what the world expects
-  regardless of intent.
+- **A facet's \`type\` says what its values are** — a \`label\` from the declared list, a \`ref\` to a
+  record, a \`date\`, or a \`number\`. Storage is uniform; the type governs comparison. An ordered facet
+  may declare \`buckets\`, and then it **presents buckets and compares raw**: filtering and grouping see
+  \`overdue · today · week · later\`, while sorting and a range filter (\`f.due=>2026-09-01\`) see the
+  date. \`created\` and \`updated\` stay fields — a facet is vocabulary you declare, and those are
+  written by the app.
 - **Blocked and waiting are never written.** Both are derived: \`blocked\` from an unfinished \`blocks\`
   edge, \`waiting\` from a non-empty \`waiting_on\`. They appear in the filter panel like any other axis.
 - **\`doc:\` paths are relative to the vault root**, or absolute (\`/…\`, \`~/…\`). A document living
