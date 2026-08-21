@@ -1,17 +1,13 @@
-import type { Facets, Rec } from '../schema/types.ts';
+import type { Rec } from '../schema/types.ts';
 
 /**
  * How records point at each other, and how to walk it.
  *
  * One module, because there is one kind of relation. A **reference facet** holds
- * record ids as its values (`ref: true` in `facets.yaml`); an **edge** is the
- * older mechanism for the same thing. Both yield the same `src names dst` pairs,
- * so everything downstream — focus, the canvas, roll-ups, config inheritance,
- * cycle refusal — walks one shape and never learns which held it.
- *
- * `pairsFor` is the only place that still knows edges exist. When `parent` and
- * `blocks` become reference facets it collapses into `refsOf`, and this module
- * has no branch left in it.
+ * record ids as its values (`ref: true` in `facets.yaml`), which makes it both
+ * classifiable and traversable — it filters, groups and drags like `priority`,
+ * and it lays out a canvas, walks under `focus` and refuses a cycle like an edge
+ * used to. There is no second mechanism and therefore no branch anywhere below.
  */
 
 /** Which way to walk. `out` follows a record's own references; `in` finds the records naming it. */
@@ -39,18 +35,6 @@ export function refsOf(facet: string, records: Map<string, Rec>): Ref[] {
   return out;
 }
 
-/** The pairs `via` names — a reference facet, or an edge type while those exist. */
-function pairsFor(via: string, records: Map<string, Rec>, facets: Facets): Ref[] {
-  if (facets[via]?.ref) return refsOf(via, records);
-  const out: Ref[] = [];
-  for (const rec of records.values()) {
-    for (const e of rec.edges) {
-      if (e.type === via && records.has(e.to)) out.push({ src: rec.id, dst: e.to });
-    }
-  }
-  return out;
-}
-
 export interface Adjacency {
   out: Map<string, string[]>;
   in: Map<string, string[]>;
@@ -63,7 +47,7 @@ export interface Adjacency {
  * what that *means* — container, blocker, membership — is the relation's
  * business rather than the engine's.
  */
-export function adjacency(via: string, records: Map<string, Rec>, facets: Facets): Adjacency {
+export function adjacency(via: string, records: Map<string, Rec>): Adjacency {
   const outward = new Map<string, string[]>();
   const inward = new Map<string, string[]>();
   const add = (m: Map<string, string[]>, k: string, v: string) => {
@@ -71,7 +55,7 @@ export function adjacency(via: string, records: Map<string, Rec>, facets: Facets
     if (list) list.push(v);
     else m.set(k, [v]);
   };
-  for (const { src, dst } of pairsFor(via, records, facets)) {
+  for (const { src, dst } of refsOf(via, records)) {
     add(outward, src, dst);
     add(inward, dst, src);
   }
@@ -129,9 +113,9 @@ export function chains(id: string, adj: Adjacency): string[][] {
 /**
  * Would pointing `from` at `to` close a loop?
  *
- * Takes the outward neighbours as a function rather than a record map, so one
- * implementation serves an edge and a reference facet alike — the check is about
- * the shape of the graph, not about where it is stored.
+ * Takes the outward neighbours as a function rather than a facet name, so the
+ * check is about the shape of the graph and the caller decides which relation it
+ * is checking.
  */
 export function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): boolean {
   if (from === to) return true;

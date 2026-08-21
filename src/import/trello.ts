@@ -124,7 +124,6 @@ export function importTrello(
       id,
       title: spec.title,
       facets: spec.facets,
-      edges: [],
       links: [],
       project: {},
       created: today(),
@@ -167,8 +166,7 @@ export function importTrello(
         out.push({
           id,
           title: clean(section[1]!),
-          facets: { kind: ['node'] },
-          edges: projectId ? [{ type: 'parent', to: projectId }] : [],
+          facets: { kind: ['node'], ...(projectId ? { parent: [projectId] } : {}) },
           links: [],
           created: today(),
           updated: today(),
@@ -230,8 +228,7 @@ export function importTrello(
       out.push({
         id,
         title: isUrl ? name : clean(name) || name,
-        facets,
-        edges: parent ? [{ type: 'parent', to: parent }] : [],
+        facets: { ...facets, ...(parent ? { parent: [parent] } : {}) },
         links: links.map(parseLink),
         source_fingerprint: `trello:${card.id}`,
         created: today(),

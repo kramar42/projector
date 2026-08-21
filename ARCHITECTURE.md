@@ -16,7 +16,7 @@ number.
 | C4 | No facet is privileged | every axis, `kind` and `project` included, is stored, filtered, grouped and written the same way |
 | C5 | Every shape is equally first-class | all three are editable, not just viewable |
 | C6 | The card body is free-form | description, links, files, images — no template |
-| C7 | No freehand drawing | the canvas is structured nodes and typed edges. This is what settles the canvas library |
+| C7 | No freehand drawing | the canvas is records and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
 | C9 | A view is a query, not a place | `view = filter × focus × shape × facets`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
@@ -44,7 +44,7 @@ The index is never authoritative — nothing in it survives a rebuild, and nothi
 | | |
 |---|---|
 | `src/schema/` | card and facet types, frontmatter read/write, validation |
-| `src/index/` | the indexer, the query compiler, the index memo |
+| `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
 | `src/web/` | React: sidebar, three shapes, card panel |
@@ -63,7 +63,8 @@ opening that view in the browser go through the same code.
 scale both are free — it is what lets a pseudo-facet be indistinguishable from a real one. In SQL,
 `blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
-the two jobs it is genuinely better at: full text (FTS5) and the recursive `blocks` closure.
+the two jobs it is genuinely better at: full text (FTS5) and the recursive `blocks` closure — and both
+now read the `facets` table, since a relation is a facet value like any other.
 
 **Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field, which made
 it a real facet given a bespoke home — a top-level frontmatter key, a zod enum, a patch field and a
@@ -138,11 +139,16 @@ pair that agrees reads as one relationship and a pair that *disagrees* still sho
 at different records — the case worth seeing. Edge labels need an explicit neutral fill, because a label
 inherits the stroke colour otherwise.
 
-**`project` is a reference facet.** Its values are record ids (`ref: true`), which makes it traversable
-as well as filterable: `src/index/refs.ts` reads it into the same `src names dst` pairs an edge yields,
-so focus, the canvas, the roll-ups and config inheritance all walk one shape and never learn which
-mechanism held it. `pairsFor` is the only place that still knows edges exist, and it collapses into
-`refsOf` once `parent` and `blocks` move too (P7 step 2).
+**Every relation is a reference facet.** `ref: true` says a facet's values are record ids, and
+`parent`, `blocks` and `project` are the three that exist. There is no `edges:` block and no `edges`
+table: `src/index/refs.ts` is the one reader, and focus, the canvas, the roll-ups, config inheritance
+and cycle refusal all walk the `src names dst` pairs it returns.
+
+The gain is not symmetry, it is capability. An edge could be traversed but never filtered, grouped,
+counted, dragged or bulk-edited; a facet could be all of those but never traversed. Making relations
+facets means `f.parent=project-a`, `groupBy: [parent]`, `parent=(none)` and drag-between-parent-columns all
+exist, none of which did before — and they work because a hierarchy concentrates: 21 distinct parents
+over 112 references, 6 used once.
 
 A project's key is its record **id** — there is no separate `key` field, because a second name for one
 thing is a second thing to keep in step, and it would let a reference point at something that is not a
@@ -158,7 +164,7 @@ edges. It takes the outward neighbours as a function rather than a record map, s
 the shape of the graph rather than where it is stored. Before P7 a membership cycle was accepted and
 `resolveProject` silently truncated the config chain.
 
-**Blocked and waiting are computed, never written.** `blocked` is an unfinished `blocks` edge and
+**Blocked and waiting are computed, never written.** `blocked` is an unfinished `blocks` reference and
 `waiting` is a non-empty `waiting_on`; neither is a `status` value. `status` is lifecycle only —
 `planning · active · frozen · done · dropped`. Storing a state beside the thing it is derived from
 gives two answers to one question and nothing to arbitrate between them (C11).
@@ -201,7 +207,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `ck add` / `POST /api/card` | one new card file | never overwrites an existing file |
 | `ck log` | nothing | reads `git log`; it is the one command with no write at all |
 | `ck link`, `ck set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
-| `PUT /api/card/:id/edges` | one card's `edges` | refuses an edge that would create a parent cycle |
+| `POST /api/bulk` op `parent` | one facet on many cards | it is `bulkFacet` under a name the bulk bar uses |
 | `PUT /api/card/:id/frontmatter` | one card's whole frontmatter block | never touches the body |
 | `DELETE /api/card/:id`, `POST /api/bulk` | card files, and edges that pointed at a deleted card | nothing outside `cards/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |

@@ -10,7 +10,9 @@ import { validate } from '../src/schema/validate.ts';
 import { loadFacets } from '../src/schema/facets.ts';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
-import type { Facets, Rec } from '../src/schema/types.ts';
+import { parse } from 'yaml';
+import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../src/server/seed.ts';
+import type { Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 import { ago, firstLine } from '../src/enrich/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
@@ -71,9 +73,9 @@ test('patchKey preserves the body and every untouched key, comments included', (
 
 test('patchKey restores canonical key order for a newly added key', () => {
   const text = join('id: x\ntitle: T\nupdated: 2026-01-01\n', '\n');
-  const out = patchKey(text, 'edges', [{ type: 'parent', to: 'p' }]);
+  const out = patchKey(text, 'facets', { parent: ['p'] });
   const keys = [...out.matchAll(/^([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(keys, ['id', 'title', 'edges', 'updated']);
+  assert.deepEqual(keys, ['id', 'title', 'facets', 'updated']);
 });
 
 test('due sits between the references and the timestamps', () => {
@@ -95,8 +97,7 @@ facets:
   kind: [card]
   priority: [now]
   status: active
-edges:
-  - {type: parent, to: project-a}
+  parent: [project-a]
 links: [jira:PROJ-1, "https://example.com/x"]
 ---
 
@@ -131,7 +132,8 @@ test('render then parse round-trips', () => {
   const again = parseCard('/f.md', renderCard({ ...res.rec }));
   assert.ok(again.ok);
   assert.equal(again.rec.title, 'Demo');
-  assert.deepEqual(again.rec.edges, [{ type: 'parent', to: 'project-a' }]);
+  // A relation survives the round trip as what it is: a facet value.
+  assert.deepEqual(again.rec.facets.parent, ['project-a']);
   assert.equal(again.rec.body.trim(), 'Body.');
 });
 
@@ -175,8 +177,11 @@ function rec(
   return {
     id,
     title: id,
-    facets: { kind: ['card'], ...(belongsTo.length ? { project: belongsTo } : {}) },
-    edges: parents.map((to) => ({ type: 'parent' as const, to })),
+    facets: {
+      kind: ['card'],
+      ...(parents.length ? { parent: parents } : {}),
+      ...(belongsTo.length ? { project: belongsTo } : {}),
+    },
     links: [],
     project,
     body,
@@ -188,18 +193,13 @@ function graph(...recs: Rec[]): Map<string, Rec> {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
-/** `project` is a reference facet; `parent` is still an edge in P7 step 1. */
-const REF_FACETS: Facets = {
-  project: { label: 'Project', values: [], open: true, single: false, ref: true },
-};
-
 test('repos union across the project chain, nearest wins for scalars', () => {
   const g = graph(
     rec('root', [], { jira: 'AAA', repos: [{ path: '/a' }] }),
     rec('mid', [], { repos: [{ path: '/b' }] }, '', ['root']),
     rec('leaf', [], undefined, '', ['mid']),
   );
-  const p = resolveProject('leaf', g, REF_FACETS, '/data');
+  const p = resolveProject('leaf', g, '/data');
   assert.ok(p);
   assert.deepEqual(p.repos.map((r) => r.path), ['/a', '/b']);
   assert.equal(p.jira, 'AAA');
@@ -213,7 +213,7 @@ test('a card in two projects inherits from both, unioned', () => {
     rec('mapping', [], { repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
     rec('deploy', [], undefined, '', ['project-d', 'mapping']),
   );
-  const p = resolveProject('deploy', g, REF_FACETS, '/data');
+  const p = resolveProject('deploy', g, '/data');
   assert.ok(p);
   assert.deepEqual(p.repos.map((r) => r.path), ['/project-d', '/mapping']);
   assert.equal(p.instructions.length, 2);
@@ -227,7 +227,7 @@ test('a duplicate repo path is not added twice', () => {
     rec('root', [], { repos: [{ path: '/a' }] }),
     rec('leaf', [], { repos: [{ path: '/a' }] }, '', ['root']),
   );
-  assert.equal(resolveProject('leaf', g, REF_FACETS, '/data')!.repos.length, 1);
+  assert.equal(resolveProject('leaf', g, '/data')!.repos.length, 1);
 });
 
 test('instructions concatenate outermost first', () => {
@@ -235,7 +235,7 @@ test('instructions concatenate outermost first', () => {
     rec('root', [], {}, '## Instructions\n\nroot rule\n'),
     rec('leaf', [], {}, '## Instructions\n\nleaf rule\n', ['root']),
   );
-  const p = resolveProject('leaf', g, REF_FACETS, '/data')!;
+  const p = resolveProject('leaf', g, '/data')!;
   assert.equal(p.instructions.length, 2);
   assert.match(p.instructions[0]!, /root rule/);
   assert.match(p.instructions[1]!, /leaf rule/);
@@ -248,7 +248,7 @@ test('only the Instructions section is extracted', () => {
 
 test('a record naming no project resolves to null', () => {
   const g = graph(rec('a', []), rec('b', ['a']));
-  assert.equal(resolveProject('b', g, REF_FACETS, '/data'), null);
+  assert.equal(resolveProject('b', g, '/data'), null);
 });
 
 test('a parent edge grants no project — membership is only the facet', () => {
@@ -256,7 +256,7 @@ test('a parent edge grants no project — membership is only the facet', () => {
     rec('project-a', [], { repos: [{ path: '/staging' }] }),
     rec('child', ['project-a']),
   );
-  assert.equal(resolveProject('child', g, REF_FACETS, '/data'), null);
+  assert.equal(resolveProject('child', g, '/data'), null);
   assert.deepEqual(projectsOf(g.get('child')!), []);
 });
 
@@ -265,7 +265,7 @@ test('a project record is its own innermost context', () => {
     rec('project-b', [], { jira: 'SUPPORT' }),
     rec('keycloak', [], { branch: 'kc/{card}' }, '', ['project-b']),
   );
-  const p = resolveProject('keycloak', g, REF_FACETS, '/data')!;
+  const p = resolveProject('keycloak', g, '/data')!;
   assert.equal(p.key, 'keycloak');
   assert.equal(p.jira, 'SUPPORT');
   assert.equal(p.branch, 'kc/{card}');
@@ -277,21 +277,21 @@ test('a cycle between projects terminates', () => {
     rec('a', [], {}, '', ['b']),
     rec('b', [], {}, '', ['a']),
   );
-  const p = resolveProject('a', g, REF_FACETS, '/data');
+  const p = resolveProject('a', g, '/data');
   assert.ok(p);
   assert.ok(p.chain.length <= 2);
 });
 
 test('multiple parents give multiple chains', () => {
   const g = graph(rec('a', []), rec('b', []), rec('c', ['a', 'b']));
-  const out = chains('c', adjacency('parent', g, REF_FACETS));
+  const out = chains('c', adjacency('parent', g));
   assert.equal(out.length, 2);
   assert.deepEqual(out.map((c) => c.at(-1)).sort(), ['a', 'b']);
 });
 
 test('a parent cycle terminates instead of hanging', () => {
   const g = graph(rec('a', ['b']), rec('b', ['a']));
-  const out = chains('a', adjacency('parent', g, REF_FACETS));
+  const out = chains('a', adjacency('parent', g));
   assert.ok(out.length >= 1);
   assert.ok(out[0]!.length <= 3);
 });
@@ -722,14 +722,51 @@ test('a reference chain is ordered, which is what config inheritance needs', () 
   );
   // `chains` answers *by which routes*, where `walk` answers *what is reachable*
   // — and only the first can put the outermost project first.
-  assert.deepEqual(chains('mapping', adjacency('project', g, REF_FACETS)), [
+  assert.deepEqual(chains('mapping', adjacency('project', g)), [
     ['mapping', 'project-d', 'project-a'],
   ]);
-  const p = resolveProject('mapping', g, REF_FACETS, '/data')!;
+  const p = resolveProject('mapping', g, '/data')!;
   assert.deepEqual(p.chain, ['project-a', 'project-d', 'mapping']);
 });
 
 test('refsOf drops a self-reference rather than making a loop of one', () => {
   const g = graph(rec('a', [], undefined, '', ['a']));
   assert.deepEqual(refsOf('project', g), []);
+});
+
+// ---------------------------------------------------------------- the seed
+
+test('every seeded file parses as what it claims to be', () => {
+  // The facet vocabulary and the conventions doc are template literals, so a
+  // stray backtick in a comment silently ends the string and breaks the whole
+  // module. That has happened three times; this is the guard.
+  const facets = parse(SEED_FACETS) as Record<string, Record<string, unknown>>;
+  assert.ok(Object.keys(facets).length > 5);
+  for (const [name, def] of Object.entries(facets)) {
+    assert.equal(typeof def, 'object', `${name} should be a mapping`);
+  }
+  // Reference facets declare no values, and every relation is one.
+  for (const name of ['parent', 'blocks', 'project']) {
+    assert.equal(facets[name]!.ref, true, `${name} should be a reference facet`);
+    assert.equal(facets[name]!.values, undefined, `${name} should declare no values`);
+  }
+  // The documented frontmatter has no `edges:` key — matched at line start, so
+  // prose *about* the old block does not trip this.
+  assert.ok(!/^edges:/m.test(SEED_README), 'the card format has no edges block');
+  for (const view of SEED_VIEWS) {
+    const y = parse(view.body) as Record<string, unknown>;
+    assert.ok(y.shape, `${view.path} states its shape`);
+    assert.ok(y.title, `${view.path} has a title`);
+  }
+});
+
+test('the seeded vocabulary covers every facet the seeded views use', () => {
+  const facets = parse(SEED_FACETS) as Record<string, unknown>;
+  const computed = new Set(['type', 'blocked', 'triage', 'due', 'staleness']);
+  for (const view of SEED_VIEWS) {
+    const y = parse(view.body) as { filter?: Record<string, unknown>; groupBy?: string[]; chips?: string[] };
+    for (const name of [...Object.keys(y.filter ?? {}), ...(y.groupBy ?? []), ...(y.chips ?? [])]) {
+      assert.ok(name in facets || computed.has(name), `${view.path} uses unknown facet "${name}"`);
+    }
+  }
 });

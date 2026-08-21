@@ -24,7 +24,7 @@ import { cardContext, renderContext, untriaged } from '../agent/context.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
 import { sessionForCwd } from '../agent/session.ts';
-import { createCard, patchCard, setEdges } from '../server/mutate.ts';
+import { createCard, patchCard } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { slugify, uniqueId } from '../import/slug.ts';
@@ -228,15 +228,11 @@ function cmdShow(id: string): void {
   console.log(`file     ${rec.file.replace(root + '/', '')}`);
   if (rec.due) console.log(`due      ${rec.due}`);
   for (const [f, v] of Object.entries(rec.facets)) console.log(`${pad(f, 8)} ${v.join(', ')}`);
-  if (rec.edges.length) {
-    console.log('\nedges');
-    for (const e of rec.edges) console.log(`  ${pad(e.type, 8)} → ${e.to}`);
-  }
   if (rec.links.length) {
     console.log('\nlinks');
     for (const l of rec.links) console.log(`  ${pad(l.kind || '?', 10)} ${l.ref}`);
   }
-  const proj = resolveProject(rec.id, records, loadFacets(p.facets), root);
+  const proj = resolveProject(rec.id, records, root);
   if (proj) {
     console.log(`\nproject  ${proj.key}   chain: ${proj.chain.join(' → ')}`);
     for (const r of proj.repos) console.log(`  repo   ${r.path}${r.base ? ` (${r.base})` : ''}`);
@@ -349,7 +345,7 @@ function cmdProject(id: string): void {
     console.error(`no record with id "${id}"`);
     process.exit(1);
   }
-  const proj = resolveProject(id, records, loadFacets(p.facets), root);
+  const proj = resolveProject(id, records, root);
   if (!proj) {
     console.log(`${id} has no project ancestor`);
     return;
@@ -640,11 +636,11 @@ try {
         ...(flags.has('facet') || flags.has('add') || flags.has('remove') ? { facets } : {}),
       });
 
+      // `--parent` is `--facet parent=` spelled the way it reads. One relation
+      // mechanism, so re-parenting is an ordinary facet write.
       const parent = flags.get('parent')?.[0];
       if (parent !== undefined) {
-        const others = rec.edges.filter((e) => e.type !== 'parent');
-        const next = parent === 'none' ? others : [...others, { type: 'parent' as const, to: parent }];
-        setEdges(root, id, next);
+        patchCard(root, id, { facets: { ...facets, ...(parent === 'none' ? { parent: [] } : { parent: [parent] }) } });
       }
       const after = cardContext(id, root)!;
       console.log(

@@ -127,8 +127,7 @@ export function importTodo(
     out.push({
       id,
       title,
-      facets: status ? { status: [status] } : {},
-      edges: parent ? [{ type: 'parent', to: parent }] : [],
+      facets: { ...(status ? { status: [status] } : {}), ...(parent ? { parent: [parent] } : {}) },
       links: [],
       project: {},
       created: today(),
@@ -170,7 +169,6 @@ export function importTodo(
             id: cont.id,
             title: cont.title,
             facets: { kind: ['node'] },
-            edges: [],
             links: [],
             created: today(),
             updated: today(),
@@ -307,8 +305,7 @@ function buildCard(
   return {
     id: uniqueId(slugify(title), taken),
     title: short,
-    facets,
-    edges: [{ type: 'parent', to: parent }],
+    facets: { ...facets, parent: [parent] },
     links: links.map(parseLink),
     source_fingerprint: `todo:${hash(text)}`,
     created: today(),

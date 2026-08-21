@@ -16,7 +16,7 @@ test('a spec survives the round trip through URL parameters', () => {
     group: 'priority,status',
     sort: 'priority:asc,updated:desc',
     uncategorised: 'start',
-    edges: 'parent,member-of',
+    edges: 'parent,project',
     chips: 'project,tech',
   };
   const spec = parseSpec(params);
@@ -48,10 +48,14 @@ test('a canvas connects itself by default; other shapes do not', () => {
 });
 
 test('a stale bookmark opens rather than erroring', () => {
-  const spec = parseSpec({ shape: 'mindmap', via: 'sideways', size: 'expanded', edges: 'parent,telepathy' });
+  const spec = parseSpec({ shape: 'mindmap', dir: 'sideways', size: 'expanded', edges: 'parent,telepathy' });
   assert.equal(spec.shape, 'board');
   assert.deepEqual(spec.chips, []);
-  assert.deepEqual(spec.edges, ['parent']);
+  // Relation names are *not* checked against a list — a reference facet declared
+  // in facets.yaml has to work without a second place enumerating what exists,
+  // so an unknown one is carried through and simply draws nothing.
+  assert.deepEqual(spec.edges, ['parent', 'telepathy']);
+  assert.equal(spec.query.focus, undefined);
 });
 
 test('a view file reads back as the query it was written from', () => {

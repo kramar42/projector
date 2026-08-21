@@ -27,6 +27,22 @@ kind:
   open: false
   single: true
 
+# What a record is part of. A reference facet, so it is both classification and
+# structure: it filters and groups a board like any facet, and it lays out the
+# canvas and walks under focus like an edge used to. Single, because one
+# container is the shape every gesture already assumed.
+parent:
+  label: Part of
+  ref: true
+  single: true
+
+# What must finish before the target. Its transitive closure is what ck next
+# and the blocked axis are built from. Not worth grouping a board by — the
+# question is always the inverse, which the derived blocked axis answers.
+blocks:
+  label: Blocks
+  ref: true
+
 priority:
   label: Priority
   values: [now, month, backlog, someday]
@@ -76,8 +92,8 @@ owner:
 
 # Which project(s) a card belongs to — an ordinary multi-valued facet, so a card
 # can be in two at once and inherits repos and instructions from both. Values are
-# the ids of records carrying a project: block. Parent edges are a separate
-# thing: they mean decomposition and are what the canvas draws.
+# the ids of records carrying a project: block. parent is a separate relation:
+# it means decomposition, and config is inherited through project alone.
 project:
   label: Project
   ref: true
@@ -102,9 +118,9 @@ facets:                   # every value is an array, even when there is one
   priority: [now]
   status: [active]
   tech: [k8s, kafka]
-edges:                    # typed graph edges
-  - { type: parent, to: project-a-eventing }
-  - { type: blocks, to: project-a-conduktor-config }
+  parent: [project-a-eventing]  # a reference facet: values are record ids
+  blocks: [project-a-conduktor-config]
+  project: [project-a]
 links:                    # read-only references, resolved and cached by the app
   - jira:PROJ-303
   - gh:pr:Acme/staging#412
@@ -128,10 +144,13 @@ know is preserved rather than dropped — \`ck check\` reports it.
   new values.
 - **\`kind\` is an ordinary facet.** \`card\` is work and appears on boards; \`node\` is scaffolding that
   organises it. Nothing about it is special — it filters, groups and drags like \`priority\`.
-- **\`project\` is an ordinary facet too.** \`project: [project-d, mapping]\` means the card belongs to both
-  and inherits the repos and instructions of both. Values are the **ids** of records carrying a
-  \`project:\` block. \`parent\` edges are a separate thing — they mean decomposition and are what the
-  canvas draws. A card may have either, both or neither.
+- **Relations are facets too.** A facet declared \`ref: true\` holds record **ids** rather than labels —
+  \`parent\`, \`blocks\` and \`project\` are the ones that exist. Being a facet means a relation filters,
+  groups a board and bulk-edits like \`priority\`; being a reference means it also draws on the canvas,
+  walks under \`focus\` and refuses a cycle. There is no \`edges:\` block.
+- **\`parent\` and \`project\` are independent.** \`parent\` is decomposition — this card is *part of*
+  that one. \`project\` is membership, and the only thing repos and instructions are inherited through.
+  A card may have either, both or neither.
 - **\`due\` is a field, not a facet**, because a deadline is compared against today rather than matched
   against a vocabulary. \`priority\` says what you intend to do next; \`due\` says what the world expects
   regardless of intent.
@@ -162,16 +181,19 @@ Config inherits along the \`project\` facet: \`repos\` union, \`instructions\` c
 everything else takes the nearest value. A card in two projects merges both. Write instructions in the
 project record's body under an \`## Instructions\` heading.
 
-## Edge types
+Membership is not decomposition: putting a card under a project with \`parent\` does *not* make it
+inherit anything. The two are separate facets on purpose.
 
-| Type | Meaning |
+## Relations
+
+| Facet | Meaning |
 |---|---|
 | \`parent\` | decomposition — this record is part of that one. Gives the mind-map tree |
 | \`blocks\` | this must finish before the target. Powers the \`blocked\` axis and \`ck next\` |
+| \`project\` | membership — the only thing config is inherited through |
 
-\`project\` is a **reference facet**: its values are record ids, so it is traversable like an edge — it
-draws on a canvas, walks under \`focus\`, and refuses a cycle — while still filtering, grouping and
-dragging like any other facet.
+All three are ordinary facets with \`ref: true\`. A canvas lays out by the **first** one it is asked to
+show, so \`parent\` first is a decomposition tree and \`project\` first is the portfolio.
 
 ## Link kinds
 
@@ -230,7 +252,7 @@ chips: [status, priority]
   },
   {
     path: 'unblocked.yaml',
-    body: `# Derived, not maintained by hand: \`blocked\` is computed from blocks edges
+    body: `# Derived, not maintained by hand: \`blocked\` is computed from the blocks facet
 # and \`waiting\` from waiting_on, so \`clear\` means neither applies.
 shape: board
 title: Unblocked now

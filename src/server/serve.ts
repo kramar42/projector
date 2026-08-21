@@ -34,7 +34,6 @@ import {
   Invalid,
   bulkDelete,
   bulkFacet,
-  bulkParent,
   createCard,
   deleteCard,
   fileFor,
@@ -45,13 +44,11 @@ import {
   saveArrangement,
   saveView,
   deleteView,
-  setEdges,
 } from './mutate.ts';
 import { watch } from 'chokidar';
 import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_README, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
-import type { Edge } from '../schema/types.ts';
 
 const PORT = Number(process.env.COCKPIT_PORT ?? 8092);
 
@@ -286,43 +283,29 @@ app.get('/api/query', (c) => {
     total: res.total,
     universe: res.universe,
     placements: res.placements,
-    edges: edgesAmong(records, facets, new Set(shown), spec.edges),
+    edges: edgesAmong(records, new Set(shown), spec.edges),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, facets, new Date().toISOString().slice(0, 10)),
+    rollups: projectRollups(records, new Date().toISOString().slice(0, 10)),
     views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
   });
 });
 
 /**
- * Edges of the requested types with both ends on screen. `member-of` is derived
- * from the `project` facet here and nowhere else, so nothing has to be stored for
- * the project hierarchy to be drawable (C9).
- */
-/**
- * The relations to draw, among the records on screen.
+ * The relations to draw: every reference in `show` with both ends on screen.
  *
- * A name in `show` is a reference facet or an edge type; both yield the same
- * `src → dst` pairs, so the canvas never learns which mechanism held them.
+ * One reader for every relation, since every relation is a reference facet — a
+ * name that no facet declares simply draws nothing.
  */
 function edgesAmong(
   records: Map<string, Rec>,
-  facets: Facets,
   ids: Set<string>,
   show: string[],
 ): { src: string; dst: string; type: string }[] {
   const out: { src: string; dst: string; type: string }[] = [];
   for (const via of show) {
-    if (facets[via]?.ref) {
-      for (const e of refsOf(via, records)) {
-        if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
-      }
-      continue;
-    }
-    for (const id of ids) {
-      for (const e of records.get(id)?.edges ?? []) {
-        if (e.type === via && ids.has(e.to)) out.push({ src: id, dst: e.to, type: via });
-      }
+    for (const e of refsOf(via, records)) {
+      if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
     }
   }
   return out;
@@ -333,7 +316,7 @@ app.get('/api/card/:id', (c) => {
   const { db, records, facets } = load(root);
   const rec = records.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
-  const project = resolveProject(rec.id, records, facets, root);
+  const project = resolveProject(rec.id, records, root);
   return c.json({
     card: toDTO(rec, records, {
       childCount: countChildren(records, rec.id),
@@ -355,11 +338,17 @@ app.get('/api/card/:id', (c) => {
   });
 });
 
-function countChildren(records: Map<string, ReturnType<typeof Object>>, id: string): number {
+/**
+ * How many records name this one as their parent.
+ *
+ * Typed as `Rec` deliberately: this was `ReturnType<typeof Object>` with a cast
+ * inside, which is how it went on reading `rec.edges` for a whole refactor after
+ * that field stopped existing. An escape hatch in a signature is a place the
+ * compiler has been told not to help.
+ */
+function countChildren(records: Map<string, Rec>, id: string): number {
   let n = 0;
-  for (const rec of (records as Map<string, { edges: { type: string; to: string }[] }>).values()) {
-    if (rec.edges.some((e) => e.type === 'parent' && e.to === id)) n++;
-  }
+  for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;
   return n;
 }
 
@@ -434,18 +423,6 @@ app.delete('/api/card/:id', (c) => {
   }
 });
 
-app.put('/api/card/:id/edges', async (c) => {
-  const root = vaultOf(c);
-  try {
-    const body = (await c.req.json()) as { edges: Edge[]; baseMtime?: number };
-    const res = setEdges(root, c.req.param('id'), body.edges ?? [], body.baseMtime);
-    bump(root);
-    return c.json(res);
-  } catch (err) {
-    return fail(c, err);
-  }
-});
-
 app.post('/api/bulk', async (c) => {
   const root = vaultOf(c);
   try {
@@ -460,7 +437,11 @@ app.post('/api/bulk', async (c) => {
     const ids = b.ids ?? [];
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
-    else if (b.op === 'parent') res = bulkParent(root, ids, b.parent ?? null);
+    else if (b.op === 'parent') {
+      // Kept as a named op because the board's bulk bar has a "set parent"
+      // button, but it is an ordinary facet write underneath.
+      res = bulkFacet(root, ids, 'parent', b.parent ? [b.parent] : [], 'set');
+    }
     else if (b.op === 'delete') res = bulkDelete(root, ids);
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
     bump(root);

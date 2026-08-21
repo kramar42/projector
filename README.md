@@ -89,25 +89,30 @@ others:
 | `▣` | a project — it owns configuration that its members inherit |
 | `12` | how many records name this one as their parent |
 
-## Typed edges
+## Relations are facets
 
-| Type | Meaning | Powers |
+A facet declared **`ref: true`** holds record ids rather than labels. That one flag is the whole
+relation model:
+
+| | Meaning | Powers |
 |---|---|---|
-| `parent` | containment / decomposition | the mind-map tree, roll-up progress |
+| `parent` | decomposition — this record is *part of* that one | the mind-map tree, roll-up progress |
 | `blocks` | A must finish before B | the `blocked` axis, "what does finishing this unblock" |
-| `project` | a **reference facet** — its values are record ids | the project hierarchy, transitive roll-up |
+| `project` | membership | config inheritance, the portfolio, transitive roll-up |
+
+There is no `edges:` block, because a relation was never a different kind of thing. Being a facet means
+a relation **filters, groups a board, reaches `(none)`, bulk-edits and drags** — none of which an edge
+could do. Being a reference means it also **lays out a canvas, walks under `focus`, and refuses a
+cycle** — everything an edge could do. One mechanism, strictly more capable than either half.
 
 `blocks` is the one neither Trello nor Jira gives usefully. Its transitive closure is what "unblocked
-now" is built from.
+now" is built from. It is the one relation not worth grouping a board by, because the question is
+always the inverse — which is what the derived `blocked` axis answers.
 
-**`project` is not an edge — it is a facet whose values happen to be records.** That is what `ref: true`
-declares, and it means one thing can be both: it filters, groups a board and drags like `priority`,
-*and* it lays out a canvas, walks under `focus` and refuses a cycle like an edge. `parent` and `blocks`
-are still edges today and move here next; when they do, `edges:` leaves the file format entirely.
-
-There was a third, `relates`, for soft association. It is gone: every job it could do is done better by
-something already here. "See also" is a link, "these are similar" is a facet, and a canvas already
-keeps connected records visible without one.
+There was a fourth, `relates`, for soft association. It is gone: every job it could do is done better
+by something already here. "See also" is a link, "these are similar" is a label facet, and a canvas
+already keeps connected records visible without one. It is also the one shape a reference facet is bad
+at — an association where every value is unique makes a useless column and a noisy filter panel.
 
 ## Projects
 
@@ -231,6 +236,10 @@ sub-sections. Its options are shared, because they describe grouping rather than
 `uncategorised` places the no-value group, and `sort` orders within a column, a section or a canvas
 rank. Every value the facet declares gets a group whether anything is in it or not — an empty column is
 somewhere to drag a card to.
+
+Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
+That works because a hierarchy concentrates: 21 distinct parents across 112 references here, only 6 of
+them used once.
 
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`
 comes before `month`.
@@ -477,12 +486,11 @@ id: fix-deploy
 title: Fix the Kpow deployment
 facets:
   kind: [card]
-  project: [platform]
   priority: [now]
   status: [active]
-edges:
-  - { type: parent, to: eventing }
-  - { type: blocks, to: conduktor-config }
+  parent: [eventing]              # reference facets: values are record ids
+  blocks: [conduktor-config]
+  project: [platform]
 links:
   - jira:PROJ-303
   - gh:pr:ORG/services#412
@@ -524,9 +532,11 @@ kind:
   values: [card, node]                     # work, or the scaffolding that organises it
   open: false
   single: true
-project:
+parent:
   ref: true                                # values are record ids, so it is
-                                           # traversable as well as filterable
+  single: true                             # traversable as well as filterable
+project:
+  ref: true
 ```
 
 # Theme

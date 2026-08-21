@@ -1,7 +1,4 @@
 export type Kind = 'card' | 'node';
-export type EdgeType = 'parent' | 'blocks';
-
-export const EDGE_TYPES: readonly EdgeType[] = ['parent', 'blocks'];
 
 export interface ProjectRepo {
   /** Absolute, `~`-prefixed, or relative to the data directory. */
@@ -21,11 +18,6 @@ export interface ProjectBlock {
   branch?: string;
 }
 
-export interface Edge {
-  type: EdgeType;
-  to: string;
-}
-
 /** A parsed link reference. `raw` is preserved verbatim so writes round-trip. */
 export interface Link {
   kind: string;
@@ -36,15 +28,15 @@ export interface Link {
 /**
  * One record file. Facet values are always arrays, uniformly.
  *
- * There is no `kind` field: card-vs-node is an ordinary facet like any other,
- * so it filters, groups, drags and bulk-edits through the one code path. Read it
- * with `kindOf`, which is a derived accessor exactly like `isProject`.
+ * There is no `kind` field and no `edges` block. Card-vs-node is an ordinary
+ * facet, and so is every relation: a facet declared `ref: true` holds record ids
+ * and is traversable, which is what edges were for. One relation mechanism, so
+ * `parent` filters and groups exactly as `priority` does.
  */
 export interface Rec {
   id: string;
   title: string;
   facets: Record<string, string[]>;
-  edges: Edge[];
   links: Link[];
   project?: ProjectBlock;
   source_fingerprint?: string;

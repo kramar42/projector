@@ -3,7 +3,7 @@ import { join as pathJoin } from 'node:path';
 import { z } from 'zod';
 import { KEY_ORDER, join, parseDoc, serialize, split } from './frontmatter.ts';
 import { parseLink } from './links.ts';
-import { EDGE_TYPES, type Edge, type ProjectBlock, type Rec } from './types.ts';
+import type { ProjectBlock, Rec } from './types.ts';
 
 /**
  * The fixed skeleton only. Facet *values* are dynamic — they come from
@@ -21,16 +21,10 @@ const projectSchema = z.object({
   branch: z.string().optional(),
 });
 
-const edgeSchema = z.object({
-  type: z.enum(EDGE_TYPES),
-  to: z.string().min(1),
-});
-
 export const frontmatterSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug'),
   title: z.string().min(1),
   facets: z.record(z.string(), z.unknown()).optional(),
-  edges: z.array(edgeSchema).optional(),
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
   source_fingerprint: z.string().optional(),
@@ -94,7 +88,6 @@ export function parseCard(file: string, text: string): ParseResult {
       id: fm.id,
       title: fm.title,
       facets: normaliseFacets(fm.facets),
-      edges: (fm.edges ?? []) as Edge[],
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
       source_fingerprint: fm.source_fingerprint,
@@ -138,7 +131,6 @@ export function renderCard(rec: Omit<Rec, 'file'>): string {
     title: rec.title,
   };
   if (Object.keys(rec.facets).length) fm.facets = rec.facets;
-  if (rec.edges.length) fm.edges = rec.edges;
   if (rec.links.length) fm.links = rec.links.map((l) => l.raw);
   if (rec.project) fm.project = rec.project;
   if (rec.source_fingerprint) fm.source_fingerprint = rec.source_fingerprint;

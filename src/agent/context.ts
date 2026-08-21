@@ -1,5 +1,5 @@
 import { paths } from '../config.ts';
-import { loadFacets } from '../schema/facets.ts';
+import { adjacency } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
 import { kindOf, parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
@@ -51,13 +51,12 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
   const enriched = readCached(dataRoot, links.map((l) => l.raw));
   const byRef = new Map(enriched.map((e) => [e.ref, e]));
 
-  const edgesTo = (type: string) =>
-    rec.edges.filter((e) => e.type === type).map((e) => records.get(e.to)).filter((r): r is Rec => !!r);
-
-  // Records pointing at this one with a `blocks` edge are its blockers.
-  const blockers = [...records.values()].filter((r) =>
-    r.edges.some((e) => e.type === 'blocks' && e.to === id),
-  );
+  // Both directions of the same relation: what this record blocks, and what
+  // names it as a blocker.
+  const adj = adjacency('blocks', records);
+  const along = (m: Map<string, string[]>) =>
+    (m.get(id) ?? []).map((n) => records.get(n)).filter((r): r is Rec => !!r);
+  const blockers = along(adj.in);
 
   const siblings = parentIds.length
     ? [...records.values()].filter(
@@ -73,13 +72,13 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     file: rec.file.replace(p.root + '/', ''),
     facets: rec.facets,
     body: rec.body,
-    project: resolveProject(id, records, loadFacets(p.facets), dataRoot),
+    project: resolveProject(id, records, dataRoot),
     parents: parentIds.map((pid) => records.get(pid)).filter((r): r is Rec => !!r).map(brief),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(id))
       .map((r) => ({ id: r.id, title: r.title, kind: kindOf(r) })),
     blockedBy: blockers.map((r) => ({ ...brief(r), done: isDone(r) })),
-    blocks: edgesTo('blocks').map(brief),
+    blocks: along(adj.out).map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
     siblings: siblings.map(brief),
   };

@@ -7,7 +7,6 @@ export const KEY_ORDER = [
   'id',
   'title',
   'facets',
-  'edges',
   'links',
   'project',
   'source_fingerprint',
@@ -53,7 +52,7 @@ export function parseDoc(yamlText: string): Document {
   return parseDocument(yamlText, { prettyErrors: true });
 }
 
-const INLINE_MAP_KEYS = new Set(['type', 'to', 'path', 'base']);
+const INLINE_MAP_KEYS = new Set(['path', 'base']);
 
 /**
  * The name of a map pair's key.
@@ -68,9 +67,9 @@ function keyName(key: unknown): string {
 }
 
 /**
- * Put scalar arrays and small edge/repo maps on one line — `priority: [now]`
- * rather than a three-line block. A card's frontmatter is read far more often
- * than it is written.
+ * Put scalar arrays and small repo maps on one line — `priority: [now]` rather
+ * than a three-line block. A card's frontmatter is read far more often than it
+ * is written.
  */
 function applyFlow(doc: Document): void {
   visit(doc, {

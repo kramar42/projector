@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { facetRank, orderValues } from '../schema/facets.ts';
 import type { Facets, Rec } from '../schema/types.ts';
-import { adjacency, walk } from './refs.ts';
+import { adjacency, refsOf, walk } from './refs.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -228,11 +228,9 @@ function valuesOf(rec: Rec, facet: string, ctx: Ctx): string[] {
 
 function buildCtx(records: Map<string, Rec>, today: string): Ctx {
   const blocked = new Set<string>();
-  for (const rec of records.values()) {
-    const done = rec.facets.status?.includes('done') ?? false;
-    if (done) continue;
+  for (const { src, dst } of refsOf('blocks', records)) {
     // `src blocks dst`, so an unfinished record blocks each of its targets.
-    for (const e of rec.edges) if (e.type === 'blocks' && records.has(e.to)) blocked.add(e.to);
+    if (!records.get(src)?.facets.status?.includes('done')) blocked.add(dst);
   }
   return { records, blocked, today };
 }
@@ -245,8 +243,8 @@ function buildCtx(records: Map<string, Rec>, today: string): Ctx {
  * `both` is the union of two separate walks, not one walk over both directions —
  * the latter would drag in every sibling's subtree and stop being a focus.
  */
-export function focused(focus: Focus, records: Map<string, Rec>, facets: Facets): Set<string> {
-  const adj = adjacency(focus.via, records, facets);
+export function focused(focus: Focus, records: Map<string, Rec>): Set<string> {
+  const adj = adjacency(focus.via, records);
   if (focus.dir === 'out') return walk(focus.id, adj.out, focus.depth);
   if (focus.dir === 'in') return walk(focus.id, adj.in, focus.depth);
   const both = walk(focus.id, adj.out, focus.depth);
@@ -451,7 +449,7 @@ export function runQuery(
   // Focus and full text bound the universe; the facet filter refines inside it.
   // Both are outside the histogram's disjunction on purpose — lifting them per
   // facet would make counts describe a set nobody asked for.
-  const scope = query.focus ? focused(query.focus, records, facets) : null;
+  const scope = query.focus ? focused(query.focus, records) : null;
   const text = query.q ? ftsIds(db, query.q) : null;
 
   const universe: Rec[] = [];
@@ -467,7 +465,7 @@ export function runQuery(
 
   const context: string[] = [];
   if (query.connect === 'ancestors') {
-    const { out: up } = adjacency('parent', records, facets);
+    const { out: up } = adjacency('parent', records);
     const have = new Set(ids);
     for (const id of ids) {
       // Ancestors only, and drawn as context: a filtered graph that renders as
@@ -583,16 +581,12 @@ export interface Rollup {
  * Transitive membership is the `project` walk, which is the same traversal the
  * focus control uses — not a second notion of hierarchy.
  */
-export function projectRollups(
-  records: Map<string, Rec>,
-  facets: Facets,
-  today: string,
-): Record<string, Rollup> {
+export function projectRollups(records: Map<string, Rec>, today: string): Record<string, Rollup> {
   const ctx = buildCtx(records, today);
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;
-    const reach = focused({ id: rec.id, via: 'project', dir: 'in' }, records, facets);
+    const reach = focused({ id: rec.id, via: 'project', dir: 'in' }, records);
     reach.delete(rec.id); // a project is not a member of itself
 
     let blocked = 0;

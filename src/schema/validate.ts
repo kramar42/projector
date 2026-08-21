@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { isKnownKind } from './links.ts';
-import { EDGE_TYPES, type Facets, type Issue, type Rec } from './types.ts';
-import { isProject, kindOf, parentsOf } from '../index/project.ts';
+import type { Facets, Issue, Rec } from './types.ts';
+import { isProject, kindOf } from '../index/project.ts';
+import { wouldCycle } from '../index/refs.ts';
 import { resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
 
@@ -65,22 +66,24 @@ export function validate(
           `"${facet}" holds one value at a time, and this has ${values.length}: ${values.join(', ')}`,
         );
       }
+      // A reference facet's values are record ids. A value that resolves to
+      // nothing is a warning rather than an error — an agent may write a card
+      // before the one it points at exists.
+      if (def.ref) {
+        for (const v of values) {
+          if (v === rec.id) at(`facets.${facet}`, `"${facet}" points at its own record`);
+          else if (!records.has(v)) {
+            at(`facets.${facet}`, `"${facet}" names "${v}", which is not a record`, 'warning');
+          } else if (wouldCycle(rec.id, v, (cur) => records.get(cur)?.facets[facet] ?? [])) {
+            at(`facets.${facet}`, `"${facet}" forms a cycle through "${v}"`);
+          }
+        }
+      }
     }
 
     // --- due ---
     if (rec.due !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(rec.due)) {
       at('due', `due must be YYYY-MM-DD, not "${rec.due}"`);
-    }
-
-    // --- edges ---
-    for (const e of rec.edges) {
-      if (!(EDGE_TYPES as readonly string[]).includes(e.type)) {
-        at('edges', `unknown edge type "${e.type}"`);
-      }
-      if (e.to === rec.id) at('edges', `edge points at itself`);
-      else if (!records.has(e.to)) {
-        at('edges', `edge target "${e.to}" does not resolve to any record`, 'warning');
-      }
     }
 
     // --- links ---
@@ -103,8 +106,6 @@ export function validate(
       }
     }
 
-    // --- cycles ---
-    if (hasCycle(rec.id, records)) at('edges', 'parent edges form a cycle');
   }
 
   // A card with no project groups under (none) and inherits nothing. Note this
@@ -143,22 +144,6 @@ export function validate(
   }
 
   return issues;
-}
-
-function hasCycle(start: string, records: Map<string, Rec>): boolean {
-  const seen = new Set<string>();
-  const stack = [start];
-  let first = true;
-  while (stack.length) {
-    const cur = stack.pop()!;
-    if (!first && cur === start) return true;
-    first = false;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    const rec = records.get(cur);
-    if (rec) stack.push(...parentsOf(rec));
-  }
-  return false;
 }
 
 export function formatIssues(issues: Issue[], dataRoot: string): string {

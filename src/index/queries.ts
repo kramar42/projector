@@ -7,7 +7,8 @@ import type { Facets } from '../schema/types.ts';
  *
  * Filtering, grouping and counting all run in memory over the record map — see
  * `src/index/query.ts` for why. What is left here is the two jobs SQLite is
- * genuinely better at: full text, and the recursive `blocks` closure.
+ * genuinely better at: full text, and the recursive `blocks` closure. Both read
+ * the `facets` table, since a relation is a facet value like any other.
  */
 export interface Row {
   id: string;
@@ -55,15 +56,15 @@ export function valuesFor(db: DatabaseSync, recordId: string, facet: string): st
   ).map((r) => r.value);
 }
 
-/** Ids that block `id`: sources of a `blocks` edge pointing at it. */
+/** Ids that block `id`: records naming it in their `blocks` facet. */
 export function blockersOf(db: DatabaseSync, id: string): { id: string; title: string; done: boolean }[] {
   const rows = db
     .prepare(
       `SELECT r.id, r.title,
               EXISTS (SELECT 1 FROM facets f
                       WHERE f.record_id = r.id AND f.facet = 'status' AND f.value = 'done') AS done
-       FROM edges e JOIN records r ON r.id = e.src
-       WHERE e.dst = ? AND e.type = 'blocks'`,
+       FROM facets b JOIN records r ON r.id = b.record_id
+       WHERE b.facet = 'blocks' AND b.value = ?`,
     )
     .all(id) as unknown as { id: string; title: string; done: number }[];
   return rows.map((r) => ({ id: r.id, title: r.title, done: r.done === 1 }));
@@ -79,8 +80,8 @@ export function unblocks(db: DatabaseSync, id: string, maxDepth = 10): { id: str
       `WITH RECURSIVE chain(n, depth) AS (
          SELECT ?, 0
          UNION
-         SELECT e.dst, c.depth + 1 FROM edges e JOIN chain c ON e.src = c.n
-         WHERE e.type = 'blocks' AND c.depth < ?
+         SELECT b.value, c.depth + 1 FROM facets b JOIN chain c ON b.record_id = c.n
+         WHERE b.facet = 'blocks' AND c.depth < ?
        )
        SELECT n AS id, depth FROM chain WHERE depth > 0 ORDER BY depth, n`,
     )
@@ -133,7 +134,10 @@ export function counts(db: DatabaseSync): Record<string, number> {
     cards: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'card'"),
     nodes: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'node'"),
     projects: one('SELECT count(*) AS n FROM records WHERE is_project = 1'),
-    edges: one('SELECT count(*) AS n FROM edges'),
+    // Relations are facet values, so there is no separate table to count.
+    relations: one(
+      "SELECT count(*) AS n FROM facets WHERE facet IN ('parent', 'blocks', 'project')",
+    ),
     links: one('SELECT count(*) AS n FROM links'),
     facetValues: one('SELECT count(*) AS n FROM facets'),
   };

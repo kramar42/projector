@@ -26,8 +26,10 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
    `project: [project-d, mapping]` means the card belongs to both and inherits the repos and instructions
    of both. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
    under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
-3. **`parent` edges mean decomposition** — "this card is part of that one". They are what the canvas
-   draws and they carry no config. Independent of `project`: a card may have either, both or neither.
+3. **`parent` is a reference facet too** — "this card is part of that one". Single-valued, drawn by the
+   canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
+   are independent, so a card may have either, both or neither. Set it with `--parent X`, which is
+   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers `ck next`.
 4. **`kind` is an ordinary facet too** — `[card]` for work, `[node]` for scaffolding. Nothing about it
    is special: set it with `--facet kind=node` like any other axis. There is no top-level `kind:` key.
 5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
@@ -43,6 +45,8 @@ ck context <id> --json       # same, machine-readable
 ck show <id>                 # compact
 ck ls --group project        # or any facet
 ck ls --focus project-a --via project --dir in    # the whole portfolio, transitively
+ck ls --focus project-a --via parent --dir in     # everything decomposed under it
+ck ls --group parent                        # or filter parent=X, or parent=(none)
                                             # out = follows references, in = referenced by
 ck ls --filter status=active,planning
 ck next                      # open cards with no unfinished blocker

@@ -136,7 +136,7 @@ export function CanvasView({
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [newEdgeType, setNewEdgeType] = useState<'parent' | 'blocks'>('parent');
+  const [newEdgeType, setNewEdgeType] = useState('parent');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [naming, setNaming] = useState(false);
@@ -224,28 +224,36 @@ export function CanvasView({
     }
   };
 
-  /** Dragging between handles creates an edge of the currently selected type. */
+  /**
+   * Dragging between handles adds a value to the selected relation.
+   *
+   * A relation is a reference facet, so this is an ordinary facet write — the
+   * same call the card panel and the bulk bar make. A hierarchy is drawn
+   * container → member, so the value lands on the *target* record and points
+   * back at the source; `single: true` on the facet is what makes a second
+   * parent replace the first rather than stack on it.
+   */
   const onConnect = useCallback(
     (c: Connection) => {
       if (!c.source || !c.target) return;
-      // Drawn parent → child, so a new parent edge is written onto the *target*
-      // record, pointing back at the source.
-      const owner = newEdgeType === 'parent' ? c.target : c.source;
-      const to = newEdgeType === 'parent' ? c.source : c.target;
+      const hierarchy = meta.facets[newEdgeType]?.single === true;
+      const owner = hierarchy ? c.target : c.source;
+      const to = hierarchy ? c.source : c.target;
       if (owner === to) return;
       setProblem(null);
-      const existing = data.edges
-        .filter((e) => e.src === owner && e.type !== 'project')
-        .map((e) => ({ type: e.type, to: e.dst }));
-      if (existing.some((e) => e.type === newEdgeType && e.to === to)) return;
-      // One parent is the norm: replace rather than stack a second one.
-      const kept = newEdgeType === 'parent' ? existing.filter((e) => e.type !== 'parent') : existing;
+      const current = data.cards[owner]?.facets[newEdgeType] ?? [];
+      if (current.includes(to)) return;
       api
-        .setEdges(owner, [...kept, { type: newEdgeType, to }])
+        .patchCard(owner, {
+          facets: {
+            ...data.cards[owner]?.facets,
+            [newEdgeType]: meta.facets[newEdgeType]?.single ? [to] : [...current, to],
+          },
+        })
         .then(() => reload())
         .catch((e: ApiError) => setProblem(e.message));
     },
-    [data.edges, newEdgeType, reload],
+    [data.cards, meta.facets, newEdgeType, reload],
   );
 
   const addNode = async () => {
@@ -327,12 +335,12 @@ export function CanvasView({
 
           <label className="edgepick">
             drag creates
-            <select
-              value={newEdgeType}
-              onChange={(e) => setNewEdgeType(e.target.value as 'parent' | 'blocks')}
-            >
-              <option value="parent">parent</option>
-              <option value="blocks">blocks</option>
+            <select value={newEdgeType} onChange={(e) => setNewEdgeType(e.target.value)}>
+              {relations(meta).map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
           </label>
 

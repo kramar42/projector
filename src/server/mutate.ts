@@ -9,7 +9,8 @@ import { loadFacets } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
-import { EDGE_TYPES, type Edge, type EdgeType, type Rec } from '../schema/types.ts';
+import type { Rec } from '../schema/types.ts';
+import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
 
 /**
@@ -190,7 +191,9 @@ export function createCard(
     }
   }
   const id = uniqueId(slugify(title), new Set(records.keys()));
-  const facets = input.facets ?? {};
+  // `parent` is a reference facet, so a caller's `parent` is one more facet
+  // value rather than a separate structure.
+  const facets = { ...(input.facets ?? {}), ...(input.parent ? { parent: [input.parent] } : {}) };
   if (Object.keys(facets).length) checkFacets(root, id, facets, records);
   if (input.due) checkDue(input.due);
 
@@ -198,7 +201,6 @@ export function createCard(
     id,
     title,
     facets,
-    edges: input.parent ? [{ type: 'parent', to: input.parent }] : [],
     links: (input.links ?? []).map(parseLink),
     source_fingerprint: input.fingerprint,
     due: input.due,
@@ -211,22 +213,31 @@ export function createCard(
 }
 
 /**
- * Delete a card file, and drop every edge that pointed at it so the graph does
- * not keep dangling references. The files are in git, so this is recoverable.
+ * Delete a card file, and drop every reference that pointed at it so the graph
+ * does not keep dangling values. The files are in git, so this is recoverable.
  */
 export function deleteCard(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
   const p = paths(root);
   const { records } = readAll(p.cards);
+  const refFacets = Object.entries(loadDefs(p.facets))
+    .filter(([, def]) => def.ref)
+    .map(([name]) => name);
   let removedEdges = 0;
 
   for (const rec of records.values()) {
     if (rec.id === id) continue;
-    const kept = rec.edges.filter((e) => e.to !== id);
-    if (kept.length !== rec.edges.length) {
-      removedEdges += rec.edges.length - kept.length;
-      patchAll(rec.file, { edges: kept.length ? kept : undefined });
+    const facets = { ...rec.facets };
+    let touched = false;
+    for (const name of refFacets) {
+      const kept = (facets[name] ?? []).filter((v) => v !== id);
+      if (kept.length === (facets[name] ?? []).length) continue;
+      removedEdges += (facets[name] ?? []).length - kept.length;
+      touched = true;
+      if (kept.length) facets[name] = kept;
+      else delete facets[name];
     }
+    if (touched) patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
   }
 
   rmSync(file);
@@ -234,34 +245,6 @@ export function deleteCard(root: string, id: string): { removedEdges: number } {
   const assets = join(p.assets, id);
   if (existsSync(assets)) rmSync(assets, { recursive: true });
   return { removedEdges };
-}
-
-export function setEdges(
-  root: string,
-  id: string,
-  edges: Edge[],
-  baseMtime?: number,
-): { mtime: number } {
-  const file = fileFor(root, id);
-  guard(file, baseMtime);
-  const { records } = readAll(paths(root).cards);
-
-  for (const e of edges) {
-    if (!(EDGE_TYPES as readonly string[]).includes(e.type)) throw new Invalid(`unknown edge type "${e.type}"`);
-    if (e.to === id) throw new Invalid('a record cannot point at itself');
-    if (!records.has(e.to)) throw new Invalid(`edge target "${e.to}" does not exist`);
-  }
-
-  // A parent edge that would create a cycle is refused: the project chain and
-  // every tree layout assume the parent graph is acyclic.
-  for (const e of edges.filter((x) => x.type === 'parent')) {
-    if (wouldCycle(id, e.to, parentsIn(records as never))) {
-      throw new Invalid(`"${e.to}" is already beneath "${id}" — that would make a cycle`);
-    }
-  }
-
-  patchAll(file, { edges: edges.length ? edges : undefined });
-  return { mtime: mtimeOf(file) };
 }
 
 /**
@@ -313,23 +296,6 @@ export function bulkFacet(
     else delete facets[facet];
     checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
-    changed++;
-  }
-  return { changed };
-}
-
-/** Re-parent many records at once — the way a card gets a project. */
-export function bulkParent(root: string, ids: string[], parent: string | null): { changed: number } {
-  const { records } = readAll(paths(root).cards);
-  if (parent && !records.has(parent)) throw new Invalid(`parent "${parent}" does not exist`);
-  let changed = 0;
-  for (const id of ids) {
-    const rec = records.get(id);
-    if (!rec || id === parent) continue;
-    if (parent && wouldCycle(id, parent, parentsIn(records as never))) continue;
-    const others = rec.edges.filter((e) => e.type !== 'parent');
-    const next: Edge[] = parent ? [...others, { type: 'parent' as EdgeType, to: parent }] : others;
-    patchAll(rec.file, { edges: next.length ? next : undefined });
     changed++;
   }
   return { changed };
@@ -403,14 +369,15 @@ export function putFrontmatter(
   checkFacets(root, id, facets, records);
   if (typeof check.data.due === 'string') checkDue(check.data.due);
 
+  // Self-reference and cycles are already refused by `checkFacets`; a value
+  // naming a record that does not exist yet is only a warning, because an agent
+  // may write a card before the one it points at.
   const warnings: string[] = [];
-  for (const e of check.data.edges ?? []) {
-    if (!records.has(e.to)) warnings.push(`edge target "${e.to}" does not exist yet`);
-    if (e.to === id) throw new Invalid('an edge cannot point at its own record');
-  }
-  for (const e of (check.data.edges ?? []).filter((x) => x.type === 'parent')) {
-    if (wouldCycle(id, e.to, parentsIn(records as never))) {
-      throw new Invalid(`parent "${e.to}" is already beneath "${id}" — that would make a cycle`);
+  const defs = loadDefs(paths(root).facets);
+  for (const [name, values] of Object.entries(facets)) {
+    if (!defs[name]?.ref) continue;
+    for (const v of values) {
+      if (!records.has(v)) warnings.push(`"${name}" names "${v}", which is not a record yet`);
     }
   }
 

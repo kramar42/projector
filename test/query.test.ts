@@ -51,24 +51,21 @@ updated: 2026-08-01
   'project-a-eventing': `---
 id: project-a-eventing
 title: Eventing
-facets: { kind: [node] }
-edges: [{ type: parent, to: project-a }]
+facets: { kind: [node], parent: [project-a] }
 updated: 2026-07-01
 ---
 `,
   'kafka-schema': `---
 id: kafka-schema
 title: Glue schema registry
-facets: { kind: [card], project: [project-a], priority: [now], status: [planning], tech: [kafka] }
-edges: [{ type: parent, to: project-a-eventing }]
+facets: { kind: [card], project: [project-a], priority: [now], status: [planning], tech: [kafka], parent: [project-a-eventing] }
 updated: 2026-08-20
 ---
 `,
   blocker: `---
 id: blocker
 title: Must land first
-facets: { kind: [card], status: [active], priority: [now] }
-edges: [{ type: blocks, to: blocked-card }]
+facets: { kind: [card], status: [active], priority: [now], blocks: [blocked-card] }
 updated: 2026-08-20
 ---
 `,
@@ -90,6 +87,8 @@ updated: 2026-01-01
 
 const FACETS = `
 kind:       { label: Kind,     values: [card, node], open: false, single: true }
+parent:     { label: Part of,  ref: true, single: true }
+blocks:     { label: Blocks,   ref: true }
 priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
 status:     { label: Status,   values: [planning, active, done], open: false, single: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
@@ -203,12 +202,12 @@ test('a done blocker stops blocking', () => {
   }
 });
 
-test('focus walks edges transitively, in the direction asked for', () => {
+test('focus walks references transitively, in the direction asked for', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
     const facets = loadFacets(join(root, 'facets.yaml'));
-    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records, facets)].sort();
+    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records)].sort();
 
     // Includes the focus itself: "this subtree" contains its own root.
     assert.deepEqual(set({ id: 'project-a', via: 'parent', dir: 'in' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
@@ -232,7 +231,7 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
     // From the middle of the chain: its own container and its own member, and
     // not `project-a` — which a walk over undirected edges would reach through project-b.
     const facets = loadFacets(join(root, 'facets.yaml'));
-    assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, records, facets)].sort(), [
+    assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, records)].sort(), [
       'project-b',
       'kc-realms',
       'keycloak',
@@ -242,7 +241,7 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
   }
 });
 
-test('a reference facet yields the same pairs an edge would, without storing them', () => {
+test('membership is read from the facet, never stored as a relation of its own', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
@@ -252,9 +251,10 @@ test('a reference facet yields the same pairs an edge would, without storing the
         .sort(),
       ['blocked-card->project-a', 'kafka-schema->project-a', 'kc-realms->keycloak', 'keycloak->project-b'],
     );
-    // Nothing was written: the cards carry a facet, not an edge.
+    // There is no relation storage to check against: a record has facets and
+    // links, and that is all. `edges` is not a field any more.
     for (const rec of records.values()) {
-      assert.ok(!rec.edges.some((e) => (e.type as string) === 'member-of'));
+      assert.ok(!('edges' in rec));
     }
   } finally {
     cleanup();
@@ -604,8 +604,7 @@ updated: 2026-08-19
   blocker: `---
 id: gate
 title: Gate
-facets: { kind: [card], status: [active] }
-edges: [{ type: blocks, to: someday }]
+facets: { kind: [card], status: [active], blocks: [someday] }
 updated: 2026-08-19
 ---
 `,
@@ -682,15 +681,15 @@ test('kind is an ordinary facet, not a computed axis', () => {
 
 // ---------------------------------------------------------------- references
 
-test('a reference facet is read from the facets, an edge from the edges', () => {
+test('every relation is read the same way, so nothing knows which is which', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
     const facets = loadFacets(join(root, 'facets.yaml'));
-    // Both mechanisms yield `src names dst` pairs, and nothing downstream can
-    // tell which held them — which is what makes the P7 step 2 swap invisible.
-    const project = adjacency('project', records, facets);
-    const parent = adjacency('parent', records, facets);
+    // One reader, so `parent` and `project` are indistinguishable to everything
+    // downstream — focus, the canvas, the roll-ups, config inheritance.
+    const project = adjacency('project', records);
+    const parent = adjacency('parent', records);
     assert.deepEqual(project.out.get('keycloak'), ['project-b']);
     assert.deepEqual(parent.out.get('project-a-eventing'), ['project-a']);
     assert.deepEqual(project.in.get('project-b'), ['keycloak']);
@@ -713,7 +712,7 @@ test('a value naming a record that does not exist is not a reference', () => {
     // It stays a facet value — it filters and groups — it simply has nothing to
     // walk to. `ck check` is what reports it.
     assert.deepEqual(records.get('orphan')!.facets.project, ['gone']);
-    assert.equal(adjacency('project', records, facets).out.get('orphan'), undefined);
+    assert.equal(adjacency('project', records).out.get('orphan'), undefined);
     assert.deepEqual(ids(root, { filter: { project: ['gone'] } }), ['orphan']);
   } finally {
     cleanup();
@@ -730,6 +729,38 @@ test('a reference facet declares no vocabulary of its own', () => {
     assert.equal(def.ref, true);
     assert.equal(def.open, true);
     assert.deepEqual(def.values, []);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a relation groups a board and reaches (none), like any other facet', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ groupBy: ['parent'], uncategorised: 'end' });
+    const byValue = Object.fromEntries((res.groups ?? []).map((g) => [g.value, g.ids.length]));
+    // None of this was possible while relations lived in an `edges` block:
+    // filtering, grouping and absence all arrive because it is a facet.
+    assert.equal(byValue.project-a, 1);
+    assert.equal(byValue['project-a-eventing'], 1);
+    assert.ok(byValue[NONE]! > 0);
+    assert.deepEqual(ids(root, { filter: { parent: ['project-a'] } }), ['project-a-eventing']);
+    assert.ok(ids(root, { filter: { parent: [NONE] } }).includes('project-a'));
+  } finally {
+    cleanup();
+  }
+});
+
+test('the blocked axis reads the blocks facet, and a done blocker stops blocking', () => {
+  const { root, cleanup } = vault();
+  try {
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
+    writeFileSync(
+      join(root, 'cards', 'blocker.md'),
+      CARDS.blocker!.replace('status: [active]', 'status: [done]'),
+      'utf8',
+    );
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), []);
   } finally {
     cleanup();
   }

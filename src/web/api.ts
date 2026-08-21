@@ -86,9 +86,6 @@ export const api = {
   deleteCard: (id: string) =>
     req<{ removedEdges: number }>('DELETE', `/api/card/${encodeURIComponent(id)}`),
 
-  setEdges: (id: string, edges: { type: string; to: string }[], baseMtime?: number) =>
-    req<{ mtime: number }>('PUT', `/api/card/${encodeURIComponent(id)}/edges`, { edges, baseMtime }),
-
   bulk: (input: {
     ids: string[];
     op: 'facet' | 'parent' | 'delete';

@@ -54,7 +54,6 @@ export function reindex(dataRoot: string): IndexResult {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insFacet = db.prepare('INSERT OR IGNORE INTO facets (record_id, facet, value) VALUES (?, ?, ?)');
-  const insEdge = db.prepare('INSERT OR IGNORE INTO edges (src, dst, type) VALUES (?, ?, ?)');
   const insLink = db.prepare('INSERT INTO links (record_id, kind, ref, raw) VALUES (?, ?, ?, ?)');
   const insFts = db.prepare('INSERT INTO fts (id, title, body) VALUES (?, ?, ?)');
 
@@ -74,7 +73,6 @@ export function reindex(dataRoot: string): IndexResult {
     for (const [facet, values] of Object.entries(rec.facets)) {
       for (const v of values) insFacet.run(rec.id, facet, v);
     }
-    for (const e of rec.edges) insEdge.run(rec.id, e.to, e.type);
     for (const l of rec.links) insLink.run(rec.id, l.kind, l.ref, l.raw);
     insFts.run(rec.id, rec.title, rec.body);
   }

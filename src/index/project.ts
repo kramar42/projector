@@ -1,4 +1,4 @@
-import type { Facets, Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
+import type { Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
 import { resolvePath } from '../config.ts';
 import { adjacency, chains } from './refs.ts';
 
@@ -14,9 +14,9 @@ export function kindOf(rec: Pick<Rec, 'facets'>): Kind {
   return rec.facets.kind?.[0] === 'node' ? 'node' : 'card';
 }
 
-/** Parent ids of a record, in declaration order. A record may have several. */
-export function parentsOf(rec: Rec): string[] {
-  return rec.edges.filter((e) => e.type === 'parent').map((e) => e.to);
+/** What a record is part of. An ordinary reference facet, read by name. */
+export function parentsOf(rec: Pick<Rec, 'facets'>): string[] {
+  return rec.facets.parent ?? [];
 }
 
 /** The `## Instructions` section of a body, or '' when absent. */
@@ -80,7 +80,6 @@ export function projectsOf(rec: Rec): string[] {
 export function resolveProject(
   id: string,
   byId: Map<string, Rec>,
-  facets: Facets,
   dataRoot: string,
 ): ResolvedProject | null {
   const rec = byId.get(id);
@@ -89,7 +88,7 @@ export function resolveProject(
   // The membership chains this record sits on, walked through the same
   // adjacency the focus control uses — so the config chain and the portfolio
   // canvas can never disagree about who belongs to whom.
-  const adj = adjacency('project', byId, facets);
+  const adj = adjacency('project', byId);
   // A project record is its own innermost context, so it starts from itself;
   // anything else starts from the projects it names.
   const starts = rec.project ? [rec.id] : (rec.facets.project ?? []).filter((k) => byId.has(k));

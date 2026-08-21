@@ -139,21 +139,17 @@ export const SHAPES: { value: Shape; label: string }[] = [
 
 export const DIRS = ['out', 'in', 'both'] as const;
 
-/** Edge types, while `parent` and `blocks` are still edges rather than references. */
-const EDGE_TYPES = ['parent', 'blocks'] as const;
-
 /**
- * Every relation a focus can walk and a canvas can draw.
+ * Every relation a focus can walk and a canvas can draw: the reference facets.
  *
- * Reference facets come from the vocabulary rather than a list here, so
- * declaring one in `facets.yaml` is all it takes for it to appear in both
- * controls — there is no second place naming the relations that exist.
+ * Read from the vocabulary rather than a list here, so declaring one in
+ * `facets.yaml` is all it takes for it to appear in every control — there is no
+ * second place naming the relations that exist.
  */
 export function relations(meta: Meta): string[] {
-  const refs = Object.entries(meta.facets)
+  return Object.entries(meta.facets)
     .filter(([, def]) => def.ref)
     .map(([name]) => name);
-  return [...EDGE_TYPES, ...refs];
 }
 
 /** A one-line reading of the query, for the sidebar footer and the page title. */

@@ -27,12 +27,6 @@ CREATE TABLE facets (
   value     TEXT NOT NULL,
   PRIMARY KEY (record_id, facet, value)
 );
-CREATE TABLE edges (
-  src  TEXT NOT NULL,
-  dst  TEXT NOT NULL,
-  type TEXT NOT NULL,
-  PRIMARY KEY (src, dst, type)
-);
 CREATE TABLE links (
   record_id TEXT NOT NULL,
   kind      TEXT NOT NULL,
@@ -49,7 +43,6 @@ CREATE TABLE cache (
 );
 CREATE INDEX idx_facets_lookup ON facets(facet, value);
 CREATE INDEX idx_records_due ON records(due);
-CREATE INDEX idx_edges_dst ON edges(dst, type);
 CREATE INDEX idx_links_record ON links(record_id);
 CREATE VIRTUAL TABLE fts USING fts5(id UNINDEXED, title, body, tokenize='porter unicode61');
 `;

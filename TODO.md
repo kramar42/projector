@@ -1,15 +1,16 @@
 
-## P6 — remaining
+## P7 — remaining
 
-- **Membership cycles are unrefused.** `setEdges` refuses a `parent` cycle, but a `project` facet
-  naming a record that transitively belongs back is accepted. `resolveProject` has a trail guard so it
-  degrades rather than hangs — it silently truncates the config chain instead of saying so. Fixed by
-  P7 step 1.
-- **`connect: ancestors` walks `parent` unconditionally** (`query.ts`), even when the canvas is drawing
-  `member-of`. So a portfolio canvas pulls in context from a different tree than the one it renders.
-  Fixed by P7, which moves `connect` to the shape and points it at the layout facet.
-- **Validator warning when a project record's `parent` edge and `project` facet disagree.** Moot once
-  both are reference facets and the question is whether `parent` exists at all — see Open questions.
+Steps 1 and 2 shipped: relations are reference facets, `edges:` and the `edges` table are gone. See
+[P7.md](P7.md) for steps 3–5 — `kind` out, `chips`+`edges` → `show`, `connect` onto the shape, the
+three CLI gaps, and the `linked` axis.
+
+- **`connect: ancestors` still walks `parent` unconditionally** (`query.ts`), even when the canvas
+  draws `project`. So a portfolio canvas pulls context from a different tree than the one it renders.
+  P7 step 3 moves `connect` to the shape and points it at the layout relation.
+- **`parent` is now `single: true`.** Nothing had ever created a second parent — every gesture replaced
+  — and no record carried one, so this states what was already true. Flip the flag if a card genuinely
+  needs to be part of two things.
 - canvas clustering by groupBy. A node has one position, so a card multi-valued on the grouped facet
   cannot be in two clusters: assign by first declared value and say so in the sidebar. Accepted-and-
   ignored until then, so switching shape never drops the parameter.
