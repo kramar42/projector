@@ -8,6 +8,7 @@ import { reindex } from '../src/index/indexer.ts';
 import { commitWatermark, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, fromWorkspacePath, ftsQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { candidateCount, channelNames, renderSweep, sweep } from '../src/intake/run.ts';
+import { touchedButIdle } from '../src/intake/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { workspacePath } from '../src/agent/worktree.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
@@ -264,6 +265,21 @@ test('a branch named after a card matches it, at any path segment', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ------------------------------------------------------- mtime is not activity
+
+test('a transcript whose file was touched but had no activity is not new work', () => {
+  const since = new Date('2026-08-14T00:00:00Z');
+  // Found by mtime, rejected by the transcript: something rewrote a batch of
+  // month-old transcripts in three seconds, and 13 of 30 candidates in the
+  // first real sweep were finished sessions resurfacing.
+  assert.equal(touchedButIdle('2026-08-04T13:50:00Z', since), true);
+  assert.equal(touchedButIdle('2026-08-19T10:32:00Z', since), false);
+  // No timestamp in the file at all: mtime is the only evidence there is, so it
+  // stands rather than being second-guessed.
+  assert.equal(touchedButIdle(undefined, since), false);
+  assert.equal(touchedButIdle('not a date', since), false);
 });
 
 // ------------------------------------------------------------------ FTS safety

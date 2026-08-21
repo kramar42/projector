@@ -24,6 +24,18 @@ import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
  */
 const MIN_TURNS = 3;
 
+/**
+ * Whether a transcript's mtime is lying about activity.
+ *
+ * Its own function so the rule is testable without a home directory: the channel
+ * reads the real `~/.claude`, which a unit test has no business constructing.
+ */
+export function touchedButIdle(lastAt: string | undefined, since: Date): boolean {
+  if (!lastAt) return false;
+  const t = Date.parse(lastAt);
+  return Number.isFinite(t) && t < since.getTime();
+}
+
 export const claudeChannel: Channel = {
   name: 'claude',
   defaultDays: 7,
@@ -62,6 +74,24 @@ export const claudeChannel: Channel = {
       }
 
       const sum = summarise(t.file);
+
+      // mtime found it; the transcript decides whether anything happened.
+      //
+      // Discovery has to be mtime — it runs over every transcript there has
+      // ever been and must not open any of them — but a file's mtime moves for
+      // reasons that are not activity: something rewrote 8 of these in three
+      // seconds on one afternoon, resurfacing sessions finished a month
+      // earlier. The survivors are parsed anyway, so the real last timestamp is
+      // already in hand and costs nothing to believe over the filesystem's.
+      if (touchedButIdle(sum.lastAt, ctx.since)) {
+        skipped.push({
+          fingerprint,
+          title: sum.opening || t.uuid.slice(0, 8),
+          why: `file touched ${t.modifiedAt.slice(0, 10)}, but no activity since ${sum.lastAt?.slice(0, 10)}`,
+        });
+        continue;
+      }
+
       if (sum.turns < MIN_TURNS) {
         skipped.push({
           fingerprint,
