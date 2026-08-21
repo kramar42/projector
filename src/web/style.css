@@ -148,6 +148,11 @@ body {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   height: 100%;
+  transition: grid-template-columns 140ms ease;
+}
+
+.shell.sidebar-is-collapsed {
+  grid-template-columns: 38px minmax(0, 1fr);
 }
 
 /* The sidebar *is* the view: sections grouped by purpose, and exactly one of
@@ -169,6 +174,69 @@ body {
   padding: 10px 10px;
   border-bottom: 1px solid var(--rule);
   flex: none;
+}
+
+.sidebar-vault-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sidebar-vault-row .vaultbtn {
+  flex: 1;
+}
+
+.sidebar-toggle {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-3);
+  font: 16px/1 var(--mono);
+  cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  border-color: var(--rule);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.sidebar-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sidebar-collapsed {
+  align-items: center;
+  gap: 12px;
+  padding-top: 9px;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+  width: 24px;
+  height: 24px;
+}
+
+.sidebar-ribbon-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: var(--ink-3);
+  font: 9px/1.15 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-ribbon-icon {
+  color: var(--accent);
+  font-size: 12px;
 }
 
 .rail-stats {
@@ -193,6 +261,26 @@ body {
   color: var(--ink-3);
   width: 62px;
   flex: none;
+}
+
+.rail-label-control {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 62px;
+  flex: none;
+}
+
+.rail-label-control .rail-label {
+  width: auto;
+  flex: none;
+}
+
+.sort-direction {
+  padding: 0;
+  width: 14px;
+  color: var(--ink-2);
+  font-size: 14px;
 }
 
 .rail-select {
@@ -227,6 +315,16 @@ body {
   color: var(--warn);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 !important;
+  color: var(--warn);
+  font-size: 12px !important;
 }
 
 .rail-focus {
@@ -515,9 +613,10 @@ body {
 }
 
 .facet-caret {
-  font-size: 8px;
+  font-size: 13px;
+  line-height: 1;
   color: var(--ink-3);
-  width: 8px;
+  width: 12px;
   flex: none;
 }
 
@@ -1882,7 +1981,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 0 12px 12px;
 }
 
 .table {

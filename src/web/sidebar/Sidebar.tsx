@@ -35,6 +35,8 @@ export function Sidebar({
   onSwitchVault,
   onAddVault,
   onOpenCard,
+  collapsed,
+  onToggleCollapsed,
 }: {
   meta: Meta;
   data: QueryResponse | null;
@@ -45,14 +47,53 @@ export function Sidebar({
   onSwitchVault: (path: string) => void;
   onAddVault: () => void;
   onOpenCard: (id: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   const spec = data?.spec;
   const saved = Boolean(spec?.name);
 
+  if (collapsed) {
+    return (
+      <nav className="sidebar sidebar-collapsed" aria-label="Collapsed sidebar">
+        <button
+          className="sidebar-toggle"
+          type="button"
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+          onClick={onToggleCollapsed}
+        >
+          »
+        </button>
+        <div className="sidebar-ribbon-info" title={`${meta.vaultName}: ${meta.counts.records} records`}>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">▣</span>
+          <span>{meta.counts.records}</span>
+        </div>
+        {data && (
+          <div className="sidebar-ribbon-info" title={`${data.total} records shown`}>
+            <span className="sidebar-ribbon-icon" aria-hidden="true">◉</span>
+            <span>{data.total}</span>
+          </div>
+        )}
+      </nav>
+    );
+  }
+
   return (
     <nav className="sidebar">
       <div className="rail-block">
-        <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
+        <div className="sidebar-vault-row">
+          <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
+          <button
+            className="sidebar-toggle"
+            type="button"
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            onClick={onToggleCollapsed}
+          >
+            «
+          </button>
+        </div>
         <div className="rail-stats">
           {meta.counts.records} records · {meta.counts.projects} projects
         </div>
@@ -174,21 +215,23 @@ function SavedViews({
           )}
         />
         {modified && (
-          <span className="rail-dirty">
-            modified
+          <span className="rail-dirty" title="This saved view has unsaved changes">
+            <span aria-label="Modified">*</span>
             <button
-              className="btn ghost tiny"
+              className="btn ghost tiny icon-button"
               title="write these changes into the saved view — its layout and card order are kept"
+              aria-label="Save changes to this view"
               onClick={() => void save(current!.name!, current!.title)}
             >
-              save
+              ✓
             </button>
             <button
-              className="btn ghost tiny"
+              className="btn ghost tiny icon-button"
               title="discard the overrides and go back to the saved view"
+              aria-label="Revert changes to this view"
               onClick={() => patch(blankQuery(params, current?.name ?? null))}
             >
-              revert
+              ↶
             </button>
           </span>
         )}
@@ -351,7 +394,19 @@ function SortRow({
         : '';
   return (
     <div className="rail-row" title={note}>
-      <label className="rail-label">Sort</label>
+      <div className="rail-label-control">
+        <label className="rail-label">Sort</label>
+        {key && (
+          <button
+            className="btn ghost tiny sort-direction"
+            title={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
+            aria-label={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
+            onClick={() => patch({ sort: `${key}:${dir === 'asc' ? 'desc' : 'asc'}` })}
+          >
+            {dir === 'asc' ? '↑' : '↓'}
+          </button>
+        )}
+      </div>
       <select
         className="rail-select"
         value={key}
@@ -367,14 +422,6 @@ function SortRow({
           </option>
         ))}
       </select>
-      {key && (
-        <button
-          className="btn ghost tiny"
-          onClick={() => patch({ sort: `${key}:${dir === 'asc' ? 'desc' : 'asc'}` })}
-        >
-          {dir === 'asc' ? '↑' : '↓'}
-        </button>
-      )}
     </div>
   );
 }

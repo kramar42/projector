@@ -24,6 +24,7 @@ import type { Meta, QueryResponse } from './types.ts';
 export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // No vault chosen, or the server rejected the one we named: ask.
   const [gate, setGate] = useState<{ reason?: string } | null>(
     currentVault() ? null : { reason: undefined },
@@ -152,7 +153,7 @@ export function App() {
 
   return (
     <EnrichmentProvider>
-      <div className="shell">
+      <div className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
         <Sidebar
           meta={meta}
           data={data}
@@ -162,6 +163,8 @@ export function App() {
           onSwitchVault={switchVault}
           onAddVault={() => setAddingVault(true)}
           onOpenCard={setOpenCard}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
         <main className="main">{content}</main>
         {openCard && (
