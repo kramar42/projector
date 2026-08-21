@@ -167,7 +167,11 @@ export function initVault(
   }
   const ignore = join(path, '.gitignore');
   if (!existsSync(ignore)) {
-    writeFileSync(ignore, '.index.db\n.index.db-*\n.enrich.db\n.enrich.db-*\n*.tmp-*\n.DS_Store\n', 'utf8');
+    writeFileSync(
+      ignore,
+      '.index.db\n.index.db-*\n.enrich.db\n.enrich.db-*\n.intake.db\n.intake.db-*\n*.tmp-*\n.DS_Store\n',
+      'utf8',
+    );
   }
 }
 

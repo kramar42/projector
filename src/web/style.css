@@ -278,15 +278,22 @@ body {
   flex: none;
 }
 
-.sort-direction {
+/* Outranks `.btn.tiny` (which is declared later in this file) so the padding
+   reset lands: with the inherited 6px side padding the content box was 2px wide
+   and the arrow drew outside its own hover box. */
+.rail-label-control .btn.sort-direction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   margin-left: auto;
   margin-right: 3px;
   padding: 0;
-  width: 16px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   color: var(--ink-2);
-  font-size: 15px !important;
-  line-height: 1 !important;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .rail-select {

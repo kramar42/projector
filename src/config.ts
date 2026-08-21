@@ -26,6 +26,7 @@ export const paths = (root: string) => ({
   views: join(root, 'views'),
   db: join(root, '.index.db'),
   enrichDb: join(root, '.enrich.db'),
+  intakeDb: join(root, '.intake.db'),
 });
 
 /**

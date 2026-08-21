@@ -71,6 +71,43 @@ export async function jiraGet<T>(
   }
 }
 
+/**
+ * The fields both consumers read, and the shape they come back in.
+ *
+ * Here rather than in `enrich/jira.ts` because it describes what a Jira issue
+ * *is*, not how one looks on a card — and because intake asking enrichment for
+ * the type would be the two importing each other, which is the thing this split
+ * exists to prevent.
+ */
+export const ISSUE_FIELDS = 'summary,status,issuetype,priority,assignee,updated,parent';
+
+export interface IssueJson {
+  key: string;
+  fields: {
+    summary?: string;
+    status?: { name?: string; statusCategory?: { key?: string } };
+    issuetype?: { name?: string };
+    priority?: { name?: string };
+    assignee?: { displayName?: string };
+    updated?: string;
+    parent?: { key?: string; fields?: { summary?: string } };
+  };
+}
+
+/**
+ * A JQL date literal. Jira reads it in the *account's* timezone, so this formats
+ * local time: an ISO string with a Z would silently shift the window by the
+ * offset, which on a cursor means either re-proposing or skipping an hour of
+ * issues every sweep.
+ */
+export function jqlDate(when: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ` +
+    `${pad(when.getHours())}:${pad(when.getMinutes())}`
+  );
+}
+
 /** The base of a browse URL, for links. Null when unconfigured. */
 export function jiraBrowse(key: string): string | null {
   const cfg = jiraConfig();

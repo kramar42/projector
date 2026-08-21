@@ -1,4 +1,4 @@
-import { jiraBrowse, jiraGet } from '../sources/jira.ts';
+import { ISSUE_FIELDS, jiraBrowse, jiraGet, type IssueJson } from '../sources/jira.ts';
 import { ago } from '../sources/run.ts';
 import { unavailable, type Enrichment, type Fetcher, type Tone } from './types.ts';
 
@@ -35,21 +35,6 @@ export function statusTone(name: string, category: string | undefined): Tone {
       return 'neutral';
   }
 }
-
-export interface IssueJson {
-  key: string;
-  fields: {
-    summary?: string;
-    status?: { name?: string; statusCategory?: { key?: string } };
-    issuetype?: { name?: string };
-    priority?: { name?: string };
-    assignee?: { displayName?: string };
-    updated?: string;
-    parent?: { key?: string; fields?: { summary?: string } };
-  };
-}
-
-export const ISSUE_FIELDS = 'summary,status,issuetype,priority,assignee,updated,parent';
 
 export const jiraFetcher: Fetcher = {
   ttl: 900,
