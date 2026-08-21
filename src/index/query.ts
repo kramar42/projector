@@ -2,7 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { bucketOf, compareValues, daysBetween, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
-import { adjacency, nodesIn, refsOf, walk } from './refs.ts';
+import { adjacency, nodesIn, walk } from './refs.ts';
+import { blockedSet } from './blocking.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -100,7 +101,6 @@ export interface QueryResult {
 // ---------------------------------------------------------------- pseudo-facets
 
 interface Ctx {
-  records: Map<string, Rec>;
   /** Records named by another record through any declared reference facet. */
   nodes: Set<string>;
   /** Records with at least one blocker that is not done. */
@@ -240,12 +240,7 @@ function rawOf(rec: Rec, facet: string): string[] {
 }
 
 function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx {
-  const blocked = new Set<string>();
-  for (const { src, dst } of refsOf('blocks', records)) {
-    // `src blocks dst`, so an unfinished record blocks each of its targets.
-    if (!records.get(src)?.facets.status?.includes('done')) blocked.add(dst);
-  }
-  return { records, nodes: nodesIn(records, facets), blocked, facets, today };
+  return { nodes: nodesIn(records, facets), blocked: blockedSet(records), facets, today };
 }
 
 // ---------------------------------------------------------------- traversal

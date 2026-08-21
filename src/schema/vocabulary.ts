@@ -1,3 +1,5 @@
+import type { FacetDef } from './types.ts';
+
 /**
  * The wire primitives — the handful of values that a URL, a `views/*.yaml` file,
  * `pj` flags and the browser all have to agree on.
@@ -10,8 +12,20 @@
  * 183 lines of types by hand. A constant that three tiers must share belongs
  * below all three.
  *
- * Nothing here reads a file or touches a database. That is the whole point.
+ * Nothing here reads a file or touches a database. That is the whole point — which
+ * is also why the two predicates about a facet's *type* live here rather than in
+ * `facets.ts`, whose one job that needs `node:fs` is loading the file.
  */
+
+/** A reference facet holds record ids: it is a relation, and it can be walked. */
+export function isRef(def: FacetDef | undefined): boolean {
+  return def?.type === 'ref';
+}
+
+/** An ordered facet compares its values rather than matching them. */
+export function isOrdered(def: FacetDef | undefined): boolean {
+  return def?.type === 'date' || def?.type === 'number';
+}
 
 /**
  * The absence refinement, as it travels.

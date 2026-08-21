@@ -22,9 +22,10 @@ import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf } from '../index/project.ts';
-import { blockersOf, unblocks } from '../index/queries.ts';
+import { blockedBy, unblocks } from '../index/blocking.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
+import type { DragMode } from '../view/dropOutcome.ts';
 import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
 import { countChildren, queryPayload } from '../view/payload.ts';
 import { toDTO } from '../view/dto.ts';
@@ -33,6 +34,7 @@ import {
   Invalid,
   bulkDelete,
   bulkFacet,
+  bulkMove,
   createCard,
   deleteCard,
   fileFor,
@@ -258,7 +260,7 @@ app.get('/api/query', (c) => {
 
 app.get('/api/card/:id', (c) => {
   const root = vaultOf(c);
-  const { db, records, facets } = load(root);
+  const { records, facets } = load(root);
   const rec = records.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
   const project = resolveProject(rec.id, records, root);
@@ -266,8 +268,8 @@ app.get('/api/card/:id', (c) => {
     card: toDTO(rec, {
       facets,
       childCount: countChildren(records, rec.id),
-      blockedBy: blockersOf(db, rec.id),
-      unblocks: unblocks(db, rec.id).map((u) => u.id),
+      blockedBy: blockedBy(rec.id, records),
+      unblocks: unblocks(rec.id, records),
     }),
     file: relative(root, rec.file),
     // The client sends this back on a write; a mismatch means an agent or an
@@ -347,15 +349,24 @@ app.post('/api/bulk', async (c) => {
   try {
     const b = (await c.req.json()) as {
       ids: string[];
-      op: 'facet' | 'parent' | 'delete';
+      op: 'facet' | 'move' | 'parent' | 'delete';
       facet?: string;
       values?: string[];
       mode?: 'set' | 'add' | 'remove';
+      /** `move` only: the drag's endpoints, from which each card's values follow. */
+      from?: string;
+      to?: string;
+      dragMode?: DragMode;
       parent?: string | null;
     };
     const ids = b.ids ?? [];
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
+    // A drag, one card at a time: the values are per record, so only the endpoints
+    // travel and `nextValues` runs here.
+    else if (b.op === 'move') {
+      res = bulkMove(root, ids, b.facet!, b.from ?? '', b.to ?? '', b.dragMode ?? 'replace');
+    }
     else if (b.op === 'parent') {
       // Kept as a named op because the board's bulk bar has a "set parent"
       // button, but it is an ordinary facet write underneath.

@@ -19,6 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { relations } from '../query.ts';
+import { connectOutcome } from '../../view/dropOutcome.ts';
 import {
   CONTEXT_BAND,
   assignClusters,
@@ -287,24 +288,34 @@ export function CanvasView({
   const onConnect = useCallback(
     (c: Connection) => {
       if (!c.source || !c.target) return;
-      const hierarchy = meta.facets[newRelation]?.single === true;
-      const owner = hierarchy ? c.target : c.source;
-      const to = hierarchy ? c.source : c.target;
-      if (owner === to) return;
+      const intent = connectOutcome({
+        source: c.source,
+        target: c.target,
+        relation: newRelation,
+        facets: meta.facets,
+        // The server's answer to "which relation is the hierarchy", which is why it
+        // is in the payload at all. This used to re-derive it from `single`.
+        layout: data.layout,
+        valuesOf: (id) => data.cards[id]?.facets[newRelation] ?? [],
+      });
+      if (intent.kind !== 'facet') return;
       setProblem(null);
-      const current = data.cards[owner]?.facets[newRelation] ?? [];
-      if (current.includes(to)) return;
+      // The same targeted write the board uses: only this facet, and the values
+      // computed per record. The old call spread the whole facet map from a
+      // possibly-stale payload, so an unrelated change could be reverted.
       api
-        .patchCard(owner, {
-          facets: {
-            ...data.cards[owner]?.facets,
-            [newRelation]: meta.facets[newRelation]?.single ? [to] : [...current, to],
-          },
+        .bulk({
+          ids: intent.ids,
+          op: 'move',
+          facet: intent.facet,
+          from: intent.from,
+          to: intent.to,
+          dragMode: intent.mode,
         })
         .then(() => reload())
         .catch((e: ApiError) => setProblem(e.message));
     },
-    [data.cards, meta.facets, newRelation, reload],
+    [data.cards, data.layout, meta.facets, newRelation, reload],
   );
 
   const addRecord = async () => {

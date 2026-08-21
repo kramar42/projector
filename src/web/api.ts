@@ -1,3 +1,4 @@
+import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
 import type { CardDetail, Meta, QueryResponse, Resolved } from './types.ts';
 
@@ -88,9 +89,12 @@ export const api = {
 
   bulk: (input: {
     ids: string[];
-    op: 'facet' | 'parent' | 'delete';
+    op: 'facet' | 'move' | 'parent' | 'delete';
     facet?: string;
     values?: string[];
+    from?: string;
+    to?: string;
+    dragMode?: DragMode;
     mode?: 'set' | 'add' | 'remove';
     parent?: string | null;
   }) => req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input),

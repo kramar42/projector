@@ -6,7 +6,8 @@ import { CardBody } from '../components/CardBody.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import type { CardDTO, Group, QueryResponse } from '../types.ts';
 
-import { NONE, modeFor, nextValues } from './dragSemantics.ts';
+import { NONE } from '../../schema/vocabulary.ts';
+import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { applyOrder } from '../query.ts';
 
@@ -84,74 +85,76 @@ export function BoardView({
     [viewName, reload],
   );
 
+  /**
+   * A facet move, however many cards it applies to.
+   *
+   * There is no branch on cardinality any more. There used to be: the single-card
+   * path computed `nextValues` and the bulk path re-derived uniform values inline,
+   * so shift-dragging `now`→`month` removed `now` for one card and `month` for
+   * two. The endpoints travel and the server applies the one transform per card.
+   */
   const move = useCallback(
-    async (cardId: string, from: string, to: string, mode: 'replace' | 'add' | 'remove') => {
-      const card = cards[cardId];
-      if (!card || !groupBy) return;
-      const ids = selected.has(cardId) ? [...selected] : [cardId];
+    async (intent: FacetIntent) => {
       setProblem(null);
-      const next = nextValues(card.facets[groupBy] ?? [], from, to, mode);
       try {
-        if (ids.length > 1) {
-          await api.bulk({
-            ids,
-            op: 'facet',
-            facet: groupBy,
-            values: to === NONE ? [] : [to],
-            mode: mode === 'add' ? 'add' : mode === 'remove' ? 'remove' : 'set',
-          });
-        } else {
-          await api.patchCard(cardId, { facets: { ...card.facets, [groupBy]: next } });
-        }
+        await api.bulk({
+          ids: intent.ids,
+          op: 'move',
+          facet: intent.facet,
+          from: intent.from,
+          to: intent.to,
+          dragMode: intent.mode,
+        });
         reload();
       } catch (err) {
         setProblem((err as ApiError).message);
       }
     },
-    [cards, groupBy, selected, reload],
+    [reload],
   );
 
-  // One monitor for the whole board: it reads the modifier keys off the drop, and
-  // the innermost drop target says whether a position was aimed at.
+  // One monitor for the whole board. It reads the pointer and the modifier keys,
+  // asks `dropOutcome` what that means, and does what it is told — the decision
+  // itself is a pure function with tests, which is what it was not.
   useEffect(() => {
     return monitorForElements({
       onDragStart: ({ source }) => setDragging(String(source.data.cardId ?? '')),
       onDrop: ({ source, location }) => {
         setDragging(null);
         const targets = location.current.dropTargets;
-        const onCard = targets.find((t) => t.data.cardId !== undefined);
+        const onCardTarget = targets.find((t) => t.data.cardId !== undefined);
         const onColumn = targets.find((t) => t.data.column !== undefined);
-        if (!onColumn) return;
-        const cardId = String(source.data.cardId ?? '');
-        const from = String(source.data.column ?? '');
-        const to = String(onColumn.data.column ?? '');
-        if (!cardId || !to) return;
+        const column = onColumn ? String(onColumn.data.column ?? '') : null;
 
-        // Dropped onto a card: aim for that slot. Above or below is decided by
-        // which half of the tile the pointer is in — no separate hitbox package
-        // needed for one comparison.
-        let at: number | null = null;
-        if (onCard && onCard.data.cardId !== cardId) {
-          const rect = onCard.element.getBoundingClientRect();
-          const below = location.current.input.clientY > rect.top + rect.height / 2;
-          at = Number(onCard.data.index ?? 0) + (below ? 1 : 0);
+        // Above or below is which half of the tile the pointer is in — one
+        // comparison, and the only geometry the decision needs.
+        let onCard: { id: string; index: number; below: boolean } | null = null;
+        if (onCardTarget) {
+          const rect = onCardTarget.element.getBoundingClientRect();
+          onCard = {
+            id: String(onCardTarget.data.cardId ?? ''),
+            index: Number(onCardTarget.data.index ?? 0),
+            below: location.current.input.clientY > rect.top + rect.height / 2,
+          };
         }
 
-        if (to === from) {
-          // Within a column, a drag means order and nothing else. Without a
-          // saved view there is nowhere to put it, so it is a no-op.
-          if (at === null || !viewName) return;
-          const current = orderedFor(to);
-          const cut = current.indexOf(cardId);
-          const without = current.filter((id) => id !== cardId);
-          const index = cut !== -1 && cut < at ? at - 1 : at;
-          void reorder(to, [...without.slice(0, index), cardId, ...without.slice(index)]);
-          return;
-        }
-        void move(cardId, from, to, modeFor(location.current.input));
+        const intent = dropOutcome({
+          cardId: String(source.data.cardId ?? ''),
+          from: String(source.data.column ?? ''),
+          to: column,
+          onCard,
+          groupBy,
+          mode: modeFor(location.current.input),
+          selected,
+          order: column ? orderedFor(column) : [],
+          viewName,
+        });
+
+        if (intent.kind === 'reorder') void reorder(intent.column, intent.ids);
+        else if (intent.kind === 'facet') void move(intent);
       },
     });
-  }, [move, reorder, orderedFor, viewName]);
+  }, [move, reorder, orderedFor, viewName, groupBy, selected]);
 
   const toggleSelect = (id: string, additive: boolean) =>
     setSelected((prev) => {
@@ -188,6 +191,7 @@ export function BoardView({
                 <Column
                   key={`${lane ?? ''}/${g.value}`}
                   group={g}
+                  order={orderedFor(g.value)}
                   cards={cards}
                   chips={data.spec.show}
                   selected={selected}
@@ -237,6 +241,7 @@ export function BoardView({
 
 function Column({
   group,
+  order,
   cards,
   chips,
   selected,
@@ -250,6 +255,8 @@ function Column({
   onCreated,
 }: {
   group: Group;
+  /** The column's stored order, across lanes — what a reorder rewrites. */
+  order: string[];
   cards: Record<string, CardDTO>;
   chips: string[];
   selected: Set<string>;
@@ -332,7 +339,7 @@ function Column({
             />
           </div>
         )}
-        {group.ids.map((id, index) => {
+        {group.ids.map((id) => {
           const card = cards[id];
           if (!card) return null;
           return (
@@ -340,7 +347,11 @@ function Column({
               key={id}
               card={card}
               column={value}
-              index={index}
+              // The index into the column's *stored* order, not into this cell.
+              // Under a secondary axis the cell is a subset of it, and a reorder
+              // writes the stored list — so a cell-local index landed the card
+              // somewhere else.
+              index={order.indexOf(id)}
               chips={chips}
               draggableTile={Boolean(groupBy)}
               orderable={orderable}

@@ -13,6 +13,7 @@ import { viewFileFor } from './views.ts';
 import type { Rec } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../schema/slug.ts';
+import { nextValues, type DragMode } from '../view/dropOutcome.ts';
 
 /**
  * Every write in the app funnels through this module.
@@ -276,6 +277,51 @@ function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): 
     stack.push(...outOf(cur));
   }
   return false;
+}
+
+/**
+ * Move records along a facet, one card at a time.
+ *
+ * Distinct from `bulkFacet` because the two are different operations that happen
+ * to write the same field. "Make these twelve cards say `now`" is uniform, and
+ * that is what `bulkFacet` does. "Move these twelve from `now` to `month`, keeping
+ * whatever else each of them says" is *per card* — every card's answer depends on
+ * its own values, and a uniform `values` array cannot express one.
+ *
+ * The board used to compute the single-card answer with `nextValues` and then
+ * throw it away whenever more than one card was selected, sending uniform values
+ * instead. So the same gesture produced different results by selection count:
+ * shift-dragging `now`→`month` removed `now` for one card and `month` for two.
+ * One transform, applied here, is what makes that unrepresentable.
+ *
+ * It also writes only the named facet, so a value an agent changed since the
+ * client's last read cannot be reverted — which the old whole-map replacement did
+ * silently, with no conflict to report.
+ */
+export function bulkMove(
+  root: string,
+  ids: string[],
+  facet: string,
+  from: string,
+  to: string,
+  mode: DragMode,
+): { changed: number } {
+  const { records } = readAll(paths(root).cards);
+  let changed = 0;
+  for (const id of ids) {
+    const rec = records.get(id);
+    if (!rec) continue;
+    const current = rec.facets[facet] ?? [];
+    const next = nextValues(current, from, to, mode);
+    if (same(current, next)) continue;
+    const facets = { ...rec.facets };
+    if (next.length) facets[facet] = next;
+    else delete facets[facet];
+    checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
+    patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
+    changed++;
+  }
+  return { changed };
 }
 
 /** Set one facet's values on many records at once. */

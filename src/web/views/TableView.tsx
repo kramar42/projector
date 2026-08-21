@@ -1,6 +1,6 @@
 import { FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import { NONE } from './dragSemantics.ts';
+import { NONE } from '../../schema/vocabulary.ts';
 import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
 
 /**

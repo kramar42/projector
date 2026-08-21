@@ -1,18 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import type { FacetDef, FacetType, Facets } from './types.ts';
+export { isOrdered, isRef } from './vocabulary.ts';
 
 const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
 
-/** A reference facet holds record ids, so it is traversable as well as filterable. */
-export function isRef(def: FacetDef | undefined): boolean {
-  return def?.type === 'ref';
-}
 
-/** An ordered facet compares its values rather than matching them. */
-export function isOrdered(def: FacetDef | undefined): boolean {
-  return def?.type === 'date' || def?.type === 'number';
-}
 
 /**
  * Load the facet vocabulary. This file is the single place column order lives —

@@ -400,7 +400,14 @@ export function CardPanel({
                   cardId={card.id}
                   value={card.body}
                   onDirtyChange={setDirty}
-                  onSave={(body) => api.patchCard(card.id, { body }).then(() => reload())}
+                  // Through `run` and carrying `baseMtime`, like every other write
+                  // here. It was neither: the largest edit in the app had no
+                  // conflict check and no error banner, while ARCHITECTURE says the
+                  // gate exists precisely because an agent may be editing the same
+                  // card at the same time (C3).
+                  onSave={(body) =>
+                    run('body', () => api.patchCard(card.id, { body, baseMtime: data.mtime }))
+                  }
                 />
               )}
             </section>

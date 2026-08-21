@@ -16,7 +16,15 @@ import { execFileSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { SEED_FACETS, SEED_VIEWS } from '../src/server/seed.ts';
 import type { Rec } from '../src/schema/types.ts';
-import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
+import { NONE } from '../src/schema/vocabulary.ts';
+import {
+  connectOutcome,
+  dropOutcome,
+  modeFor,
+  nextValues,
+  type DragMode,
+} from '../src/view/dropOutcome.ts';
+import { blockedBy, blockedSet, unblocks } from '../src/index/blocking.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
 import type { CardDTO } from '../src/web/types.ts';
 import { ago, firstLine } from '../src/sources/run.ts';
@@ -1054,4 +1062,186 @@ test('linking bumps updated, and unlinking an absent ref refuses', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * The gesture that meant two things.
+ *
+ * The board computed `nextValues` for one card and then threw it away whenever
+ * more than one was selected, sending uniform values to the bulk endpoint
+ * instead. Three of four gestures diverged and one *inverted*: shift-dragging
+ * `now`→`month` took `now` off a single card and `month` off a batch. There is no
+ * cardinality branch to test any more, so this asserts the property instead — the
+ * intent carries endpoints, and one transform answers for every card.
+ */
+test('a drop means the same thing however many cards are selected', () => {
+  const both = ['now', 'month'];
+  const cases: [string, string, DragMode, string[]][] = [
+    ['now', 'month', 'remove', ['month']],
+    ['now', 'backlog', 'replace', ['month', 'backlog']],
+    ['now', NONE, 'replace', ['month']],
+    ['now', 'month', 'add', both],
+  ];
+  for (const [from, to, mode, want] of cases) {
+    const intent = dropOutcome({
+      cardId: 'a',
+      from,
+      to,
+      onCard: null,
+      groupBy: 'priority',
+      mode,
+      selected: new Set(['a', 'b', 'c']),
+      order: [],
+      viewName: 'home',
+    });
+    assert.equal(intent.kind, 'facet');
+    assert.ok(intent.kind === 'facet');
+    // The endpoints travel, never the values — which is what makes one card and
+    // twelve the same request.
+    assert.deepEqual({ from: intent.from, to: intent.to, mode: intent.mode }, { from, to, mode });
+    assert.deepEqual(intent.ids, ['a', 'b', 'c'], 'a selected card drags the selection');
+    // And every one of them resolves through the same transform.
+    for (const id of intent.ids) {
+      assert.deepEqual(nextValues(both, intent.from, intent.to, intent.mode), want, `${id}: ${mode}`);
+    }
+  }
+});
+
+test('dragging an unselected card moves only that card', () => {
+  const intent = dropOutcome({
+    cardId: 'z',
+    from: 'now',
+    to: 'month',
+    onCard: null,
+    groupBy: 'priority',
+    mode: 'replace',
+    selected: new Set(['a', 'b']),
+    order: [],
+    viewName: 'home',
+  });
+  assert.ok(intent.kind === 'facet');
+  assert.deepEqual(intent.ids, ['z']);
+});
+
+/**
+ * A reorder splices into the column's stored order, and the index it is given has
+ * to be an index into that same list. It used to be the position within one
+ * lane's cell, which is a subset of the column once a secondary axis is in play —
+ * so a matrix reorder wrote the card somewhere else. With no lanes the two
+ * coincide, which is why it went unnoticed.
+ */
+test('a reorder lands where the pointer aimed, across lanes', () => {
+  const order = ['a', 'b', 'c', 'd'];
+  const at = (index: number, below: boolean) => {
+    const intent = dropOutcome({
+      cardId: 'd',
+      from: 'now',
+      to: 'now',
+      onCard: { id: order[index]!, index, below },
+      groupBy: 'priority',
+      mode: 'replace',
+      selected: new Set(),
+      order,
+      viewName: 'home',
+    });
+    assert.ok(intent.kind === 'reorder');
+    return intent.ids;
+  };
+  assert.deepEqual(at(0, false), ['d', 'a', 'b', 'c'], 'above the first');
+  assert.deepEqual(at(0, true), ['a', 'd', 'b', 'c'], 'below the first');
+  assert.deepEqual(at(1, true), ['a', 'b', 'd', 'c'], 'below the second');
+});
+
+test('a drop with nowhere to put an order says so instead of vanishing', () => {
+  const intent = dropOutcome({
+    cardId: 'a',
+    from: 'now',
+    to: 'now',
+    onCard: { id: 'b', index: 1, below: false },
+    groupBy: 'priority',
+    mode: 'replace',
+    selected: new Set(),
+    order: ['a', 'b'],
+    viewName: undefined,
+  });
+  assert.deepEqual(intent, {
+    kind: 'none',
+    why: 'order has nowhere to live without a saved view',
+  });
+});
+
+/** A single-valued relation moves rather than stacking; a multi-valued one adds. */
+test('connecting two nodes moves a hierarchy edge and adds an ordinary one', () => {
+  const facets = loadFacets(
+    facetsFile('parent: { type: ref, single: true }\nblocks: { type: ref }\n'),
+  );
+  const valuesOf = (id: string) => (id === 'child' ? ['oldparent'] : []);
+
+  // `parent` is the layout relation and single: dragging parent→child writes the
+  // child, taking the parent it already had off.
+  const up = connectOutcome({
+    source: 'newparent',
+    target: 'child',
+    relation: 'parent',
+    facets,
+    layout: 'parent',
+    valuesOf,
+  });
+  assert.ok(up.kind === 'facet');
+  assert.deepEqual(up.ids, ['child']);
+  assert.deepEqual(nextValues(['oldparent'], up.from, up.to, up.mode), ['newparent']);
+
+  // `blocks` is multi-valued: the source owns it and the value is added.
+  const across = connectOutcome({
+    source: 'a',
+    target: 'b',
+    relation: 'blocks',
+    facets,
+    layout: 'parent',
+    valuesOf: () => ['c'],
+  });
+  assert.ok(across.kind === 'facet');
+  assert.deepEqual(across.ids, ['a']);
+  assert.deepEqual(nextValues(['c'], across.from, across.to, across.mode), ['c', 'b']);
+
+  // A relation that is not a reference facet cannot be drawn, so nothing happens.
+  const bogus = connectOutcome({
+    source: 'a',
+    target: 'b',
+    relation: 'priority',
+    facets,
+    layout: null,
+    valuesOf: () => [],
+  });
+  assert.equal(bogus.kind, 'none');
+});
+
+/**
+ * The self-blocking card that read `clear` on the axis while its own DTO said it
+ * blocked itself, ten times over — the SQL closure applied neither of the two
+ * rules `refsOf` applies, and was depth-capped at 10.
+ */
+test('a self-reference and a dangling one are dropped by every blocks answer', () => {
+  const records = new Map(
+    [
+      recordOf('---\nid: loop\ntitle: Loops\nfacets: { blocks: [loop], status: [planning] }\n---\n'),
+      recordOf('---\nid: ghost\ntitle: Ghost\nfacets: { blocks: [nowhere], status: [planning] }\n---\n'),
+      recordOf('---\nid: real\ntitle: Real\nfacets: { blocks: [target], status: [planning] }\n---\n'),
+      recordOf('---\nid: target\ntitle: Target\nfacets: { status: [planning] }\n---\n'),
+      recordOf('---\nid: fin\ntitle: Finished\nfacets: { blocks: [target], status: [done] }\n---\n'),
+    ].map((r) => [r.id, r]),
+  );
+
+  assert.deepEqual(unblocks('loop', records), [], 'a self-loop unblocks nothing, and terminates');
+  assert.deepEqual(blockedBy('loop', records), [], 'and is blocked by nothing');
+  assert.deepEqual(unblocks('ghost', records), [], 'a value naming no record is not a target');
+  assert.deepEqual(unblocks('real', records), ['target']);
+
+  // A finished blocker stops blocking; an unfinished one does not.
+  assert.deepEqual(
+    blockedBy('target', records).map((b) => [b.id, b.done]).sort(),
+    [['fin', true], ['real', false]],
+  );
+  assert.ok(blockedSet(records).has('target'), 'one unfinished blocker is enough');
+  assert.ok(!blockedSet(records).has('loop'), 'and a self-reference is not one');
 });

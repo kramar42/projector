@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Facets, Rec } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
 import { parentsOf } from '../index/project.ts';
-import { blockersOf, unblocks } from '../index/queries.ts';
+import { blockedBy, unblocks } from '../index/blocking.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
 import { refsOf } from '../index/refs.ts';
 import type { ViewSpec } from './spec.ts';
@@ -90,8 +90,8 @@ export function queryPayload(
       facets,
       today,
       childCount: countChildren(records, id),
-      blockedBy: blockersOf(db, id),
-      unblocks: unblocks(db, id).map((u) => u.id),
+      blockedBy: blockedBy(id, records),
+      unblocks: unblocks(id, records),
     });
   }
 

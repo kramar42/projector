@@ -14,37 +14,7 @@ export interface Row {
   updated: string | null;
 }
 
-/** Ids that block `id`: records naming it in their `blocks` facet. */
-export function blockersOf(db: DatabaseSync, id: string): { id: string; title: string; done: boolean }[] {
-  const rows = db
-    .prepare(
-      `SELECT r.id, r.title,
-              EXISTS (SELECT 1 FROM facets f
-                      WHERE f.record_id = r.id AND f.facet = 'status' AND f.value = 'done') AS done
-       FROM facets b JOIN records r ON r.id = b.record_id
-       WHERE b.facet = 'blocks' AND b.value = ?`,
-    )
-    .all(id) as unknown as { id: string; title: string; done: number }[];
-  return rows.map((r) => ({ id: r.id, title: r.title, done: r.done === 1 }));
-}
 
-/**
- * Transitive `blocks` closure downstream of `id` — what finishing this unblocks.
- * Depth-capped, so a cycle in the graph cannot hang the query.
- */
-export function unblocks(db: DatabaseSync, id: string, maxDepth = 10): { id: string; depth: number }[] {
-  return db
-    .prepare(
-      `WITH RECURSIVE chain(n, depth) AS (
-         SELECT ?, 0
-         UNION
-         SELECT b.value, c.depth + 1 FROM facets b JOIN chain c ON b.record_id = c.n
-         WHERE b.facet = 'blocks' AND c.depth < ?
-       )
-       SELECT n AS id, depth FROM chain WHERE depth > 0 ORDER BY depth, n`,
-    )
-    .all(id, maxDepth) as unknown as { id: string; depth: number }[];
-}
 
 /**
  * Records matching an FTS query, most relevant first.
