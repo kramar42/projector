@@ -3,7 +3,7 @@ import { NONE } from '../../schema/vocabulary.ts';
 import { labelFor } from '../views/groups.ts';
 import { toggleFilterValue } from '../../view/intents.ts';
 import type { FacetCount } from '../types.ts';
-import type { Edit } from './Sidebar.tsx';
+import type { Edit } from '../types.ts';
 
 /**
  * The facet panel.

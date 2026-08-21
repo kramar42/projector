@@ -85,6 +85,18 @@ export function CardPanel({
     }
   };
 
+  /**
+   * Commit the title edit. One body, called from Enter and from the button — it
+   * was written out at both, which is two chances for one decision to drift.
+   */
+  const rename = () => {
+    const next = editTitle;
+    setEditTitle(null);
+    if (next !== null) {
+      void run('renaming', () => api.patchCard(card!.id, { title: next, baseMtime: data!.mtime }));
+    }
+  };
+
   const card = data?.card;
 
   return (
@@ -115,25 +127,12 @@ export function CardPanel({
                     if (e.key === 'Escape') setEditTitle(null);
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      const next = editTitle;
-                      setEditTitle(null);
-                      void run('renaming', () =>
-                        api.patchCard(card.id, { title: next, baseMtime: data!.mtime }),
-                      );
+                      rename();
                     }
                   }}
                 />
                 <div className="titleedit-bar">
-                  <Button
-                    tone="primary" size="small"
-                    onClick={() => {
-                      const next = editTitle;
-                      setEditTitle(null);
-                      void run('renaming', () =>
-                        api.patchCard(card.id, { title: next, baseMtime: data!.mtime }),
-                      );
-                    }}
-                  >
+                  <Button tone="primary" size="small" onClick={rename}>
                     Rename
                   </Button>
                   <Button tone="ghost" size="small" onClick={() => setEditTitle(null)}>

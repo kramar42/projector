@@ -27,6 +27,7 @@ export type { Resolved } from '../server/enrich.ts';
 import type { CardDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
 import type { QueryPayload } from '../view/payload.ts';
+import type { ViewSpec as Spec } from '../view/spec.ts';
 
 /**
  * The query response, as the client sees it.
@@ -35,6 +36,13 @@ import type { QueryPayload } from '../view/payload.ts';
  * opinion about what it contains.
  */
 export type QueryResponse = QueryPayload;
+
+/**
+ * A control names what it wants of the spec; `App` turns the result into the URL
+ * overrides that carry it. Here rather than in the sidebar because the sidebar is
+ * several files now and they would otherwise import each other in a circle.
+ */
+export type Edit = (fn: (spec: Spec) => Spec, replace?: boolean) => void;
 
 /** One card and everything the panel needs around it — `GET /api/card/:id`. */
 export interface CardDetail {

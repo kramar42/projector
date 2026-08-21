@@ -32,6 +32,7 @@ import {
 import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse, Meta } from '../types.ts';
 import { Button } from '../components/Button.tsx';
+import { CommitInput } from '../components/CommitInput.tsx';
 
 /**
  * A canvas node hosts the same `<CardBody>` every other shape renders. That is
@@ -394,9 +395,11 @@ export function CanvasView({
             </Button>
           )}
           {naming && (
-            <SaveAs
+            <CommitInput
+              placeholder="view name"
+              wrapper={{ tag: 'span', className: 'saveas' }}
               onCancel={() => setNaming(false)}
-              onSave={(title) => {
+              onCommit={(title) => {
                 setNaming(false);
                 void savePositions(title, title);
               }}
@@ -419,24 +422,4 @@ export function CanvasView({
  * meant a third implementation of it, and it also slugged the *title*, so
  * "Project A Portfolio" was saved as `project-a-portfolio`.
  */
-function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: string) => void }) {
-  const [text, setText] = useState('');
-  return (
-    <span className="saveas">
-      <input
-        autoFocus
-        value={text}
-        placeholder="view name"
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') onCancel();
-          if (e.key === 'Enter' && text.trim()) onSave(text.trim());
-        }}
-      />
-      <Button tone="primary" size="small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
-        Save
-      </Button>
-    </span>
-  );
-}
 
