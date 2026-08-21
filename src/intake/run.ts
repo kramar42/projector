@@ -100,6 +100,22 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
   return { reports, unknown };
 }
 
+/**
+ * Which cards already carry each of these fingerprints or links.
+ *
+ * The fetched channels dedupe themselves, but Slack and Gmail are fetched by an
+ * agent through MCP — so without this the one channel pair that cannot check
+ * would be the one guessing. `ck add --fingerprint` refuses a duplicate anyway;
+ * this is what lets a proposal be honest before it gets that far.
+ */
+export function known(root: string, refs: string[]): { ref: string; cards: string[] }[] {
+  const vault = readVault(root);
+  return refs.map((ref) => ({
+    ref,
+    cards: [...new Set([...(vault.fingerprints.get(ref) ?? []), ...(vault.links.get(ref) ?? [])])],
+  }));
+}
+
 /** Total candidates across a sweep, which is what "anything to look at" means. */
 export function candidateCount(s: Sweep): number {
   return s.reports.reduce((n, r) => n + r.candidates.length, 0);

@@ -25,6 +25,7 @@ import {
   channelNames,
   commitWatermark,
   DEFAULT_LIMIT,
+  known,
   renderStatus,
   renderSweep,
   sweep,
@@ -92,7 +93,8 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   ck intake status                                     per channel: cursor, last run, counts
   ck intake commit --channel c [--cursor v]
      [--seen n] [--captured n]                         move a channel's cursor, after a sweep is resolved
-  ck intake reset [--channel c]                         forget a cursor, back to the default window
+  ck intake known <fingerprint>...                     which cards already carry these refs
+  ck intake reset [--channel c]                        forget a cursor, back to the default window
 
   ck context <id> [--json]                             everything known about a card, assembled
   ck untriaged [--json] [--limit n]                    cards needing attention, and why
@@ -625,6 +627,14 @@ try {
           captured: Number(flags.get('captured')?.[0] ?? 0),
         });
         console.log(`${w.channel} cursor ${w.cursor ?? '(unchanged, none)'} — ran at ${w.ranAt}`);
+        break;
+      }
+
+      if (sub === 'known') {
+        if (!channels.length) fail('ck intake known <fingerprint-or-ref>...');
+        for (const row of known(root, channels)) {
+          console.log(`${pad(row.ref, 46)} ${row.cards.length ? row.cards.join(', ') : '—'}`);
+        }
         break;
       }
 

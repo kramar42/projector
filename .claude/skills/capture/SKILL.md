@@ -1,77 +1,143 @@
 ---
 name: capture
-description: Sweep Slack, Jira, Gmail and recent git commits for things that should become cockpit cards, then create them after approval. Use when asked to capture, sweep, do an inbox pass, collect what's outstanding, or check what has come in; and when the user dumps several things at once that should become cards. Do not use to fill in facets on cards that already exist; that is the triage skill.
+description: Sweep Claude sessions, git branches, Jira, Slack and Gmail for things that should become cockpit cards — or links onto cards that already exist — then apply what is approved and move the watermarks. Use when asked to capture, sweep, do an inbox pass, collect what's outstanding, or check what has come in; and when the user dumps several things at once that should become cards. Do not use to fill in facets on cards that already exist; that is the triage skill.
 ---
 
 # Capture
 
-Turn what has accumulated elsewhere into cards. Read the `cockpit` skill first — the fingerprint rule
-below is what keeps this runnable more than once.
+Turn what has accumulated elsewhere into cards — or into links on the cards that already cover it.
+Read the `cockpit` skill first.
 
 **You propose. You do not apply.** Present the candidates, stop, wait.
 
-## 1. Sweep the sources
+## 1. Where the last sweep got to
 
-Cover these unless the user narrows it. Say which you covered and which you skipped.
+```bash
+ck intake status
+```
 
-| Source | Where | What counts |
+Per channel: the cursor, when it last ran, what it saw. **The cursor is why this is worth running
+more than once** — without it you are the thing deciding what counts as new, from a fixed window,
+every time.
+
+Losing `.intake.db` is not a disaster: a channel with no cursor falls back to its default window and
+`source_fingerprint` still stops every duplicate. Wider sweep, never a wrong one.
+
+## 2. Sweep
+
+```bash
+ck intake --json            # every channel, each from its own cursor
+ck intake claude git        # or name them
+ck intake --since 2026-08-01 --limit 40
+```
+
+`ck` fetches three of the five itself. Say which you covered and which you skipped.
+
+| Channel | Fetched by | What counts |
 |---|---|---|
-| Slack self-DM | `D01234567` (his own scratchpad) | notes-to-self, saved links, decisions |
-| Slack saved | `is:saved` | bookmarked messages |
-| Jira | assigned to him, or mentioning him, updated recently | anything needing his reply or action |
-| Gmail | vendor threads, forwarded meeting notes | commitments made to other people |
-| git | `git log --oneline -20 --author="$(git config user.name)"` in the active repos | work in flight with no card |
+| `claude` | `ck` — `~/.claude/projects` | sessions that moved: work in flight, often already on a card |
+| `git` | `ck` — the project repos | his own branches and base-branch commits with nothing tracking them |
+| `jira` | `ck` — JQL, needs `COCKPIT_JIRA_*` | assigned to / reported by / watched by him, updated since the cursor |
+| `slack` | **you, through the Slack MCP** | `D01234567` (his scratchpad) and `is:saved` |
+| `gmail` | **you, through the Gmail MCP** | vendor threads, forwarded meeting notes — commitments made to other people |
 
-Prefer the last sweep's boundary over a fixed window: `ck ls --filter source=slack --json` shows what
-was already taken, and each card's `source_fingerprint` records exactly what it came from.
+For Slack and Gmail: take the cursor out of `ck intake status`, fetch **only since it**, and treat
+what you find exactly as `ck` treats the rest. Their fingerprints are `slack:<channel>/<ts>` and
+`gmail:<message-id>`.
 
-## 2. Deduplicate before proposing, not after
+Every candidate arrives with a **fingerprint** derived from the thing itself, never from its wording,
+and `ck` has already dropped the ones a card carries. **Check your own the same way** — the two
+channels `ck` cannot fetch are the two that would otherwise be guessing:
 
-Every candidate needs a **stable fingerprint** derived from the thing itself, never from its wording:
+```bash
+ck intake known slack:D01234567/1784119823.993869 gmail:<message-id>
+```
 
-- Slack: `slack:<channel>/<ts>` — the permalink's timestamp
-- Jira: `jira:<KEY>`
-- Gmail: `gmail:<message-id>`
-- git: `git:<repo>@<sha>`
+It prints the cards carrying each ref, or `—`. `ck add --fingerprint` refuses a duplicate regardless,
+but checking first is what makes the proposal honest.
 
-Then drop any candidate whose fingerprint already exists. `ck add --fingerprint` also refuses
-duplicates, so the guarantee holds even if you miss one — but checking first keeps the proposal
-honest. Without this the inbox refills on every sweep and stops being worth running.
+## 3. Three answers, not one
 
-## 3. Propose, then stop
+Most of what a sweep returns is not a new card. For each candidate:
+
+| | when | do |
+|---|---|---|
+| **link** | it is more work on something already tracked | `ck link <card> <ref>` |
+| **card** | work nobody has filed | `ck add … --fingerprint` |
+| **neither** | a question asked and answered, a status, something already done | list under "noticed, not captured" |
+
+`ck` decides only what is decidable: a ref already on a card, a fingerprint already captured, a
+session too short to be work. Everything else is yours, and the evidence is in `evidence.matches` —
+each with the mechanical reason it matched:
+
+- `cwd` / `worktree` / `worktree branch` — the session ran in that project's repo or workspace. Close
+  to proof.
+- `branch` / `branch names PROJ-303` / `mentions PROJ-303` — the name or the message says so. Strong.
+- `text` — it shares vocabulary with that card. **Weak.** Two cards about Keycloak are not the same
+  card. Never link on `text` alone; say what you think it is and let him say.
+
+When linking, say which reason you are relying on, so a wrong call is visible before it lands. A
+session linked to the wrong card puts its history somewhere nobody will look for it.
+
+## 4. Propose, then stop
 
 One table:
 
-| title | source | links | fingerprint | why it's a card |
+| do | title | channel | ref / fingerprint | why, and on what evidence |
 |---|---|---|---|---|
 
 Rules:
 
-- **A card is something with an outcome.** A link worth reading is a card in `project: research`
-  with `priority: someday`. A fact, a status update or a thing already done is not a card — list
-  those separately as "noticed, not captured" so nothing looks silently dropped.
-- **Title in his voice, imperative where it is an action.** Keep his phrasing when he wrote it; do
-  not tidy `clean-up ecr` into `Clean up Amazon ECR`.
-- **Carry the provenance as a link**, always: `slack:<permalink>`, `jira:KEY`, `gh:commit:...`. A
-  card whose context is lost is the exact failure the old TODO file kept hitting.
+- **A card is something with an outcome.** A link worth reading is a card in `project: research` with
+  `priority: someday`. A fact, a status update or a thing already done is not a card — those go under
+  "noticed, not captured" so nothing looks silently dropped.
+- **Title in his voice, imperative where it is an action.** Keep his phrasing when he wrote it; do not
+  tidy `clean-up ecr` into `Clean up Amazon ECR`. A Claude session's title is its opening prompt; a
+  branch's is its first commit subject. Both are already his words.
+- **Carry the provenance as a link**, always. `ck` supplies them: `claude:<uuid>`,
+  `gh:branch:ORG/repo@name`, `gh:commit:ORG/repo@sha`, `jira:KEY`. Add `slack:<permalink>` yourself.
 - **Do not assign a project.** Capture gets it into the system; `triage` decides where it lives. Set
   `source` and, if obvious, `priority`.
 
 Then **stop**.
 
-## 4. Create what was approved
+## 5. Apply, then move the cursors
 
 ```bash
 ck add "<title>" \
-  --facet source=slack --facet status=planning \
-  --link "slack:<permalink>" \
-  --fingerprint "slack:<channel>/<ts>"
+  --facet source=claude --facet status=planning \
+  --link "claude:<uuid>" \
+  --fingerprint "claude:<uuid>"
+
+ck link <existing-card> "claude:<uuid>"
 ```
 
-Then `ck check`, and report: created, skipped as duplicate, and left uncaptured.
+Then, **and only once the proposal is resolved** — approved, or explicitly declined:
+
+```bash
+ck intake commit --channel claude --cursor <nextCursor> --seen 9 --captured 2
+```
+
+`<nextCursor>` is the channel's `nextCursor` from `ck intake --json` (the plain output prints it as
+"cursor would move to"). For Slack and Gmail it is the newest ts or date you actually read.
+
+Three things to get right here:
+
+- **A `nextCursor` of `null` means do not move it.** A truncated run — more behind the cursor than the
+  limit showed — deliberately holds its place so the next sweep resumes there. Commit the counts, not
+  a cursor.
+- **Commit after, never before.** A sweep abandoned halfway must not swallow what it had listed.
+- **Committing forgets the declines.** Once the cursor passes something you called "not a card", there
+  is no record it was ever considered. If a rejection is worth keeping, make the card and set
+  `status: dropped` — that keeps the fingerprint, and the next sweep leaves it alone.
+
+Finish with `ck check`, and report: created, linked, skipped as duplicate, left uncaptured, and which
+cursors moved.
 
 ## Credentials and sensitive content
 
 If a swept message contains a secret — a token, an AWS key, a password — **do not put the value in a
-card**. Create the card describing the rotation needed and reference the message; say plainly that
-you withheld the value. His Slack scratchpad has had plaintext credentials in it before.
+card**. Create the card describing the rotation needed and reference the message; say plainly that you
+withheld the value. His Slack scratchpad has had plaintext credentials in it before.
+
+Everything intake touches is read-only (C2). Nothing here writes to Slack, Jira, GitHub or Gmail.

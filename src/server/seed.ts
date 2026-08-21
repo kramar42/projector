@@ -89,7 +89,7 @@ domain:
 
 source:
   label: Source
-  values: [brain, slack, jira, gmail, git]
+  values: [brain, slack, jira, gmail, git, claude]
   open: true
 
 tech:
