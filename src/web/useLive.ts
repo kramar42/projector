@@ -37,7 +37,7 @@ export function useLive<T>(
     setData(null);
     setError(null);
     reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `deps` is the caller's own dependency list, passed through deliberately.
   }, deps);
 
   useEffect(() => onDataChange(reload), [reload]);

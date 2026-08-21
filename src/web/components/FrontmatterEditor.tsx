@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { StreamLanguage } from '@codemirror/language';
+import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { ApiError } from '../api.ts';
 
 /**
@@ -83,7 +82,7 @@ export function FrontmatterEditor({
       v.destroy();
       view.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The editor owns its document after mount, so `cardId` alone is the dependency.
   }, [cardId]);
 
   // Adopt an external change only when there is nothing unsaved to lose.

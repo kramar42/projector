@@ -102,8 +102,7 @@ export function BodyEditor({
       view.current = null;
     };
     // The editor owns its document after mount; remounting on every keystroke
-    // would fight CodeMirror's own state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // would fight CodeMirror's own state, so `cardId` alone is the dependency.
   }, [cardId]);
 
   // An external change (an agent editing the same file) replaces the document,
