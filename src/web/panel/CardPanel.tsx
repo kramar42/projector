@@ -4,7 +4,7 @@ import { useLive } from '../useLive.ts';
 import { RecordMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
-import { Actions, Body, Facets, Frontmatter, Links } from './blocks.tsx';
+import { Actions, Body, Facets, Frontmatter, Inbound, Links } from './blocks.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -140,92 +140,103 @@ export function CardPanel({
         )}
 
         {data && card && (
+          /*
+           * Four tiers, not ten peers.
+           *
+           * The order is what the panel is opened for, and one rule decides it:
+           * a region whose height the card controls goes above one whose height
+           * the *content* controls. Otherwise the thing you came to click moves
+           * every time a body gets longer or a project gains a child.
+           *
+           *   state       the axes — bounded, and the commonest edit
+           *   content     what it says and what it points at — unbounded
+           *   inbound     what points at it, and what it inherits — derived
+           *   workshop    the raw file, its path, and the two rare actions
+           *
+           * `Delete` used to be the first control in the panel, above the card's
+           * own id, at the same size as everything else. Weight follows blast
+           * radius, so it and the project toggle are at the foot now.
+           */
           <div className="panel-body">
-            <Actions card={card} write={write} />
+            <div className="panel-tier">
+              <Facets
+                defs={meta.facets}
+                values={card.facets}
+                refs={data.refs}
+                selfId={card.id}
+                write={write}
+                onOpen={onOpen}
+              />
+            </div>
 
-            {/* The id row is gone: it is the `?card=` parameter in the address
-                bar and the stem of the filename on the row below, so it was the
-                same string three times on the first fold of the panel. */}
-            <dl className="kv">
-              <dt>file</dt>
-              <dd><code>{data.file}</code></dd>
-              {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
-            </dl>
+            <div className="panel-tier">
+              <Links card={card} write={write} />
+              <Body card={card} write={write} onDirtyChange={setDirty} />
+            </div>
 
-            <Facets
-              defs={meta.facets}
-              values={card.facets}
-              refs={data.refs}
-              selfId={card.id}
-              write={write}
-              onOpen={onOpen}
-            />
+            {(card.blockedBy.length > 0 || data.children.length > 0 || data.project) && (
+              <div className="panel-tier">
+                <Inbound
+                  head="Blocked by"
+                  means="computed from other cards' blocks, not stored on this one"
+                  records={card.blockedBy}
+                  className={(b) => (b.done ? 'is-done' : 'is-open')}
+                  onOpen={onOpen}
+                />
+                <Inbound
+                  head="Children"
+                  means="records naming this one as their parent, not stored on this one"
+                  records={data.children}
+                  onOpen={onOpen}
+                />
 
-            {/* Derived, both of them: the inbound side of `blocks` and of
-                `parent`. There is no edit here because the edit lives on the
-                other card — the `ƒ` says so, the same mark the filter panel
-                uses for an axis it computed rather than read. */}
-            {card.blockedBy.length > 0 && (
-              <section className="panel-section">
-                <h3>
-                  Blocked by
-                  <span className="derived" title="computed from other cards' blocks, not stored on this one">ƒ</span>
-                </h3>
-                {card.blockedBy.map((b) => (
-                  <button
-                    className={`reflink ${b.done ? 'is-done' : 'is-open'}`}
-                    key={b.id}
-                    onClick={() => onOpen(b.id)}
-                  >
-                    {b.title}
-                    {b.done ? ' ✓' : ''}
-                  </button>
-                ))}
-              </section>
-            )}
-
-            {data.children.length > 0 && (
-              <section className="panel-section">
-                <h3>
-                  Children ({data.children.length})
-                  <span className="derived" title="records naming this one as their parent, not stored on this one">ƒ</span>
-                </h3>
-                {data.children.map((ch) => (
-                  <button className="reflink" key={ch.id} onClick={() => onOpen(ch.id)}>
-                    {ch.title}
-                  </button>
-                ))}
-              </section>
-            )}
-
-            {data.project && (
-              <section className="panel-section">
-                <h3>Project (inherited)</h3>
-                <div className="proj">
-                  <div><span className="k">key</span> <code>{data.project.key}</code></div>
-                  <div><span className="k">chain</span> {data.project.chain.join(' → ')}</div>
-                  {data.project.jira && (<div><span className="k">jira</span> <code>{data.project.jira}</code></div>)}
-                  {data.project.branch && (<div><span className="k">branch</span> <code>{data.project.branch}</code></div>)}
-                  {data.project.repos.map((r) => (
-                    <div key={r.path}>
-                      <span className="k">repo</span> <code>{r.path}</code>{r.base ? ` @ ${r.base}` : ''}
+                {data.project && (
+                  <section className="panel-section">
+                    <h3>
+                      Project
+                      <span
+                        className="derived-word"
+                        title="resolved along the project facet and its chain, not stored on this card"
+                      >
+                        inherited
+                      </span>
+                    </h3>
+                    <div className="proj">
+                      <div><span className="k">key</span> <code>{data.project.key}</code></div>
+                      <div><span className="k">chain</span> {data.project.chain.join(' → ')}</div>
+                      {data.project.jira && (<div><span className="k">jira</span> <code>{data.project.jira}</code></div>)}
+                      {data.project.branch && (<div><span className="k">branch</span> <code>{data.project.branch}</code></div>)}
+                      {data.project.repos.map((r) => (
+                        <div key={r.path}>
+                          <span className="k">repo</span> <code>{r.path}</code>{r.base ? ` @ ${r.base}` : ''}
+                        </div>
+                      ))}
+                      {data.project.instructions.length > 0 && (
+                        <details>
+                          <summary>{data.project.instructions.length} instruction block(s)</summary>
+                          <pre className="instructions">{data.project.instructions.join('\n\n')}</pre>
+                        </details>
+                      )}
                     </div>
-                  ))}
-                  {data.project.instructions.length > 0 && (
-                    <details>
-                      <summary>{data.project.instructions.length} instruction block(s)</summary>
-                      <pre className="instructions">{data.project.instructions.join('\n\n')}</pre>
-                    </details>
-                  )}
-                </div>
-              </section>
+                  </section>
+                )}
+              </div>
             )}
 
-            <Links card={card} write={write} />
+            <div className="panel-tier is-workshop">
+              <Frontmatter cardId={card.id} yaml={data.yaml} write={write} />
 
-            <Frontmatter cardId={card.id} yaml={data.yaml} write={write} />
+              {/* The id row is gone: it was the `?card=` parameter in the address
+                  bar and the stem of the filename beside it, so the same string
+                  appeared three times on what was then the first fold. */}
+              <dl className="kv">
+                <dt>file</dt>
+                <dd><code>{data.file}</code></dd>
+                {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
+              </dl>
 
-            <Body card={card} write={write} onDirtyChange={setDirty} />
+              <Actions card={card} write={write} />
+            </div>
           </div>
         )}
       </aside>

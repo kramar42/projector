@@ -22,6 +22,71 @@ import type { CardDTO, CardDetail, Meta } from '../types.ts';
  * a card, and `Actions` cannot touch an axis.
  */
 
+/** Past this, an inbound list stops being a list and becomes the page. */
+const INBOUND_CUTOFF = 6;
+
+/**
+ * A list of records this card did not choose: what blocks it, what is part of it.
+ *
+ * Capped, because it is unbounded and it is not why the panel was opened. A
+ * project with sixteen children drew all sixteen — 569px, forty per cent of the
+ * panel — and pushed the body a full screen down, which is the thing the last
+ * pass had just fixed arriving through a different door. The `n more` is the
+ * sidebar's own, rather than a scroll inside a scroll.
+ */
+export function Inbound({
+  head,
+  means,
+  records,
+  onOpen,
+  className,
+}: {
+  head: string;
+  means: string;
+  records: { id: string; title: string; done?: boolean }[];
+  onOpen: (id: string) => void;
+  className?: (r: { done?: boolean }) => string;
+}) {
+  const [all, setAll] = useState(false);
+  if (!records.length) return null;
+  const shown = all ? records : records.slice(0, INBOUND_CUTOFF);
+  const more = records.length - shown.length;
+
+  return (
+    <section className="panel-section">
+      <h3>
+        {head}
+        {records.length > 1 && <span className="section-count">{records.length}</span>}
+        {/* The same `ƒ` the filter rail puts on an axis it computed rather than
+            read — there is no edit here because the edit lives on the other card. */}
+        <span className="derived" title={means}>
+          ƒ
+        </span>
+      </h3>
+      {shown.map((r) => (
+        <button
+          className={`reflink ${className?.(r) ?? ''}`}
+          key={r.id}
+          onClick={() => onOpen(r.id)}
+        >
+          {r.title}
+          {r.done ? ' ✓' : ''}
+        </button>
+      ))}
+      {more > 0 && (
+        <button className="facet-more" onClick={() => setAll(true)}>
+          {more} more
+        </button>
+      )}
+      {all && records.length > INBOUND_CUTOFF && (
+        <button className="facet-more" onClick={() => setAll(false)}>
+          less
+        </button>
+      )}
+    </section>
+  );
+}
+
 export function Actions({
   card,
   write,

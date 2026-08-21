@@ -1270,11 +1270,49 @@ body {
   box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18);
 }
 
+/*
+ * Two intervals, not one.
+ *
+ * Every block used to be 18px from the next, so ten of them carried identical
+ * weight and nothing on the surface said which mattered — the squint test
+ * returned a stack of equals. A cadence needs a tight interval and a generous
+ * one: 8px between siblings inside a tier, 20px and a hairline between tiers.
+ * Both are steps of the committed scale (1·4·6·7·8·12·14·18·20); 18px is now
+ * spent on the page padding alone, where it always was.
+ */
 .panel-body {
   padding: 18px 20px 40px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
+}
+
+.panel-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-tier + .panel-tier {
+  border-top: 1px solid var(--rule);
+  padding-top: 20px;
+}
+
+/* The workshop: the raw file, its path, and the two actions you take least
+   often. It recedes rather than hides — everything in it is still one glance
+   away, and none of it is what the panel was opened for. */
+.panel-tier.is-workshop {
+  margin-top: 4px;
+}
+
+.panel-tier.is-workshop .kv,
+.panel-tier.is-workshop .panel-actions {
+  opacity: 0.72;
+}
+
+.panel-tier.is-workshop:hover .kv,
+.panel-tier.is-workshop:hover .panel-actions {
+  opacity: 1;
 }
 
 .panel-section h3 {
@@ -1673,10 +1711,32 @@ textarea { resize: vertical; font-family: inherit; }
   cursor: help;
 }
 
+/* The same fact in a word, where a word is more honest than the glyph: `Project`
+   is resolved along the membership chain rather than computed from one axis, and
+   `ƒ` would claim it is the latter. Sized as a label, because it is one. */
+.derived-word {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-left: 6px;
+  cursor: help;
+}
+
 /* A section's action, in the corner a control lives in. It is a Button rather
    than a tab: `.tab` says "you are in this mode", and refresh and edit-raw are
    things you do, not modes you are in. */
 .section-do { float: right; }
+
+/* How many are under a head that caps its list, so the count is not hidden by
+   the cap. Tabular, because it changes while its neighbours stay put. */
+.section-count {
+  font-family: var(--mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  margin-left: 5px;
+}
 
 .tabs { float: right; display: inline-flex; gap: 2px; }
 .tab {
