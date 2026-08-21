@@ -10,10 +10,10 @@ import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 /**
  * The sweep: every channel, from where it last got to.
  *
- * Two things are deliberately not here. It **writes no cards** — `ck add` and
- * `ck link` do that, after a human has agreed — and it **does not advance any
+ * Two things are deliberately not here. It **writes no cards** — `pj add` and
+ * `pj link` do that, after a human has agreed — and it **does not advance any
  * cursor**. A run that fetched is not a run that was resolved, and a sweep
- * abandoned halfway must not swallow what it had already listed. `ck intake
+ * abandoned halfway must not swallow what it had already listed. `pj intake
  * commit` is the separate, explicit step.
  */
 
@@ -105,7 +105,7 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
  *
  * The fetched channels dedupe themselves, but Slack and Gmail are fetched by an
  * agent through MCP — so without this the one channel pair that cannot check
- * would be the one guessing. `ck add --fingerprint` refuses a duplicate anyway;
+ * would be the one guessing. `pj add --fingerprint` refuses a duplicate anyway;
  * this is what lets a proposal be honest before it gets that far.
  */
 export function known(root: string, refs: string[]): { ref: string; cards: string[] }[] {
@@ -133,7 +133,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     // itself rather than as an empty "since".
     const from = r.cursor ? `since ${ago(r.cursor) || r.cursor}` : 'no watermark — default window';
     L.push(`## ${r.channel}  (${from})`);
-    if (!r.fetched) L.push(`   not fetched by ck: ${r.note ?? 'no reason given'}`);
+    if (!r.fetched) L.push(`   not fetched by pj: ${r.note ?? 'no reason given'}`);
     else if (r.note) L.push(`   ${r.note}`);
 
     for (const c of r.candidates) {
@@ -166,7 +166,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   }
   L.push(
     `${candidateCount(s)} candidate(s). Nothing is captured and no cursor has moved — ` +
-      `create what is worth a card, then: ck intake commit --channel <c> --cursor <v>`,
+      `create what is worth a card, then: pj intake commit --channel <c> --cursor <v>`,
   );
   return L.join('\n');
 }

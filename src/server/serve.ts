@@ -51,7 +51,7 @@ import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 
-const PORT = Number(process.env.COCKPIT_PORT ?? 8092);
+const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
 
 /** Origins allowed to send a mutating request. A localhost server is still
  *  reachable from any page open in the browser, so an Origin that is present
@@ -61,7 +61,7 @@ const ORIGINS = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`,
 /**
  * The vault a request is about.
  *
- * The browser names it with `X-Cockpit-Vault`, and it must already be
+ * The browser names it with `X-Projector-Vault`, and it must already be
  * registered — the registry is what keeps this from being "read any directory
  * the page asks for". Registering happens through the vault endpoints, which is
  * where a path is checked and, if the user asked, initialised.
@@ -69,7 +69,7 @@ const ORIGINS = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`,
 class NoVault extends Error {}
 
 function vaultOf(c: Context): string {
-  const header = c.req.header('X-Cockpit-Vault');
+  const header = c.req.header('X-Projector-Vault');
   if (header) {
     const want = normalise(header);
     if (!isRegistered(want)) throw new NoVault(`vault not registered: ${want}`);
@@ -673,7 +673,7 @@ if (existsSync(dist)) {
 }
 
 serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
-  console.log(`cockpit  http://127.0.0.1:${info.port}`);
+  console.log(`projector  http://127.0.0.1:${info.port}`);
   const known = listVaults();
   if (!known.length) console.log('vaults   none yet — the app will ask for a folder');
   for (const v of known) {

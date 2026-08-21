@@ -1,6 +1,6 @@
 # Architecture
 
-How cockpit works inside, and the invariants to preserve when changing it. For what the app *is* and
+How projector works inside, and the invariants to preserve when changing it. For what the app *is* and
 how to use it, see [README.md](README.md).
 
 ## Principles
@@ -34,12 +34,12 @@ flowchart TB
   end
 
   you["You, in a browser"]
-  agent["A Claude session<br/>/capture · /triage · /work"]
+  agent["A Claude session<br/>/pj-capture · /pj-triage · /pj-work"]
 
   subgraph surfaces["Two surfaces — peers, not a stack"]
     direction LR
     ui["Web UI<br/>board · canvas · table · card panel"]
-    ck["ck<br/>one command per question"]
+    pj["pj<br/>one command per question"]
   end
 
   idx[("index.db · enrich.db<br/>derived and disposable — delete them and nothing is lost.<br/>The index is memoised on an exact stamp of every file it read")]
@@ -56,11 +56,11 @@ flowchart TB
   outside["Jira · GitHub · Claude transcripts · docs · git<br/>read-only, always (C2)"]
 
   you --> ui
-  agent --> ck
+  agent --> pj
   vault --> idx
   vw --> spec
   ui --> spec
-  ck --> spec
+  pj --> spec
   fac --> q
   spec --> q
   idx --> q
@@ -71,19 +71,19 @@ flowchart TB
   agent -.->|"or plain file writes — no API, no app running (C3)"| cards
 
   idx <-->|"links, resolved lazily and cached with a TTL"| outside
-  proj -->|"ck work — a worktree per repo, plus a briefing"| outside
-  ck -->|"ck log — what actually changed"| outside
+  proj -->|"pj work — a worktree per repo, plus a briefing"| outside
+  pj -->|"pj log — what actually changed"| outside
 ```
 
 Three things are worth reading off it.
 
 **The vault is three kinds of file, and only three.** Cards are content, `facets.yaml` is the
 vocabulary that constrains them, and a view is a saved query plus the arrangement that has nowhere
-else to live. Everything below the vault box is derived: delete both caches and `ck reindex` is
+else to live. Everything below the vault box is derived: delete both caches and `pj reindex` is
 always correct.
 
 **The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a `views/*.yaml` file and
-a set of `ck` flags parse into the same thing, so `ck ls --view unblocked` and opening that view in
+a set of `pj` flags parse into the same thing, so `pj ls --view unblocked` and opening that view in
 the browser are the same query by construction rather than by discipline.
 
 **The file format is a public API.** The app writes through a gate that validates against the
@@ -100,17 +100,16 @@ the two are expected to be editing the same card at the same time.
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
 | `src/web/` | React: sidebar, three shapes, card panel |
-| `src/cli/` | `ck` |
+| `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
 | `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
 | `src/agent/` | card context assembly, worktree workspaces, briefings, git history |
-| `src/import/` | one-time Trello and TODO.md importers |
 
 ## The query compiler
 
 `src/index/query.ts` is the whole engine, and `src/view/spec.ts` is the one description of a view —
-shared by the URL, a saved file and `ck` flags, so the three cannot drift. `ck ls --view unblocked` and
+shared by the URL, a saved file and `pj` flags, so the three cannot drift. `pj ls --view unblocked` and
 opening that view in the browser go through the same code.
 
 **Filtering runs in memory** over the record map rather than in SQL. Not a performance trade — at this
@@ -242,7 +241,7 @@ discarded on every reindex, and watermarks in the enrichment cache would be disc
 `clearEnrichment`.
 
 **A watermark is not load-bearing, and that is what makes it safe to keep at all.** It is the one piece
-of state cockpit holds that is not derived from the card files. Correctness does not rest on it:
+of state projector holds that is not derived from the card files. Correctness does not rest on it:
 `source_fingerprint` is what stops a duplicate, and it stops one whether or not a cursor knows the
 item exists. So the watermark only decides how far back to *look* — losing it degrades a sweep to a
 default window, which is noisier and never wrong. Nothing about the work has two answers, so C1 is
@@ -252,7 +251,7 @@ untouched.
 channel that returned the *newest* N items and then advanced would step over everything older it never
 looked at. Channels therefore work **oldest-first from the cursor**, and a run truncated by its limit
 holds its cursor where it was: the next sweep resumes at the same place, and the backlog drains through
-fingerprint dedup rather than through the cursor. `ck intake` is also the only command that reads
+fingerprint dedup rather than through the cursor. `pj intake` is also the only command that reads
 external state and writes nothing at all — advancing a cursor is a separate explicit step, because a
 run that fetched is not a run that was resolved.
 
@@ -261,7 +260,7 @@ answers how to display it; intake is given a channel and a cursor and answers wh
 filed. Same Jira token, same `~/.claude/projects`, opposite question. `src/sources/` holds what is
 genuinely common — the credential, the subprocess, the transcript parser — and neither directory
 imports the other. Two of the five intake channels have no fetcher here at all: Slack and Gmail are
-read by an agent through MCP, and `ck` keeps their cursors anyway, because a watermark is a property of
+read by an agent through MCP, and `pj` keeps their cursors anyway, because a watermark is a property of
 where the sweep got to and not of who did the fetching.
 
 **Instructions are configuration, not prose.** They live in the `project:` block. They were once a
@@ -339,21 +338,20 @@ C2 says everything external is read-only. Concretely, every operation that write
 
 | Operation | Writes | Never |
 |---|---|---|
-| `ck add` / `POST /api/card` | one new card file | never overwrites an existing file |
-| `ck log` | nothing | reads `git log`; it is the one command with no write at all |
-| `ck link`, `ck set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
-| `ck set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
+| `pj add` / `POST /api/card` | one new card file | never overwrites an existing file |
+| `pj log` | nothing | reads `git log`; it is the one command with no write at all |
+| `pj link`, `pj set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
+| `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
 | `POST /api/bulk` op `parent` | one facet on many cards | it is `bulkFacet` under a name the bulk bar uses |
 | `PUT /api/card/:id/frontmatter` | one card's whole frontmatter block | never touches the body |
-| `ck rm`, `DELETE /api/card/:id`, `POST /api/bulk` | card files, and every reference that pointed at them | nothing outside `cards/` |
+| `pj rm`, `DELETE /api/card/:id`, `POST /api/bulk` | card files, and every reference that pointed at them | nothing outside `cards/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose card still exists |
 | `DELETE /api/view/:name` | one view file | never touches the cards it selected |
 | `POST /api/card/:id/asset` | one file under `cards/assets/<id>/` | never overwrites: the name is a content hash |
-| `ck import …` | new card files; skips any id already present | never edits or deletes an existing card |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app | never touches a vault's contents |
-| `ck intake` | nothing at all | proposes; it writes no card and moves no cursor |
-| `ck intake commit` | one row in `.intake.db` | never a card, and never on its own initiative |
+| `pj intake` | nothing at all | proposes; it writes no card and moves no cursor |
+| `pj intake commit` | one row in `.intake.db` | never a card, and never on its own initiative |
 | everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a card file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
@@ -374,9 +372,9 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/cards/**` | card files, and assets under `cards/assets/<id>/` | you create or edit a card |
 | `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.intake.db` | where each intake channel last got to | only `ck intake commit`; gitignored |
+| `<vault>/.intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
-| `$COCKPIT_WORKSPACES/<card>/` (default `~/Code/wt/`) | `ck work` worktrees and `AGENT_BRIEFING.md` | only `ck work` |
+| `$PROJECTOR_WORKSPACES/<card>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
 
 Every card write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
 sees half a file. The registry is written the same way.
@@ -388,15 +386,15 @@ sees half a file. The registry is written the same way.
 | `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link, and discovering sessions that moved | read-only |
 | any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
 | any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
-| a project's declared `repos` | `ck work`, through `git`; `ck intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
+| a project's declared `repos` | `pj work`, through `git`; `pj intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
 
 `doc:` and the folder picker are the two places a path outside the vault is reachable, and both are
 deliberate: a `doc:` ref is something you typed, and a picker that cannot leave one directory cannot
 pick a folder. Neither reads anything you have not named.
 
-**Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `ck log`, and
-`log`/`branch`/`config`/`remote` in declared repos for `ck intake git`),
-`gh` (`pr view`, `api` GETs), and `osascript` (opening a terminal, `ck work` only). No shell — `execFile` with an argument array, so
+**Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `pj log`, and
+`log`/`branch`/`config`/`remote` in declared repos for `pj intake git`),
+`gh` (`pr view`, `api` GETs), and `osascript` (opening a terminal, `pj work` only). No shell — `execFile` with an argument array, so
 nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
 because a path may contain a quote.
 
@@ -404,12 +402,12 @@ because a path may contain a quote.
 
 | | |
 |---|---|
-| `COCKPIT_DATA` | the vault, for the CLI |
-| `COCKPIT_PORT` | server port (default 8092) |
-| `COCKPIT_WORKSPACES` | where `ck work` puts worktrees (default `~/Code/wt`) |
-| `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
-| `COCKPIT_INTAKE_JQL` | overrides the JQL `ck intake jira` searches with |
-| `COCKPIT_GIT_AUTHOR` | whose commits `ck intake git` looks for (default: each repo's own `user.email`) |
+| `PROJECTOR_DATA` | the vault, for the CLI |
+| `PROJECTOR_PORT` | server port (default 8092) |
+| `PROJECTOR_WORKSPACES` | where `pj work` puts worktrees. **Required** — `pj work` refuses rather than guessing a directory to create real worktrees in |
+| `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
+| `PROJECTOR_INTAKE_JQL` | overrides the JQL `pj intake jira` searches with |
+| `PROJECTOR_GIT_AUTHOR` | whose commits `pj intake git` looks for (default: each repo's own `user.email`) |
 
 No credential is read from anywhere but the environment, and none reaches the browser: enrichment
 responses carry the resolved fields, never the token.
@@ -417,11 +415,11 @@ responses carry the resolved fields, never the token.
 ## Why the registry is a file
 
 `vaults.json` cannot be `localStorage`, because the **server** is the party that needs it. A request
-names its vault in an `X-Cockpit-Vault` header, and the server refuses a path that is not registered —
+names its vault in an `X-Projector-Vault` header, and the server refuses a path that is not registered —
 so the header is a reference to a folder you chose rather than an arbitrary path a page can name.
 `localStorage` is browser-side; the server cannot read it.
 
-It sits next to the app rather than in `~/.cockpit`, so an install carries its own list: nothing is
+It sits next to the app rather than in `~/.projector`, so an install carries its own list: nothing is
 written to your home directory, and two installs cannot fight over one file. It is gitignored, because
 it holds local paths and belongs to the install rather than the code.
 
@@ -430,7 +428,7 @@ the custom header forces a CORS preflight that no origin of ours answers, and a 
 foreign `Origin` is rejected outright.
 
 The CLI does not depend on the registry at all: `vaultAbove` walks up from the working directory the way
-git finds a repository, so `ck` works inside any vault whether or not the app has ever opened it. The
+git finds a repository, so `pj` works inside any vault whether or not the app has ever opened it. The
 registry is then only the browser's memory of which folders you use — delete it and you lose the list,
 nothing else.
 
@@ -439,7 +437,7 @@ nothing else.
 `initVault` writes `cards/`, `facets.yaml`, four starter views and a `.gitignore`. **No prose.**
 
 It used to also write `cards/README.md`, a per-vault conventions document from `SEED_README`. That was
-a near-verbatim copy of the `cockpit` skill, and its only audience — an agent editing card files
+a near-verbatim copy of the `projector` skill, and its only audience — an agent editing card files
 directly — already loads the skill. Two documents stating the card format is one document to drift, so
 the format is now written down in exactly two places that cannot disagree: `src/schema/card.ts`, which
 parses it, and the skill, which explains it.
@@ -477,7 +475,7 @@ full of markdown attracts a README, not because the app puts one there.
 
 | | |
 |---|---|
-| `model.test.ts` | frontmatter round-trips, link parsing, project resolution, reference cycles, validation, drag semantics, canvas clusters, nested `--set`, worktrees, `ck log` over a scratch repo, and the seed files parsing as what they claim to be |
+| `model.test.ts` | frontmatter round-trips, link parsing, project resolution, reference cycles, validation, drag semantics, canvas clusters, nested `--set`, worktrees, `pj log` over a scratch repo, and the seed files parsing as what they claim to be |
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
 | `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |

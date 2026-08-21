@@ -15,14 +15,14 @@ import { workspacePath } from '../src/agent/worktree.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
 
 /**
- * Intake is the one part of cockpit holding state that is not derived from the
+ * Intake is the one part of projector holding state that is not derived from the
  * card files, so most of what is worth testing here is the discipline around
  * that: the cursor may not skip anything, and it may not be the thing
  * correctness depends on.
  */
 
 function vault(cards: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), 'ck-intake-'));
+  const root = mkdtempSync(join(tmpdir(), 'pj-intake-'));
   mkdirSync(join(root, 'cards'), { recursive: true });
   for (const [name, body] of Object.entries(cards)) {
     writeFileSync(join(root, 'cards', `${name}.md`), body, 'utf8');
@@ -115,7 +115,7 @@ test('a sweep writes no cards and moves no cursor', async () => {
     const before = reindex(root).records.size;
     await sweep(root, { only: ['claude', 'git'], limit: 3 });
     assert.equal(reindex(root).records.size, before);
-    // Proposing is not resolving: only `ck intake commit` moves a cursor.
+    // Proposing is not resolving: only `pj intake commit` moves a cursor.
     assert.deepEqual(watermarks(root), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -136,7 +136,7 @@ test('a truncated run holds its cursor, so nothing behind it is skipped', async 
   }
 });
 
-test('a channel ck cannot reach still reports its cursor', async () => {
+test('a channel pj cannot reach still reports its cursor', async () => {
   const root = vault({ a: card('a') });
   try {
     commitWatermark(root, 'slack', '1755700000.1');
@@ -330,7 +330,7 @@ test('a sweep says out loud that it captured nothing', async () => {
  * running; only the last conversation record says whether work is happening.
  */
 function transcript(...records: unknown[]): string {
-  const dir = mkdtempSync(join(tmpdir(), 'ck-turn-'));
+  const dir = mkdtempSync(join(tmpdir(), 'pj-turn-'));
   const file = join(dir, 'session.jsonl');
   writeFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
   return file;

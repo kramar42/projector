@@ -41,7 +41,7 @@ export interface Candidate {
   channel: string;
   /**
    * Derived from the thing itself, never from its wording, so a re-sweep
-   * converges. `ck add --fingerprint` refuses a duplicate on the strength of it.
+   * converges. `pj add --fingerprint` refuses a duplicate on the strength of it.
    */
   fingerprint: string;
   /** In his voice where the source gave one — a commit subject, an opening prompt. */
@@ -70,7 +70,7 @@ export interface ChannelReport {
   /** Where the cursor should move to once the proposal is resolved. */
   nextCursor: string | null;
   /**
-   * False when `ck` has no way to reach this channel — Slack and Gmail have no
+   * False when `pj` has no way to reach this channel — Slack and Gmail have no
    * credential here and are fetched by an agent through MCP. The cursor is still
    * ours: one store for "where we got to", whoever did the fetching.
    */

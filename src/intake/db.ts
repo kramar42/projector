@@ -26,7 +26,7 @@ import { paths } from '../config.ts';
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS watermark (
   channel   TEXT PRIMARY KEY,
-  -- Channel-defined and opaque: an ISO timestamp for the ones ck fetches, a
+  -- Channel-defined and opaque: an ISO timestamp for the ones pj fetches, a
   -- Slack ts or a Gmail date for the ones an agent fetches through MCP.
   cursor    TEXT,
   ran_at    TEXT NOT NULL,

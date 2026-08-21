@@ -99,7 +99,7 @@ project:    { label: Project,  type: ref }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'cockpit-query-'));
+  const root = mkdtempSync(join(tmpdir(), 'projector-query-'));
   mkdirSync(join(root, 'cards'), { recursive: true });
   for (const [id, text] of Object.entries(CARDS)) {
     writeFileSync(join(root, 'cards', `${id}.md`), text, 'utf8');
@@ -647,7 +647,7 @@ updated: 2026-08-19
 };
 
 function datedVault(): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'cockpit-dated-'));
+  const root = mkdtempSync(join(tmpdir(), 'projector-dated-'));
   mkdirSync(join(root, 'cards'), { recursive: true });
   for (const [name, text] of Object.entries(DATED)) {
     writeFileSync(join(root, 'cards', `${name}.md`), text, 'utf8');
@@ -746,7 +746,7 @@ test('a value naming a record that does not exist is not a reference', () => {
     );
     const { records } = reindex(root);
     // It stays a facet value — it filters and groups — it simply has nothing to
-    // walk to. `ck check` is what reports it.
+    // walk to. `pj check` is what reports it.
     assert.deepEqual(records.get('orphan')!.facets.project, ['gone']);
     assert.equal(adjacency('project', records).out.get('orphan'), undefined);
     assert.deepEqual(ids(root, { filter: { project: ['gone'] } }), ['orphan']);

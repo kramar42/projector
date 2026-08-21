@@ -6,7 +6,7 @@
  * assumed directory name — with nothing chosen, the app asks.
  */
 
-const KEY = 'cockpit.vault';
+const KEY = 'projector.vault';
 
 export function currentVault(): string | null {
   try {

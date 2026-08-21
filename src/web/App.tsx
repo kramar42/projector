@@ -148,7 +148,7 @@ export function App() {
       />
     );
   }
-  if (error) return <div className="boot-error">Cannot reach the cockpit server: {error}</div>;
+  if (error) return <div className="boot-error">Cannot reach the projector server: {error}</div>;
   if (!meta) return <div className="boot">starting…</div>;
 
   return (

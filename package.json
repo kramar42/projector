@@ -1,5 +1,5 @@
 {
-  "name": "cockpit",
+  "name": "projector",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,10 @@
     "node": ">=24"
   },
   "bin": {
-    "ck": "./src/cli/ck.ts"
+    "pj": "./src/cli/pj.ts"
   },
   "scripts": {
-    "ck": "node src/cli/ck.ts",
+    "pj": "node src/cli/pj.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "dev": "node src/server/serve.ts",

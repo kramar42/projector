@@ -41,5 +41,5 @@ needs to be part of two things.
 
 P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the
 model is presently known to be wrong, and the next useful work is likely to be *using* it rather than
-changing it — 10 `ck check` warnings left, `energy` set on a handful of records, `owner` declared and
+changing it — 10 `pj check` warnings left, `energy` set on a handful of records, `owner` declared and
 unused, no deadlines set anywhere.

@@ -31,7 +31,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   const vault = currentVault();
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (vault) headers['X-Cockpit-Vault'] = vault;
+  if (vault) headers['X-Projector-Vault'] = vault;
 
   const res = await fetch(path, {
     method,

@@ -61,7 +61,7 @@ export function normalise(p: string): string {
  *
  * `README.md` is excluded because a folder full of markdown attracts one — not
  * because the app puts one there. It no longer seeds a card-conventions README:
- * that text was a copy of the `cockpit` skill, which an agent already has, and
+ * that text was a copy of the `projector` skill, which an agent already has, and
  * two places saying the same thing is one place to drift.
  */
 export function countCards(path: string): number {
@@ -130,16 +130,18 @@ export function forgetVault(path: string): boolean {
 }
 
 /**
- * A readable default name. `…/work/cockpit/data` reads better as "cockpit" than
- * as "data", so a generic leaf borrows its parent's name.
+ * The name prefilled when a vault is opened. Deliberately just the folder name.
+ *
+ * This used to keep a list of leaf names considered too generic to be a name —
+ * `data`, `vault`, `cards` — and silently borrow the parent's name instead. It is
+ * gone on purpose: the rule guessed for the user, the list of what counts as
+ * generic was never right for anyone but its author, and its output was a *name*
+ * the user could see and change anyway. A suggestion that is wrong in a visible
+ * field costs a keystroke; a rule nobody can predict costs an explanation. Do not
+ * reintroduce it.
  */
-const GENERIC = new Set(['data', 'vault', 'cards', 'cockpit-data', '.']);
-
 export function suggestName(path: string): string {
-  const leaf = basename(path);
-  if (!GENERIC.has(leaf.toLowerCase())) return leaf;
-  const parent = basename(dirname(path));
-  return parent ? `${parent}` : leaf;
+  return basename(path);
 }
 
 /**

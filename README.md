@@ -1,4 +1,4 @@
-# cockpit
+# projector
 
 A personal work-management app. One card database in markdown files, projected as a **board**, a
 **mind-map canvas** or a **table** — whichever the current query asks for — with read-only inline views
@@ -16,8 +16,8 @@ Node 26 runs the TypeScript directly — no build step for the server or the CLI
 pnpm install
 pnpm build && pnpm serve          # then open http://127.0.0.1:8092
 
-alias ck='node "$PWD/src/cli/ck.ts"'
-ck ls --group priority            # the CLI needs nothing running
+alias pj='node "$PWD/src/cli/pj.ts"'
+pj ls --group priority            # the CLI needs nothing running
 ```
 
 One process, one URL: the server serves the built UI. `pnpm dev:web` alongside `pnpm serve` gives a
@@ -404,14 +404,14 @@ A link is a typed string on a card, resolved lazily and cached. It renders as it
 enrichment replaces that with something richer if and when it arrives — nothing waits on it.
 
 **A kind exists when something resolves it.** Anything that only ever renders its own text is a `url`
-with extra vocabulary, so there is no `cal:` or `grafana:` — and no `trello:`, which was import
+with extra vocabulary, so there is no `cal:` or `grafana:` — and no `trello:`, which was migration
 provenance, which is the `source` facet's job. `slack:` is the one kind kept without a fetcher: a
 Slack ref is not interchangeable with the permalink it wraps, and it is common enough to be worth
 resolving.
 
 | Kind | Syntax | Source | Needs | TTL |
 |---|---|---|---|---|
-| `jira` | `jira:PROJ-303` | Jira REST | `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL`, `COCKPIT_JIRA_TOKEN` | 15 min |
+| `jira` | `jira:PROJ-303` | Jira REST | `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | 15 min |
 | `gh:pr` | `gh:pr:ORG/repo#412` | `gh pr view --json` | the `gh` CLI, authenticated | 5 min |
 | `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | — | 10 min |
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | — | never |
@@ -427,8 +427,8 @@ uuid and resolves to its opening prompt, last activity, turn count, working dire
 `claude --resume` command to pick it back up.
 
 ```bash
-ck enrich --all              # resolve every link on every card and print it
-ck enrich <ref> --force
+pj enrich --all              # resolve every link on every card and print it
+pj enrich <ref> --force
 ```
 
 ---
@@ -443,20 +443,20 @@ channel and a cursor and answers *which refs nobody has filed*. Same Jira token,
 |---|---|---|---|
 | `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` |
 | `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` |
-| `jira` | JQL, `COCKPIT_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` |
+| `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` |
 | `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` |
 | `gmail` | **not fetched here** — an agent, through MCP | a thread | `gmail:<message-id>` |
 
 ```bash
-ck intake                    # every channel, each from where it last got to
-ck intake claude git --json
-ck intake status
-ck intake known claude:abc-123          # which cards already carry this
-ck intake commit --channel claude --cursor 2026-08-21T09:00:00Z
+pj intake                    # every channel, each from where it last got to
+pj intake claude git --json
+pj intake status
+pj intake known claude:abc-123          # which cards already carry this
+pj intake commit --channel claude --cursor 2026-08-21T09:00:00Z
 ```
 
-**`ck intake` writes nothing.** It creates no card and moves no cursor: `ck add`/`ck link` do the first
-after a human agrees, and `ck intake commit` does the second once the proposal is resolved. A run that
+**`pj intake` writes nothing.** It creates no card and moves no cursor: `pj add`/`pj link` do the first
+after a human agrees, and `pj intake commit` does the second once the proposal is resolved. A run that
 fetched is not a run that was resolved, and an abandoned sweep must not swallow what it listed.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the cards is — it stops a
@@ -468,15 +468,15 @@ throwaway-able.
 Channels work **oldest-first from the cursor**, and a run truncated by `--limit` holds its cursor: a
 cursor is one value, so it may only advance to a boundary with nothing unexamined behind it.
 
-**What `ck` decides, and what it does not.** It decides only what is decidable — a ref already on a
+**What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
 card, a fingerprint already captured, a session too short to be work. Everything else arrives as
 `evidence`, and each match carries the mechanical reason it matched: `cwd`, `worktree`, `branch`,
 `mentions PROJ-303`, `text`. There is no score and no verdict, because the failure that would make this
 useless is a confident wrong one — a session linked to the wrong card puts its history where nobody will
-look. Choosing between card, link and neither is `/capture`'s job, out loud.
+look. Choosing between card, link and neither is `/pj-capture`'s job, out loud.
 
 Two channels have no fetcher here at all. Slack and Gmail are read by an agent through MCP — a second
-token in a second place to rotate buys nothing — but `ck` still keeps their cursors, because a
+token in a second place to rotate buys nothing — but `pj` still keeps their cursors, because a
 watermark is a property of where the sweep got to, not of who fetched.
 
 ---
@@ -486,19 +486,19 @@ watermark is a property of where the sweep got to, not of who fetched.
 Cards are plain files, so an agent can create and edit them directly with no API and no app running.
 Three commands make that reliable:
 
-**`ck context <id>`** assembles everything known about a card in one pass — the project chain, the
+**`pj context <id>`** assembles everything known about a card in one pass — the project chain, the
 inherited repos and instructions, relations, and cached link enrichment — so an agent never
 re-derives it from the filesystem.
 
-**`ck log`** answers "what did I actually do last week", which nothing stored on a card can: `updated`
+**`pj log`** answers "what did I actually do last week", which nothing stored on a card can: `updated`
 is one overwritten date and only ever says that *something* changed. The vault is a git repository, so
 the answer was already on disk — this reads the two versions of every changed file through the card
 parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
-**`ck work <id>`** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
+**`pj work <id>`** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
 with the card's full context embedded, and a terminal running a Claude session in it. Reopening is
-idempotent, and one repo failing does not stop the others. Workspaces default to `~/Code/wt`,
-overridable with `COCKPIT_WORKSPACES`.
+idempotent, and one repo failing does not stop the others. **`PROJECTOR_WORKSPACES` is required** —
+worktrees are real directories on disk, so where they go is told, never guessed.
 
 The briefing's key step: read the card, the linked issues and every repo's docs — then **stop and ask**
 before planning or writing code. Its last step links the session back to the card, so a card
@@ -510,19 +510,19 @@ accumulates its own history.
 
 | | |
 |---|---|
-| `/cockpit` | the model and the `ck` surface — read by the others, and on its own for ad-hoc card work |
-| `/capture` | sweep the five intake channels; each candidate becomes a card, a link on an existing card, or nothing |
-| `/triage` | give incomplete cards a project, priority and status |
-| `/work` | start work on a card |
+| `/projector` | the model and the `pj` surface — read by the others, and on its own for ad-hoc card work |
+| `/pj-capture` | sweep the five intake channels; each candidate becomes a card, a link on an existing card, or nothing |
+| `/pj-triage` | give incomplete cards a project, priority and status |
+| `/pj-work` | start work on a card |
 
-`/capture` and `/triage` both **propose and stop**: they present a table and apply nothing until it is
+`/pj-capture` and `/pj-triage` both **propose and stop**: they present a table and apply nothing until it is
 approved. A wrong project assignment hides a card in a column nobody will look in, which is worse than
 leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
 is why a rejected card gets `status: archived` rather than being deleted: deleting it destroys the
 fingerprint with it, and the next sweep creates it again.
 
-`/capture` reads its candidates from `ck intake` rather than deciding what is new itself, and it makes
-one decision per candidate that `ck` deliberately does not: **card, link, or neither.** A Claude session
+`/pj-capture` reads its candidates from `pj intake` rather than deciding what is new itself, and it makes
+one decision per candidate that `pj` deliberately does not: **card, link, or neither.** A Claude session
 is usually not new work — it is more of something already tracked, or a question that was answered — and
 only "already on a card" is a fact. The rest is a judgement, made on evidence it has to quote.
 
@@ -536,21 +536,21 @@ and remembers the choice, and the switcher at the top of the sidebar opens or ad
 
 Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, four
 starter views, and a `.gitignore` for the derived index and cache. A non-empty folder that is not a
-vault is refused. No prose is written into a vault — the format lives in the `cockpit` skill.
+vault is refused. No prose is written into a vault — the format lives in the `projector` skill.
 
 The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
 one that is on that list — so a page in your browser cannot point it at an arbitrary directory. It is
 the only thing written outside a vault; delete it and you lose the list, nothing else.
 
 ```bash
-ck vaults                                  # list
-ck vaults add <path> [--name n] [--create] # open a folder as a vault
-ck vaults forget <path>                    # stop tracking it; the folder is untouched
-ck --vault <path> <command>                # act on a specific one
+pj vaults                                  # list
+pj vaults add <path> [--name n] [--create] # open a folder as a vault
+pj vaults forget <path>                    # stop tracking it; the folder is untouched
+pj --vault <path> <command>                # act on a specific one
 ```
 
-The CLI does not need the list at all: run `ck` anywhere inside a vault and it finds it by walking up,
-the way git finds a repository. Otherwise `--vault`, then `COCKPIT_DATA`, then the single registered
+The CLI does not need the list at all: run `pj` anywhere inside a vault and it finds it by walking up,
+the way git finds a repository. Otherwise `--vault`, then `PROJECTOR_DATA`, then the single registered
 one.
 
 ---
@@ -559,28 +559,27 @@ one.
 
 | | |
 |---|---|
-| `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet |
-| `ck show <id>` | one record, with its resolved project config |
-| `ck next` | open cards with nobody waited on and no unfinished blocker, deadline first |
-| `ck log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
-| `ck add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
-| `ck set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--set path=yaml` |
-| `ck rm <id>…` | delete, dropping every reference pointing at it |
-| `ck link <id> <ref> …` | append links |
-| `ck project <id>` | resolved project config and inherited instructions |
-| `ck context <id> [--json]` | everything known about a card, assembled |
-| `ck untriaged [--json]` | cards missing project/priority/status, with the reason each surfaced |
-| `ck work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
-| `ck link-session <id>` | link the live Claude session working in this directory |
-| `ck enrich [<ref>…] [--all]` | resolve link enrichment |
-| `ck intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
-| `ck intake status` · `ck intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
-| `ck intake commit --channel c [--cursor v]` · `ck intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
-| `ck check` | validate every card file |
-| `ck reindex` · `ck stats` · `ck search <q>` | rebuild the index · counts · full text |
-| `ck import trello <file.json>` · `ck import todo <TODO.md>` | one-time imports |
+| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet |
+| `pj show <id>` | one record, with its resolved project config |
+| `pj next` | open cards with nobody waited on and no unfinished blocker, deadline first |
+| `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
+| `pj add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
+| `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--set path=yaml` |
+| `pj rm <id>…` | delete, dropping every reference pointing at it |
+| `pj link <id> <ref> …` | append links |
+| `pj project <id>` | resolved project config and inherited instructions |
+| `pj context <id> [--json]` | everything known about a card, assembled |
+| `pj untriaged [--json]` | cards missing project/priority/status, with the reason each surfaced |
+| `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
+| `pj link-session <id>` | link the live Claude session working in this directory |
+| `pj enrich [<ref>…] [--all]` | resolve link enrichment |
+| `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
+| `pj intake status` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
+| `pj intake commit --channel c [--cursor v]` · `pj intake reset [--channel c]` | move a cursor, after a sweep is resolved · forget one |
+| `pj check` | validate every card file |
+| `pj reindex` · `pj stats` · `pj search <q>` | rebuild the index · counts · full text |
 
-The CLI and the app share one query compiler, so `ck ls --view unblocked` and opening that view in the
+The CLI and the app share one query compiler, so `pj ls --view unblocked` and opening that view in the
 browser mean the same thing.
 
 ---
@@ -634,8 +633,8 @@ vocabulary does not know is preserved rather than dropped.
 `priority` says what you intend to do next; `due` says what the world expects regardless of intent.
 Both are facets — the type is what tells the engine one is matched and the other compared.
 
-The format is documented once, in the `cockpit` skill — the audience for it is an agent editing files
-directly, and an agent already loads that. `ck check` validates every card and reports every problem at
+The format is documented once, in the `projector` skill — the audience for it is an agent editing files
+directly, and an agent already loads that. `pj check` validates every card and reports every problem at
 once, rather than stopping at the first.
 
 ## Facet vocabulary

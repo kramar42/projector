@@ -4,7 +4,7 @@ import { isRef } from '../schema/facets.ts';
 
 /**
  * The one description of a view, shared by the three places that describe one:
- * a URL, a saved `views/*.yaml`, and `ck` flags.
+ * a URL, a saved `views/*.yaml`, and `pj` flags.
  *
  * A `ViewSpec` is a `Query` plus how to draw it. The split matters: everything in
  * the query half is derivable and therefore a live control, while `nodes` and

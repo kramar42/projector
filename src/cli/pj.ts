@@ -5,7 +5,7 @@ import { paths, resolveCliVault, resolvePath } from '../config.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { listCardFiles, renderCard, writeCardFile } from '../schema/card.ts';
+import { listCardFiles, writeCardFile } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
 import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
@@ -15,8 +15,6 @@ import { counts, nextUp, search, unblocks, valuesFor } from '../index/queries.ts
 import { runQuery } from '../index/query.ts';
 import { layoutRelation, parseSpec, specToParams } from '../view/spec.ts';
 import { findView } from '../server/views.ts';
-import { importTrello } from '../import/trello.ts';
-import { importTodo } from '../import/todo.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
 import { cardContext, renderContext, untriaged } from '../agent/context.ts';
@@ -36,10 +34,9 @@ import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../a
 import { sessionForCwd } from '../agent/session.ts';
 import { createCard, deleteCard, patchCard, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
 
 /**
- * Which vault this invocation acts on: `--vault`, then `COCKPIT_DATA`, then the
+ * Which vault this invocation acts on: `--vault`, then `PROJECTOR_DATA`, then the
  * single registered vault if there is exactly one. There is no built-in default
  * and no directory name assumed.
  */
@@ -62,53 +59,51 @@ function vaultOrExit(): string {
   return res.root;
 }
 
-// `ck vaults` manages the registry and so must not require a vault itself.
+// `pj vaults` manages the registry and so must not require a vault itself.
 const NO_VAULT_NEEDED = new Set(['vaults', 'help', '']);
 const root = NO_VAULT_NEEDED.has(rawCmd ?? '') ? '' : vaultOrExit();
 const p = paths(root || '/nonexistent');
 
-const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
+const HELP = `pj — projector CLI${root ? `  (vault: ${root})` : ''}
 
-  ck ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
+  pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
      --dir out|in|both --depth n]                   list records, grouped
-  ck show <id>                                         one record in full
-  ck next                                              actionable cards: open and unblocked
-  ck log [--since "1 week ago"]                        what changed, from git history
-  ck add <title> [--id slug] [--parent id]
+  pj show <id>                                         one record in full
+  pj next                                              actionable cards: open and unblocked
+  pj log [--since "1 week ago"]                        what changed, from git history
+  pj add <title> [--id slug] [--parent id]
          [--facet f=v ...] [--link ref ...]
          [--fingerprint fp] [--body text]              create a record
-  ck link <id> <ref> [...]                             append links to a record
-  ck unlink <id> <ref> [...]                           remove links from a record
-  ck check                                             validate every card file
-  ck reindex                                           rebuild the index from files
-  ck search <query>                                    full-text search
-  ck project <id>                                      resolved project config for a record
-  ck import trello <file.json>                         import a Trello board export
-  ck import todo <TODO.md>                             import a TODO.md
-  ck stats                                             index counts
-  ck enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
+  pj link <id> <ref> [...]                             append links to a record
+  pj unlink <id> <ref> [...]                           remove links from a record
+  pj check                                             validate every card file
+  pj reindex                                           rebuild the index from files
+  pj search <query>                                    full-text search
+  pj project <id>                                      resolved project config for a record
+  pj stats                                             index counts
+  pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
 
-  ck intake [<channel>...] [--since iso] [--limit n]
+  pj intake [<channel>...] [--since iso] [--limit n]
      [--json] [--verbose]                              what has happened elsewhere, since last time
-  ck intake status                                     per channel: cursor, last run, counts
-  ck intake commit --channel c [--cursor v]
+  pj intake status                                     per channel: cursor, last run, counts
+  pj intake commit --channel c [--cursor v]
      [--seen n] [--captured n]                         move a channel's cursor, after a sweep is resolved
-  ck intake known <fingerprint>...                     which cards already carry these refs
-  ck intake reset [--channel c]                        forget a cursor, back to the default window
+  pj intake known <fingerprint>...                     which cards already carry these refs
+  pj intake reset [--channel c]                        forget a cursor, back to the default window
 
-  ck context <id> [--json]                             everything known about a card, assembled
-  ck untriaged [--json] [--limit n]                    cards needing attention, and why
-  ck set <id>... [--title t] [--facet f=v] [--add f=v]
+  pj context <id> [--json]                             everything known about a card, assembled
+  pj untriaged [--json] [--limit n]                    cards needing attention, and why
+  pj set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--parent id|none]
          [--set path=yaml ...]                         scripted edits, for skills
-  ck rm <id>...                                        delete, dropping references to it
-  ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
-  ck link-session <id> [--cwd dir]                     link the live session working here
+  pj rm <id>...                                        delete, dropping references to it
+  pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
+  pj link-session <id> [--cwd dir]                     link the live session working here
 
-  ck vaults                                            list known vaults
-  ck vaults add <path> [--name n] [--create]           open a folder as a vault
-  ck vaults forget <path>                              stop tracking it (folder untouched)
+  pj vaults                                            list known vaults
+  pj vaults add <path> [--name n] [--create]           open a folder as a vault
+  pj vaults forget <path>                              stop tracking it (folder untouched)
 
   --vault <path>                                       act on a specific vault
 `;
@@ -117,7 +112,7 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
  * Split flags from positional arguments.
  *
  * `known` is not optional courtesy. An unrecognised flag used to be dropped
- * silently, so `ck set x --project '{}'` printed a success line and did nothing
+ * silently, so `pj set x --project '{}'` printed a success line and did nothing
  * — the sort of failure you only find by checking the file afterwards.
  */
 /** Report and stop. A CLI that half-applies a bad batch is worse than one that refuses. */
@@ -160,15 +155,6 @@ function ensureData(): void {
   mkdirSync(p.views, { recursive: true });
 }
 
-function takenIds(): Set<string> {
-  const { records } = readAll(p.cards);
-  return new Set(records.keys());
-}
-
-function cardPath(id: string): string {
-  return join(p.cards, `${id}.md`);
-}
-
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
 }
@@ -176,7 +162,7 @@ function pad(s: string, n: number): string {
 // ---------------------------------------------------------------- commands
 
 /**
- * `ck ls` runs the same compiler the sidebar does.
+ * `pj ls` runs the same compiler the sidebar does.
  *
  * The CLI has had `--filter f=v,v --group <facet>` since P0 — the web app is what
  * caught up. Sharing the compiler is what keeps them from drifting: a saved view
@@ -290,7 +276,7 @@ function cmdAdd(argv: string[]): void {
   const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'fingerprint']);
   const title = rest.join(' ').trim();
   if (!title) {
-    console.error('ck add <title>');
+    console.error('pj add <title>');
     process.exit(1);
   }
   ensureData();
@@ -320,7 +306,7 @@ function cmdAdd(argv: string[]): void {
 function cmdLink(argv: string[]): void {
   const [id, ...refs] = argv;
   if (!id || !refs.length) {
-    console.error('ck link <id> <ref> [...]');
+    console.error('pj link <id> <ref> [...]');
     process.exit(1);
   }
   const { records } = readAll(p.cards);
@@ -345,13 +331,13 @@ function cmdLink(argv: string[]): void {
  * provenance, and provenance is the whole point of a link. Moving a ref from one
  * card to another is ordinary organisational work, not an edge case.
  *
- * A ref that is not there is an error rather than a no-op: `ck unlink x jira:FOO-1`
+ * A ref that is not there is an error rather than a no-op: `pj unlink x jira:FOO-1`
  * reporting success while doing nothing is how you find out a month later that
  * the link is still on the other card.
  */
 function cmdUnlink(argv: string[]): void {
   const [id, ...refs] = argv;
-  if (!id || !refs.length) fail('ck unlink <id> <ref> [...]');
+  if (!id || !refs.length) fail('pj unlink <id> <ref> [...]');
   const { records } = readAll(p.cards);
   const rec = records.get(id);
   if (!rec) fail(`no record with id "${id}"`);
@@ -383,13 +369,13 @@ function cmdReindex(): void {
     `indexed ${c.records} record(s): ${c.cards} card(s), ${c.nodes} node(s), ` +
       `${c.projects} project(s), ${c.edges} edge(s), ${c.links} link(s)`,
   );
-  if (unreadable.length) console.log(`${unreadable.length} file(s) could not be parsed — run ck check`);
+  if (unreadable.length) console.log(`${unreadable.length} file(s) could not be parsed — run pj check`);
 }
 
 function cmdSearch(argv: string[]): void {
   const q = argv.join(' ').trim();
   if (!q) {
-    console.error('ck search <query>');
+    console.error('pj search <query>');
     process.exit(1);
   }
   const { db } = reindex(root);
@@ -424,80 +410,6 @@ function cmdProject(id: string): void {
   }
 }
 
-function cmdImport(argv: string[]): void {
-  const [what, file] = argv;
-  if (!what || !file) {
-    console.error('ck import trello <file.json> | ck import todo <TODO.md>');
-    process.exit(1);
-  }
-  ensureData();
-  const src = resolvePath(file, process.cwd());
-  if (!existsSync(src)) {
-    console.error(`not found: ${src}`);
-    process.exit(1);
-  }
-  const taken = takenIds();
-  let records: ReturnType<typeof importTrello>['records'];
-
-  if (what === 'trello') {
-    const res = importTrello(src, { taken });
-    records = res.records;
-    const r = res.report;
-    console.log(`# Trello import\n`);
-    console.log(`  file                    ${src}`);
-    console.log(`  cards in file           ${r.cardsTotal}`);
-    console.log(`  lists in file           ${r.listsTotal} (${r.listsOpen} open)`);
-    console.log(`  live cards              ${r.cardsLive}`);
-    console.log(`  - meta-list skipped     ${r.skippedMeta}`);
-    console.log(`  - separators skipped    ${r.skippedSeparator}`);
-    console.log(`  = imported              ${r.imported}`);
-    console.log(`  project records         ${r.projects.join(', ') || '-'}`);
-    console.log(`  section nodes           ${r.sections}`);
-    if (r.vocabulary.length)
-      console.log(`\n  column-name palette (${r.vocabulary.length}) → facet vocabulary, not cards:`);
-    for (const v of r.vocabulary) console.log(`    ${v}`);
-    if (r.urlTitles.length) console.log(`\n  ${r.urlTitles.length} card(s) titled with a bare URL — need titles`);
-    for (const n of r.needsAttachment)
-      console.log(`  attachment to re-export by hand: ${n.id} → ${n.files.join(', ')}`);
-  } else if (what === 'todo') {
-    // Existing project records, keyed by their project key, so a project named in
-    // both sources is reused rather than duplicated.
-    const { records: current } = readAll(p.cards);
-    const existingProjects = new Map<string, string>();
-    for (const rec of current.values()) {
-      if (rec.project && !existingProjects.has(rec.id)) existingProjects.set(rec.id, rec.id);
-    }
-    const res = importTodo(src, { taken, existingProjects });
-    records = res.records;
-    const r = res.report;
-    console.log(`# TODO.md import\n`);
-    console.log(`  project records         ${r.projects.length}`);
-    console.log(`  cards                   ${r.cards} (${r.doneCards} already done)`);
-    console.log(`    of which inbox        ${r.inboxCards}  → under node "inbox", awaiting triage`);
-    console.log(`    of which jira         ${r.jiraCards}  → under node "jira-triage"`);
-    for (const s of r.skippedSections) console.log(`  not imported            ${s}`);
-  } else {
-    console.error(`unknown import source "${what}"`);
-    process.exit(1);
-  }
-
-  let written = 0;
-  let skipped = 0;
-  for (const rec of records) {
-    const file = cardPath(rec.id);
-    if (existsSync(file)) {
-      skipped++;
-      continue;
-    }
-    writeCardFile(file, renderCard(rec));
-    written++;
-  }
-  console.log(`\nwrote ${written} file(s)${skipped ? `, skipped ${skipped} already present` : ''}`);
-  const { db } = reindex(root);
-  const c = counts(db);
-  console.log(`index: ${c.records} record(s), ${c.projects} project(s), ${c.edges} edge(s)`);
-}
-
 function cmdStats(): void {
   const { db } = reindex(root);
   const c = counts(db);
@@ -525,7 +437,7 @@ try {
       const { flags } = argFlags(argv, ['since']);
       if (!isRepo(root)) {
         console.error(
-          'this vault is not a git repository — `ck log` reads the history git already keeps',
+          'this vault is not a git repository — `pj log` reads the history git already keeps',
         );
         process.exit(1);
       }
@@ -554,9 +466,6 @@ try {
     case 'project':
       cmdProject(argv[0] ?? '');
       break;
-    case 'import':
-      cmdImport(argv);
-      break;
     case 'stats':
       cmdStats();
       break;
@@ -567,7 +476,7 @@ try {
       if (!sub || sub === 'list') {
         const vaults = listVaults();
         if (!vaults.length) {
-          console.log('no vaults yet — `ck vaults add <path>`, or open one in the app');
+          console.log('no vaults yet — `pj vaults add <path>`, or open one in the app');
           break;
         }
         for (const v of vaults) {
@@ -578,7 +487,7 @@ try {
       }
       if (sub === 'add') {
         if (!given) {
-          console.error('ck vaults add <path> [--name n] [--create]');
+          console.error('pj vaults add <path> [--name n] [--create]');
           process.exit(1);
         }
         const path = normalise(given);
@@ -589,13 +498,13 @@ try {
       }
       if (sub === 'forget') {
         if (!given) {
-          console.error('ck vaults forget <path>');
+          console.error('pj vaults forget <path>');
           process.exit(1);
         }
         console.log(forgetVault(given) ? `forgot ${normalise(given)}` : 'not tracked');
         break;
       }
-      console.error(`unknown: ck vaults ${sub}`);
+      console.error(`unknown: pj vaults ${sub}`);
       process.exit(1);
     }
     case 'enrich': {
@@ -607,7 +516,7 @@ try {
           ? [...new Set([...records.values()].flatMap((r) => r.links.map((l) => l.raw)))]
           : [];
       if (!refs.length) {
-        console.error('ck enrich <ref>... | ck enrich --all');
+        console.error('pj enrich <ref>... | pj enrich --all');
         process.exit(1);
       }
       // Kick off the fetches, wait for the queue to drain, then report.
@@ -629,7 +538,7 @@ try {
     }
     /**
      * A sweep proposes; it never captures and never advances a cursor. Both are
-     * separate deliberate steps — `ck add`/`ck link` for the first, `ck intake
+     * separate deliberate steps — `pj add`/`pj link` for the first, `pj intake
      * commit` for the second — because a run that fetched is not a run that was
      * resolved, and an abandoned sweep must not swallow what it listed.
      */
@@ -653,7 +562,7 @@ try {
 
       if (sub === 'commit') {
         const channel = flags.get('channel')?.[0];
-        if (!channel) fail('ck intake commit --channel <c> [--cursor <v>]');
+        if (!channel) fail('pj intake commit --channel <c> [--cursor <v>]');
         if (!channelNames().includes(channel)) {
           fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
         }
@@ -666,7 +575,7 @@ try {
       }
 
       if (sub === 'known') {
-        if (!channels.length) fail('ck intake known <fingerprint-or-ref>...');
+        if (!channels.length) fail('pj intake known <fingerprint-or-ref>...');
         for (const row of known(root, channels)) {
           console.log(`${pad(row.ref, 46)} ${row.cards.length ? row.cards.join(', ') : '—'}`);
         }
@@ -735,7 +644,7 @@ try {
       const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'parent', 'set']);
       if (!rest.length) {
         console.error(
-          'ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]\n' +
+          'pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]\n' +
             '                [--parent id|none] [--set path=yaml]',
         );
         process.exit(1);
@@ -805,11 +714,11 @@ try {
     case 'rm': {
       const { rest } = argFlags(argv, []);
       if (!rest.length) {
-        console.error('ck rm <id>...');
+        console.error('pj rm <id>...');
         process.exit(1);
       }
       // Through `deleteCard`, which drops every reference pointing at the record.
-      // Removing the file by hand leaves them dangling, which `ck check` then
+      // Removing the file by hand leaves them dangling, which `pj check` then
       // reports — the reason this command exists.
       for (const id of rest) {
         const { removedEdges } = deleteCard(root, id);
@@ -823,13 +732,23 @@ try {
       const id = rest[0];
       const ctx = id ? cardContext(id, root) : null;
       if (!ctx) {
-        console.error('ck work <id>');
+        console.error('pj work <id>');
         process.exit(1);
       }
       const jiraKeys = ctx.links.filter((l) => l.kind === 'jira').map((l) => l.ref);
       const branch = branchFor(ctx.id, { template: ctx.project?.branch, jiraKeys });
-      const parentDir =
-        process.env.COCKPIT_WORKSPACES ?? join(homedir(), 'Code', 'wt');
+      // Required, with no fallback. `pj work` creates real worktrees on disk, and a
+      // guessed parent directory puts them somewhere the user did not choose and
+      // will not think to look. Being told is cheap; being surprised is not.
+      const workspaces = process.env.PROJECTOR_WORKSPACES;
+      if (!workspaces) {
+        console.error(
+          'PROJECTOR_WORKSPACES is not set — `pj work` needs to be told where worktrees go.\n' +
+            '  export PROJECTOR_WORKSPACES=~/Code/wt',
+        );
+        process.exit(1);
+      }
+      const parentDir = resolvePath(workspaces, process.cwd());
       const workspace = workspacePath(parentDir, ctx.project?.key ?? 'no-project', branch);
       const repos = ctx.project?.repos ?? [];
 
@@ -891,7 +810,7 @@ try {
       const { flags, rest } = argFlags(argv, ['cwd']);
       const id = rest[0];
       if (!id) {
-        console.error('ck link-session <id> [--cwd dir]');
+        console.error('pj link-session <id> [--cwd dir]');
         process.exit(1);
       }
       const cwd = flags.get('cwd')?.[0] ?? process.cwd();
@@ -922,6 +841,6 @@ try {
       if (cmd) process.exitCode = 1;
   }
 } catch (err) {
-  console.error(`ck ${cmd}: ${(err as Error).message}`);
+  console.error(`pj ${cmd}: ${(err as Error).message}`);
   process.exit(1);
 }

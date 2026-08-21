@@ -38,7 +38,7 @@ parent:
   type: ref
   single: true
 
-# What must finish before the target. Its transitive closure is what ck next
+# What must finish before the target. Its transitive closure is what pj next
 # and the blocked axis are built from. Not worth grouping a board by — the
 # question is always the inverse, which the derived blocked axis answers.
 blocks:

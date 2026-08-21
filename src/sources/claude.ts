@@ -13,7 +13,7 @@ import { firstLine } from './run.ts';
  * a transcript to the chat that drives it (`desktopSessionFor`).
  *
  * Three consumers, one reader: the `claude:` fetcher resolves a uuid it was
- * given, `ck link-session` finds the session working in a directory, and intake
+ * given, `pj link-session` finds the session working in a directory, and intake
  * discovers transcripts that moved since it last looked. Before this file each
  * had its own copy of `liveSessions`, which is two too many for a format we do
  * not control.

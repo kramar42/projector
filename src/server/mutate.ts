@@ -12,7 +12,7 @@ import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
 import type { Rec } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
-import { slugify, uniqueId } from '../import/slug.ts';
+import { slugify, uniqueId } from '../schema/slug.ts';
 
 /**
  * Every write in the app funnels through this module.

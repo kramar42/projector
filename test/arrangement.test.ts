@@ -15,7 +15,7 @@ import { resolveCliVault, vaultAbove } from '../src/config.ts';
  * rather than replaces, and a card that has gone is the only thing dropped.
  */
 function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'cockpit-arr-'));
+  const root = mkdtempSync(join(tmpdir(), 'projector-arr-'));
   mkdirSync(join(root, 'cards'), { recursive: true });
   mkdirSync(join(root, 'views'), { recursive: true });
   for (const id of cards) {
@@ -148,7 +148,7 @@ test('the CLI finds a vault from the working directory, without a registry', () 
     // A folder that is not a vault and has none above it.
     assert.equal(vaultAbove(tmpdir()), null);
 
-    // So `ck` needs no flag and no registry entry when run from inside. Compared
+    // So `pj` needs no flag and no registry entry when run from inside. Compared
     // against the real path: chdir resolves symlinks, and on macOS the temp dir
     // is one.
     const cwd = process.cwd();
@@ -171,10 +171,10 @@ test('an explicit vault still wins over the working directory', () => {
     try {
       process.chdir(a.root);
       assert.deepEqual(resolveCliVault(['--vault', b.root], []), { root: b.root });
-      process.env.COCKPIT_DATA = b.root;
+      process.env.PROJECTOR_DATA = b.root;
       assert.deepEqual(resolveCliVault([], []), { root: b.root });
     } finally {
-      delete process.env.COCKPIT_DATA;
+      delete process.env.PROJECTOR_DATA;
       process.chdir(cwd);
     }
   } finally {

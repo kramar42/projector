@@ -47,7 +47,7 @@ export const jiraChannel: Channel = {
   defaultDays: 7,
 
   async collect(ctx): Promise<ChannelReport> {
-    const jql = process.env.COCKPIT_INTAKE_JQL || defaultJql(ctx.since);
+    const jql = process.env.PROJECTOR_INTAKE_JQL || defaultJql(ctx.since);
     const res = await searchIssues(jql, Math.max(ctx.limit * 2, 20));
 
     if (!res.ok) {

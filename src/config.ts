@@ -32,7 +32,7 @@ export const paths = (root: string) => ({
 /**
  * The vault a command-line invocation should act on.
  *
- * `--vault <path>` wins, then `COCKPIT_DATA`. Otherwise, if exactly one vault is
+ * `--vault <path>` wins, then `PROJECTOR_DATA`. Otherwise, if exactly one vault is
  * registered, that one — a single-vault setup should not have to say so. With
  * several registered and no choice made, the caller is asked to pick rather than
  * guessing.
@@ -67,8 +67,8 @@ export function resolveCliVault(
     if (!given) return { error: '--vault needs a path' };
     return { root: resolvePath(given, process.cwd()) };
   }
-  if (process.env.COCKPIT_DATA) {
-    return { root: resolvePath(process.env.COCKPIT_DATA, process.cwd()) };
+  if (process.env.PROJECTOR_DATA) {
+    return { root: resolvePath(process.env.PROJECTOR_DATA, process.cwd()) };
   }
   // Standing inside a vault is an unambiguous answer, and it does not need the
   // registry to exist — so the CLI works on a vault the app has never opened.
@@ -78,7 +78,7 @@ export function resolveCliVault(
   if (!registered.length) {
     return {
       error:
-        'no vault. Run from inside one, pass --vault <path>, set COCKPIT_DATA, or open one in the app.',
+        'no vault. Run from inside one, pass --vault <path>, set PROJECTOR_DATA, or open one in the app.',
     };
   }
   return {

@@ -8,7 +8,7 @@
  * same failure vocabulary — and neither should own the other's store, so what is
  * shared stops here.
  *
- * Set `COCKPIT_JIRA_URL`, `COCKPIT_JIRA_EMAIL` and `COCKPIT_JIRA_TOKEN` (an
+ * Set `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL` and `PROJECTOR_JIRA_TOKEN` (an
  * Atlassian API token) to turn it on. Only GET is ever issued (C2).
  */
 
@@ -19,14 +19,14 @@ export interface JiraConfig {
 }
 
 export function jiraConfig(): JiraConfig | null {
-  const url = process.env.COCKPIT_JIRA_URL?.replace(/\/+$/, '');
-  const email = process.env.COCKPIT_JIRA_EMAIL;
-  const token = process.env.COCKPIT_JIRA_TOKEN;
+  const url = process.env.PROJECTOR_JIRA_URL?.replace(/\/+$/, '');
+  const email = process.env.PROJECTOR_JIRA_EMAIL;
+  const token = process.env.PROJECTOR_JIRA_TOKEN;
   return url && email && token ? { url, email, token } : null;
 }
 
 export const JIRA_UNCONFIGURED =
-  'Jira is not configured — set COCKPIT_JIRA_URL, COCKPIT_JIRA_EMAIL and COCKPIT_JIRA_TOKEN';
+  'Jira is not configured — set PROJECTOR_JIRA_URL, PROJECTOR_JIRA_EMAIL and PROJECTOR_JIRA_TOKEN';
 
 /**
  * A GET that never throws. Callers specialise the message where a status means

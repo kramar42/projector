@@ -1,20 +1,20 @@
 ---
-name: work
-description: Start work on a cockpit card — prepare a multi-repo git worktree workspace, write a briefing from the card's full context, and open a Claude session there. Use when asked to work on / start / pick up a card, or to set up a workspace or worktree for a piece of work. Also use to hand a card to a fresh session with its context intact.
+name: pj-work
+description: Start work on a projector card — prepare a multi-repo git worktree workspace, write a briefing from the card's full context, and open a Claude session there. Use when asked to work on / start / pick up a card, or to set up a workspace or worktree for a piece of work. Also use to hand a card to a fresh session with its context intact.
 ---
 
 # Work on a card
 
 Prepare a workspace and hand the card to a session that starts with everything it needs. Read the
-`cockpit` skill first.
+`projector` skill first.
 
 ## 1. Identify the card
 
 If the user named one loosely, resolve it before doing anything:
 
 ```bash
-ck search "<what they said>"
-ck next                      # when they asked "what should I work on"
+pj search "<what they said>"
+pj next                      # when they asked "what should I work on"
 ```
 
 Confirm which card you landed on if there was any ambiguity. Never prepare a workspace for a guess.
@@ -22,13 +22,13 @@ Confirm which card you landed on if there was any ambiguity. Never prepare a wor
 ## 2. Check it can actually be worked
 
 ```bash
-ck context <id>
+pj context <id>
 ```
 
 Stop and say so, rather than pressing on, if:
 
 - **No project, or the project declares no repos.** There is nothing to lay out. Offer to add repos
-  to the project record's frontmatter — `ck context` shows which project it resolves to, and the
+  to the project record's frontmatter — `pj context` shows which project it resolves to, and the
   frontmatter tab in the app is the place to edit it.
 - **It is blocked.** `blockedBy` lists unfinished blockers. Say which, and ask whether to proceed
   anyway or switch to a blocker.
@@ -37,7 +37,7 @@ Stop and say so, rather than pressing on, if:
 ## 3. Dry run first when anything is unusual
 
 ```bash
-ck work <id> --dry-run
+pj work <id> --dry-run
 ```
 
 This prints the workspace path, the branch, the repos and the whole briefing without touching the
@@ -47,7 +47,7 @@ user has not used this before.
 ## 4. Launch
 
 ```bash
-ck work <id>
+pj work <id>
 ```
 
 Which does, in order: a workspace directory outside every repo; one `git worktree` per project repo
@@ -62,11 +62,11 @@ run themselves.
 
 ## 5. Close the loop
 
-The briefing already instructs the new session to run `ck link-session <id>` as its last step, so the
+The briefing already instructs the new session to run `pj link-session <id>` as its last step, so the
 card accumulates its own history. If you are *inside* a workspace and it has not happened yet:
 
 ```bash
-ck link-session <id>
+pj link-session <id>
 ```
 
 That finds the live session working in this directory and appends `claude:<uuid>` to the card, which

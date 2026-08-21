@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 
 /**
  * The index is derived and disposable. Nothing here is authoritative — a cold
- * `ck reindex` from the card files is always correct, so the schema is free to
+ * `pj reindex` from the card files is always correct, so the schema is free to
  * change without a migration.
  */
 const SCHEMA = `

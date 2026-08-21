@@ -101,7 +101,7 @@ export function buildBriefing(input: {
   L.push('4. Link this session back to the card so it can be found later:');
   L.push('');
   L.push('   ```bash');
-  L.push(`   ck link-session ${ctx.id}`);
+  L.push(`   pj link-session ${ctx.id}`);
   L.push('   ```');
   L.push('');
   L.push(

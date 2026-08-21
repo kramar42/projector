@@ -4,7 +4,7 @@ import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/f
 import { loadCard, parseCard, renderCard } from '../src/schema/card.ts';
 import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
-import { clean, slugify, uniqueId } from '../src/import/slug.ts';
+import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
@@ -408,27 +408,27 @@ test('a desktop-app local_ id explains why it cannot resolve', async () => {
 });
 
 test('jira says what configuration it needs', async () => {
-  const saved = process.env.COCKPIT_JIRA_URL;
-  delete process.env.COCKPIT_JIRA_URL;
+  const saved = process.env.PROJECTOR_JIRA_URL;
+  delete process.env.PROJECTOR_JIRA_URL;
   const r = await jiraFetcher.fetch('PROJ-303');
   assert.equal(isUnavailable(r), true);
   if (isUnavailable(r)) {
     assert.equal(r.needsSetup, true);
-    assert.match(r.reason, /COCKPIT_JIRA_URL/);
+    assert.match(r.reason, /PROJECTOR_JIRA_URL/);
   }
-  if (saved) process.env.COCKPIT_JIRA_URL = saved;
+  if (saved) process.env.PROJECTOR_JIRA_URL = saved;
 });
 
 test('a bad issue key never reaches the network', async () => {
-  process.env.COCKPIT_JIRA_URL = 'https://example.invalid';
-  process.env.COCKPIT_JIRA_EMAIL = 'a@b.c';
-  process.env.COCKPIT_JIRA_TOKEN = 'x';
+  process.env.PROJECTOR_JIRA_URL = 'https://example.invalid';
+  process.env.PROJECTOR_JIRA_EMAIL = 'a@b.c';
+  process.env.PROJECTOR_JIRA_TOKEN = 'x';
   const r = await jiraFetcher.fetch('not-a-key');
   assert.equal(isUnavailable(r), true);
   if (isUnavailable(r)) assert.match(r.reason, /not an issue key/);
-  delete process.env.COCKPIT_JIRA_URL;
-  delete process.env.COCKPIT_JIRA_EMAIL;
-  delete process.env.COCKPIT_JIRA_TOKEN;
+  delete process.env.PROJECTOR_JIRA_URL;
+  delete process.env.PROJECTOR_JIRA_EMAIL;
+  delete process.env.PROJECTOR_JIRA_TOKEN;
 });
 
 test('jira status colour follows statusCategory, not workflow names', () => {
@@ -533,7 +533,7 @@ test('the briefing names failed repos as out of scope and stops before building'
   assert.match(out, /out of scope[\s\S]*bad.*boom/);
   assert.match(out, /STOP/);
   assert.match(out, /deliberately left out/);
-  assert.match(out, /ck link-session c1/);
+  assert.match(out, /pj link-session c1/);
 });
 
 // ---------------------------------------------------------------- vaults
@@ -545,18 +545,20 @@ test('a vault path is normalised: ~ expanded, absolute, no trailing slash', () =
   assert.ok(!normalise('~/v').includes('~'));
 });
 
-test('a generic leaf name borrows its parent, so vaults are distinguishable', () => {
-  // `…/work/cockpit/data` and `…/notes/other/data` would otherwise both be "data".
-  assert.equal(suggestName('/Users/k/Code/work/cockpit/data'), 'cockpit');
-  assert.equal(suggestName('/Users/k/notes/vault'), 'notes');
+test('the suggested name is the folder name, and nothing cleverer', () => {
+  // There is no list of "too generic" leaf names that borrows the parent instead.
+  // A suggestion sits in an editable field, so guessing buys nothing and costs
+  // predictability.
+  assert.equal(suggestName('/Users/k/notes/vault'), 'vault');
+  assert.equal(suggestName('/Users/k/Code/work/projector/work'), 'work');
   assert.equal(suggestName('/Users/k/second-brain'), 'second-brain');
 });
 
 test('doc refs resolve against the vault, and absolutely when absolute', () => {
-  const dir = mkdtempSync(pathJoin(tmpdir(), 'ck-vault-'));
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-'));
   mkdirSync(pathJoin(dir, 'cards'), { recursive: true });
   writeFileSync(pathJoin(dir, 'inside.md'), '# in');
-  const outside = pathJoin(dir, '..', `ck-outside-${process.pid}.md`);
+  const outside = pathJoin(dir, '..', `pj-outside-${process.pid}.md`);
   writeFileSync(outside, '# out');
 
   assert.equal(resolveDoc('inside.md', dir).path, pathJoin(dir, 'inside.md'));
@@ -574,7 +576,7 @@ test('doc refs resolve against the vault, and absolutely when absolute', () => {
 });
 
 test('a directory is a vault when it holds what a vault is made of', () => {
-  const dir = mkdtempSync(pathJoin(tmpdir(), 'ck-vault-'));
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-'));
   assert.equal(looksLikeVault(dir), false);
   mkdirSync(pathJoin(dir, 'cards'));
   assert.equal(looksLikeVault(dir), true);
@@ -586,17 +588,17 @@ test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
   const two = [...one, { path: '/v/two', name: 'two' }];
 
   // An explicit flag wins over everything.
-  assert.deepEqual(resolveCliVault(['node', 'ck', '--vault', '/v/x', 'ls'], two), { root: '/v/x' });
+  assert.deepEqual(resolveCliVault(['node', 'pj', '--vault', '/v/x', 'ls'], two), { root: '/v/x' });
   // One registered vault needs no flag.
-  assert.deepEqual(resolveCliVault(['node', 'ck', 'ls'], one), { root: '/v/one' });
+  assert.deepEqual(resolveCliVault(['node', 'pj', 'ls'], one), { root: '/v/one' });
   // Several, with no choice made, must ask rather than guess.
-  const ambiguous = resolveCliVault(['node', 'ck', 'ls'], two);
+  const ambiguous = resolveCliVault(['node', 'pj', 'ls'], two);
   assert.ok('error' in ambiguous && /--vault/.test(ambiguous.error));
   // None at all says how to get one.
-  const none = resolveCliVault(['node', 'ck', 'ls'], []);
+  const none = resolveCliVault(['node', 'pj', 'ls'], []);
   assert.ok('error' in none && /no vault/.test(none.error));
   // A flag with no value is an error, not a silent fallback.
-  const bare = resolveCliVault(['node', 'ck', 'ls', '--vault'], one);
+  const bare = resolveCliVault(['node', 'pj', 'ls', '--vault'], one);
   assert.ok('error' in bare);
 });
 
@@ -624,7 +626,7 @@ test('a yaml date in a facet round-trips as a date, not a timestamp', () => {
 // ---------------------------------------------------------------- validation
 
 function facetsFile(body: string): string {
-  const dir = mkdtempSync(pathJoin(tmpdir(), 'cockpit-facets-'));
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'projector-facets-'));
   const f = pathJoin(dir, 'facets.yaml');
   writeFileSync(f, body, 'utf8');
   return f;
@@ -687,8 +689,8 @@ test('an ordered facet orders by its buckets, not alphabetically', () => {
 
 // ---------------------------------------------------------------- history
 
-test('ck log reads status transitions out of the diffs', () => {
-  const root = mkdtempSync(pathJoin(tmpdir(), 'cockpit-git-'));
+test('pj log reads status transitions out of the diffs', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
   try {
     mkdirSync(pathJoin(root, 'cards'), { recursive: true });
@@ -779,13 +781,13 @@ test('every seeded file parses as what it claims to be', () => {
 });
 
 test('a new vault is seeded with a vocabulary and views, and no prose', () => {
-  const root = mkdtempSync(pathJoin(tmpdir(), 'ck-seed-'));
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-seed-'));
   try {
     initVault(root, SEED_FACETS, SEED_VIEWS);
     assert.ok(existsSync(pathJoin(root, 'facets.yaml')));
     assert.ok(existsSync(pathJoin(root, 'cards')));
     assert.ok(existsSync(pathJoin(root, 'views')));
-    // No card-conventions README. That text was a copy of the `cockpit` skill,
+    // No card-conventions README. That text was a copy of the `projector` skill,
     // which an agent already has — and two places stating the format is one
     // place to drift out of date.
     assert.equal(existsSync(pathJoin(root, 'cards', 'README.md')), false);
@@ -812,7 +814,7 @@ test('the seeded vocabulary covers every facet the seeded views use', () => {
 // ---------------------------------------------------------------- nested set
 
 function scratchVault(): { root: string; cleanup: () => void } {
-  const root = mkdtempSync(pathJoin(tmpdir(), 'ck-set-'));
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-set-'));
   mkdirSync(pathJoin(root, 'cards'), { recursive: true });
   writeFileSync(
     pathJoin(root, 'facets.yaml'),

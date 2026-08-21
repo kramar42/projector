@@ -8,7 +8,7 @@ import { paths } from '../config.ts';
 export interface IndexResult {
   db: DatabaseSync;
   records: Map<string, Rec>;
-  /** Files that could not be parsed at all; `ck check` reports them. */
+  /** Files that could not be parsed at all; `pj check` reports them. */
   unreadable: { file: string; errors: string[] }[];
   duplicates: { id: string; files: string[] }[];
 }

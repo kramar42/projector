@@ -1,27 +1,39 @@
 ---
-name: cockpit
-description: How to read and write everything in a cockpit vault — the markdown cards, the facet vocabulary in facets.yaml, and the saved views. Use whenever a request involves cards, projects, facets, views, the board, the canvas, the table, or the `ck` CLI: creating a card, changing its facets or project, adding or changing a facet axis, writing or fixing a saved view, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Read this before hand-editing any file in a vault — it is the only place the card format is written down.
+name: projector
+description: How to read and write everything in a projector vault — the markdown cards, the facet vocabulary in facets.yaml, and the saved views. Use whenever a request involves cards, projects, facets, views, the board, the canvas, the table, or the `pj` CLI: creating a card, changing its facets or project, adding or changing a facet axis, writing or fixing a saved view, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Read this before hand-editing any file in a vault — it is the only place the card format is written down.
 ---
 
-# Cockpit
+# Projector
 
 A personal work-management app. One markdown card database, projected as a board, a mind-map canvas or
-a table — whichever the current query asks for. `cockpit/README.md` describes the app; **this file is
+a table — whichever the current query asks for. The project's `README.md` describes the app; **this file is
 where the card format itself is written down**, so nothing in a vault restates it.
 
 **A vault holds three editable things**, and this skill covers all three:
 
 | | | |
 |---|---|---|
-| `cards/*.md` | the records | mostly `ck` |
+| `cards/*.md` | the records | mostly `pj` |
 | `facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
 | `views/*.yaml` | saved queries and their arrangement | hand-edit |
 
-Everything is plain files: create and edit them with Write/Edit, no API and no running app. Prefer `ck`
-for cards, because it validates and keeps formatting consistent. Run `ck check` after any batch.
+**`<vault>` below is whichever folder is in play — never a path written down here.** `pj` resolves it
+the way git finds a repository: `--vault <path>` wins, then `$PROJECTOR_DATA`, then a walk up from the
+working directory, then the single registered vault. Ask `pj` rather than assuming:
 
 ```bash
-alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
+pj vaults                    # the registered ones, and where each lives
+pj --help                    # its header names the vault this invocation would act on
+```
+
+If several are registered and the request does not say which, **ask the user** — `pj` itself refuses to
+guess here, and so should you: acting on the wrong vault writes real records into the wrong database.
+
+Everything is plain files: create and edit them with Write/Edit, no API and no running app. Prefer `pj`
+for cards, because it validates and keeps formatting consistent. Run `pj check` after any batch.
+
+```bash
+alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
 ```
 
 ## The model, in four facts
@@ -37,54 +49,54 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
 3. **`parent` is a reference facet too** — "this card is part of that one". Single-valued, drawn by the
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
    are independent, so a card may have either, both or neither. Set it with `--parent X`, which is
-   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers `ck next`.
+   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers `pj next`.
 4. **There is no `kind`.** A record is not a class of thing. Whether it is work is whether it carries a
    `status` — which is what keeps a grouping record off a status-filtered board — and whether it
    contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
 5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
    from a non-empty `waiting_on`; neither is a status. `status` is lifecycle only.
 6. **A facet declares a `type`** — `label` (the default), `ref`, `date` or `number`. `due` is a date
-   facet: `ck set <id> --facet due=2026-09-01`, cleared with `--facet due=`. An ordered facet presents
+   facet: `pj set <id> --facet due=2026-09-01`, cleared with `--facet due=`. An ordered facet presents
    **buckets** on an axis and compares raw values, so `--filter due=overdue` and
    `--filter due=">2026-09-01"` are both valid and mean different things.
 
 ## Reading
 
 ```bash
-ck context <id>              # everything: facets, project chain, repos, instructions, links, body
-ck context <id> --json       # same, machine-readable
-ck show <id>                 # compact
-ck ls --group project        # or any facet
-ck ls --focus project-a --via project --dir in    # the whole portfolio, transitively
-ck ls --focus project-a --via parent --dir in     # everything decomposed under it
-ck ls --group parent                        # or filter parent=X, or parent=(none)
-ck ls --filter linked=jira                  # which records carry a Jira link
+pj context <id>              # everything: facets, project chain, repos, instructions, links, body
+pj context <id> --json       # same, machine-readable
+pj show <id>                 # compact
+pj ls --group project        # or any facet
+pj ls --focus project-a --via project --dir in    # the whole portfolio, transitively
+pj ls --focus project-a --via parent --dir in     # everything decomposed under it
+pj ls --group parent                        # or filter parent=X, or parent=(none)
+pj ls --filter linked=jira                  # which records carry a Jira link
                                             # out = follows references, in = referenced by
-ck ls --filter status=active,planning
-ck next                      # open cards with no unfinished blocker
-ck untriaged --json          # cards missing project/priority/status, and why
-ck next                      # actionable now: deadline first, then priority
-ck log --since "1 week ago"  # what actually changed, out of git
-ck search <query>
-ck project <id>              # just the resolved project config
-ck enrich <ref> --force      # resolve a link's live state
+pj ls --filter status=active,planning
+pj next                      # open cards with no unfinished blocker
+pj untriaged --json          # cards missing project/priority/status, and why
+pj next                      # actionable now: deadline first, then priority
+pj log --since "1 week ago"  # what actually changed, out of git
+pj search <query>
+pj project <id>              # just the resolved project config
+pj enrich <ref> --force      # resolve a link's live state
 ```
 
-`ck context` is the right first move for almost any question about a card. It already resolves the
+`pj context` is the right first move for almost any question about a card. It already resolves the
 project chain, the inherited repos and instructions, and the cached link enrichment — do not
 re-derive those by reading files.
 
 ## Writing
 
 ```bash
-ck add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--fingerprint fp] [--body text]
-ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]
-ck set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
-ck set <id> --set 'project={}'      # this is how a record becomes a project
-ck rm <id>...                       # deletes, dropping every reference pointing at it
-ck link <id> <ref> [...]
-ck link-session <id>         # link the live Claude session working in this directory
-ck check                     # validate everything; run this after a batch of edits
+pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--fingerprint fp] [--body text]
+pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]
+pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
+pj set <id> --set 'project={}'      # this is how a record becomes a project
+pj rm <id>...                       # deletes, dropping every reference pointing at it
+pj link <id> <ref> [...]
+pj link-session <id>         # link the live Claude session working in this directory
+pj check                     # validate everything; run this after a batch of edits
 ```
 
 `--facet` replaces a facet's values, `--add`/`--remove` adjust them. `--fingerprint` makes a create
@@ -93,20 +105,20 @@ refilling the inbox.
 
 ## Rules that matter
 
-- **An unknown flag is an error.** `ck` used to drop them silently, so a typo looked like success.
+- **An unknown flag is an error.** `pj` used to drop them silently, so a typo looked like success.
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
   `planning|active|frozen|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
-  `cockpit/data/facets.yaml` before inventing a value; `ck set` will refuse anyway.
+  `<vault>/facets.yaml` before inventing a value; `pj set` will refuse anyway.
 - **Never write `status: blocked` or `status: waiting`.** They are not values. If something is
   blocked by another card, add a `blocks` edge from the blocker; if it is waiting on a person, set
   `waiting_on`. Both surface on the `blocked` axis without being stored twice.
 - **`archived` is how you retire a captured card**, not deletion. Deleting it destroys the
-  `source_fingerprint` too, so the next `/capture` sweep creates it again.
+  `source_fingerprint` too, so the next `/pj-capture` sweep creates it again.
 - **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a card
   outside Project A.
 - **Never set a `project` value with no matching project record.** Either use an existing id or
   propose creating the record — do not invent membership that resolves to nothing.
-- **Positions are never on a card.** Canvas `x/y` lives in `cockpit/data/views/canvas/*.yaml`.
+- **Positions are never on a card.** Canvas `x/y` lives in `<vault>/views/canvas/*.yaml`.
 - **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a card
   operation. Links are references, not copies.
 
@@ -149,8 +161,8 @@ due:
 - **`open: false` is the only thing that rejects a value.** Defaults to false for `label`, true for
   everything else.
 
-Adding an axis is two steps and no code: declare it here, then set it with `ck set <id> --facet f=v`.
-Removing one leaves the values on the cards — `ck check` then reports them as unknown rather than
+Adding an axis is two steps and no code: declare it here, then set it with `pj set <id> --facet f=v`.
+Removing one leaves the values on the cards — `pj check` then reports them as unknown rather than
 dropping them, which is the behaviour you want when a rename is half-done.
 
 **Four axes are computed and are *not* in this file** — `type`, `blocked`, `triage`, `staleness`.
@@ -161,7 +173,7 @@ a card.
 ## Views — `views/*.yaml`
 
 **A view is a query, not a place.** `view = filter × focus × shape × show`. The same file describes
-what a URL and `ck ls` flags describe, so a saved view and a live query are the same object.
+what a URL and `pj ls` flags describe, so a saved view and a live query are the same object.
 
 ```yaml
 shape: board                  # board · canvas · table
@@ -192,8 +204,8 @@ live control in the UI. `nodes` (canvas x/y) and `order` (card order within a co
 - **`(none)` is written as `(none)`**, never as a bare `none`, so a facet that one day has a literal
   value `none` cannot collide with the absence refinement.
 
-Read one with `ck ls --view <name>`; the flags mirror the keys exactly. There is no CLI to write one —
-create the file, and confirm it by opening it: `ck ls --view <name>`.
+Read one with `pj ls --view <name>`; the flags mirror the keys exactly. There is no CLI to write one —
+create the file, and confirm it by opening it: `pj ls --view <name>`.
 
 ## Link kinds
 
@@ -209,4 +221,4 @@ A `local_…` id comes from the desktop app's store, is not on disk, and will no
 ## Don't compute what a query already answers
 
 Board badges, blocker state, progress counts and "what's actionable" are SQL over the index, not
-judgement calls. Ask `ck` and report what it says. Narrate; do not decide.
+judgement calls. Ask `pj` and report what it says. Narrate; do not decide.

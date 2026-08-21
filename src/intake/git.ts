@@ -48,11 +48,11 @@ function git(cwd: string, args: string[]): string | null {
 
 /** The identity to filter on: the repo's own `user.email`, overridable. */
 function authorFor(repo: string): string | null {
-  if (process.env.COCKPIT_GIT_AUTHOR) return process.env.COCKPIT_GIT_AUTHOR;
+  if (process.env.PROJECTOR_GIT_AUTHOR) return process.env.PROJECTOR_GIT_AUTHOR;
   return git(repo, ['config', 'user.email'])?.trim() || null;
 }
 
-/** `origin/HEAD` if it is known, else the checked-out branch. Same rule as `ck work`. */
+/** `origin/HEAD` if it is known, else the checked-out branch. Same rule as `pj work`. */
 function baseBranch(repo: string): string {
   const head = git(repo, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])?.trim();
   if (head) return head.replace(/^origin\//, '');
