@@ -1,5 +1,5 @@
 import { NONE } from './views/dragSemantics.ts';
-import type { Query, Shape, ViewSpec } from './types.ts';
+import type { Meta, Query, Shape, ViewSpec } from './types.ts';
 
 /**
  * The URL is the view (C9).
@@ -137,9 +137,24 @@ export const SHAPES: { value: Shape; label: string }[] = [
   { value: 'table', label: 'Table' },
 ];
 
-export const VIAS = ['parent', 'member-of', 'blocks'] as const;
-export const DIRS = ['down', 'up', 'both'] as const;
-export const EDGE_KINDS = ['parent', 'blocks', 'member-of'] as const;
+export const DIRS = ['out', 'in', 'both'] as const;
+
+/** Edge types, while `parent` and `blocks` are still edges rather than references. */
+const EDGE_TYPES = ['parent', 'blocks'] as const;
+
+/**
+ * Every relation a focus can walk and a canvas can draw.
+ *
+ * Reference facets come from the vocabulary rather than a list here, so
+ * declaring one in `facets.yaml` is all it takes for it to appear in both
+ * controls — there is no second place naming the relations that exist.
+ */
+export function relations(meta: Meta): string[] {
+  const refs = Object.entries(meta.facets)
+    .filter(([, def]) => def.ref)
+    .map(([name]) => name);
+  return [...EDGE_TYPES, ...refs];
+}
 
 /** A one-line reading of the query, for the sidebar footer and the page title. */
 export function describe(spec: ViewSpec, total: number): string {

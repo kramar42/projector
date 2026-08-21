@@ -92,15 +92,18 @@ export interface FacetDef {
    */
   single: boolean;
   /**
-   * Where the offered values come from, when a static list will not do.
-   * `project-records` means every record carrying a `project:` block, so a new
-   * project is offerable the moment it exists rather than once something uses it.
+   * The values of this facet are record ids in this vault.
    *
-   * This affects the *vocabulary* only. Every facet is stored and written
-   * identically — there is deliberately no such thing as a facet the app writes
-   * through some other mechanism.
+   * A reference facet is a facet — it filters, groups, drags and bulk-edits
+   * through the same code path as `priority` — and it is *also* traversable,
+   * which is what edges used to be for. `open` is implied and `values` is
+   * meaningless, since a vocabulary of record ids cannot be declared in advance.
+   *
+   * Cycles are always refused. Every reference facet that exists needs it:
+   * `project` for config inheritance, and `parent` for tree layout once it moves
+   * here too.
    */
-  valuesFrom?: 'project-records';
+  ref: boolean;
 }
 
 export type Facets = Record<string, FacetDef>;

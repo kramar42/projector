@@ -7,7 +7,8 @@ import type { FacetDef, Facets } from './types.ts';
  * what list-order does in Trello, made explicit and shared by every view.
  *
  * It is also where the constraints live: `open` decides whether a new value is
- * accepted, and `single` whether more than one may be held at once.
+ * accepted, `single` whether more than one may be held at once, and `ref`
+ * whether the values are record ids rather than labels.
  */
 export function loadFacets(file: string): Facets {
   if (!existsSync(file)) return {};
@@ -17,12 +18,15 @@ export function loadFacets(file: string): Facets {
   for (const [name, def] of Object.entries(raw)) {
     if (!def || typeof def !== 'object') continue;
     const d = def as Record<string, unknown>;
+    const ref = d.ref === true;
     out[name] = {
       label: typeof d.label === 'string' ? d.label : name,
-      values: Array.isArray(d.values) ? d.values.map(String) : [],
-      open: d.open === true,
+      // A reference facet's vocabulary is the vault, so a declared list is
+      // always a mistake and is dropped rather than half-honoured.
+      values: !ref && Array.isArray(d.values) ? d.values.map(String) : [],
+      open: ref || d.open === true,
       single: d.single === true,
-      valuesFrom: d.valuesFrom === 'project-records' ? 'project-records' : undefined,
+      ref,
     };
   }
   return out;

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RecordPicker } from './RecordPicker.tsx';
 import type { FacetDef } from '../types.ts';
 
 /**
@@ -8,8 +9,10 @@ import type { FacetDef } from '../types.ts';
  * new value typed in. A `single` facet picks one and replaces rather than
  * accumulating, so `status` cannot end up holding `planning` and `done` at once.
  *
- * `project` and `kind` are ordinary facets here, which is why neither needs any
- * special handling.
+ * A **reference** facet holds record ids, so its vocabulary is the whole vault
+ * and a toggle list is the wrong control — it picks a record instead. That falls
+ * out of `ref`, so `project` needs no handling of its own here, and a reference
+ * facet declared tomorrow gets the same editor for free.
  */
 export function FacetEditor({
   name,
@@ -23,6 +26,7 @@ export function FacetEditor({
   onChange: (next: string[]) => void;
 }) {
   const [adding, setAdding] = useState('');
+  const [picking, setPicking] = useState(false);
 
   const toggle = (v: string) => {
     if (values.includes(v)) return onChange(values.filter((x) => x !== v));
@@ -39,6 +43,38 @@ export function FacetEditor({
   // Values already on the card that the vocabulary does not declare — shown so
   // they can be removed rather than silently hidden.
   const extras = values.filter((v) => !def.values.includes(v));
+
+  if (def.ref) {
+    return (
+      <div className="facetedit">
+        <div className="facetedit-label">{def.label}</div>
+        <div className="facetedit-values">
+          {values.map((v) => (
+            <button key={v} className="togglechip is-on" onClick={() => toggle(v)} title="remove">
+              {v}
+            </button>
+          ))}
+          {picking ? null : (
+            <button className="btn ghost small" onClick={() => setPicking(true)}>
+              + record
+            </button>
+          )}
+        </div>
+        {picking && (
+          <RecordPicker
+            exclude={values}
+            placeholder={`${def.label.toLowerCase()}…`}
+            onCancel={() => setPicking(false)}
+            onPick={(id) => {
+              setPicking(false);
+              if (id) onChange(def.single ? [id] : [...values, id]);
+            }}
+          />
+        )}
+        <input type="hidden" name={name} />
+      </div>
+    );
+  }
 
   return (
     <div className="facetedit">

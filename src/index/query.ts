@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { facetRank, orderValues } from '../schema/facets.ts';
 import type { Facets, Rec } from '../schema/types.ts';
-import { parentsOf, projectRecords, projectsOf } from './project.ts';
+import { adjacency, walk } from './refs.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -18,12 +18,13 @@ import { parentsOf, projectRecords, projectsOf } from './project.ts';
 /** Absence of any value for a facet. Also the trailing group's label, as in P0. */
 export const NONE = '(none)';
 
-export type Via = 'parent' | 'member-of' | 'blocks';
-export type Dir = 'down' | 'up' | 'both';
+export type { Dir } from './refs.ts';
+import type { Dir } from './refs.ts';
 
 export interface Focus {
   id: string;
-  via: Via;
+  /** A reference facet name, or an edge type while both still exist. */
+  via: string;
   dir: Dir;
   /** Hops from the focus. Omit for unlimited. */
   depth?: number;
@@ -239,100 +240,18 @@ function buildCtx(records: Map<string, Rec>, today: string): Ctx {
 // ---------------------------------------------------------------- traversal
 
 /**
- * `member-of` edges, derived from the `project` facet and never stored.
- *
- * Membership is the facet, so this is the only honest way to draw the project
- * hierarchy: `resolveProject` reads the facet, and a `parent` edge that disagrees
- * with it changes the picture without changing what a card inherits.
- */
-export function memberEdges(records: Map<string, Rec>): { src: string; dst: string }[] {
-  const registry = projectRecords(records);
-  const out: { src: string; dst: string }[] = [];
-  for (const rec of records.values()) {
-    for (const key of projectsOf(rec)) {
-      const owner = registry.get(key);
-      if (owner && owner.id !== rec.id) out.push({ src: rec.id, dst: owner.id });
-    }
-  }
-  return out;
-}
-
-/**
- * Neighbours per axis, in both directions. `up` is toward the container or the
- * thing that must happen first; `down` is into the subtree or downstream.
- */
-function adjacency(via: Via, records: Map<string, Rec>): { up: Map<string, string[]>; down: Map<string, string[]> } {
-  const up = new Map<string, string[]>();
-  const down = new Map<string, string[]>();
-  const add = (m: Map<string, string[]>, k: string, v: string) => {
-    const list = m.get(k);
-    if (list) list.push(v);
-    else m.set(k, [v]);
-  };
-
-  const pairs: { src: string; dst: string }[] = [];
-  if (via === 'member-of') {
-    pairs.push(...memberEdges(records));
-  } else if (via === 'parent') {
-    for (const rec of records.values()) {
-      for (const p of parentsOf(rec)) {
-        if (records.has(p)) pairs.push({ src: rec.id, dst: p });
-      }
-    }
-  } else {
-    for (const rec of records.values()) {
-      for (const e of rec.edges) {
-        if (e.type === 'blocks' && records.has(e.to)) pairs.push({ src: rec.id, dst: e.to });
-      }
-    }
-  }
-
-  for (const { src, dst } of pairs) {
-    if (via === 'blocks') {
-      // Stored as "src must finish before dst", so dst is downstream of src.
-      add(down, src, dst);
-      add(up, dst, src);
-    } else {
-      // Stored as member → container, so the container is up.
-      add(up, src, dst);
-      add(down, dst, src);
-    }
-  }
-  return { up, down };
-}
-
-function walk(from: string, edges: Map<string, string[]>, depth: number | undefined): Set<string> {
-  const seen = new Set<string>([from]);
-  let frontier = [from];
-  let hops = 0;
-  while (frontier.length && (depth === undefined || hops < depth)) {
-    const next: string[] = [];
-    for (const cur of frontier) {
-      for (const n of edges.get(cur) ?? []) {
-        if (seen.has(n)) continue;
-        seen.add(n);
-        next.push(n);
-      }
-    }
-    frontier = next;
-    hops++;
-  }
-  return seen;
-}
-
-/**
  * The records a focus selects, including the focus itself.
  *
  * `both` is the union of two separate walks, not one walk over both directions —
  * the latter would drag in every sibling's subtree and stop being a focus.
  */
-export function focused(focus: Focus, records: Map<string, Rec>): Set<string> {
-  const { up, down } = adjacency(focus.via, records);
-  if (focus.dir === 'down') return walk(focus.id, down, focus.depth);
-  if (focus.dir === 'up') return walk(focus.id, up, focus.depth);
-  const out = walk(focus.id, down, focus.depth);
-  for (const id of walk(focus.id, up, focus.depth)) out.add(id);
-  return out;
+export function focused(focus: Focus, records: Map<string, Rec>, facets: Facets): Set<string> {
+  const adj = adjacency(focus.via, records, facets);
+  if (focus.dir === 'out') return walk(focus.id, adj.out, focus.depth);
+  if (focus.dir === 'in') return walk(focus.id, adj.in, focus.depth);
+  const both = walk(focus.id, adj.out, focus.depth);
+  for (const id of walk(focus.id, adj.in, focus.depth)) both.add(id);
+  return both;
 }
 
 // ---------------------------------------------------------------- full text
@@ -532,7 +451,7 @@ export function runQuery(
   // Focus and full text bound the universe; the facet filter refines inside it.
   // Both are outside the histogram's disjunction on purpose — lifting them per
   // facet would make counts describe a set nobody asked for.
-  const scope = query.focus ? focused(query.focus, records) : null;
+  const scope = query.focus ? focused(query.focus, records, facets) : null;
   const text = query.q ? ftsIds(db, query.q) : null;
 
   const universe: Rec[] = [];
@@ -548,7 +467,7 @@ export function runQuery(
 
   const context: string[] = [];
   if (query.connect === 'ancestors') {
-    const { up } = adjacency('parent', records);
+    const { out: up } = adjacency('parent', records, facets);
     const have = new Set(ids);
     for (const id of ids) {
       // Ancestors only, and drawn as context: a filtered graph that renders as
@@ -661,15 +580,19 @@ export interface Rollup {
  * `direct` and `total` are both reported because the difference is the answer to
  * a real question: `project-b` has one direct member and seven transitive ones, so a
  * single number would either hide its portfolio or overstate its workload.
- * Transitive membership is the `member-of` walk, which is the same traversal the
+ * Transitive membership is the `project` walk, which is the same traversal the
  * focus control uses — not a second notion of hierarchy.
  */
-export function projectRollups(records: Map<string, Rec>, today: string): Record<string, Rollup> {
+export function projectRollups(
+  records: Map<string, Rec>,
+  facets: Facets,
+  today: string,
+): Record<string, Rollup> {
   const ctx = buildCtx(records, today);
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;
-    const reach = focused({ id: rec.id, via: 'member-of', dir: 'down' }, records);
+    const reach = focused({ id: rec.id, via: 'project', dir: 'in' }, records, facets);
     reach.delete(rec.id); // a project is not a member of itself
 
     let blocked = 0;
@@ -684,7 +607,7 @@ export function projectRollups(records: Map<string, Rec>, today: string): Record
     }
 
     out[rec.id] = {
-      direct: [...records.values()].filter((r) => projectsOf(r).includes(rec.id)).length,
+      direct: [...records.values()].filter((r) => r.facets.project?.includes(rec.id)).length,
       total: reach.size,
       blocked,
       untriaged,

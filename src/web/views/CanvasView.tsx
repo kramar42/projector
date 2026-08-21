@@ -19,10 +19,10 @@ import '@xyflow/react/dist/style.css';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
-import { EDGE_KINDS, type Patch } from '../query.ts';
+import { relations, type Patch } from '../query.ts';
 import { layoutTypes, manualLayout, treeLayout } from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import type { CardDTO, QueryResponse } from '../types.ts';
+import type { CardDTO, QueryResponse, Meta } from '../types.ts';
 
 /**
  * A canvas node hosts the same `<CardBody>` every other shape renders. That is
@@ -56,20 +56,20 @@ const nodeTypes = { record: RecordNode };
 const EDGE_COLOUR: Record<string, string> = {
   parent: 'var(--edge-parent)',
   blocks: 'var(--edge-blocks)',
-  'member-of': 'var(--edge-member)',
+  project: 'var(--edge-member)',
 };
 
 const DASH: Record<string, string | undefined> = {
   blocks: '6 4',
-  'member-of': '1 3',
+  project: '1 3',
 };
 
 /**
  * One edge per pair of records, whatever the types.
  *
- * `parent` and `member-of` agreeing is the *expected* shape for a project
- * record — `keycloak` carries both — so drawing both put two identical lines on
- * top of each other with no way to tell there were two. Collapsing them means a
+ * `parent` and `project` agreeing is the *expected* shape for a record inside a
+ * project, so drawing both put two identical lines on top of each other with no
+ * way to tell there were two. Collapsing them means a
  * pair that agrees reads as one relationship, and a pair that *disagrees* still
  * shows up as two separate edges pointing at different records, which is the case
  * worth seeing.
@@ -93,7 +93,7 @@ function buildEdges(
 
   return [...byPair.values()].map(({ src, dst, types }) => {
     // The most structural type wins the styling; the rest ride along in the title.
-    const lead = ['parent', 'member-of', 'blocks'].find((t) => types.includes(t)) ?? types[0]!;
+    const lead = ['parent', 'project', 'blocks'].find((t) => types.includes(t)) ?? types[0]!;
     const colour = EDGE_COLOUR[lead] ?? 'var(--edge-parent)';
     return {
       id: `${types.join('+')}:${src}->${dst}`,
@@ -117,6 +117,7 @@ function buildEdges(
 }
 
 export function CanvasView({
+  meta,
   data,
   onOpen,
   reload,
@@ -124,6 +125,7 @@ export function CanvasView({
   wire,
   onSaved,
 }: {
+  meta: Meta;
   data: QueryResponse;
   onOpen: (id: string) => void;
   reload: () => void;
@@ -233,7 +235,7 @@ export function CanvasView({
       if (owner === to) return;
       setProblem(null);
       const existing = data.edges
-        .filter((e) => e.src === owner && e.type !== 'member-of')
+        .filter((e) => e.src === owner && e.type !== 'project')
         .map((e) => ({ type: e.type, to: e.dst }));
       if (existing.some((e) => e.type === newEdgeType && e.to === to)) return;
       // One parent is the norm: replace rather than stack a second one.
@@ -294,7 +296,7 @@ export function CanvasView({
             render={() => (
               <>
                 <div className="pop-head">Edges drawn</div>
-                {EDGE_KINDS.map((kind) => (
+                {relations(meta).map((kind) => (
                   <label key={kind} className="pop-check">
                     <input
                       type="checkbox"

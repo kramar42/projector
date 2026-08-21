@@ -22,9 +22,10 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
    card with two values for a grouped facet appears in two board columns — that is the model working.
    A facet declared `single: true` refuses a second value instead: `priority`, `status`, `kind`,
    `energy` and `owner` are single, because holding two at once is incoherent rather than expressive.
-2. **`project` is an ordinary facet.** `project: [project-d, mapping]` means the card belongs to both and
-   inherits the repos and instructions of both. Values are the **ids** of records carrying a
-   `project:` block — a project has no separate key. It is *not* derived from anything.
+2. **`project` is a reference facet** — `ref: true`, so its values are record **ids**.
+   `project: [project-d, mapping]` means the card belongs to both and inherits the repos and instructions
+   of both. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
+   under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
 3. **`parent` edges mean decomposition** — "this card is part of that one". They are what the canvas
    draws and they carry no config. Independent of `project`: a card may have either, both or neither.
 4. **`kind` is an ordinary facet too** — `[card]` for work, `[node]` for scaffolding. Nothing about it
@@ -41,6 +42,8 @@ ck context <id>              # everything: facets, project chain, repos, instruc
 ck context <id> --json       # same, machine-readable
 ck show <id>                 # compact
 ck ls --group project        # or any facet
+ck ls --focus project-a --via project --dir in    # the whole portfolio, transitively
+                                            # out = follows references, in = referenced by
 ck ls --filter status=active,planning
 ck next                      # open cards with no unfinished blocker
 ck untriaged --json          # cards missing project/priority/status, and why

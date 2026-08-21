@@ -111,10 +111,11 @@ export function App() {
   const shape = data?.spec.shape ?? 'board';
   const content = useMemo(() => {
     if (queryError) return <div className="pane-error">{queryError}</div>;
-    if (!data) return <div className="pane-loading">loading…</div>;
+    if (!data || !meta) return <div className="pane-loading">loading…</div>;
     if (shape === 'canvas')
       return (
         <CanvasView
+          meta={meta}
           data={data}
           onOpen={setOpenCard}
           reload={reload}
@@ -125,7 +126,7 @@ export function App() {
       );
     if (shape === 'table') return <TableView data={data} onOpen={setOpenCard} />;
     return <BoardView data={data} onOpen={setOpenCard} reload={reload} patch={patch} />;
-  }, [data, queryError, shape, setOpenCard, reload, patch, wire]);
+  }, [data, meta, queryError, shape, setOpenCard, reload, patch, wire]);
 
   if (gate) {
     return (

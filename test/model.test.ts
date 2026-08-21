@@ -4,12 +4,13 @@ import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/f
 import { parseCard, renderCard } from '../src/schema/card.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { ancestorChains, extractInstructions, kindOf, projectsOf, resolveProject } from '../src/index/project.ts';
+import { extractInstructions, kindOf, projectsOf, resolveProject } from '../src/index/project.ts';
+import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { validate } from '../src/schema/validate.ts';
 import { loadFacets } from '../src/schema/facets.ts';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
-import type { Rec } from '../src/schema/types.ts';
+import type { Facets, Rec } from '../src/schema/types.ts';
 import { NONE, modeFor, nextValues } from '../src/web/views/dragSemantics.ts';
 import { ago, firstLine } from '../src/enrich/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
@@ -187,13 +188,18 @@ function graph(...recs: Rec[]): Map<string, Rec> {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
+/** `project` is a reference facet; `parent` is still an edge in P7 step 1. */
+const REF_FACETS: Facets = {
+  project: { label: 'Project', values: [], open: true, single: false, ref: true },
+};
+
 test('repos union across the project chain, nearest wins for scalars', () => {
   const g = graph(
     rec('root', [], { jira: 'AAA', repos: [{ path: '/a' }] }),
     rec('mid', [], { repos: [{ path: '/b' }] }, '', ['root']),
     rec('leaf', [], undefined, '', ['mid']),
   );
-  const p = resolveProject('leaf', g, '/data');
+  const p = resolveProject('leaf', g, REF_FACETS, '/data');
   assert.ok(p);
   assert.deepEqual(p.repos.map((r) => r.path), ['/a', '/b']);
   assert.equal(p.jira, 'AAA');
@@ -207,7 +213,7 @@ test('a card in two projects inherits from both, unioned', () => {
     rec('mapping', [], { repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
     rec('deploy', [], undefined, '', ['project-d', 'mapping']),
   );
-  const p = resolveProject('deploy', g, '/data');
+  const p = resolveProject('deploy', g, REF_FACETS, '/data');
   assert.ok(p);
   assert.deepEqual(p.repos.map((r) => r.path), ['/project-d', '/mapping']);
   assert.equal(p.instructions.length, 2);
@@ -221,7 +227,7 @@ test('a duplicate repo path is not added twice', () => {
     rec('root', [], { repos: [{ path: '/a' }] }),
     rec('leaf', [], { repos: [{ path: '/a' }] }, '', ['root']),
   );
-  assert.equal(resolveProject('leaf', g, '/data')!.repos.length, 1);
+  assert.equal(resolveProject('leaf', g, REF_FACETS, '/data')!.repos.length, 1);
 });
 
 test('instructions concatenate outermost first', () => {
@@ -229,7 +235,7 @@ test('instructions concatenate outermost first', () => {
     rec('root', [], {}, '## Instructions\n\nroot rule\n'),
     rec('leaf', [], {}, '## Instructions\n\nleaf rule\n', ['root']),
   );
-  const p = resolveProject('leaf', g, '/data')!;
+  const p = resolveProject('leaf', g, REF_FACETS, '/data')!;
   assert.equal(p.instructions.length, 2);
   assert.match(p.instructions[0]!, /root rule/);
   assert.match(p.instructions[1]!, /leaf rule/);
@@ -242,7 +248,7 @@ test('only the Instructions section is extracted', () => {
 
 test('a record naming no project resolves to null', () => {
   const g = graph(rec('a', []), rec('b', ['a']));
-  assert.equal(resolveProject('b', g, '/data'), null);
+  assert.equal(resolveProject('b', g, REF_FACETS, '/data'), null);
 });
 
 test('a parent edge grants no project — membership is only the facet', () => {
@@ -250,7 +256,7 @@ test('a parent edge grants no project — membership is only the facet', () => {
     rec('project-a', [], { repos: [{ path: '/staging' }] }),
     rec('child', ['project-a']),
   );
-  assert.equal(resolveProject('child', g, '/data'), null);
+  assert.equal(resolveProject('child', g, REF_FACETS, '/data'), null);
   assert.deepEqual(projectsOf(g.get('child')!), []);
 });
 
@@ -259,7 +265,7 @@ test('a project record is its own innermost context', () => {
     rec('project-b', [], { jira: 'SUPPORT' }),
     rec('keycloak', [], { branch: 'kc/{card}' }, '', ['project-b']),
   );
-  const p = resolveProject('keycloak', g, '/data')!;
+  const p = resolveProject('keycloak', g, REF_FACETS, '/data')!;
   assert.equal(p.key, 'keycloak');
   assert.equal(p.jira, 'SUPPORT');
   assert.equal(p.branch, 'kc/{card}');
@@ -271,23 +277,23 @@ test('a cycle between projects terminates', () => {
     rec('a', [], {}, '', ['b']),
     rec('b', [], {}, '', ['a']),
   );
-  const p = resolveProject('a', g, '/data');
+  const p = resolveProject('a', g, REF_FACETS, '/data');
   assert.ok(p);
   assert.ok(p.chain.length <= 2);
 });
 
 test('multiple parents give multiple chains', () => {
   const g = graph(rec('a', []), rec('b', []), rec('c', ['a', 'b']));
-  const chains = ancestorChains('c', g);
-  assert.equal(chains.length, 2);
-  assert.deepEqual(chains.map((c) => c.at(-1)).sort(), ['a', 'b']);
+  const out = chains('c', adjacency('parent', g, REF_FACETS));
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map((c) => c.at(-1)).sort(), ['a', 'b']);
 });
 
 test('a parent cycle terminates instead of hanging', () => {
   const g = graph(rec('a', ['b']), rec('b', ['a']));
-  const chains = ancestorChains('a', g);
-  assert.ok(chains.length >= 1);
-  assert.ok(chains[0]!.length <= 3);
+  const out = chains('a', adjacency('parent', g, REF_FACETS));
+  assert.ok(out.length >= 1);
+  assert.ok(out[0]!.length <= 3);
 });
 
 // ---------------------------------------------------------------- drag semantics
@@ -693,4 +699,37 @@ test('ck log reads status transitions out of the diffs', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------- reference cycles
+
+test('one cycle check serves an edge and a reference facet alike', () => {
+  const out: Record<string, string[]> = { a: ['b'], b: ['c'], c: [] };
+  const outOf = (id: string) => out[id] ?? [];
+  // c already reaches nothing, so a can point at it.
+  assert.equal(wouldCycle('a', 'c', outOf), false);
+  // b reaches c, so c pointing back at a would close the loop through both.
+  assert.equal(wouldCycle('c', 'a', outOf), true);
+  // A record pointing at itself is the degenerate case, caught the same way.
+  assert.equal(wouldCycle('a', 'a', outOf), true);
+});
+
+test('a reference chain is ordered, which is what config inheritance needs', () => {
+  const g = graph(
+    rec('project-a', [], {}),
+    rec('project-d', [], {}, '', ['project-a']),
+    rec('mapping', [], {}, '', ['project-d']),
+  );
+  // `chains` answers *by which routes*, where `walk` answers *what is reachable*
+  // — and only the first can put the outermost project first.
+  assert.deepEqual(chains('mapping', adjacency('project', g, REF_FACETS)), [
+    ['mapping', 'project-d', 'project-a'],
+  ]);
+  const p = resolveProject('mapping', g, REF_FACETS, '/data')!;
+  assert.deepEqual(p.chain, ['project-a', 'project-d', 'mapping']);
+});
+
+test('refsOf drops a self-reference rather than making a loop of one', () => {
+  const g = graph(rec('a', [], undefined, '', ['a']));
+  assert.deepEqual(refsOf('project', g), []);
 });

@@ -23,8 +23,11 @@ export interface FacetDef {
   open: boolean;
   /** At most one value at a time — a vocabulary constraint, not a storage one. */
   single: boolean;
-  /** Vocabulary sourced from the data rather than a static list. */
-  valuesFrom?: 'project-records';
+  /**
+   * The values are record ids, so the facet is traversable as well as
+   * filterable: it draws on a canvas, walks under `focus`, and refuses a cycle.
+   */
+  ref: boolean;
 }
 
 export interface Meta {
@@ -46,8 +49,10 @@ export type Shape = 'board' | 'canvas' | 'table';
 
 export interface Focus {
   id: string;
-  via: 'parent' | 'member-of' | 'blocks';
-  dir: 'down' | 'up' | 'both';
+  /** A reference facet name, or an edge type while those still exist. */
+  via: string;
+  /** `out` follows a record's own references; `in` finds the records naming it. */
+  dir: 'out' | 'in' | 'both';
   depth?: number;
 }
 

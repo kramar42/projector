@@ -10,8 +10,8 @@ test('a spec survives the round trip through URL parameters', () => {
     'f.blocked': 'clear',
     q: 'keycloak',
     focus: 'project-b',
-    via: 'member-of',
-    dir: 'down',
+    via: 'project',
+    dir: 'in',
     depth: '2',
     group: 'priority,status',
     sort: 'priority:asc,updated:desc',
@@ -22,7 +22,7 @@ test('a spec survives the round trip through URL parameters', () => {
   const spec = parseSpec(params);
   assert.deepEqual(spec.query.filter, { project: ['project-a', NONE], blocked: ['clear'] });
   assert.deepEqual(spec.query.groupBy, ['priority', 'status']);
-  assert.deepEqual(spec.query.focus, { id: 'project-b', via: 'member-of', dir: 'down', depth: 2 });
+  assert.deepEqual(spec.query.focus, { id: 'project-b', via: 'project', dir: 'in', depth: 2 });
   // `connect` is only written when it differs from the shape's default.
   assert.deepEqual(specToParams(spec), params);
 });
@@ -127,8 +127,8 @@ test('a file round-trips through save and reload', () => {
 });
 
 test('an explicitly empty focus overrides a saved one', () => {
-  const saved = specFromFile('project-a', { shape: 'canvas', focus: { id: 'project-a', via: 'parent', dir: 'down' } });
-  assert.deepEqual(saved.query.focus, { id: 'project-a', via: 'parent', dir: 'down', depth: undefined });
+  const saved = specFromFile('project-a', { shape: 'canvas', focus: { id: 'project-a', via: 'parent', dir: 'in' } });
+  assert.deepEqual(saved.query.focus, { id: 'project-a', via: 'parent', dir: 'in', depth: undefined });
 
   // How the ✕ has to travel: deleting the key means "inherit", and the server
   // merges the file's parameters under the URL's, so the focus would come back.

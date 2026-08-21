@@ -95,10 +95,15 @@ others:
 |---|---|---|
 | `parent` | containment / decomposition | the mind-map tree, roll-up progress |
 | `blocks` | A must finish before B | the `blocked` axis, "what does finishing this unblock" |
-| `member-of` | derived from the `project` facet, never stored | the project hierarchy, transitive roll-up |
+| `project` | a **reference facet** — its values are record ids | the project hierarchy, transitive roll-up |
 
 `blocks` is the one neither Trello nor Jira gives usefully. Its transitive closure is what "unblocked
 now" is built from.
+
+**`project` is not an edge — it is a facet whose values happen to be records.** That is what `ref: true`
+declares, and it means one thing can be both: it filters, groups a board and drags like `priority`,
+*and* it lays out a canvas, walks under `focus` and refuses a cycle like an edge. `parent` and `blocks`
+are still edges today and move here next; when they do, `edges:` leaves the file format entirely.
 
 There was a third, `relates`, for soft association. It is gone: every job it could do is done better by
 something already here. "See also" is a link, "these are similar" is a facet, and a canvas already
@@ -198,16 +203,20 @@ A record plus a traversal. **Not a filter**: a facet filter tests membership one
 values, while focus walks *edges*, transitively.
 
 ```
-focus = { id, via: parent | member-of | blocks, dir: down | up | both, depth: n | ∞ }
+focus = { id, via: <any relation>, dir: out | in | both, depth: n | ∞ }
 ```
 
 The difference matters most with nested projects. If `platform` contains `identity`, which contains the
 cards doing the work, then `filter: project=platform` finds only what names `platform` directly — while
-`focus=platform via=member-of dir=down` finds the whole portfolio. Otherwise you have to tick every
+`focus=platform via=project dir=in` finds the whole portfolio. Otherwise you have to tick every
 sub-project by hand, and remember again when a new one appears.
 
-It applies to every shape: `via=blocks dir=down` is "what does finishing this unblock", and `dir=up` is
-"what is this part of".
+`dir` is mechanical rather than spatial: **`out`** follows a record's own references and **`in`** finds
+the records naming it. `up`/`down` would read correctly only for containment — on `blocks`, "up" means
+toward the blocker, which is the same arrow as `parent`'s "down".
+
+It applies to every shape: `via=blocks dir=out` is "what does finishing this unblock", and
+`via=parent dir=out` is "what is this part of".
 
 ## shape and facets
 
@@ -284,14 +293,14 @@ So "card in two columns" is always a gesture, never an accident.
 same face — how much of a record to show is a property of the view, which is what `chips` is, so a card
 never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
-you have chosen to draw — decomposition (`parent`) or membership (`member-of`).
+you have chosen to draw first — decomposition (`parent`) or membership (`project`).
 
 Filtering a graph means **match plus context**: unmatched ancestors are kept so the tree stays
 connected, drawn muted and counted separately, so a filtered graph still reads as a graph.
 
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** card counts, blocked,
-untriaged, last activity — where total follows the `member-of` chain, so a project with one direct
+untriaged, last activity — where total follows the `project` chain, so a project with one direct
 member and six nested ones reads `1 / 7`.
 
 ## Editing
@@ -516,8 +525,8 @@ kind:
   open: false
   single: true
 project:
-  valuesFrom: project-records              # vocabulary from the data, not a list
-  open: true
+  ref: true                                # values are record ids, so it is
+                                           # traversable as well as filterable
 ```
 
 # Theme

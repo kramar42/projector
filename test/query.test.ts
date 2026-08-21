@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
 import { loadFacets } from '../src/schema/facets.ts';
-import { NONE, focused, ftsQuery, memberEdges, runQuery, type Query } from '../src/index/query.ts';
+import { NONE, focused, ftsQuery, runQuery, type Query } from '../src/index/query.ts';
+import { adjacency, refsOf } from '../src/index/refs.ts';
 
 /**
  * A vault of its own, so these assert the engine rather than whatever the real
@@ -93,7 +94,7 @@ priority:   { label: Priority, values: [now, month, backlog], open: false, singl
 status:     { label: Status,   values: [planning, active, done], open: false, single: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
 waiting_on: { label: Waiting on, values: [], open: true }
-project:    { label: Project,  values: [], open: true, valuesFrom: project-records }
+project:    { label: Project,  ref: true }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
@@ -206,18 +207,19 @@ test('focus walks edges transitively, in the direction asked for', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
-    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records)].sort();
+    const facets = loadFacets(join(root, 'facets.yaml'));
+    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records, facets)].sort();
 
     // Includes the focus itself: "this subtree" contains its own root.
-    assert.deepEqual(set({ id: 'project-a', via: 'parent', dir: 'down' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
-    assert.deepEqual(set({ id: 'kafka-schema', via: 'parent', dir: 'up' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
-    // member-of reaches the grandchild that `project=project-b` could not.
-    assert.deepEqual(set({ id: 'project-b', via: 'member-of', dir: 'down' }), ['project-b', 'kc-realms', 'keycloak']);
+    assert.deepEqual(set({ id: 'project-a', via: 'parent', dir: 'in' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
+    assert.deepEqual(set({ id: 'kafka-schema', via: 'parent', dir: 'out' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
+    // The project reference reaches the grandchild that `project=project-b` could not.
+    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in' }), ['project-b', 'kc-realms', 'keycloak']);
     // Downstream of a blocker is what finishing it unblocks.
-    assert.deepEqual(set({ id: 'blocker', via: 'blocks', dir: 'down' }), ['blocked-card', 'blocker']);
-    assert.deepEqual(set({ id: 'blocked-card', via: 'blocks', dir: 'up' }), ['blocked-card', 'blocker']);
+    assert.deepEqual(set({ id: 'blocker', via: 'blocks', dir: 'out' }), ['blocked-card', 'blocker']);
+    assert.deepEqual(set({ id: 'blocked-card', via: 'blocks', dir: 'in' }), ['blocked-card', 'blocker']);
     // depth caps the walk one hop short of the grandchild.
-    assert.deepEqual(set({ id: 'project-b', via: 'member-of', dir: 'down', depth: 1 }), ['project-b', 'keycloak']);
+    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in', depth: 1 }), ['project-b', 'keycloak']);
   } finally {
     cleanup();
   }
@@ -229,7 +231,8 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
     const { records } = reindex(root);
     // From the middle of the chain: its own container and its own member, and
     // not `project-a` — which a walk over undirected edges would reach through project-b.
-    assert.deepEqual([...focused({ id: 'keycloak', via: 'member-of', dir: 'both' }, records)].sort(), [
+    const facets = loadFacets(join(root, 'facets.yaml'));
+    assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, records, facets)].sort(), [
       'project-b',
       'kc-realms',
       'keycloak',
@@ -239,12 +242,12 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
   }
 });
 
-test('member-of edges are derived from the facet, never stored', () => {
+test('a reference facet yields the same pairs an edge would, without storing them', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
     assert.deepEqual(
-      memberEdges(records)
+      refsOf('project', records)
         .map((e) => `${e.src}->${e.dst}`)
         .sort(),
       ['blocked-card->project-a', 'kafka-schema->project-a', 'kc-realms->keycloak', 'keycloak->project-b'],
@@ -263,7 +266,7 @@ test('focus bounds the facet filter rather than being one', () => {
   try {
     const run = open(root);
     const res = run({
-      focus: { id: 'project-a', via: 'parent', dir: 'down' },
+      focus: { id: 'project-a', via: 'parent', dir: 'in' },
       filter: { priority: ['now'] },
     });
     assert.deepEqual(res.ids, ['kafka-schema']);
@@ -538,9 +541,9 @@ test('focus and search do narrow which facets exist', () => {
   try {
     const run = open(root);
     // `tech` lives on two cards, neither in the project-b project chain.
-    const scoped = run({ focus: { id: 'project-b', via: 'member-of', dir: 'down' } });
+    const scoped = run({ focus: { id: 'project-b', via: 'project', dir: 'in' } });
     assert.ok(scoped.counts.some((c) => c.facet === 'tech')); // kc-realms is in there
-    const elsewhere = run({ focus: { id: 'blocker', via: 'blocks', dir: 'down' } });
+    const elsewhere = run({ focus: { id: 'blocker', via: 'blocks', dir: 'out' } });
     assert.ok(!elsewhere.counts.some((c) => c.facet === 'tech'));
   } finally {
     cleanup();
@@ -560,7 +563,7 @@ test('universe is what the filter is hiding, exactly', () => {
     assert.equal(narrowed.total, 4);
     // Focus and search narrow the universe itself — they define what you are
     // looking at, so nothing is being "hidden" from you.
-    const scoped = run({ focus: { id: 'project-a', via: 'parent', dir: 'down' } });
+    const scoped = run({ focus: { id: 'project-a', via: 'parent', dir: 'in' } });
     assert.equal(scoped.universe, 3);
     assert.equal(scoped.total, 3);
   } finally {
@@ -672,6 +675,61 @@ test('kind is an ordinary facet, not a computed axis', () => {
     const kind = open(root)({}).counts.find((c) => c.facet === 'kind');
     assert.ok(kind);
     assert.equal(kind.pseudo, false);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- references
+
+test('a reference facet is read from the facets, an edge from the edges', () => {
+  const { root, cleanup } = vault();
+  try {
+    const { records } = reindex(root);
+    const facets = loadFacets(join(root, 'facets.yaml'));
+    // Both mechanisms yield `src names dst` pairs, and nothing downstream can
+    // tell which held them — which is what makes the P7 step 2 swap invisible.
+    const project = adjacency('project', records, facets);
+    const parent = adjacency('parent', records, facets);
+    assert.deepEqual(project.out.get('keycloak'), ['project-b']);
+    assert.deepEqual(parent.out.get('project-a-eventing'), ['project-a']);
+    assert.deepEqual(project.in.get('project-b'), ['keycloak']);
+    assert.deepEqual(parent.in.get('project-a'), ['project-a-eventing']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a value naming a record that does not exist is not a reference', () => {
+  const { root, cleanup } = vault();
+  try {
+    writeFileSync(
+      join(root, 'cards', 'orphan.md'),
+      '---\nid: orphan\ntitle: Orphan\nfacets: { kind: [card], project: [gone] }\n---\n',
+      'utf8',
+    );
+    const { records } = reindex(root);
+    const facets = loadFacets(join(root, 'facets.yaml'));
+    // It stays a facet value — it filters and groups — it simply has nothing to
+    // walk to. `ck check` is what reports it.
+    assert.deepEqual(records.get('orphan')!.facets.project, ['gone']);
+    assert.equal(adjacency('project', records, facets).out.get('orphan'), undefined);
+    assert.deepEqual(ids(root, { filter: { project: ['gone'] } }), ['orphan']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a reference facet declares no vocabulary of its own', () => {
+  const { root, cleanup } = vault();
+  try {
+    const def = loadFacets(join(root, 'facets.yaml')).project!;
+    // `ref` implies `open` — a vault cannot enumerate its record ids in advance
+    // — and a declared list would be a mistake, so it is dropped rather than
+    // half-honoured.
+    assert.equal(def.ref, true);
+    assert.equal(def.open, true);
+    assert.deepEqual(def.values, []);
   } finally {
     cleanup();
   }

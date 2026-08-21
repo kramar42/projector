@@ -9,7 +9,7 @@ import { loadFacets } from '../schema/facets.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
-import { EDGE_TYPES, type Edge, type EdgeType } from '../schema/types.ts';
+import { EDGE_TYPES, type Edge, type EdgeType, type Rec } from '../schema/types.ts';
 import { slugify, uniqueId } from '../import/slug.ts';
 
 /**
@@ -78,11 +78,19 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
 /**
  * Validate facet names and values against the vocabulary before writing.
  *
- * A closed facet rejects unknown values and a single-valued one rejects a
- * second. Every facet is writable and every facet is checked the same way —
- * `kind` and `project` included. There is no special kind.
+ * A closed facet rejects unknown values, a single-valued one rejects a second,
+ * and a reference facet rejects a cycle. Every facet is writable and every facet
+ * is checked the same way — `project` included. There is no special kind.
+ *
+ * `records` is only needed for reference facets, so it is optional: a caller
+ * writing labels does not have to read the vault first.
  */
-export function checkFacets(root: string, facets: Record<string, string[]>): void {
+export function checkFacets(
+  root: string,
+  id: string,
+  facets: Record<string, string[]>,
+  records?: Map<string, Rec>,
+): void {
   const defs = loadFacets(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
     const def = defs[name];
@@ -96,6 +104,14 @@ export function checkFacets(root: string, facets: Record<string, string[]>): voi
     }
     if (def.single && values.length > 1) {
       throw new Invalid(`"${name}" holds one value at a time, and this sets ${values.length}`);
+    }
+    if (def.ref && records) {
+      for (const v of values) {
+        if (v === id) throw new Invalid(`"${name}" cannot point at its own record`);
+        if (wouldCycle(id, v, (cur) => records.get(cur)?.facets[name] ?? [])) {
+          throw new Invalid(`"${v}" already reaches "${id}" through "${name}" — that would make a cycle`);
+        }
+      }
     }
   }
 }
@@ -117,7 +133,7 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
   const file = fileFor(root, id);
   guard(file, input.baseMtime);
 
-  if (input.facets) checkFacets(root, input.facets);
+  if (input.facets) checkFacets(root, id, input.facets, readAll(paths(root).cards).records);
   if (input.title !== undefined && !input.title.trim()) throw new Invalid('title cannot be empty');
   if (input.due) checkDue(input.due);
 
@@ -175,7 +191,7 @@ export function createCard(
   }
   const id = uniqueId(slugify(title), new Set(records.keys()));
   const facets = input.facets ?? {};
-  if (Object.keys(facets).length) checkFacets(root, facets);
+  if (Object.keys(facets).length) checkFacets(root, id, facets, records);
   if (input.due) checkDue(input.due);
 
   const text = renderCard({
@@ -239,7 +255,7 @@ export function setEdges(
   // A parent edge that would create a cycle is refused: the project chain and
   // every tree layout assume the parent graph is acyclic.
   for (const e of edges.filter((x) => x.type === 'parent')) {
-    if (wouldCycle(id, e.to, records as never)) {
+    if (wouldCycle(id, e.to, parentsIn(records as never))) {
       throw new Invalid(`"${e.to}" is already beneath "${id}" — that would make a cycle`);
     }
   }
@@ -248,25 +264,30 @@ export function setEdges(
   return { mtime: mtimeOf(file) };
 }
 
-function wouldCycle(
-  child: string,
-  parent: string,
-  records: Map<string, { edges: { type: string; to: string }[] }>,
-): boolean {
-  if (child === parent) return true;
+/**
+ * Would pointing `from` at `to` close a loop?
+ *
+ * Takes the outward neighbours as a function rather than a record map, so one
+ * implementation serves a `parent` edge and a reference facet alike — the check
+ * is about the shape of the graph, not about where it is stored.
+ */
+function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): boolean {
+  if (from === to) return true;
   const seen = new Set<string>();
-  const stack = [parent];
+  const stack = [to];
   while (stack.length) {
     const cur = stack.pop()!;
-    if (cur === child) return true;
+    if (cur === from) return true;
     if (seen.has(cur)) continue;
     seen.add(cur);
-    for (const e of records.get(cur)?.edges ?? []) {
-      if (e.type === 'parent') stack.push(e.to);
-    }
+    stack.push(...outOf(cur));
   }
   return false;
 }
+
+/** Outward `parent` neighbours, while `parent` is still an edge. */
+const parentsIn = (records: Map<string, { edges: { type: string; to: string }[] }>) => (id: string) =>
+  (records.get(id)?.edges ?? []).filter((e) => e.type === 'parent').map((e) => e.to);
 
 /** Set one facet's values on many records at once. */
 export function bulkFacet(
@@ -290,7 +311,7 @@ export function bulkFacet(
     const facets = { ...rec.facets };
     if (next.length) facets[facet] = next;
     else delete facets[facet];
-    checkFacets(root, next.length ? { [facet]: next } : {});
+    checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
@@ -305,7 +326,7 @@ export function bulkParent(root: string, ids: string[], parent: string | null): 
   for (const id of ids) {
     const rec = records.get(id);
     if (!rec || id === parent) continue;
-    if (parent && wouldCycle(id, parent, records as never)) continue;
+    if (parent && wouldCycle(id, parent, parentsIn(records as never))) continue;
     const others = rec.edges.filter((e) => e.type !== 'parent');
     const next: Edge[] = parent ? [...others, { type: 'parent' as EdgeType, to: parent }] : others;
     patchAll(rec.file, { edges: next.length ? next : undefined });
@@ -379,7 +400,7 @@ export function putFrontmatter(
     const arr = Array.isArray(v) ? v : [v];
     facets[k] = arr.filter((x) => x != null).map(String);
   }
-  checkFacets(root, facets);
+  checkFacets(root, id, facets, records);
   if (typeof check.data.due === 'string') checkDue(check.data.due);
 
   const warnings: string[] = [];
@@ -388,7 +409,7 @@ export function putFrontmatter(
     if (e.to === id) throw new Invalid('an edge cannot point at its own record');
   }
   for (const e of (check.data.edges ?? []).filter((x) => x.type === 'parent')) {
-    if (wouldCycle(id, e.to, records as never)) {
+    if (wouldCycle(id, e.to, parentsIn(records as never))) {
       throw new Invalid(`parent "${e.to}" is already beneath "${id}" — that would make a cycle`);
     }
   }

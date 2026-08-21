@@ -1,5 +1,6 @@
-import type { Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
+import type { Facets, Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
 import { resolvePath } from '../config.ts';
+import { adjacency, chains } from './refs.ts';
 
 /**
  * Card or node, from the `kind` facet.
@@ -16,32 +17,6 @@ export function kindOf(rec: Pick<Rec, 'facets'>): Kind {
 /** Parent ids of a record, in declaration order. A record may have several. */
 export function parentsOf(rec: Rec): string[] {
   return rec.edges.filter((e) => e.type === 'parent').map((e) => e.to);
-}
-
-/**
- * Every ancestor chain from `id` up to a root, nearest-first.
- * Cycles are broken by refusing to revisit an id within the same chain, so a
- * malformed graph degrades instead of hanging.
- */
-export function ancestorChains(id: string, byId: Map<string, Rec>): string[][] {
-  const chains: string[][] = [];
-  const walk = (cur: string, acc: string[]) => {
-    if (acc.includes(cur)) {
-      chains.push(acc);
-      return;
-    }
-    const next = [...acc, cur];
-    const rec = byId.get(cur);
-    const parents = rec ? parentsOf(rec) : [];
-    const live = parents.filter((p) => byId.has(p) && !next.includes(p));
-    if (!live.length) {
-      chains.push(next);
-      return;
-    }
-    for (const p of live) walk(p, next);
-  };
-  walk(id, []);
-  return chains;
 }
 
 /** The `## Instructions` section of a body, or '' when absent. */
@@ -105,32 +80,34 @@ export function projectsOf(rec: Rec): string[] {
 export function resolveProject(
   id: string,
   byId: Map<string, Rec>,
+  facets: Facets,
   dataRoot: string,
 ): ResolvedProject | null {
   const rec = byId.get(id);
   if (!rec) return null;
-  const registry = projectRecords(byId);
 
-  // Outermost-first order across every project the record belongs to, so
-  // instructions read general → specific and repos accumulate the same way.
+  // The membership chains this record sits on, walked through the same
+  // adjacency the focus control uses — so the config chain and the portfolio
+  // canvas can never disagree about who belongs to whom.
+  const adj = adjacency('project', byId, facets);
+  // A project record is its own innermost context, so it starts from itself;
+  // anything else starts from the projects it names.
+  const starts = rec.project ? [rec.id] : (rec.facets.project ?? []).filter((k) => byId.has(k));
+
+  // Outermost-first, so instructions read general → specific and repos
+  // accumulate the same way. A chain arrives nearest-first, hence the reverse.
   const order: Rec[] = [];
   const seen = new Set<string>();
-
-  const walk = (key: string, trail: Set<string>) => {
-    const owner = registry.get(key);
-    if (!owner || trail.has(key)) return;
-    trail.add(key);
-    // Ancestors first: a project's own project is more general than it is.
-    for (const up of projectsOf(owner)) walk(up, trail);
-    if (!seen.has(owner.id)) {
-      seen.add(owner.id);
-      order.push(owner);
+  for (const start of starts) {
+    for (const chain of chains(start, adj)) {
+      for (const key of [...chain].reverse()) {
+        const owner = byId.get(key);
+        if (!owner?.project || seen.has(key)) continue;
+        seen.add(key);
+        order.push(owner);
+      }
     }
-  };
-
-  // A project record is its own innermost context, then whatever it belongs to.
-  const roots = rec.project ? [...projectsOf(rec), rec.id] : projectsOf(rec);
-  for (const key of roots) walk(key, new Set());
+  }
 
   if (!order.length) return null;
 

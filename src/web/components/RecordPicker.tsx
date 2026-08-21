@@ -3,9 +3,12 @@ import { api } from '../api.ts';
 import type { CardDTO } from '../types.ts';
 
 /**
- * Pick a record — used to set a parent, meaning "this card is part of that one".
- * Project membership is a separate thing entirely: it is the `project` facet.
- * Projects still sort first, since they are the usual landmarks.
+ * Pick a record.
+ *
+ * Used wherever a value *is* a record: setting a parent, and adding a value to a
+ * reference facet. Projects sort first, since they are the usual landmarks —
+ * which is also what makes this the right control for `project` without knowing
+ * that facet by name.
  */
 export function RecordPicker({
   exclude = [],

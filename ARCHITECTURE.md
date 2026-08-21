@@ -126,22 +126,37 @@ instead lets the saved value come straight back.
 **`(none)` travels as itself** in the URL and in a view file, never as a bare `none`, so a facet that
 one day has a literal value `none` cannot collide with the absence refinement.
 
-**Canvas layout follows the hierarchy edges that are *shown*,** not `parent` alone. `parent` is
-decomposition and `member-of` is membership — either can lay a graph out, while `blocks` is drawn but
-never fed to dagre, since an edge pointing sideways across the tree distorts every rank it crosses. Laying a `member-of` canvas out by `parent` puts every node in one column with the hierarchy
-invisible.
+**Canvas layout follows the *first* relation shown,** not `parent` alone. A hierarchy can lay a graph
+out and a cross-cutting relation cannot — a blocker pointing sideways distorts every rank it crosses —
+but which is which is a property of the view, not of the relation: `parent` first gives a
+decomposition tree with dependencies drawn over it, `project` first gives the portfolio. Laying a
+membership canvas out by `parent` puts every node in one column with the hierarchy invisible.
 
-**One edge per pair of records,** whatever the types. `parent` and `member-of` agreeing is the expected
-shape for a project record, so drawing both put two identical lines on top of each other. Collapsed, a
+**One edge per pair of records,** whatever the relation. `parent` and `project` agreeing is the expected
+shape for a record inside a project, so drawing both put two identical lines on top of each other. Collapsed, a
 pair that agrees reads as one relationship and a pair that *disagrees* still shows as two edges pointing
 at different records — the case worth seeing. Edge labels need an explicit neutral fill, because a label
 inherits the stroke colour otherwise.
 
-**`member-of` is derived, never stored.** Membership *is* the `project` facet: `resolveProject` reads
-the facet and nothing else, so drawing the project hierarchy from `parent` edges would show a picture
-that inheritance does not follow. A project's key is its record **id** — there is no separate `key`
-field, because a second name for one thing is a second thing to keep in step, and it would let a
-membership reference point at something that is not a record id.
+**`project` is a reference facet.** Its values are record ids (`ref: true`), which makes it traversable
+as well as filterable: `src/index/refs.ts` reads it into the same `src names dst` pairs an edge yields,
+so focus, the canvas, the roll-ups and config inheritance all walk one shape and never learn which
+mechanism held it. `pairsFor` is the only place that still knows edges exist, and it collapses into
+`refsOf` once `parent` and `blocks` move too (P7 step 2).
+
+A project's key is its record **id** — there is no separate `key` field, because a second name for one
+thing is a second thing to keep in step, and it would let a reference point at something that is not a
+record id.
+
+**Direction is mechanical, not spatial.** `out` follows a record's own references; `in` finds the
+records naming it. `up`/`down` only reads correctly for containment — on `blocks`, "up" would mean
+toward the blocker, which is the same arrow as `parent`'s "down" — so the words would have meant
+opposite tree-directions depending on the relation.
+
+**Cycles are refused on every reference facet**, through the one `wouldCycle` that also guards `parent`
+edges. It takes the outward neighbours as a function rather than a record map, so the check is about
+the shape of the graph rather than where it is stored. Before P7 a membership cycle was accepted and
+`resolveProject` silently truncated the config chain.
 
 **Blocked and waiting are computed, never written.** `blocked` is an unfinished `blocks` edge and
 `waiting` is a non-empty `waiting_on`; neither is a `status` value. `status` is lifecycle only —

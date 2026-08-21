@@ -1,4 +1,4 @@
-import { NONE, type Dir, type Focus, type Query, type Via } from '../index/query.ts';
+import { NONE, type Dir, type Focus, type Query } from '../index/query.ts';
 
 /**
  * The one description of a view, shared by the three places that describe one:
@@ -12,9 +12,7 @@ import { NONE, type Dir, type Focus, type Query, type Via } from '../index/query
 export type Shape = 'board' | 'canvas' | 'table';
 
 export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
-export const VIAS: readonly Via[] = ['parent', 'member-of', 'blocks'];
-export const DIRS: readonly Dir[] = ['down', 'up', 'both'];
-export const EDGE_KINDS: readonly string[] = ['parent', 'blocks', 'member-of'];
+export const DIRS: readonly Dir[] = ['out', 'in', 'both'];
 
 export interface ViewSpec {
   /** Set when this came from a saved view; absent for an ad-hoc query. */
@@ -22,7 +20,7 @@ export interface ViewSpec {
   title?: string;
   shape: Shape;
   query: Query;
-  /** Which edge types the canvas draws. Layout always follows `parent`. */
+  /** Which relations the canvas draws. Layout follows the first of them. */
   edges: string[];
   /**
    * Which facets are visible on a record. A board and a canvas draw them as chips;
@@ -60,10 +58,13 @@ function focusOf(params: Record<string, string>): Focus | undefined {
   const id = params.focus?.trim();
   if (!id) return undefined;
   const depth = Number(params.depth);
+  // `via` is a relation name — a reference facet, or an edge type while those
+  // still exist — so it is not validated against a list here. An unknown one
+  // simply finds no neighbours, which is what a stale bookmark should do.
   return {
     id,
-    via: one(params.via, VIAS) ?? 'parent',
-    dir: one(params.dir, DIRS) ?? 'down',
+    via: params.via?.trim() || 'parent',
+    dir: one(params.dir, DIRS) ?? 'in',
     depth: Number.isInteger(depth) && depth > 0 ? depth : undefined,
   };
 }
@@ -106,7 +107,10 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   return {
     shape,
     query,
-    edges: edges.length ? edges.filter((e) => EDGE_KINDS.includes(e)) : ['parent', 'blocks'],
+    // Relation names are not checked against a list, for the same reason `via`
+    // is not: a reference facet declared in `facets.yaml` must work without a
+    // second place enumerating what exists. An unknown one draws nothing.
+    edges: edges.length ? edges : ['parent', 'blocks'],
     chips,
   };
 }
@@ -158,7 +162,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (focus?.id) {
     params.focus = String(focus.id);
     params.via = String(focus.via ?? 'parent');
-    params.dir = String(focus.dir ?? 'down');
+    params.dir = String(focus.dir ?? 'in');
     if (focus.depth !== undefined) params.depth = String(focus.depth);
   }
 

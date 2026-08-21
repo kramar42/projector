@@ -1,4 +1,5 @@
 import { paths } from '../config.ts';
+import { loadFacets } from '../schema/facets.ts';
 import { readAll } from '../index/indexer.ts';
 import { kindOf, parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
@@ -72,7 +73,7 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     file: rec.file.replace(p.root + '/', ''),
     facets: rec.facets,
     body: rec.body,
-    project: resolveProject(id, records, dataRoot),
+    project: resolveProject(id, records, loadFacets(p.facets), dataRoot),
     parents: parentIds.map((pid) => records.get(pid)).filter((r): r is Rec => !!r).map(brief),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(id))

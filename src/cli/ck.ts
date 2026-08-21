@@ -236,7 +236,7 @@ function cmdShow(id: string): void {
     console.log('\nlinks');
     for (const l of rec.links) console.log(`  ${pad(l.kind || '?', 10)} ${l.ref}`);
   }
-  const proj = resolveProject(rec.id, records, root);
+  const proj = resolveProject(rec.id, records, loadFacets(p.facets), root);
   if (proj) {
     console.log(`\nproject  ${proj.key}   chain: ${proj.chain.join(' → ')}`);
     for (const r of proj.repos) console.log(`  repo   ${r.path}${r.base ? ` (${r.base})` : ''}`);
@@ -349,7 +349,7 @@ function cmdProject(id: string): void {
     console.error(`no record with id "${id}"`);
     process.exit(1);
   }
-  const proj = resolveProject(id, records, root);
+  const proj = resolveProject(id, records, loadFacets(p.facets), root);
   if (!proj) {
     console.log(`${id} has no project ancestor`);
     return;

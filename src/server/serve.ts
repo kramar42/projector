@@ -21,12 +21,13 @@ import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
-import { kindOf, projectRecords, resolveProject, parentsOf } from '../index/project.ts';
+import { kindOf, resolveProject, parentsOf } from '../index/project.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, unblocks } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
 import { loadViews, viewFileFor, findView } from './views.ts';
-import { memberEdges, projectRollups, runQuery } from '../index/query.ts';
+import { projectRollups, runQuery } from '../index/query.ts';
+import { refsOf } from '../index/refs.ts';
 import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
 import {
   Conflict,
@@ -212,7 +213,7 @@ app.get('/api/meta', (c) => {
   return c.json({
     vault: root,
     vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
-    facets: withDynamicValues(facets, records),
+    facets,
     counts: counts(db),
     enrichment: enrichmentStats(root),
     views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
@@ -285,10 +286,10 @@ app.get('/api/query', (c) => {
     total: res.total,
     universe: res.universe,
     placements: res.placements,
-    edges: edgesAmong(records, new Set(shown), spec.edges),
+    edges: edgesAmong(records, facets, new Set(shown), spec.edges),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, new Date().toISOString().slice(0, 10)),
+    rollups: projectRollups(records, facets, new Date().toISOString().slice(0, 10)),
     views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
   });
 });
@@ -298,24 +299,30 @@ app.get('/api/query', (c) => {
  * from the `project` facet here and nowhere else, so nothing has to be stored for
  * the project hierarchy to be drawable (C9).
  */
+/**
+ * The relations to draw, among the records on screen.
+ *
+ * A name in `show` is a reference facet or an edge type; both yield the same
+ * `src → dst` pairs, so the canvas never learns which mechanism held them.
+ */
 function edgesAmong(
   records: Map<string, Rec>,
+  facets: Facets,
   ids: Set<string>,
   show: string[],
 ): { src: string; dst: string; type: string }[] {
-  const want = new Set(show);
   const out: { src: string; dst: string; type: string }[] = [];
-  for (const id of ids) {
-    const rec = records.get(id);
-    if (!rec) continue;
-    for (const e of rec.edges) {
-      if (!want.has(e.type) || !ids.has(e.to)) continue;
-      out.push({ src: id, dst: e.to, type: e.type });
+  for (const via of show) {
+    if (facets[via]?.ref) {
+      for (const e of refsOf(via, records)) {
+        if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
+      }
+      continue;
     }
-  }
-  if (want.has('member-of')) {
-    for (const e of memberEdges(records)) {
-      if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: 'member-of' });
+    for (const id of ids) {
+      for (const e of records.get(id)?.edges ?? []) {
+        if (e.type === via && ids.has(e.to)) out.push({ src: id, dst: e.to, type: via });
+      }
     }
   }
   return out;
@@ -323,10 +330,10 @@ function edgesAmong(
 
 app.get('/api/card/:id', (c) => {
   const root = vaultOf(c);
-  const { db, records } = load(root);
+  const { db, records, facets } = load(root);
   const rec = records.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
-  const project = resolveProject(rec.id, records, root);
+  const project = resolveProject(rec.id, records, facets, root);
   return c.json({
     card: toDTO(rec, records, {
       childCount: countChildren(records, rec.id),
@@ -347,26 +354,6 @@ app.get('/api/card/:id', (c) => {
     project,
   });
 });
-
-/**
- * Fill in the values of any facet that sources its vocabulary from the data.
- *
- * `project` offers every record carrying a `project:` block, so a project just
- * created is immediately offerable rather than only once something uses it. This
- * is vocabulary only — the facet is stored and written like any other.
- */
-function withDynamicValues(facets: Facets, records: Map<string, Rec>): Facets {
-  const out: Facets = {};
-  for (const [name, def] of Object.entries(facets)) {
-    if (def.valuesFrom !== 'project-records') {
-      out[name] = def;
-      continue;
-    }
-    const keys = [...projectRecords(records).keys()].sort();
-    out[name] = { ...def, values: [...new Set([...def.values, ...keys])] };
-  }
-  return out;
-}
 
 function countChildren(records: Map<string, ReturnType<typeof Object>>, id: string): number {
   let n = 0;

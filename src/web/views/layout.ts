@@ -30,21 +30,20 @@ export function dims(_card: CardDTO): { w: number; h: number } {
 }
 
 /**
- * Which edge types give a canvas its shape.
+ * Which relation gives a canvas its shape: the **first** one shown.
  *
- * `parent` is decomposition and `member-of` is membership — both are hierarchies,
- * so either can lay a graph out. `blocks` is drawn but never fed to dagre: a
- * blocker pointing sideways across the tree would distort every rank it crosses.
+ * A hierarchy can lay a graph out and a cross-cutting relation cannot — a
+ * blocker pointing sideways across the tree distorts every rank it crosses — but
+ * which is which is a property of the view rather than of the relation. Put
+ * `parent` first and `blocks` second and you get a decomposition tree with
+ * dependencies drawn over it; put `project` first and you get the portfolio.
  *
- * This has to follow what is *shown*, not just `parent`. A member-of canvas has
- * no parent edges at all, and laying it out by parent put 27 records in one
- * column with the hierarchy invisible.
+ * This has to follow what is *shown*. A membership canvas has no parent edges at
+ * all, and laying it out by parent put 27 records in one column with the
+ * hierarchy invisible.
  */
-const HIERARCHY = ['parent', 'member-of'];
-
 export function layoutTypes(shown: string[]): string[] {
-  const usable = shown.filter((t) => HIERARCHY.includes(t));
-  return usable.length ? usable : ['parent'];
+  return shown.length ? [shown[0]!] : ['parent'];
 }
 
 /**

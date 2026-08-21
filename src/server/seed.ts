@@ -12,7 +12,9 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   open:    true  → new values accepted
 #            false → the validator rejects anything not listed
 #   single:  true  → at most one value at a time
-#   valuesFrom: project-records → offer every record carrying a project: block
+#   ref:     true  → the values are record ids in this vault, so the facet is
+#                    also traversable: it lays out a canvas, walks under focus,
+#                    and refuses a cycle. open is implied and values ignored.
 #
 # Every facet is stored and written identically. There is deliberately no kind of
 # facet the app writes through some other mechanism — kind and project included.
@@ -78,9 +80,7 @@ owner:
 # thing: they mean decomposition and are what the canvas draws.
 project:
   label: Project
-  values: []
-  open: true
-  valuesFrom: project-records
+  ref: true
 `;
 
 export const SEED_README = `# Card conventions
@@ -169,7 +169,9 @@ project record's body under an \`## Instructions\` heading.
 | \`parent\` | decomposition — this record is part of that one. Gives the mind-map tree |
 | \`blocks\` | this must finish before the target. Powers the \`blocked\` axis and \`ck next\` |
 
-\`member-of\` is a third edge the canvas can draw, derived from the \`project\` facet and never stored.
+\`project\` is a **reference facet**: its values are record ids, so it is traversable like an edge — it
+draws on a canvas, walks under \`focus\`, and refuses a cycle — while still filtering, grouping and
+dragging like any other facet.
 
 ## Link kinds
 

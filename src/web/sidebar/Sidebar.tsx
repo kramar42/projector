@@ -4,7 +4,7 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import { VaultSwitcher } from '../VaultSwitcher.tsx';
 import { FilterPanel } from './FilterPanel.tsx';
-import { DIRS, SHAPES, VIAS, clearFilters, clearFocus, type Patch } from '../query.ts';
+import { DIRS, SHAPES, clearFilters, clearFocus, relations, type Patch } from '../query.ts';
 import type { Meta, QueryResponse, SavedView, Shape } from '../types.ts';
 
 /**
@@ -19,6 +19,13 @@ import type { Meta, QueryResponse, SavedView, Shape } from '../types.ts';
  *
  * Sections are grouped by purpose, and exactly one of them scrolls.
  */
+/** `out` follows a record's own references; `in` finds the records naming it. */
+const DIR_MEANS: Record<string, string> = {
+  out: 'follows — what this record points at',
+  in: 'referenced by — what points at this record',
+  both: 'both directions, as two separate walks',
+};
+
 export function Sidebar({
   meta,
   data,
@@ -64,7 +71,7 @@ export function Sidebar({
       </div>
 
       <div className="rail-block">
-        <FocusSection data={data} saved={saved} patch={patch} onOpenCard={onOpenCard} />
+        <FocusSection meta={meta} data={data} saved={saved} patch={patch} onOpenCard={onOpenCard} />
       </div>
 
       {/* The only scrolling region. */}
@@ -444,11 +451,13 @@ function columnsLabel(chips: string[]): string {
  * indistinguishable from the real ones.
  */
 function FocusSection({
+  meta,
   data,
   saved,
   patch,
   onOpenCard,
 }: {
+  meta: Meta;
   data: QueryResponse | null;
   saved: boolean;
   patch: (p: Patch) => void;
@@ -498,10 +507,10 @@ function FocusSection({
           <select
             className="rail-select"
             value={focus.via}
-            title="which edges to walk"
+            title="which relation to walk"
             onChange={(e) => patch({ via: e.target.value })}
           >
-            {VIAS.map((v) => (
+            {relations(meta).map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>
@@ -513,7 +522,7 @@ function FocusSection({
             onChange={(e) => patch({ dir: e.target.value })}
           >
             {DIRS.map((d) => (
-              <option key={d} value={d}>
+              <option key={d} value={d} title={DIR_MEANS[d]}>
                 {d}
               </option>
             ))}
