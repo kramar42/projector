@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { bucketOf, compareValues, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
+import { bucketOf, compareValues, facetRank, isOrdered, isRef, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, refsOf, walk } from './refs.ts';
@@ -100,6 +100,8 @@ export interface QueryResult {
 
 interface Ctx {
   records: Map<string, Rec>;
+  /** Records named by another record through any declared reference facet. */
+  nodes: Set<string>;
   /** Records with at least one blocker that is not done. */
   blocked: Set<string>;
   facets: Facets;
@@ -136,8 +138,11 @@ function daysSince(date: string | undefined, today: string): number | null {
 export const PSEUDO: Record<string, Pseudo> = {
   type: {
     label: 'Type',
-    values: ['project', 'plain'],
-    of: (rec) => [rec.project ? 'project' : 'plain'],
+    values: ['project', 'node', 'plain'],
+    // A project owns configuration, a node is named by another record, and the
+    // rest are plain. The values are deliberately exclusive: a project that is
+    // also linked remains a project, so the three counts always add up.
+    of: (rec, ctx) => [rec.project ? 'project' : ctx.nodes.has(rec.id) ? 'node' : 'plain'],
   },
   /**
    * Why a record cannot proceed, if it cannot.
@@ -219,7 +224,12 @@ function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx
     // `src blocks dst`, so an unfinished record blocks each of its targets.
     if (!records.get(src)?.facets.status?.includes('done')) blocked.add(dst);
   }
-  return { records, blocked, facets, today };
+  const nodes = new Set<string>();
+  for (const [facet, def] of Object.entries(facets)) {
+    if (!isRef(def)) continue;
+    for (const { dst } of refsOf(facet, records)) nodes.add(dst);
+  }
+  return { records, nodes, blocked, facets, today };
 }
 
 // ---------------------------------------------------------------- traversal

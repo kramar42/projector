@@ -52,6 +52,8 @@ export function Sidebar({
 }) {
   const spec = data?.spec;
   const saved = Boolean(spec?.name);
+  const typeValues = data?.counts.find((facet) => facet.facet === 'type')?.values;
+  const typeCount = (type: string) => typeValues?.find((value) => value.value === type)?.count ?? 0;
 
   if (collapsed) {
     return (
@@ -65,17 +67,17 @@ export function Sidebar({
         >
           »
         </button>
-        <div className="sidebar-ribbon-info" title={`${meta.vaultName}: ${meta.counts.records} cards`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">·</span>
-          <span>{meta.counts.records}</span>
-        </div>
-        <div className="sidebar-ribbon-info" title={`${meta.counts.projects} projects`}>
+        <div className="sidebar-ribbon-info" title={`${typeCount('project')} projects in this query`}>
           <span className="sidebar-ribbon-icon" aria-hidden="true">▣</span>
-          <span>{meta.counts.projects}</span>
+          <span>{typeCount('project')}</span>
         </div>
-        <div className="sidebar-ribbon-info" title={`${meta.counts.containers} linked nodes`}>
+        <div className="sidebar-ribbon-info" title={`${typeCount('node')} linked nodes in this query`}>
           <span className="sidebar-ribbon-icon" aria-hidden="true">○</span>
-          <span>{meta.counts.containers}</span>
+          <span>{typeCount('node')}</span>
+        </div>
+        <div className="sidebar-ribbon-info" title={`${typeCount('plain')} plain cards in this query`}>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">·</span>
+          <span>{typeCount('plain')}</span>
         </div>
       </nav>
     );

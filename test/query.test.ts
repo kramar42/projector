@@ -128,6 +128,7 @@ test('every card is loaded, so a bare query is the whole vault', () => {
   }
 });
 
+
 test('a facet filter is one level deep and reads values, not edges', () => {
   const { root, cleanup } = vault();
   try {
@@ -175,6 +176,8 @@ test('pseudo-facets filter exactly like stored ones', () => {
   try {
     assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['project'] } }), ['project-b', 'keycloak', 'project-a']);
+    assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocked-card', 'project-a-eventing']);
+    assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocker', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
     // Three axes missing at once puts a card in three triage buckets.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
@@ -788,4 +791,3 @@ test('the linked axis makes external references askable', () => {
     cleanup();
   }
 });
-
