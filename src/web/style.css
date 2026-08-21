@@ -278,6 +278,7 @@ body {
 
 .sort-direction {
   margin-left: auto;
+  margin-right: 3px;
   padding: 0;
   width: 16px;
   height: 20px;
