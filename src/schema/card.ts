@@ -19,6 +19,7 @@ const projectSchema = z.object({
   repos: z.array(repoSchema).optional(),
   jira: z.string().optional(),
   branch: z.string().optional(),
+  instructions: z.string().optional(),
 });
 
 export const frontmatterSchema = z.object({

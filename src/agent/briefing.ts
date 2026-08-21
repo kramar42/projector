@@ -77,7 +77,7 @@ export function buildBriefing(input: {
   } else {
     L.push(
       'None recorded for this project. If rules emerge while you work, offer them for the project ' +
-        "record's `## Instructions` section rather than keeping them in your head.",
+        "project's `instructions` rather than keeping them in your head.",
     );
   }
   L.push('');

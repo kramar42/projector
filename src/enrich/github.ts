@@ -1,5 +1,5 @@
 import { ago, firstLine, gh } from './run.ts';
-import { isUnavailable, unavailable, type Enrichment, type Fetcher, type Tone, type Unavailable } from './types.ts';
+import { isUnavailable, unavailable, type Fetcher, type Tone, type Unavailable } from './types.ts';
 
 /**
  * GitHub, through the `gh` CLI rather than the REST API directly, so it reuses

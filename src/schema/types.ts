@@ -14,6 +14,15 @@ export interface ProjectBlock {
   repos?: ProjectRepo[];
   jira?: string;
   branch?: string;
+  /**
+   * How work on this project is done, inherited by its members.
+   *
+   * Configuration, so it lives with the rest of it. It used to be a `##
+   * Instructions` heading in the record's body, matched by regex — the one place
+   * prose was load-bearing, where renaming a heading silently stopped
+   * inheritance with nothing to check against.
+   */
+  instructions?: string;
 }
 
 /** A parsed link reference. `raw` is preserved verbatim so writes round-trip. */

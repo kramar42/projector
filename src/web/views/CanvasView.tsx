@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -18,8 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import { PopoverButton } from '../components/Popover.tsx';
-import { relations, type Patch } from '../query.ts';
+import { relations } from '../query.ts';
 import {
   CONTEXT_BAND,
   assignClusters,
@@ -41,9 +40,9 @@ import type { CardDTO, QueryResponse, Meta } from '../types.ts';
  * that quietly widens its own result set is a filter you stop trusting.
  */
 function RecordNode({ data }: NodeProps) {
-  const { card, chips, context, onOpen } = data as unknown as {
+  const { card, show, context, onOpen } = data as unknown as {
     card: CardDTO;
-    chips: string[];
+    show: string[];
     context: boolean;
     onOpen: (id: string) => void;
   };
@@ -52,7 +51,7 @@ function RecordNode({ data }: NodeProps) {
       {/* React Flow attaches edges to handles. Without them a custom node renders
           fine and every edge is silently dropped. */}
       <Handle type="target" position={Position.Left} />
-      <CardBody card={card} showFacets={chips} onOpen={onOpen} />
+      <CardBody card={card} showFacets={show} onOpen={onOpen} />
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -76,10 +75,14 @@ function ClusterNode({ data }: NodeProps) {
 
 const nodeTypes = { record: RecordNode, cluster: ClusterNode };
 
-const EDGE_COLOUR: Record<string, string> = {
-  parent: 'var(--edge-parent)',
-  blocks: 'var(--edge-blocks)',
-  project: 'var(--edge-member)',
+/**
+ * How each relation draws. "Edge" below is React Flow's word for a line — the
+ * model has only facets, and a *reference* facet is what puts one on screen.
+ */
+const RELATION_COLOUR: Record<string, string> = {
+  parent: 'var(--rel-parent)',
+  blocks: 'var(--rel-blocks)',
+  project: 'var(--rel-project)',
 };
 
 const DASH: Record<string, string | undefined> = {
@@ -117,7 +120,7 @@ function buildEdges(
   return [...byPair.values()].map(({ src, dst, types }) => {
     // The most structural type wins the styling; the rest ride along in the title.
     const lead = ['parent', 'project', 'blocks'].find((t) => types.includes(t)) ?? types[0]!;
-    const colour = EDGE_COLOUR[lead] ?? 'var(--edge-parent)';
+    const colour = RELATION_COLOUR[lead] ?? 'var(--rel-parent)';
     return {
       id: `${types.join('+')}:${src}->${dst}`,
       source: src,
@@ -144,7 +147,6 @@ export function CanvasView({
   data,
   onOpen,
   reload,
-  patch,
   wire,
   onSaved,
 }: {
@@ -152,14 +154,13 @@ export function CanvasView({
   data: QueryResponse;
   onOpen: (id: string) => void;
   reload: () => void;
-  patch: (p: Patch) => void;
   /** The query half of the page URL — what a save records. */
   wire: string;
   onSaved: (name: string) => void;
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [newEdgeType, setNewEdgeType] = useState('parent');
+  const [newRelation, setNewRelation] = useState('parent');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [naming, setNaming] = useState(false);
@@ -185,10 +186,10 @@ export function CanvasView({
     const groups = data.groups?.filter((g) => !g.lane) ?? [];
     const clustered = groups.length > 0;
     const auto = clustered
-      ? clusteredLayout(shown, data.edges, hierarchy, groups)
-      : treeLayout(shown, data.edges, 'LR', hierarchy);
+      ? clusteredLayout(shown, data.relations, hierarchy, groups)
+      : treeLayout(shown, data.relations, 'LR', hierarchy);
     const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.edges, stored, hierarchy, auto)
+      ? manualLayout(shown, data.relations, stored, hierarchy, auto)
       : auto;
 
     const rfNodes: Node[] = shown.map((card) => {
@@ -205,7 +206,7 @@ export function CanvasView({
         style: { width: p.w, height: p.h },
         data: {
           card,
-          chips: data.spec.show,
+          show: data.spec.show,
           context: context.has(card.id),
           onOpen,
         },
@@ -228,7 +229,7 @@ export function CanvasView({
       : [];
 
     // Bands first, so a record is always drawn over its own background.
-    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.edges, hierarchy) };
+    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, hierarchy) };
   }, [data, onOpen]);
 
   useEffect(() => {
@@ -286,27 +287,27 @@ export function CanvasView({
   const onConnect = useCallback(
     (c: Connection) => {
       if (!c.source || !c.target) return;
-      const hierarchy = meta.facets[newEdgeType]?.single === true;
+      const hierarchy = meta.facets[newRelation]?.single === true;
       const owner = hierarchy ? c.target : c.source;
       const to = hierarchy ? c.source : c.target;
       if (owner === to) return;
       setProblem(null);
-      const current = data.cards[owner]?.facets[newEdgeType] ?? [];
+      const current = data.cards[owner]?.facets[newRelation] ?? [];
       if (current.includes(to)) return;
       api
         .patchCard(owner, {
           facets: {
             ...data.cards[owner]?.facets,
-            [newEdgeType]: meta.facets[newEdgeType]?.single ? [to] : [...current, to],
+            [newRelation]: meta.facets[newRelation]?.single ? [to] : [...current, to],
           },
         })
         .then(() => reload())
         .catch((e: ApiError) => setProblem(e.message));
     },
-    [data.cards, meta.facets, newEdgeType, reload],
+    [data.cards, meta.facets, newRelation, reload],
   );
 
-  const addNode = async () => {
+  const addRecord = async () => {
     const title = prompt('New record. Title:');
     if (!title?.trim()) return;
     try {
@@ -348,9 +349,9 @@ export function CanvasView({
           rather than a control, since nothing but a canvas ever honoured it.
         */}
         <div className="canvas-float">
-          <label className="edgepick">
+          <label className="relationpick">
             drag creates
-            <select value={newEdgeType} onChange={(e) => setNewEdgeType(e.target.value)}>
+            <select value={newRelation} onChange={(e) => setNewRelation(e.target.value)}>
               {relations(meta).map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -359,7 +360,7 @@ export function CanvasView({
             </select>
           </label>
 
-          <button className="btn small" onClick={() => void addNode()}>
+          <button className="btn small" onClick={() => void addRecord()}>
             + record
           </button>
           {dirty && !naming && (

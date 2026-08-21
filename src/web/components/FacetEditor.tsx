@@ -85,7 +85,7 @@ export function FacetEditor({
         <div className="facetedit-values">
           <input
             type="date"
-            className="dueinput"
+            className="dateinput"
             value={values[0] ?? ''}
             onChange={(e) => set(e.target.value || null)}
           />

@@ -8,15 +8,6 @@ export function parentsOf(rec: Pick<Rec, 'facets'>): string[] {
   return rec.facets.parent ?? [];
 }
 
-/** The `## Instructions` section of a body, or '' when absent. */
-export function extractInstructions(body: string): string {
-  const m = body.match(/^##+\s+Instructions\s*$/im);
-  if (!m || m.index === undefined) return '';
-  const after = body.slice(m.index + m[0].length);
-  const next = after.search(/^##\s+/m);
-  return (next === -1 ? after : after.slice(0, next)).trim();
-}
-
 export function isProject(rec: Rec): boolean {
   return rec.project !== undefined;
 }
@@ -31,21 +22,6 @@ function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], base: string):
       out.push(r);
       seen.add(r.path);
     }
-  }
-  return out;
-}
-
-/**
- * Every record carrying a `project:` block, keyed by its id.
- *
- * A project's key *is* its record id. There is no separate `key` field: the
- * `project` facet stores record ids like every other reference in the model, so
- * membership, the canvas and the roll-ups all address the same name.
- */
-export function projectRecords(byId: Map<string, Rec>): Map<string, Rec> {
-  const out = new Map<string, Rec>();
-  for (const rec of byId.values()) {
-    if (rec.project) out.set(rec.id, rec);
   }
   return out;
 }
@@ -113,7 +89,7 @@ export function resolveProject(
     key = owner.id;
     if (p.jira) jira = p.jira;
     if (p.branch) branch = p.branch;
-    const ins = extractInstructions(owner.body);
+    const ins = p.instructions?.trim();
     if (ins) instructions.push(`<!-- from ${owner.id} -->\n${ins}`);
   }
 

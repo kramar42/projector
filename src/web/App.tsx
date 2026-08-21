@@ -119,13 +119,12 @@ export function App() {
           data={data}
           onOpen={setOpenCard}
           reload={reload}
-          patch={patch}
           wire={wire}
           onSaved={(name) => patch({ view: name })}
         />
       );
     if (shape === 'table') return <TableView data={data} onOpen={setOpenCard} />;
-    return <BoardView data={data} onOpen={setOpenCard} reload={reload} patch={patch} />;
+    return <BoardView data={data} onOpen={setOpenCard} reload={reload} />;
   }, [data, meta, queryError, shape, setOpenCard, reload, patch, wire]);
 
   if (gate) {

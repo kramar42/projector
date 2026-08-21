@@ -6,7 +6,7 @@ import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { extractInstructions, projectsOf, resolveProject } from '../src/index/project.ts';
+import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { validate } from '../src/schema/validate.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
@@ -211,8 +211,8 @@ test('repos union across the project chain, nearest wins for scalars', () => {
 
 test('a card in two projects inherits from both, unioned', () => {
   const g = graph(
-    rec('project-d', [], { repos: [{ path: '/project-d' }] }, '## Instructions\n\nnexus rule\n'),
-    rec('mapping', [], { repos: [{ path: '/mapping' }] }, '## Instructions\n\nmapping rule\n'),
+    rec('project-d', [], { repos: [{ path: '/project-d' }], instructions: 'project-d rule' }),
+    rec('mapping', [], { repos: [{ path: '/mapping' }], instructions: 'mapping rule' }),
     rec('deploy', [], undefined, '', ['project-d', 'mapping']),
   );
   const p = resolveProject('deploy', g, '/data');
@@ -234,18 +234,13 @@ test('a duplicate repo path is not added twice', () => {
 
 test('instructions concatenate outermost first', () => {
   const g = graph(
-    rec('root', [], {}, '## Instructions\n\nroot rule\n'),
-    rec('leaf', [], {}, '## Instructions\n\nleaf rule\n', ['root']),
+    rec('root', [], { instructions: 'root rule' }),
+    rec('leaf', [], { instructions: 'leaf rule' }, '', ['root']),
   );
   const p = resolveProject('leaf', g, '/data')!;
   assert.equal(p.instructions.length, 2);
   assert.match(p.instructions[0]!, /root rule/);
   assert.match(p.instructions[1]!, /leaf rule/);
-});
-
-test('only the Instructions section is extracted', () => {
-  const body = '\nNotes.\n\n## Instructions\n\nthe rule\n\n## Other\n\nnot this\n';
-  assert.equal(extractInstructions(body), 'the rule');
 });
 
 test('a record naming no project resolves to null', () => {

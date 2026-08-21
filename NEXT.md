@@ -1,16 +1,19 @@
-## P7 — done
+## Where the model landed
 
-All five steps shipped, plus the two items they left open: `connect` follows the relation a canvas is
-laid out by, and `groupBy` draws bands. See [P7.md](P7.md).
+Relations became reference facets and `edges:` left the file format; `kind` went, since carrying a
+`status` is what makes a record work and being named as a `parent` is what makes it a container;
+`chips` and `edges.show` became one `show`; `connect` moved onto the shape; `groupBy` draws bands on a
+canvas. Then facets got a `type` — `label · ref · date · number` — so `due` is an ordinary facet, range
+filters work on any ordered one, the type picks the editing control, and project instructions moved out
+of the body into the `project:` block.
 
-`parent` is `single: true` — nothing had ever created a second parent and no record carried one, so it
-states what was already true. Flip the flag if a card genuinely needs to be part of two things.
+All of it is described in [README.md](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md). The phase
+documents it was designed in are gone: the design is the code now, and a second place saying so would
+only drift.
 
-## P8 — done
-
-Facets are typed: `label · ref · date · number`, with `buckets` on the ordered ones. `due` is an
-ordinary facet, range filters work on any ordered facet, and the type picks the editing control. See
-[P8.md](P8.md).
+One decision worth remembering: **`parent` is `single: true`.** Nothing had ever created a second
+parent and no record carried one, so it states what was already true. Flip the flag if a card genuinely
+needs to be part of two things.
 
 ## Not now
 

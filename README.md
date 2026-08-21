@@ -129,7 +129,7 @@ others:
 
 ## Relations are facets
 
-A facet declared **`ref: true`** holds record ids rather than labels. That one flag is the whole
+A facet declared **`type: ref`** holds record ids rather than labels. That one word is the whole
 relation model:
 
 | | Meaning | Powers |
@@ -156,8 +156,8 @@ at — an association where every value is unique makes a useless column and a n
 
 Projects **nest**, and a card can belong to several at once. No separate entity is needed for this:
 **`project:` is an optional frontmatter block on any record**, and a record carrying it is a project.
-It works on nodes as well as cards, so a deliverable can be both tracked work and a container for the
-cards implementing it.
+Any record can carry one, so a deliverable is both tracked work and a container for the cards
+implementing it.
 
 ```yaml
 project:
@@ -166,6 +166,8 @@ project:
     - { path: ~/code/infra,  base: dev }
   jira: PROJ                          # default project for new jira: links
   branch: "plat/{card}"               # branch template
+  instructions: |                     # how work here is done
+    - Never change a realm in eu-prod without a ticket and a rollback plan.
 ```
 
 A project's key is its record **id**. There is no separate `key`: a second name for one thing is a
@@ -185,10 +187,12 @@ outward — each value's record, then whatever *that* record belongs to. `repos`
 (a nested project needs its parent's plus its own), `instructions` concatenate outermost-first so the
 most specific advice reads last, and everything else takes the nearest value.
 
-Instructions live in the project record's **body**, under an `## Instructions` heading — which is
-exactly where "how we work on this" belongs.
+**Instructions are configuration**, so they live in the block with the rest of it. They were a
+`## Instructions` heading in the record's body once, matched by regex — the one place prose was
+load-bearing, where renaming a heading silently stopped inheritance with nothing to check against. The
+body is free-form again: nothing in it is read by the app.
 
-`parent` edges are a separate thing: they mean decomposition and carry no config. A card may have a
+`parent` is a separate relation: it means decomposition and carries no config. A card may have a
 project, a parent, both or neither.
 
 ---
@@ -205,7 +209,7 @@ view = filter × focus × shape × show
 That is also the sidebar, top to bottom. No top bar, and only the filter panel scrolls:
 
 ```
-[ vault ▾ ]                                  ( 152 cards · 7 nodes · 12 projects )
+[ vault ▾ ]                                       ( 157 records · 12 projects )
 [ saved view ▾ ]  modified · save · revert
 ──────────────────────────────────────────
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
@@ -370,16 +374,19 @@ member and six nested ones reads `1 / 7`.
 
 ## Editing
 
-**Structure is edited by gesture; content is edited in the panel.** Facets, `parent` and edges
-are written by drag, the bulk bar and canvas handles — the same writes for one card or fifty. Title,
-body, links and the `project:` block go through the card panel only. Creating a card inline in a column
-is the one exception.
+**Structure is edited by gesture; content is edited in the panel.** Facets — relations included — are
+written by drag, the bulk bar and canvas handles, the same writes for one card or fifty. Title, body,
+links and the `project:` block go through the card panel only. Creating a card inline in a column is
+the one exception.
+
+Since a relation is a facet, dragging between columns of a `parent` board re-parents a card through
+exactly the code path that changes its priority.
 
 | Where | What |
 |---|---|
-| Card panel | rename, toggle facets, set a deadline, set parent, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
+| Card panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
-| Canvas | drag nodes and **Save layout**, handle-to-handle to create an edge, `+ node` |
+| Canvas | drag records and **Save layout**, handle-to-handle to add a reference, `+ record` |
 | Table | click a row to open the panel |
 
 **Bulk actions** make a few hundred cards tractable: ⌘-click a selection, then set a parent, set or
@@ -429,7 +436,7 @@ ck enrich <ref> --force
 # Agents
 
 Cards are plain files, so an agent can create and edit them directly with no API and no app running.
-Two commands make that reliable:
+Three commands make that reliable:
 
 **`ck context <id>`** assembles everything known about a card in one pass — the project chain, the
 inherited repos and instructions, relations, and cached link enrichment — so an agent never
@@ -462,7 +469,9 @@ accumulates its own history.
 
 `/capture` and `/triage` both **propose and stop**: they present a table and apply nothing until it is
 approved. A wrong project assignment hides a card in a column nobody will look in, which is worse than
-leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox.
+leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
+is why a rejected card gets `status: dropped` rather than being deleted: deleting it destroys the
+fingerprint with it, and the next sweep creates it again.
 
 ---
 
@@ -542,13 +551,12 @@ browser mean the same thing.
 id: fix-deploy
 title: Fix the Kpow deployment
 facets:
-  kind: [card]
   priority: [now]
   status: [active]
+  due: [2026-09-01]               # a date facet: compared, not matched
   parent: [eventing]              # reference facets: values are record ids
   blocks: [conduktor-config]
   project: [platform]
-  due: [2026-09-01]               # a date facet: compared, not matched
 links:
   - jira:PROJ-303
   - gh:pr:ORG/services#412
@@ -584,16 +592,19 @@ priority:
   values: [now, month, backlog, someday]   # declared order == column order, everywhere
   open: false                              # new values rejected by the validator
   single: true                             # a second value rejected too
-kind:
-  values: [card, node]                     # work, or the scaffolding that organises it
-  open: false
-  single: true
 parent:
-  ref: true                                # values are record ids, so it is
+  label: Part of
+  type: ref                                # values are record ids, so it is
   single: true                             # traversable as well as filterable
-project:
-  ref: true
+due:
+  type: date                               # compared against today, not matched
+  single: true
+  buckets: { overdue: -1, today: 0, week: 7 }   # what an axis shows
+  overflow: later
 ```
+
+A `ref`, `date` or `number` facet declares no `values`: its vocabulary is the vault or the number
+line, so `open` is implied and a declared list is dropped rather than half-honoured.
 
 # Theme
 
@@ -604,4 +615,4 @@ Light and dark follow the system setting.
 ---
 
 How it works inside, and the invariants to keep when changing it: [ARCHITECTURE.md](ARCHITECTURE.md).
-Open items: [TODO.md](TODO.md).
+What is deliberately not being done, and why: [NEXT.md](NEXT.md).

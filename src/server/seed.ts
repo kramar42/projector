@@ -191,11 +191,13 @@ project:
     - { path: ~/Code/work/staging, base: main }
   jira: PROJ
   branch: "kc/{card}"
+  instructions: |
+    - Never change a realm in eu-prod without a ticket and a rollback plan.
 \`\`\`
 
-Config inherits along the \`project\` facet: \`repos\` union, \`instructions\` concatenate outermost-first,
-everything else takes the nearest value. A card in two projects merges both. Write instructions in the
-project record's body under an \`## Instructions\` heading.
+Config inherits along the \`project\` facet: \`repos\` union, \`instructions\` concatenate outermost-first
+so the most specific advice reads last, everything else takes the nearest value. A card in two projects
+merges both. The body stays free-form: nothing in it is read by the app.
 
 Membership is not decomposition: putting a card under a project with \`parent\` does *not* make it
 inherit anything. The two are separate facets on purpose.

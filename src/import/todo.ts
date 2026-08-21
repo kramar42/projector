@@ -132,7 +132,7 @@ export function importTodo(
       project: {},
       created: today(),
       updated: today(),
-      body: `\nImported from TODO.md.\n\n## Instructions\n\n_None recorded yet._\n`,
+      body: `\nImported from TODO.md.\n`,
     });
     report.projects.push(id);
     return { id, level, status };

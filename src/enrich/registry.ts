@@ -2,7 +2,7 @@ import { branchFetcher, commitFetcher, prFetcher } from './github.ts';
 import { sessionFetcher } from './claudeSession.ts';
 import { docFetcher } from './doc.ts';
 import { jiraFetcher } from './jira.ts';
-import { unavailable, type Fetcher } from './types.ts';
+import type { Fetcher } from './types.ts';
 
 /**
  * Which link kinds can be enriched.
@@ -31,4 +31,3 @@ export const NOT_ENRICHED: Record<string, string> = {
   url: 'plain link',
 };
 
-export const unknownKind = (kind: string) => unavailable(`no fetcher for "${kind}"`);

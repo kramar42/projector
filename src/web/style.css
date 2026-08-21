@@ -28,9 +28,9 @@
   --accent-soft: #ebebf7;
   --dot: #dcdcdc;
 
-  --edge-parent: #7676c4;
-  --edge-blocks: #b06060; /* between red1 and red3, legible on white */
-  --edge-member: #5a7fa8;
+  --rel-parent: #7676c4;
+  --rel-blocks: #b06060; /* between red1 and red3, legible on white */
+  --rel-project: #5a7fa8;
   --minimap-node: #a6a6e7;
   --minimap-mask: rgba(50, 50, 50, 0.12);
 
@@ -79,9 +79,9 @@
     --accent-soft: #2a2a3c; /* purple4 */
     --dot: #323232;       /* shadow */
 
-    --edge-parent: #a6a6e7; /* purple1 */
-    --edge-blocks: #df8787; /* red1 — xoria's Special */
-    --edge-member: #87afdf; /* blue1 — xoria's Statement */
+    --rel-parent: #a6a6e7; /* purple1 */
+    --rel-blocks: #df8787; /* red1 — xoria's Special */
+    --rel-project: #87afdf; /* blue1 — xoria's Statement */
     --minimap-node: #373762; /* purple3 */
     --minimap-mask: rgba(4, 4, 4, 0.62); /* darkest */
 
@@ -216,28 +216,6 @@ body {
 .rail-select:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.rail-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-2);
-  cursor: pointer;
-  padding-left: 68px;
-}
-
-.rail-check.inline {
-  padding-left: 0;
-  font-size: 11px;
-}
-
-.rail-edges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  align-items: center;
 }
 
 .rail-dirty {
@@ -778,7 +756,7 @@ body {
  *     geometric shapes 0.046em too low. These two constants are those
  *     differences — they are measurements, not taste.
  */
-.kindmark {
+.recordmark {
   font-family: var(--mono);
   font-size: 0.8em;
   line-height: 1;
@@ -787,12 +765,12 @@ body {
   align-self: baseline;
 }
 
-.kindmark.is-leaf {
+.recordmark.is-leaf {
   transform: translateY(0.03em);
 }
 
-.kindmark.is-container,
-.kindmark.is-project {
+.recordmark.is-container,
+.recordmark.is-project {
   transform: translateY(-0.058em);
 }
 
@@ -967,7 +945,7 @@ body {
   color: var(--ink);
 }
 
-.dueinput {
+.dateinput {
   font-family: var(--mono);
   font-size: 11.5px;
   background: var(--surface-2);
@@ -1063,7 +1041,7 @@ body {
 .react-flow__edge-text {
   font-family: var(--mono);
   font-size: 9px;
-  fill: var(--edge-blocks);
+  fill: var(--rel-blocks);
 }
 
 .react-flow__edge-textbg {
@@ -1115,27 +1093,6 @@ body {
   z-index: 21;
   overflow-y: auto;
   box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18);
-}
-
-.panel-close {
-  position: sticky;
-  top: 0;
-  float: right;
-  margin: 10px 12px 0 0;
-  appearance: none;
-  border: 1px solid var(--rule);
-  background: var(--surface-2);
-  color: var(--ink-2);
-  border-radius: 5px;
-  width: 26px;
-  height: 26px;
-  cursor: pointer;
-  font-size: 12px;
-  z-index: 1;
-}
-
-.panel-close:hover {
-  background: var(--surface-3);
 }
 
 .panel-body {
@@ -1257,22 +1214,6 @@ code {
   margin: 8px 0 0;
 }
 
-.linklist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.linklist li {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-
 .linkkind {
   font-family: var(--mono);
   font-size: 9.5px;
@@ -1281,11 +1222,6 @@ code {
   letter-spacing: 0.06em;
   min-width: 62px;
   flex: none;
-}
-
-.linklist a {
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
 }
 
 /* rendered card body */
@@ -1434,8 +1370,8 @@ textarea { resize: vertical; font-family: inherit; }
 
 
 
-.edgepick { display: inline-flex; gap: 6px; align-items: center; }
-.edgepick select { padding: 2px 5px; font-size: 11px; }
+.relationpick { display: inline-flex; gap: 6px; align-items: center; }
+.relationpick select { padding: 2px 5px; font-size: 11px; }
 
 /* board editing */
 
@@ -1537,7 +1473,7 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* The mark carries what the record is; hovering it says so in words. It scales
    with the title, so it needs no size of its own. */
-.panel-title .kindmark {
+.panel-title .recordmark {
   cursor: help;
 }
 
@@ -1596,11 +1532,7 @@ textarea { resize: vertical; font-family: inherit; }
   border-style: solid;
   border-color: var(--accent);
 }
-.facetedit-scope { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; font-style: italic; }
-
 .linkedit { display: flex; flex-direction: column; gap: 4px; }
-.linkedit-row { display: flex; gap: 6px; align-items: center; font-size: 12px; }
-.linkedit-row a, .linkedit-row code { overflow-wrap: anywhere; flex: 1; }
 .linkedit input { width: 100%; font-size: 11.5px; }
 
 /* record picker */
@@ -2130,23 +2062,4 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   font-size: 11px;
   color: var(--bad);
   padding: 2px 2px 0;
-}
-
-/* Canvas float: the three controls only a canvas can honour, plus its transient
-   actions. In the rail these would make the sidebar reflow on every shape switch. */
-.floatbtn {
-  flex: none;
-  max-width: 150px;
-}
-
-.floatselect {
-  appearance: none;
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 12px;
-  padding: 3px 6px;
-  cursor: pointer;
 }

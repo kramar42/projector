@@ -134,7 +134,8 @@ export interface QueryResponse {
   placements: number;
   /** The relation a canvas lays out by — the first reference facet in `show`. */
   layout: string | null;
-  edges: { src: string; dst: string; type: string }[];
+  /** What the canvas draws: every reference in `show` with both ends shown. */
+  relations: { src: string; dst: string; type: string }[];
   rollups?: Record<string, Rollup>;
   views: SavedView[];
 }

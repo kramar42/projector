@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { ago, firstLine } from './run.ts';
-import { unavailable, type Enrichment, type Fetcher, type Tone } from './types.ts';
+import { unavailable, type Fetcher, type Tone } from './types.ts';
 
 /**
  * Claude sessions, read from disk. No configuration, no MCP, no network.

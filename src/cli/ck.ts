@@ -7,7 +7,6 @@ import { SEED_FACETS, SEED_README, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles, renderCard, writeCardFile } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
-import { parseLink } from '../schema/links.ts';
 import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
@@ -60,7 +59,7 @@ const p = paths(root || '/nonexistent');
 const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
 
   ck ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
-     [--sort key:dir] [--q text] [--focus <id> --via parent|member-of|blocks
+     [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
      --dir out|in|both --depth n]                   list records, grouped
   ck show <id>                                         one record in full
   ck next                                              actionable cards: open and unblocked
@@ -133,17 +132,6 @@ function argFlags(
     } else rest.push(a);
   }
   return { flags, rest };
-}
-
-function parseFilter(specs: string[] | undefined): Record<string, string[]> | undefined {
-  if (!specs?.length) return undefined;
-  const out: Record<string, string[]> = {};
-  for (const spec of specs) {
-    const [facet, values] = spec.split('=');
-    if (!facet || !values) continue;
-    out[facet] = values.split(',').map((v) => v.trim()).filter(Boolean);
-  }
-  return Object.keys(out).length ? out : undefined;
 }
 
 function ensureData(): void {
@@ -796,10 +784,6 @@ try {
       break;
     }
 
-    case 'init':
-      ensureData();
-      console.log(`data directory ready at ${root}`);
-      break;
     default:
       console.log(HELP);
       if (cmd) process.exitCode = 1;

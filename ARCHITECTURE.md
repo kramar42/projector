@@ -72,6 +72,14 @@ makes it work, being named as a `parent` is what makes it a container — so it 
 `type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
 their place.
 
+**Focus and filter are the same operation at two levels, deliberately.** A focus is a filter clause
+whose test is transitive rather than one level deep, so in principle
+`filter: { parent: { values: [project-a], depth: ∞ } }` would collapse them into one concept. The split is
+kept because it is load-bearing for the facet panel: focus bounds the *universe* and filter refines
+inside it, and the panel decides which facets to **offer** from the universe while computing **counts**
+from the filtered pool. Collapse them and "38 filtered out" changes meaning. Worth revisiting only with
+the histogram semantics settled first.
+
 **Universe vs. hits.** `universe` is what focus and search left; `hits` is that narrowed by the facet
 filter. The distinction is load-bearing in two places: the sidebar reports `universe − total` as
 "filtered out", so the number is exact rather than inferred from the histogram; and the facet panel
@@ -91,7 +99,7 @@ selected value always stays listed or it could never be unselected.
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
-are. Rebuilding costs ~37ms at 159 cards; checking the stamp costs ~0.5ms.
+are. Rebuilding costs ~37ms at 157 records; checking the stamp costs ~0.5ms.
 
 Before the query became interactive the index was rebuilt on every request, which was right while a
 request meant a click. A live search box makes that several rebuilds a second. The stamp is not a TTL
@@ -139,7 +147,7 @@ pair that agrees reads as one relationship and a pair that *disagrees* still sho
 at different records — the case worth seeing. Edge labels need an explicit neutral fill, because a label
 inherits the stroke colour otherwise.
 
-**Every relation is a reference facet.** `ref: true` says a facet's values are record ids, and
+**Every relation is a reference facet.** `type: ref` says a facet's values are record ids, and
 `parent`, `blocks` and `project` are the three that exist. There is no `edges:` block and no `edges`
 table: `src/index/refs.ts` is the one reader, and focus, the canvas, the roll-ups, config inheritance
 and cycle refusal all walk the `src names dst` pairs it returns.
@@ -158,6 +166,21 @@ record id.
 records naming it. `up`/`down` only reads correctly for containment — on `blocks`, "up" would mean
 toward the blocker, which is the same arrow as `parent`'s "down" — so the words would have meant
 opposite tree-directions depending on the relation.
+
+**A reference facet declares no vocabulary.** `values` on a `ref`, `date` or `number` facet is always a mistake — the vocabulary is
+the vault — so `loadFacets` drops it rather than half-honouring it, and `open` is implied. A value
+naming a record that does not exist is a **warning**, not an error: an agent may write a card before
+the one it points at, and refusing that would make the order of two file writes matter.
+
+**A relation carries no data of its own.** A reference facet value is a bare record id, so there is
+nowhere to hang a label, a weight or a reason on a relationship. `Edge` was `{type, to}` and nothing
+used more, and a reason for a blocker belongs in the body — accepted knowingly, since it is the one
+thing the collapse gave up.
+
+**Instructions are configuration, not prose.** They live in the `project:` block. They were once a
+`## Instructions` heading in the body matched by regex — the only place where renaming a heading
+silently changed behaviour, with nothing to validate against. The body is free-form again (C6): the app
+reads nothing in it.
 
 **Cycles are refused on every reference facet**, through the one `wouldCycle` that also guards `parent`
 edges. It takes the outward neighbours as a function rather than a record map, so the check is about
@@ -232,14 +255,16 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `ck add` / `POST /api/card` | one new card file | never overwrites an existing file |
 | `ck log` | nothing | reads `git log`; it is the one command with no write at all |
 | `ck link`, `ck set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
+| `ck set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
 | `POST /api/bulk` op `parent` | one facet on many cards | it is `bulkFacet` under a name the bulk bar uses |
 | `PUT /api/card/:id/frontmatter` | one card's whole frontmatter block | never touches the body |
-| `DELETE /api/card/:id`, `POST /api/bulk` | card files, and edges that pointed at a deleted card | nothing outside `cards/` |
+| `ck rm`, `DELETE /api/card/:id`, `POST /api/bulk` | card files, and every reference that pointed at them | nothing outside `cards/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose card still exists |
 | `DELETE /api/view/:name` | one view file | never touches the cards it selected |
 | `POST /api/card/:id/asset` | one file under `cards/assets/<id>/` | never overwrites: the name is a content hash |
 | `ck import …` | new card files; skips any id already present | never edits or deletes an existing card |
+| `POST`/`DELETE /api/vaults` | `vaults.json` beside the app | never touches a vault's contents |
 | everything else | `.index.db` and `.enrich.db` only | never touches a card file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
@@ -357,10 +382,12 @@ written down.
 
 | | |
 |---|---|
-| `model.test.ts` | frontmatter round-trips, link parsing, project resolution, drag semantics, worktrees, validation, `ck log` over a scratch repo |
-| `query.test.ts` | the compiler: filters, `(none)`, pseudo-facets, deadlines, focus traversals, grouping, counts, FTS |
-| `spec.test.ts` | `ViewSpec` round-trips through URL params and files |
+| `model.test.ts` | frontmatter round-trips, link parsing, project resolution, reference cycles, validation, drag semantics, canvas clusters, nested `--set`, worktrees, `ck log` over a scratch repo, and the seed files parsing as what they claim to be |
+| `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
+| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
 | `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
-and not whatever the cards happen to say today.
+and not whatever the cards happen to say today. `tsconfig` runs with `noUnusedLocals` and
+`noUnusedParameters`: a function that outlives the field it read is a compile error rather than
+something a later reader has to notice.

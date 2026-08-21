@@ -209,7 +209,6 @@ test('focus walks references transitively, in the direction asked for', () => {
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
-    const facets = loadFacets(join(root, 'facets.yaml'));
     const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records)].sort();
 
     // Includes the focus itself: "this subtree" contains its own root.
@@ -233,7 +232,6 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
     const { records } = reindex(root);
     // From the middle of the chain: its own container and its own member, and
     // not `project-a` — which a walk over undirected edges would reach through project-b.
-    const facets = loadFacets(join(root, 'facets.yaml'));
     assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, records)].sort(), [
       'project-b',
       'kc-realms',
@@ -693,7 +691,6 @@ test('every relation is read the same way, so nothing knows which is which', () 
   const { root, cleanup } = vault();
   try {
     const { records } = reindex(root);
-    const facets = loadFacets(join(root, 'facets.yaml'));
     // One reader, so `parent` and `project` are indistinguishable to everything
     // downstream — focus, the canvas, the roll-ups, config inheritance.
     const project = adjacency('project', records);
@@ -716,7 +713,6 @@ test('a value naming a record that does not exist is not a reference', () => {
       'utf8',
     );
     const { records } = reindex(root);
-    const facets = loadFacets(join(root, 'facets.yaml'));
     // It stays a facet value — it filters and groups — it simply has nothing to
     // walk to. `ck check` is what reports it.
     assert.deepEqual(records.get('orphan')!.facets.project, ['gone']);

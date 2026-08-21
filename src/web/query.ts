@@ -1,5 +1,5 @@
 import { NONE } from './views/dragSemantics.ts';
-import type { Meta, Query, Shape, ViewSpec } from './types.ts';
+import type { Meta, Shape, ViewSpec } from './types.ts';
 
 /**
  * The URL is the view (C9).
@@ -13,7 +13,6 @@ import type { Meta, Query, Shape, ViewSpec } from './types.ts';
  */
 
 export const CARD_PARAM = 'card';
-const VIEW_PARAM = 'view';
 
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
@@ -33,14 +32,6 @@ export function apiSearch(search: string): string {
   for (const [k, v] of paramsOf(search)) if (isQueryParam(k)) out.append(k, v);
   const s = out.toString();
   return s ? `?${s}` : '';
-}
-
-export function openCardOf(search: string): string | null {
-  return paramsOf(search).get(CARD_PARAM);
-}
-
-export function savedViewOf(search: string): string | null {
-  return paramsOf(search).get(VIEW_PARAM);
 }
 
 // ---------------------------------------------------------------- writing
@@ -115,22 +106,6 @@ function wireValues(raw: string | null): string[] {
 
 // ---------------------------------------------------------------- reading back
 
-/**
- * Whether the URL diverges from the saved view it names — what the sidebar shows
- * as *modified*. Compared on the wire form rather than the parsed objects: the
- * server already merged them, so the question is only which keys were overridden.
- */
-export function overriddenKeys(search: string, spec: ViewSpec | undefined): string[] {
-  if (!spec?.name) return [];
-  const params = paramsOf(search);
-  const out: string[] = [];
-  for (const [key] of params) {
-    if (key === VIEW_PARAM || key === CARD_PARAM || !isQueryParam(key)) continue;
-    out.push(key);
-  }
-  return out;
-}
-
 export const SHAPES: { value: Shape; label: string }[] = [
   { value: 'board', label: 'Board' },
   { value: 'canvas', label: 'Canvas' },
@@ -162,11 +137,6 @@ export function describe(spec: ViewSpec, total: number): string {
   if (q.q) bits.push(`"${q.q}"`);
   if (q.groupBy?.length) bits.push(`by ${q.groupBy.join(' × ')}`);
   return bits.join(' · ');
-}
-
-/** Which facet a drag writes, so the board can say so before you drag. */
-export function dragFacet(query: Query): string | null {
-  return query.groupBy?.[0] ?? null;
 }
 
 /**

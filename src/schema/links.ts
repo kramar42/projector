@@ -23,8 +23,6 @@ export const LINK_KINDS = [
   'url',
 ] as const;
 
-export type LinkKind = (typeof LINK_KINDS)[number];
-
 const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'doc', 'slack'];
 
 /**

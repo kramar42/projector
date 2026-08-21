@@ -1,5 +1,5 @@
 import { useEnrichment } from '../enrichment.tsx';
-import type { CardDTO, Tone } from '../types.ts';
+import type { CardDTO } from '../types.ts';
 
 /**
  * The one card component, rendered at two sizes inside a board column, a canvas
@@ -127,7 +127,7 @@ export function CardBody({
   return (
     <div className={cls(card, 'cardface')} onDoubleClick={() => onOpen?.(card.id)}>
       <div className="cardface-head">
-        <KindMark card={card} />
+        <RecordMark card={card} />
         <span className="cardface-title">{card.title}</span>
       </div>
 
@@ -199,12 +199,12 @@ export function markOf(card: CardDTO): { glyph: string; role: string; means: str
   return { glyph: '·', role: 'leaf', means: 'nothing is part of this one' };
 }
 
-export function KindMark({ card }: { card: CardDTO }) {
+export function RecordMark({ card }: { card: CardDTO }) {
   // The role is also a class, because each glyph needs its own optical nudge —
-  // see `.kindmark` in style.css.
+  // see `.recordmark` in style.css.
   const { glyph, role, means } = markOf(card);
   return (
-    <span className={`kindmark is-${role}`} title={means}>
+    <span className={`recordmark is-${role}`} title={means}>
       {glyph}
     </span>
   );

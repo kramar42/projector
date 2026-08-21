@@ -128,7 +128,7 @@ export function importTrello(
       project: {},
       created: today(),
       updated: today(),
-      body: `\nImported from the Trello list "${clean(list.name)}".\n\n## Instructions\n\n_None recorded yet._\n`,
+      body: `\nImported from the Trello list "${clean(list.name)}".\n`,
     });
   }
 

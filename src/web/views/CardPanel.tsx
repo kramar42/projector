@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { marked } from 'marked';
 import { ApiError, api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { KindMark } from '../components/CardBody.tsx';
+import { RecordMark } from '../components/CardBody.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
@@ -100,7 +100,7 @@ export function CardPanel({
           {card &&
             (editTitle === null ? (
               <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
-                <KindMark card={card} />
+                <RecordMark card={card} />
                 <span className="panel-title-text">{card.title}</span>
               </h2>
             ) : (
@@ -165,9 +165,9 @@ export function CardPanel({
         {data && card && (
           <div className="panel-body">
             <div className="panel-actions">
-              {/* Promote/demote is gone on purpose: `kind` is an ordinary facet
-                  now, so it is toggled in the Facets section like every other
-                  axis rather than through a control of its own. */}
+              {/* There is no promote/demote, because there is no class of
+                  record to move between. A record is work when it carries a
+                  lifecycle, which is the Status facet below. */}
               <button
                 className="btn small"
                 title={

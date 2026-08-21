@@ -1,5 +1,5 @@
 import { fallbackLabel } from '../schema/links.ts';
-import type { Rec, ResolvedProject } from '../schema/types.ts';
+import type { Rec } from '../schema/types.ts';
 import { isProject } from '../index/project.ts';
 import { bucketOf } from '../schema/facets.ts';
 import type { Facets } from '../schema/types.ts';
@@ -73,7 +73,6 @@ export function excerptOf(body: string, max = 160): string {
 
 export function toDTO(
   rec: Rec,
-  records: Map<string, Rec>,
   extra: {
     childCount?: number;
     blockedBy?: { id: string; title: string; done: boolean }[];
@@ -100,4 +99,3 @@ export function toDTO(
   };
 }
 
-export interface ProjectDTO extends ResolvedProject {}

@@ -278,10 +278,6 @@ function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): 
   return false;
 }
 
-/** Outward `parent` neighbours, while `parent` is still an edge. */
-const parentsIn = (records: Map<string, { edges: { type: string; to: string }[] }>) => (id: string) =>
-  (records.get(id)?.edges ?? []).filter((e) => e.type === 'parent').map((e) => e.to);
-
 /** Set one facet's values on many records at once. */
 export function bulkFacet(
   root: string,

@@ -191,10 +191,6 @@ export const PSEUDO: Record<string, Pseudo> = {
   },
 };
 
-export function isPseudo(facet: string): boolean {
-  return facet in PSEUDO;
-}
-
 /**
  * Every record's values for one axis, as the axis presents them.
  *

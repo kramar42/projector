@@ -8,7 +8,7 @@ import type { CardDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE, modeFor, nextValues } from './dragSemantics.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import { applyOrder, type Patch } from '../query.ts';
+import { applyOrder } from '../query.ts';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -23,12 +23,10 @@ export function BoardView({
   data,
   onOpen,
   reload,
-  patch,
 }: {
   data: QueryResponse;
   onOpen: (id: string) => void;
   reload: () => void;
-  patch: (p: Patch) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [problem, setProblem] = useState<string | null>(null);

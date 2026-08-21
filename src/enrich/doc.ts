@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { ago, firstLine } from './run.ts';
 import { unavailable, type Enrichment, type Fetcher } from './types.ts';
 import { resolveDoc } from '../vault.ts';

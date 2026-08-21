@@ -26,7 +26,7 @@ import { resolveProject, parentsOf } from '../index/project.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, unblocks } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
-import { loadViews, viewFileFor, findView } from './views.ts';
+import { loadViews, findView } from './views.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
 import { refsOf } from '../index/refs.ts';
 import { layoutRelation, parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
@@ -207,7 +207,7 @@ app.delete('/api/vaults', async (c) => {
 app.get('/api/meta', (c) => {
   const root = vaultOf(c);
   touchVault(root);
-  const { facets, db, views, records } = load(root);
+  const { facets, db, views } = load(root);
   return c.json({
     vault: root,
     vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
@@ -266,7 +266,7 @@ app.get('/api/query', (c) => {
   for (const id of shown) {
     const rec = records.get(id);
     if (!rec) continue;
-    cards[id] = toDTO(rec, records, {
+    cards[id] = toDTO(rec, {
       facets,
       childCount: countChildren(records, id),
       blockedBy: blockersOf(db, id),
@@ -291,7 +291,7 @@ app.get('/api/query', (c) => {
     // Computed here rather than in the client, so the relation a canvas lays out
     // by and the one `connect` walked cannot come apart (C8).
     layout: layout ?? null,
-    edges: edgesAmong(records, facets, new Set(shown), spec.show),
+    relations: relationsAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
     rollups: projectRollups(records, facets, new Date().toISOString().slice(0, 10)),
@@ -307,7 +307,7 @@ app.get('/api/query', (c) => {
  * otherwise read as a relation. `source: [git]` next to a record called `git` is
  * unlikely and would be a real bug.
  */
-function edgesAmong(
+function relationsAmong(
   records: Map<string, Rec>,
   facets: Facets,
   ids: Set<string>,
@@ -330,7 +330,7 @@ app.get('/api/card/:id', (c) => {
   if (!rec) return c.json({ error: 'no such card' }, 404);
   const project = resolveProject(rec.id, records, root);
   return c.json({
-    card: toDTO(rec, records, {
+    card: toDTO(rec, {
       facets,
       childCount: countChildren(records, rec.id),
       blockedBy: blockersOf(db, rec.id),
@@ -363,28 +363,6 @@ function countChildren(records: Map<string, Rec>, id: string): number {
   let n = 0;
   for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;
   return n;
-}
-
-function isBeneath(
-  records: Map<string, { edges: { type: string; to: string }[] }>,
-  id: string,
-  ancestor: string,
-): boolean {
-  const seen = new Set<string>();
-  const stack = [id];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    const rec = records.get(cur);
-    if (!rec) continue;
-    for (const e of rec.edges) {
-      if (e.type !== 'parent') continue;
-      if (e.to === ancestor) return true;
-      stack.push(e.to);
-    }
-  }
-  return false;
 }
 
 // ---------------------------------------------------------------- writes
