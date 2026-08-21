@@ -207,9 +207,10 @@ export const PSEUDO: Record<string, Pseudo> = {
   /**
    * Which kinds of external reference a record carries.
    *
-   * Every axis on a card was askable except this one: 90 of 157 records here
-   * hold a link and there was no way to ask which. A record with none yields no
-   * value, so "nothing linked" is the ordinary `(none)` refinement.
+   * Every axis on a card was askable except this one: most records here hold a
+   * link (110 of 191 at the time of writing) and there was no way to ask which. A
+   * record with none yields no value, so "nothing linked" is the ordinary
+   * `(none)` refinement.
    */
   linked: {
     label: 'Linked',

@@ -40,9 +40,10 @@ export type ParseResult =
 /**
  * Facet values are always arrays. A scalar in the file is lifted to `[scalar]`.
  *
- * No facet is named here. `kind` is stored, read and written exactly like
- * `priority`, which is the whole point of it being a facet — the parser, the
- * filter, the histogram and the grouping all treat it as one more axis.
+ * No facet is named here, and that is the point: the parser, the filter, the
+ * histogram and the grouping all treat every axis identically, so a new facet
+ * needs no code. A facet the vocabulary does not declare is preserved, not
+ * dropped — the file is the source of truth (C1), not this parser's opinion.
  */
 function normaliseFacets(raw: unknown): Record<string, string[]> {
   const out: Record<string, string[]> = {};

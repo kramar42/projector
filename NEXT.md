@@ -17,12 +17,12 @@ needs to be part of two things.
 
 ## Not now
 
-- **The expression language.** Moving the four remaining pseudo-facets — `type`, `blocked`, `triage`,
-  `staleness` — into `facets.yaml` needs one, and its hardest case cannot be a per-record expression at
-  all: `blocked` requires the aggregate pass over every record's `blocks` references. Since P8 the case
-  is weaker anyway: each of the four computes over something a facet *cannot* describe — a `project:`
-  block, the reference graph, an absence, the app-written `updated` — so `PSEUDO` has a coherent
-  residual job rather than being a holding pen.
+- **The expression language.** Moving the five remaining pseudo-facets — `type`, `blocked`, `triage`,
+  `staleness`, `linked` — into `facets.yaml` needs one, and its hardest case cannot be a per-record
+  expression at all: `blocked` requires the aggregate pass over every record's `blocks` references.
+  Since P8 the case is weaker anyway: each of the five computes over something a facet *cannot*
+  describe — a `project:` block, the reference graph, an absence, a record's links, the app-written
+  `updated` — so `PSEUDO` has a coherent residual job rather than being a holding pen.
 - **Per-column summaries.** Not blocked on the expression language, which was the wrong reason: a
   built-in summary is a *named aggregate* — count, sum, average, min, max — and needs no parser, and
   `type: number` now exists so the arithmetic ones would mean something.
@@ -41,5 +41,14 @@ needs to be part of two things.
 
 P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the
 model is presently known to be wrong, and the next useful work is likely to be *using* it rather than
-changing it — 10 `pj check` warnings left, `energy` set on a handful of records, `owner` declared and
+changing it — 7 `pj check` warnings left, `energy` set on a handful of records, `owner` declared and
 unused, no deadlines set anywhere.
+
+Two things the audit of 2026-08-21 turned up that belong here rather than in the model. **`blocks`
+carries one value across 191 records**, and `pj next`, the `blocked` axis, the recursive closure, cycle
+refusal and the `unblocked` view are all built on it — the mechanism is finished and idle, the same way
+`due` and `owner` are. That is also how `pj next` could filter on a deleted facet unnoticed for two
+days: with no blocker data, an empty answer looked plausible. And **three of the seven `pj check`
+warnings are structural** — `inbox`, `projects` and `jira-triage` are top-level containers that belong
+to no project by construction, so the count cannot reach zero until the check exempts records nothing
+names as a parent.

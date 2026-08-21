@@ -38,7 +38,7 @@ export interface Link {
  * There is no `kind` and no `edges`. A record is not a class of thing: whether it
  * is work is whether it carries a lifecycle, and whether it contains anything is
  * whether anything references it — both readable from the record itself, so
- * neither is stored (C11). Every relation is a facet declared `ref: true`, which
+ * neither is stored (C11). Every relation is a facet declared `type: ref`, which
  * is why `parent` filters and groups exactly as `priority` does.
  */
 export interface Rec {

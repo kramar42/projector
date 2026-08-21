@@ -10,7 +10,8 @@ back** to Jira, GitHub, Trello or Slack.
 
 ## Running
 
-Node 26 runs the TypeScript directly — no build step for the server or the CLI.
+Node 24+ runs the TypeScript directly — no build step for the server or the CLI. The floor is
+`engines` in `package.json`; anything newer is fine.
 
 ```bash
 pnpm install
@@ -59,21 +60,23 @@ is what makes it cheap — the engine reads a facet in exactly two places.
 
 ## Pseudo-facets
 
-Four axes are computed rather than stored, and appear in the filter panel indistinguishable from real
+Five axes are computed rather than stored, and appear in the filter panel indistinguishable from real
 facets:
 
 | | Values | Derived from |
 |---|---|---|
-| `type` | `project`, `plain` | presence of a `project:` block |
+| `type` | `project`, `node`, `plain` | a `project:` block · being named as a `parent` |
 | `blocked` | `blocked`, `waiting`, `clear` | an unfinished `blocks` edge · a non-empty `waiting_on` |
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a record carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
-absence, or the app-written `updated` field. Each is a count, a date comparison or the presence of a
+absence, a record's links, or the app-written `updated` field. Each is a count, a date comparison or the presence of a
 reference — never a judgement. `type=project`
-*is* the projects view, and `triage` turns the untriaged pile into something you can drag out of.
+*is* the projects view, and `triage` turns the untriaged pile into something you can drag out of. The
+three `type` values are exclusive — a project that something is part of stays a `project` — so the
+counts always add up.
 
 **Every one of them computes.** Nothing derivable is also storable, which is why there is no
 `status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
@@ -209,7 +212,7 @@ view = filter × focus × shape × show
 That is also the sidebar, top to bottom. No top bar, and only the filter panel scrolls:
 
 ```
-[ vault ▾ ]                                       ( 157 records · 12 projects )
+[ vault ▾ ]                                       ( 191 records · 16 projects )
 [ saved view ▾ ]  modified · save · revert
 ──────────────────────────────────────────
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
@@ -290,7 +293,7 @@ rank. Every value the facet declares gets a group whether anything is in it or n
 somewhere to drag a card to.
 
 Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
-That works because a hierarchy concentrates: 21 distinct parents across 112 references here, only 6 of
+That works because a hierarchy concentrates: 26 distinct parents across 134 references here, only 7 of
 them used once.
 
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`

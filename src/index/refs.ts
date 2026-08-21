@@ -5,7 +5,7 @@ import type { Facets, Rec } from '../schema/types.ts';
  * How records point at each other, and how to walk it.
  *
  * One module, because there is one kind of relation. A **reference facet** holds
- * record ids as its values (`ref: true` in `facets.yaml`), which makes it both
+ * record ids as its values (`type: ref` in `facets.yaml`), which makes it both
  * classifiable and traversable — it filters, groups and drags like `priority`,
  * and it lays out a canvas, walks under `focus` and refuses a cycle like an edge
  * used to. There is no second mechanism and therefore no branch anywhere below.

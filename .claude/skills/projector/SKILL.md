@@ -36,13 +36,14 @@ for cards, because it validates and keeps formatting consistent. Run `pj check` 
 alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
 ```
 
-## The model, in four facts
+## The model, in six facts
 
 1. **Facets are arrays, and some hold one value.** Every value is an array, even when there is one. A
    card with two values for a grouped facet appears in two board columns — that is the model working.
-   A facet declared `single: true` refuses a second value instead: `priority`, `status`, `kind`,
-   `energy` and `owner` are single, because holding two at once is incoherent rather than expressive.
-2. **`project` is a reference facet** — `ref: true`, so its values are record **ids**.
+   A facet declared `single: true` refuses a second value instead: `priority`, `status`, `energy`,
+   `owner`, `parent` and `due` are single, because holding two at once is incoherent rather than
+   expressive.
+2. **`project` is a reference facet** — `type: ref`, so its values are record **ids**.
    `project: [project-d, mapping]` means the card belongs to both and inherits the repos and instructions
    of both. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
    under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
@@ -165,10 +166,10 @@ Adding an axis is two steps and no code: declare it here, then set it with `pj s
 Removing one leaves the values on the cards — `pj check` then reports them as unknown rather than
 dropping them, which is the behaviour you want when a rename is half-done.
 
-**Four axes are computed and are *not* in this file** — `type`, `blocked`, `triage`, `staleness`.
-Each reads something a facet cannot describe: a `project:` block, the reference graph, an absence, the
-app-written `updated`. They filter and group exactly like declared facets. Never try to write one onto
-a card.
+**Five axes are computed and are *not* in this file** — `type`, `blocked`, `triage`, `staleness`,
+`linked`. Each reads something a facet cannot describe: a `project:` block, the reference graph, an
+absence, a record's links, the app-written `updated`. They filter and group exactly like declared
+facets. Never try to write one onto a card.
 
 ## Views — `views/*.yaml`
 

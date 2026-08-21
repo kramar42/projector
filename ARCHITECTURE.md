@@ -117,13 +117,18 @@ scale both are free — it is what lets a pseudo-facet be indistinguishable from
 `blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
 the two jobs it is genuinely better at: full text (FTS5) and the recursive `blocks` closure — and both
-now read the `facets` table, since a relation is a facet value like any other.
+now read the `facets` table, since a relation is a facet value like any other. `src/index/queries.ts`
+holds only those, plus `counts`. It used to also carry a general `listRecords`/`filterClause` pair — a
+second filtering engine, which is what this whole section says should not exist — and that is exactly
+where `pj next` went on filtering by `kind` for two days after P7 deleted it. `pj next` is now one
+`runQuery` call, because `blocked: [clear]` already means "no unfinished blocker and nobody waited on".
 
 **Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field. Moving it
 into `facets.yaml` showed it asserted two things the record already said — carrying a `status` is what
 makes it work, being named as a `parent` is what makes it a container — so it is gone entirely (C11).
 `type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
-their place.
+their place — and `type` also reads the reference graph, since its third value `node` is "something
+names this as a parent". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
 
 **Focus and filter are the same operation at two levels, deliberately.** A focus is a filter clause
 whose test is transitive rather than one level deep, so in principle
@@ -152,7 +157,7 @@ selected value always stays listed or it could never be unselected.
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
-are. Rebuilding costs ~37ms at 157 records; checking the stamp costs ~0.5ms.
+are. Rebuilding costs ~34ms at 191 records; checking the stamp costs ~0.5ms.
 
 Before the query became interactive the index was rebuilt on every request, which was right while a
 request meant a click. A live search box makes that several rebuilds a second. The stamp is not a TTL
@@ -208,8 +213,8 @@ and cycle refusal all walk the `src names dst` pairs it returns.
 The gain is not symmetry, it is capability. An edge could be traversed but never filtered, grouped,
 counted, dragged or bulk-edited; a facet could be all of those but never traversed. Making relations
 facets means `f.parent=project-a`, `groupBy: [parent]`, `parent=(none)` and drag-between-parent-columns all
-exist, none of which did before — and they work because a hierarchy concentrates: 21 distinct parents
-over 112 references, 6 used once.
+exist, none of which did before — and they work because a hierarchy concentrates: 26 distinct parents
+over 134 references, 7 used once.
 
 A project's key is its record **id** — there is no separate `key` field, because a second name for one
 thing is a second thing to keep in step, and it would let a reference point at something that is not a
