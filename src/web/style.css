@@ -1694,19 +1694,96 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .tab.is-on { background: var(--accent); border-color: var(--accent); color: var(--ground); }
 
-.facetedit { margin-bottom: 12px; }
+/* An axis carrying nothing is one line; one carrying something is open. Closed
+   rows sit tighter than open ones, so a run of empty axes reads as a list of
+   names rather than as a stack of sections. */
+.facetedit { margin-bottom: 2px; }
+.facetedit.is-carried { margin-bottom: 10px; }
+
+/* The whole label row is the toggle, so the target is the width of the panel
+   rather than the width of the word — the same head the filter rail uses. */
+.facetedit-head {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  margin-bottom: 2px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
 .facetedit-label {
   font-family: var(--mono);
   font-size: var(--text-chip);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--ink-3);
-  margin-bottom: 4px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
 }
+
+.facetedit-head:hover .facetedit-label { color: var(--ink-2); }
+.facetedit.is-carried .facetedit-label { color: var(--ink-2); }
+
+/* What a collapsed axis still says: how many values are under it. */
+.facetedit-count {
+  font-family: var(--mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
 .facetedit-values { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+
+/* A reference value is a record, so it carries a record's two affordances side
+   by side: the title goes there, the ✕ unlinks it. They used to be one gesture —
+   clicking the chip removed the edge, and only a hover title said so. */
+.refchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  max-width: 100%;
+}
+
+.refchip:hover { border-color: var(--rule-2); }
+
+/* Hueless on purpose. Three axes are references — `parent`, `blocks`, `project`
+   — and One Hue Per Axis means a family serves exactly one, so a shared chip
+   colour for all three would say "project" about two axes that are not it.
+   What a reference *is* is carried by the record mark and the title, which is
+   the same grammar a card face and a table row use. */
+.refchip-go {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: var(--text-body-sm);
+  color: var(--ink-2);
+  padding: 1.5px 2px 1.5px 6px;
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.refchip-go:hover { color: var(--ink); }
+.refchip .btn.tiny { padding: 0 4px 0 2px; }
+
+/* The mark that says what the record is, at the size the surrounding text sets —
+   the same `▣ / ○ / ·` vocabulary as every other surface. See `.recordmark` for
+   where the optical nudges come from. */
+.refchip .recordmark {
+  padding-left: 6px;
+  font-size: 0.8em;
+}
 /* Sized to its placeholder rather than to a round number, so it reads as one more
    chip in the row instead of a gap at the end. It grows when focused. */
 .facetedit-add input {

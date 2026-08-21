@@ -54,9 +54,12 @@ export function FrontmatterEditor({
 
   return (
     <div className="editor">
+      {/* One line, not four. "The whole frontmatter, as it sits in the file" is
+          what the pane visibly is, and "validated on save, a bad edit is
+          refused" is what the refusal says when it happens. The `id` rule is the
+          only part that has to be known *before* typing. */}
       <p className="hint">
-        The whole frontmatter, as it sits in the file. Validated on save — a bad edit is refused, not
-        written. <code>id</code> cannot be changed here, because other records' edges point at it.
+        <code>id</code> is fixed — other records' edges point at it.
       </p>
       <div ref={hostRef} className="editor-host is-yaml" />
       <div className="editor-bar">

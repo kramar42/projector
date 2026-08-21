@@ -4,7 +4,7 @@ import { useLive } from '../useLive.ts';
 import { RecordMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
-import { Actions, Body, Facets, Frontmatter, Links, Parent } from './blocks.tsx';
+import { Actions, Body, Facets, Frontmatter, Links } from './blocks.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -143,17 +143,23 @@ export function CardPanel({
           <div className="panel-body">
             <Actions card={card} write={write} />
 
+            {/* The id row is gone: it is the `?card=` parameter in the address
+                bar and the stem of the filename on the row below, so it was the
+                same string three times on the first fold of the panel. */}
             <dl className="kv">
-              <dt>id</dt>
-              <dd><code>{card.id}</code></dd>
               <dt>file</dt>
               <dd><code>{data.file}</code></dd>
               {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
             </dl>
 
-            <Parent card={card} parents={data.parents} write={write} onOpen={onOpen} />
-
-            <Facets defs={meta.facets} values={card.facets} write={write} />
+            <Facets
+              defs={meta.facets}
+              values={card.facets}
+              refs={data.refs}
+              selfId={card.id}
+              write={write}
+              onOpen={onOpen}
+            />
 
             {/* Derived, both of them: the inbound side of `blocks` and of
                 `parent`. There is no edit here because the edit lives on the

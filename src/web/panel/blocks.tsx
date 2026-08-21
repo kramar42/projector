@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Button } from '../components/Button.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
-import { RecordPicker } from '../components/RecordPicker.tsx';
 import { LinkEditor } from '../components/LinkEditor.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { renderBody } from '../../view/markdown.ts';
 import type { CardWriter } from './usePanelWriter.ts';
-import type { CardDTO, Meta } from '../types.ts';
+import type { CardDTO, CardDetail, Meta } from '../types.ts';
 
 /**
  * The panel's blocks.
@@ -63,73 +62,29 @@ export function Actions({
 }
 
 /**
- * The parent, as titles you can walk to.
+ * Every axis, drawn the same way.
  *
- * It writes `parent` through the ordinary facet door now. It used to reach for
- * the bulk endpoint, which takes no base mtime and never calls the write gate —
- * so this control silently overwrote a concurrent agent edit while the `Part of`
- * chip row further down correctly refused (C4: relations are written like every
- * other axis, and this one was the exception).
- *
- * What it still adds over that chip row is the reason it survives: titles rather
- * than ids, navigation on click, and a picker that excludes the card itself so
- * "be your own parent" stays impossible rather than becoming a 400.
+ * There is no section above this one for `parent` any more. It had grown its own
+ * because the generic reference row drew raw ids and could not be walked, so the
+ * one relation that mattered daily got a better control — and the card ended up
+ * carrying two editors for one axis, fifty pixels apart, with no way to tell
+ * which was authoritative. Fixing the generic row for every reference facet made
+ * the bespoke one redundant rather than merely unwanted (C4).
  */
-export function Parent({
-  card,
-  parents,
-  write,
-  onOpen,
-}: {
-  card: CardDTO;
-  parents: { id: string; title: string }[];
-  write: Pick<CardWriter, 'facet'>;
-  onOpen: (id: string) => void;
-}) {
-  const [picking, setPicking] = useState(false);
-  return (
-    <section className="panel-section">
-      <h3>Parent</h3>
-      {parents.map((p) => (
-        <button className="reflink" key={p.id} onClick={() => onOpen(p.id)}>
-          {p.title}
-        </button>
-      ))}
-      {!picking ? (
-        <Button size="small" onClick={() => setPicking(true)}>
-          {parents.length ? 'Change parent' : 'Set parent'}
-        </Button>
-      ) : (
-        <RecordPicker
-          exclude={[card.id]}
-          placeholder="parent record…"
-          clearLabel="— no parent —"
-          onCancel={() => setPicking(false)}
-          onPick={(pid) => {
-            setPicking(false);
-            // `parent` is single: picking one genuinely replaces it.
-            write.facet('parent', pid ? [pid] : [], 'set');
-          }}
-        />
-      )}
-      <p className="hint">
-        A parent means decomposition — this card is <em>part of</em> that one — and is what
-        the canvas draws. Membership is the <code>project</code> facet, and only that: repos
-        and instructions are inherited through it, never through a parent edge. The two are
-        independent, so a card can have either, both or neither.
-      </p>
-    </section>
-  );
-}
-
 export function Facets({
   defs,
   values,
+  refs,
+  selfId,
   write,
+  onOpen,
 }: {
   defs: Meta['facets'];
   values: CardDTO['facets'];
+  refs: CardDetail['refs'];
+  selfId: string;
   write: Pick<CardWriter, 'facet'>;
+  onOpen: (id: string) => void;
 }) {
   return (
     <section className="panel-section">
@@ -140,6 +95,9 @@ export function Facets({
           name={name}
           def={def}
           values={values[name] ?? []}
+          refs={refs}
+          selfId={selfId}
+          onOpen={onOpen}
           // One axis, named, and the editor says whether it replaced the axis
           // or named a delta on it. Neither the map nor — for a toggle — the
           // axis's other values are asserted, so nothing an agent changed
@@ -198,17 +156,15 @@ export function Frontmatter({
           </Button>
         </span>
       </h3>
-      {!open ? (
-        <p className="hint">
-          Everything above edits the frontmatter through chips. Open this to set what the panel
-          does not draw — a project's repos, a branch template, keys added later.
-        </p>
-      ) : (
-        // No fetch. The yaml arrives with the card, from the same read as its
-        // mtime, so there is no second copy of this file to go stale — which is
-        // what used to make saving here revert whatever the chips had just done.
-        <FrontmatterEditor cardId={cardId} yaml={yaml} onSave={write.frontmatter} />
-      )}
+      {/* No fetch. The yaml arrives with the card, from the same read as its
+          mtime, so there is no second copy of this file to go stale — which is
+          what used to make saving here revert whatever the chips had just done.
+
+          Nothing renders when it is closed. There was a paragraph here saying
+          the chips above edit the frontmatter and this opens the rest; the
+          control it sat under is labelled `edit raw`, on a surface with one
+          reader who wrote both. */}
+      {open && <FrontmatterEditor cardId={cardId} yaml={yaml} onSave={write.frontmatter} />}
     </section>
   );
 }

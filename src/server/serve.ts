@@ -21,7 +21,7 @@ import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
-import { resolveProject, parentsOf } from '../index/project.ts';
+import { resolveProject, parentsOf, isProject } from '../index/project.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
@@ -280,10 +280,20 @@ app.get('/api/card/:id', (c) => {
     // the chips refreshed on every write and the raw pane never did, so saving
     // it reverted whatever the chips had just done. One read, one mtime.
     yaml: split(readFileSync(rec.file, 'utf8')).yaml ?? '',
-    parents: parentsOf(rec)
-      .map((id) => records.get(id))
-      .filter((r) => r)
-      .map((r) => ({ id: r!.id, title: r!.title })),
+    // Every record this card points at, from any reference facet, resolved to a
+    // title. A reference facet stores ids, so without this the panel can only
+    // draw `check-technical-challenge-code-submissions-nikola` where the rest of
+    // the app draws a title — which is why `parent` had grown a bespoke section
+    // to say the same thing better, and why the card then carried two controls
+    // for one axis. One answer for every reference facet, so none needs its own.
+    refs: Object.fromEntries(
+      Object.entries(rec.facets)
+        .filter(([name]) => facets[name]?.type === 'ref')
+        .flatMap(([, ids]) => ids)
+        .map((id) => records.get(id))
+        .filter((r) => r !== undefined)
+        .map((r) => [r.id, { title: r.title, isProject: isProject(r) }]),
+    ),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))
       .map((r) => ({ id: r.id, title: r.title })),

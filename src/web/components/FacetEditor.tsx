@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { RecordPicker } from './RecordPicker.tsx';
-import type { FacetDef } from '../types.ts';
+import type { CardDetail, FacetDef } from '../types.ts';
 import type { FacetMode } from '../panel/write.ts';
-import { Button } from './Button.tsx';
+import { Button, IconButton } from './Button.tsx';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -22,20 +22,37 @@ import { Button } from './Button.tsx';
  * as of its last render, so "the axis is now exactly this" reverts a value an
  * agent added a moment ago — inside the write gate's tolerance, with nothing to
  * report. A delta cannot.
+ *
+ * An axis carrying nothing draws its label and stops. The vocabulary is a
+ * *picker*, not a readout: thirteen axes rendered whole is 48 chips of which
+ * four are usually lit, so the panel spent its first screen restating
+ * facets.yaml instead of describing the card. This is the disclosure the filter
+ * rail already uses, on the same rule — an axis you are using stays open.
  */
 export function FacetEditor({
   name,
   def,
   values,
+  refs,
+  selfId,
   onChange,
+  onOpen,
 }: {
   name: string;
   def: FacetDef;
   values: string[];
+  /** Titles for reference values. Absent for a label or date axis. */
+  refs?: CardDetail['refs'];
+  /** The card being edited, so it cannot be made its own reference. */
+  selfId?: string;
   onChange: (next: string[], mode: FacetMode) => void;
+  onOpen?: (id: string) => void;
 }) {
   const [adding, setAdding] = useState('');
   const [picking, setPicking] = useState(false);
+  // Same rule as the filter rail: an axis you are using is open, one you are
+  // not starts collapsed. A date counts as carried when it holds a value.
+  const [open, setOpen] = useState(values.length > 0);
 
   /**
    * Taking a value on. A single-valued axis genuinely replaces, so it is the one
@@ -58,43 +75,67 @@ export function FacetEditor({
   // they can be removed rather than silently hidden.
   const extras = values.filter((v) => !def.values.includes(v));
 
-  if (def.type === 'ref') {
-    return (
-      <div className="facetedit">
-        <div className="facetedit-label">{def.label}</div>
-        <div className="facetedit-values">
-          {values.map((v) => (
-            <button key={v} className="togglechip is-on" onClick={() => drop(v)} title="remove">
-              {v}
-            </button>
-          ))}
-          {picking ? null : (
-            <Button tone="ghost" size="small" onClick={() => setPicking(true)}>
-              + record
-            </Button>
-          )}
-        </div>
-        {picking && (
-          <RecordPicker
-            exclude={values}
-            placeholder={`${def.label.toLowerCase()}…`}
-            onCancel={() => setPicking(false)}
-            onPick={(id) => {
-              setPicking(false);
-              if (id) take(id);
-            }}
-          />
-        )}
-        <input type="hidden" name={name} />
-      </div>
-    );
-  }
+  const head = (
+    <button className="facetedit-head" onClick={() => setOpen((v) => !v)}>
+      <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
+      <span className="facetedit-label">{def.label}</span>
+      {!open && values.length > 0 && <span className="facetedit-count">{values.length}</span>}
+    </button>
+  );
 
-  if (def.type === 'date') {
-    // A date is single by nature: there is one value, and setting it replaces.
-    return (
-      <div className="facetedit">
-        <div className="facetedit-label">{def.label}</div>
+  const body = () => {
+    if (def.type === 'ref') {
+      return (
+        <>
+          <div className="facetedit-values">
+            {values.map((v) => (
+              // A reference is a record, so it reads as one: the title, and a
+              // click that goes there. Removing is its own mark — the row used
+              // to remove on click and say so only in a hover title, which put
+              // "go to this card" and "unlink this card" on the same gesture.
+              <span key={v} className="refchip">
+                {/* `▣` when the record owns a project block, `·` otherwise. The
+                    `○` case needs a child count this payload does not carry, and
+                    inventing a fourth mark to cover that would be worse than
+                    under-reporting with the vocabulary that already exists. */}
+                <span
+                  className={`recordmark ${refs?.[v]?.isProject ? 'is-project' : 'is-leaf'}`}
+                  aria-hidden="true"
+                >
+                  {refs?.[v]?.isProject ? '▣' : '·'}
+                </span>
+                <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
+                  {refs?.[v]?.title ?? v}
+                </button>
+                <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
+              </span>
+            ))}
+            {!picking && (
+              <Button tone="ghost" size="small" onClick={() => setPicking(true)}>
+                + record
+              </Button>
+            )}
+          </div>
+          {picking && (
+            <RecordPicker
+              exclude={selfId ? [...values, selfId] : values}
+              placeholder={`${def.label.toLowerCase()}…`}
+              clearLabel={def.single && values.length ? `— no ${def.label.toLowerCase()} —` : undefined}
+              onCancel={() => setPicking(false)}
+              onPick={(id) => {
+                setPicking(false);
+                if (id) take(id);
+                else onChange([], 'set');
+              }}
+            />
+          )}
+        </>
+      );
+    }
+
+    if (def.type === 'date') {
+      // A date is single by nature: there is one value, and setting it replaces.
+      return (
         <div className="facetedit-values">
           <input
             type="date"
@@ -108,17 +149,13 @@ export function FacetEditor({
             </Button>
           )}
         </div>
-        <input type="hidden" name={name} />
-      </div>
-    );
-  }
+      );
+    }
 
-  return (
-    <div className="facetedit">
-      {/* No "open" badge: the `+ new` field is present exactly when new values are
-          accepted, so it already says so. */}
-      <div className="facetedit-label">{def.label}</div>
+    return (
       <div className="facetedit-values">
+        {/* No "open" badge: the `+ new` field is present exactly when new values
+            are accepted, so it already says so. */}
         {[...def.values, ...extras].map((v) => (
           <button
             key={v}
@@ -144,6 +181,13 @@ export function FacetEditor({
           </span>
         )}
       </div>
+    );
+  };
+
+  return (
+    <div className={`facetedit ${values.length ? 'is-carried' : ''}`}>
+      {head}
+      {open && body()}
       <input type="hidden" name={name} />
     </div>
   );

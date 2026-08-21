@@ -52,7 +52,16 @@ export interface CardDetail {
   mtime: number;
   /** The raw frontmatter, from the same read as `mtime` — one file, one answer. */
   yaml: string;
-  parents: { id: string; title: string }[];
+  /**
+   * Every record this card's reference facets point at, resolved.
+   *
+   * Keyed by id, because that is what a reference facet stores and therefore
+   * what the editor has in hand. It replaces a `parents` list that answered the
+   * same question for one facet only — which is what let `parent` acquire a
+   * second, better-looking control while `blocks` and `project` kept drawing
+   * raw ids.
+   */
+  refs: Record<string, { title: string; isProject: boolean }>;
   children: { id: string; title: string }[];
   project: ResolvedProject | null;
 }
