@@ -1,0 +1,746 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-21T20:06:54Z",
+  "title": "Design System: projector",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Darker",
+        "canonical": "#080808",
+        "lightValue": "#f7f7f7",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "The field the board and canvas sit on — the outermost of four surfaces."
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "BG",
+        "canonical": "#101010",
+        "lightValue": "#ffffff",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "The sidebar, a card face, the panel, a popover."
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Recessed",
+        "canonical": "#1a1a1a",
+        "lightValue": "#f0f0f0",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "A column body, a rail input, a hovered table row, a canvas band."
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Inset",
+        "canonical": "#262626",
+        "lightValue": "#e4e4e4",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "A count badge, a button on hover, a progress track."
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#dddddd",
+        "lightValue": "#101010",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "Every title, value and piece of body copy."
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Gandalf",
+        "canonical": "#bbbbbb",
+        "lightValue": "#323232",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "Control labels and secondary values; brightens to ink on hover."
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Grey",
+        "canonical": "#999999",
+        "lightValue": "#666666",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "Every label, key, count, meta line and excerpt — the ground state of annotation."
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#262626",
+        "lightValue": "#e0e0e0",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "Every boundary between regions, at exactly 1px."
+      },
+      "rule-2": {
+        "role": "neutral",
+        "displayName": "Grey3",
+        "canonical": "#444444",
+        "lightValue": "#c4c4c4",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "An interactive edge: an input, a popover, a hovered card."
+      },
+      "dot": {
+        "role": "neutral",
+        "displayName": "Shadow",
+        "canonical": "#323232",
+        "lightValue": "#dcdcdc",
+        "tonalRamp": [
+          "#040404",
+          "#101010",
+          "#262626",
+          "#444444",
+          "#666666",
+          "#999999",
+          "#bbbbbb",
+          "#dddddd"
+        ],
+        "purpose": "The canvas dot grid, and nothing else."
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Type Purple",
+        "canonical": "#a6a6e7",
+        "lightValue": "#373762",
+        "tonalRamp": [
+          "#2a2a3c",
+          "#373762",
+          "#a6a6e7",
+          "#b6b6f6"
+        ],
+        "purpose": "The app's one voice: focus, selection, drop target, active filter, unsaved mark, primary button."
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Accent Wash",
+        "canonical": "#2a2a3c",
+        "lightValue": "#ebebf7",
+        "tonalRamp": [
+          "#2a2a3c",
+          "#373762",
+          "#a6a6e7",
+          "#b6b6f6"
+        ],
+        "purpose": "The accent's only fill — hovered drop column, bulk bar ground, focus pill. Never text."
+      },
+      "ok": {
+        "role": "semantic",
+        "displayName": "PreProc Green",
+        "canonical": "#afdf87",
+        "lightValue": "#4a6237",
+        "tonalRamp": [
+          "#323c2a",
+          "#4a6237",
+          "#afdf87",
+          "#d3f6b6"
+        ],
+        "purpose": "A finished reference, a filled progress bar."
+      },
+      "warn": {
+        "role": "semantic",
+        "displayName": "Yellow",
+        "canonical": "#dfdf87",
+        "lightValue": "#624a37",
+        "tonalRamp": [
+          "#3c3c2a",
+          "#626237",
+          "#dfdf87",
+          "#f6f6b6"
+        ],
+        "purpose": "Unsaved state, a deadline landing today."
+      },
+      "bad": {
+        "role": "semantic",
+        "displayName": "Special Red",
+        "canonical": "#df8787",
+        "lightValue": "#623737",
+        "tonalRamp": [
+          "#3c2a2a",
+          "#623737",
+          "#df8787",
+          "#f6b6b6"
+        ],
+        "purpose": "A failure, a blocked left border, an open reference, an overdue deadline."
+      },
+      "rel-parent": {
+        "role": "secondary",
+        "displayName": "Parent Purple",
+        "canonical": "#a6a6e7",
+        "lightValue": "#7676c4",
+        "tonalRamp": [
+          "#2a2a3c",
+          "#373762",
+          "#a6a6e7",
+          "#b6b6f6"
+        ],
+        "purpose": "Decomposition edges on the canvas — the default spine."
+      },
+      "rel-blocks": {
+        "role": "secondary",
+        "displayName": "Blocks Red",
+        "canonical": "#df8787",
+        "lightValue": "#b06060",
+        "tonalRamp": [
+          "#3c2a2a",
+          "#623737",
+          "#df8787",
+          "#f6b6b6"
+        ],
+        "purpose": "Blocking edges, the only edge kind with a text label. Light mode leaves the palette deliberately: red1 is illegible on white and red3 too dark for an edge."
+      },
+      "rel-project": {
+        "role": "secondary",
+        "displayName": "Project Blue",
+        "canonical": "#87afdf",
+        "lightValue": "#5a7fa8",
+        "tonalRamp": [
+          "#2a363c",
+          "#375362",
+          "#87afdf",
+          "#b6e0f6"
+        ],
+        "purpose": "Membership edges on the canvas."
+      },
+      "hue-red": {
+        "role": "tertiary",
+        "displayName": "Special Red",
+        "canonical": "#df8787",
+        "lightValue": "#623737",
+        "tonalRamp": [
+          "#3c2a2a",
+          "#623737",
+          "#df8787",
+          "#f6b6b6"
+        ],
+        "purpose": "Chip text for waiting_on — the only facet whose presence is itself a warning."
+      },
+      "hue-orange": {
+        "role": "tertiary",
+        "displayName": "Number Orange",
+        "canonical": "#dfaf87",
+        "lightValue": "#624a37",
+        "tonalRamp": [
+          "#3c322a",
+          "#624a37",
+          "#dfaf87",
+          "#f6d3b6"
+        ],
+        "purpose": "Chip text for priority — what you intend to do next."
+      },
+      "hue-yellow": {
+        "role": "tertiary",
+        "displayName": "Constant Yellow",
+        "canonical": "#dfdf87",
+        "lightValue": "#626237",
+        "tonalRamp": [
+          "#3c3c2a",
+          "#626237",
+          "#dfdf87",
+          "#f6f6b6"
+        ],
+        "purpose": "Chip text for domain."
+      },
+      "hue-green": {
+        "role": "tertiary",
+        "displayName": "PreProc Green",
+        "canonical": "#afdf87",
+        "lightValue": "#4a6237",
+        "tonalRamp": [
+          "#323c2a",
+          "#4a6237",
+          "#afdf87",
+          "#d3f6b6"
+        ],
+        "purpose": "Chip text for status — lifecycle, and nothing else."
+      },
+      "hue-blue": {
+        "role": "tertiary",
+        "displayName": "Statement Blue",
+        "canonical": "#87afdf",
+        "lightValue": "#375362",
+        "tonalRamp": [
+          "#2a363c",
+          "#375362",
+          "#87afdf",
+          "#b6e0f6"
+        ],
+        "purpose": "Chip text for tech."
+      },
+      "hue-purple": {
+        "role": "tertiary",
+        "displayName": "Type Purple",
+        "canonical": "#a6a6e7",
+        "lightValue": "#373762",
+        "tonalRamp": [
+          "#2a2a3c",
+          "#373762",
+          "#a6a6e7",
+          "#b6b6f6"
+        ],
+        "purpose": "Chip text for project — membership."
+      },
+      "hue-pink": {
+        "role": "tertiary",
+        "displayName": "Identifier Pink",
+        "canonical": "#dfafdf",
+        "lightValue": "#623762",
+        "tonalRamp": [
+          "#3c2a3c",
+          "#623762",
+          "#dfafdf",
+          "#f8c9f8"
+        ],
+        "purpose": "Chip text for layer; the one family that also carries weight 600."
+      },
+      "hue-red-bg": {
+        "role": "tertiary",
+        "displayName": "Red Fill",
+        "canonical": "#3c2a2a",
+        "lightValue": "#f6b6b6",
+        "tonalRamp": [
+          "#3c2a2a",
+          "#623737",
+          "#df8787",
+          "#f6b6b6"
+        ],
+        "purpose": "Chip fill for waiting_on, diluted by --chip-tint in light mode."
+      },
+      "hue-orange-bg": {
+        "role": "tertiary",
+        "displayName": "Orange Fill",
+        "canonical": "#3c322a",
+        "lightValue": "#f6d3b6",
+        "tonalRamp": [
+          "#3c322a",
+          "#624a37",
+          "#dfaf87",
+          "#f6d3b6"
+        ],
+        "purpose": "Chip fill for priority, diluted by --chip-tint in light mode."
+      },
+      "hue-yellow-bg": {
+        "role": "tertiary",
+        "displayName": "Yellow Fill",
+        "canonical": "#3c3c2a",
+        "lightValue": "#f6f6b6",
+        "tonalRamp": [
+          "#3c3c2a",
+          "#626237",
+          "#dfdf87",
+          "#f6f6b6"
+        ],
+        "purpose": "Chip fill for domain, diluted by --chip-tint in light mode."
+      },
+      "hue-green-bg": {
+        "role": "tertiary",
+        "displayName": "Green Fill",
+        "canonical": "#323c2a",
+        "lightValue": "#d3f6b6",
+        "tonalRamp": [
+          "#323c2a",
+          "#4a6237",
+          "#afdf87",
+          "#d3f6b6"
+        ],
+        "purpose": "Chip fill for status, diluted by --chip-tint in light mode."
+      },
+      "hue-blue-bg": {
+        "role": "tertiary",
+        "displayName": "Blue Fill",
+        "canonical": "#2a363c",
+        "lightValue": "#b6e0f6",
+        "tonalRamp": [
+          "#2a363c",
+          "#375362",
+          "#87afdf",
+          "#b6e0f6"
+        ],
+        "purpose": "Chip fill for tech, diluted by --chip-tint in light mode."
+      },
+      "hue-purple-bg": {
+        "role": "tertiary",
+        "displayName": "Purple Fill",
+        "canonical": "#2a2a3c",
+        "lightValue": "#b6b6f6",
+        "tonalRamp": [
+          "#2a2a3c",
+          "#373762",
+          "#a6a6e7",
+          "#b6b6f6"
+        ],
+        "purpose": "Chip fill for project, diluted by --chip-tint in light mode."
+      },
+      "hue-pink-bg": {
+        "role": "tertiary",
+        "displayName": "Pink Fill",
+        "canonical": "#3c2a3c",
+        "lightValue": "#f8c9f8",
+        "tonalRamp": [
+          "#3c2a3c",
+          "#623762",
+          "#dfafdf",
+          "#f8c9f8"
+        ],
+        "purpose": "Chip fill for layer, diluted by --chip-tint in light mode."
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The vault gate's heading — the only full-page title in the app, and the only place type is large."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The open record's title in the card panel. The largest type in normal use."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "A record's title on a face, in a column or on the canvas. Two-line clamp on a canvas node."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The working size: buttons, inputs, table cells, reference rows, panel prose. The 14px on body is an inheritance root, not a used size."
+      },
+      "body-compact": {
+        "displayName": "Body Compact",
+        "purpose": "One step down for anything in a long vertical list: filter rows, rail selects, excerpts, kv values."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "A face's meta line, and the panel's kv keys in uppercase."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The signature. Panel section heads, table headers, lane heads, rail labels. Tracking widens with prominence: 0.1em in rails and tables, 0.13em in the panel, 0.14em at the gate."
+      },
+      "chip": {
+        "displayName": "Chip",
+        "purpose": "Every facet chip and link chip."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Canvas edge labels, badge counts, a link chip kind prefix."
+      }
+    },
+    "shadows": [
+      {
+        "name": "panel",
+        "value": "-12px 0 40px rgba(8, 6, 12, 0.18)",
+        "purpose": "The card panel, thrown leftward from the right edge it is docked to."
+      },
+      {
+        "name": "popover",
+        "value": "0 12px 32px rgba(20, 15, 35, 0.18)",
+        "purpose": "Portalled menus — furthest from the plane, so they cast furthest."
+      },
+      {
+        "name": "picker",
+        "value": "0 8px 28px rgba(8, 6, 12, 0.22)",
+        "purpose": "The record picker: smaller throw, higher opacity, because it is a modal over a scrim."
+      },
+      {
+        "name": "floating-bar",
+        "value": "0 6px 20px rgba(20, 15, 35, 0.16)",
+        "purpose": "The bulk bar, which exists only while a selection does."
+      },
+      {
+        "name": "toolbar",
+        "value": "0 4px 14px rgba(20, 15, 35, 0.1)",
+        "purpose": "The canvas toolbar — lightest, because it rests on the canvas rather than over content."
+      },
+      {
+        "name": "selection-ring",
+        "value": "0 0 0 1px var(--accent)",
+        "purpose": "NOT elevation. A stroke drawn outside the selected card, because its border is already spoken for."
+      },
+      {
+        "name": "drop-line-top",
+        "value": "0 -2px 0 0 var(--accent)",
+        "purpose": "NOT elevation. The reorder drop indicator above a card."
+      },
+      {
+        "name": "drop-line-bottom",
+        "value": "0 2px 0 0 var(--accent)",
+        "purpose": "NOT elevation. The reorder drop indicator below a card."
+      },
+      {
+        "name": "scrim",
+        "value": "rgba(10, 8, 14, 0.34)",
+        "purpose": "The panel scrim. A fill, not a shadow, but it belongs to the same depth vocabulary."
+      }
+    ],
+    "motion": [
+      {
+        "name": "shell-collapse",
+        "value": "grid-template-columns 140ms ease",
+        "purpose": "The sidebar collapsing to 38px. One of only two transitions in the stylesheet."
+      },
+      {
+        "name": "rail-width",
+        "value": "width 90ms ease",
+        "purpose": "A rail control resizing. The other of the two."
+      },
+      {
+        "name": "doctrine",
+        "value": "none",
+        "purpose": "There are no keyframes. Regrouping, re-sorting and filtering are instant; motion is permitted only where a mouse gesture would feel broken without it — dragging a card, panning or zooming the canvas, collapsing the rail."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Record Face",
+      "kind": "card",
+      "refersTo": "card-face",
+      "description": "The signature component. One face renders in a column, on the canvas and in a table cell — how much of it appears is a property of the view, never of the record.",
+      "html": "<div class=\"ds-face\"><div class=\"ds-face-head\"><span class=\"ds-mark ds-mark-leaf\">·</span><span class=\"ds-face-title\">Migrate the staging realm to the new authenticator</span></div><p class=\"ds-face-excerpt\">Blocked on the group-authenticator rollout; needs a rollback plan before eu-prod.</p><div class=\"ds-chiprow\"><span class=\"ds-chip ds-chip-priority\">now</span><span class=\"ds-chip ds-chip-status\">in-progress</span><span class=\"ds-chip ds-chip-project\">platform</span><span class=\"ds-chip ds-chip-tech\">keycloak</span></div><div class=\"ds-face-meta\"><span>updated 2d</span><span>PROJ-303</span></div></div>",
+      "css": ".ds-face { background: var(--surface, #101010); border: 1px solid var(--rule, #262626); border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 6px; width: 292px; max-width: 100%; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: var(--ink, #dddddd); cursor: pointer; } .ds-face:hover { border-color: var(--rule-2, #444444); } .ds-face-head { display: flex; gap: 7px; align-items: baseline; } .ds-mark { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 0.8em; line-height: 1; color: var(--ink-3, #999999); flex: none; align-self: baseline; } .ds-mark-leaf { transform: translateY(0.03em); } .ds-face-title { font-size: 13px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; } .ds-face-excerpt { margin: 0; font-size: 12px; color: var(--ink-3, #999999); line-height: 1.4; } .ds-chiprow { display: flex; gap: 4px; flex-wrap: wrap; } .ds-chip { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10px; padding: 1.5px 6px; border-radius: 3px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.01em; } .ds-chip-priority { background: var(--hue-orange-bg, #3c322a); color: var(--hue-orange, #dfaf87); border-color: color-mix(in srgb, var(--hue-orange, #dfaf87) 30%, transparent); } .ds-chip-status { background: var(--hue-green-bg, #323c2a); color: var(--hue-green, #afdf87); border-color: color-mix(in srgb, var(--hue-green, #afdf87) 30%, transparent); } .ds-chip-project { background: var(--hue-purple-bg, #2a2a3c); color: var(--hue-purple, #a6a6e7); border-color: color-mix(in srgb, var(--hue-purple, #a6a6e7) 32%, transparent); } .ds-chip-tech { background: var(--hue-blue-bg, #2a363c); color: var(--hue-blue, #87afdf); border-color: color-mix(in srgb, var(--hue-blue, #87afdf) 30%, transparent); } .ds-face-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10.5px; letter-spacing: 0.08em; color: var(--ink-3, #999999); }"
+    },
+    {
+      "name": "Facet Chip Row",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "One hue family per facet axis, plus the two hueless hint tones and the filled bucket overrides. A chip colour names its axis before you read the word.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-c ds-c-priority\">now</span><span class=\"ds-c ds-c-status\">planning</span><span class=\"ds-c ds-c-project\">Project D</span><span class=\"ds-c ds-c-tech\">react</span><span class=\"ds-c ds-c-layer\">infra</span><span class=\"ds-c ds-c-waiting\">person-a</span><span class=\"ds-c ds-c-domain\">project-b</span><span class=\"ds-c ds-c-energy\">deep</span><span class=\"ds-c ds-c-muted\">trello</span><span class=\"ds-c ds-c-overdue\">2026-08-14</span></div>",
+      "css": ".ds-chips { display: flex; gap: 4px; flex-wrap: wrap; background: var(--surface, #101010); padding: 10px; border-radius: 6px; border: 1px solid var(--rule, #262626); } .ds-c { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10px; padding: 1.5px 6px; border-radius: 3px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.01em; } .ds-c-priority { background: var(--hue-orange-bg, #3c322a); color: var(--hue-orange, #dfaf87); border-color: color-mix(in srgb, var(--hue-orange, #dfaf87) 30%, transparent); } .ds-c-status { background: var(--hue-green-bg, #323c2a); color: var(--hue-green, #afdf87); border-color: color-mix(in srgb, var(--hue-green, #afdf87) 30%, transparent); } .ds-c-project { background: var(--hue-purple-bg, #2a2a3c); color: var(--hue-purple, #a6a6e7); border-color: color-mix(in srgb, var(--hue-purple, #a6a6e7) 32%, transparent); } .ds-c-tech { background: var(--hue-blue-bg, #2a363c); color: var(--hue-blue, #87afdf); border-color: color-mix(in srgb, var(--hue-blue, #87afdf) 30%, transparent); } .ds-c-layer { background: var(--hue-pink-bg, #3c2a3c); color: var(--hue-pink, #dfafdf); border-color: color-mix(in srgb, var(--hue-pink, #dfafdf) 34%, transparent); font-weight: 600; } .ds-c-waiting { background: var(--hue-red-bg, #3c2a2a); color: var(--hue-red, #df8787); border-color: color-mix(in srgb, var(--hue-red, #df8787) 32%, transparent); } .ds-c-domain { background: var(--hue-yellow-bg, #3c3c2a); color: var(--hue-yellow, #dfdf87); border-color: color-mix(in srgb, var(--hue-yellow, #dfdf87) 30%, transparent); } .ds-c-energy { background: transparent; color: var(--ink-3, #999999); border-color: var(--rule, #262626); font-style: italic; } .ds-c-muted { background: transparent; color: var(--ink-3, #999999); border-color: var(--rule, #262626); } .ds-c-overdue { background: var(--bad, #df8787); color: var(--ground, #080808); }"
+    },
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "The default control. Fill and text brighten together on hover — the standard hover gesture across the system.",
+      "html": "<button class=\"ds-btn\">Save layout</button>",
+      "css": ".ds-btn { appearance: none; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 12.5px; border: 1px solid var(--rule-2, #444444); background: var(--surface-2, #1a1a1a); color: var(--ink-2, #bbbbbb); border-radius: 5px; padding: 5px 10px; cursor: pointer; white-space: nowrap; } .ds-btn:hover { background: var(--surface-3, #262626); color: var(--ink, #dddddd); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #a6a6e7); outline-offset: 1px; } .ds-btn:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Button — Primary",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Hover is brightness(1.08) rather than a second colour, so the primary button needs no hover token.",
+      "html": "<button class=\"ds-btn-primary\">Create card</button>",
+      "css": ".ds-btn-primary { appearance: none; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 12.5px; font-weight: 600; background: var(--accent, #a6a6e7); border: 1px solid var(--accent, #a6a6e7); color: var(--ground, #080808); border-radius: 5px; padding: 5px 10px; cursor: pointer; white-space: nowrap; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #a6a6e7); outline-offset: 1px; }"
+    },
+    {
+      "name": "Button — Danger",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Text-only red with a mixed border and a wash on hover. There is never a filled red button.",
+      "html": "<button class=\"ds-btn-danger\">Delete record</button>",
+      "css": ".ds-btn-danger { appearance: none; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 12.5px; background: transparent; color: var(--bad, #df8787); border: 1px solid color-mix(in srgb, var(--bad, #df8787) 40%, transparent); border-radius: 5px; padding: 5px 10px; cursor: pointer; white-space: nowrap; } .ds-btn-danger:hover { background: color-mix(in srgb, var(--bad, #df8787) 14%, transparent); } .ds-btn-danger:focus-visible { outline: 2px solid var(--accent, #a6a6e7); outline-offset: 1px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Focus draws its ring inside the box (outline-offset: -1px) so a focused field in a dense list does not shift its neighbours.",
+      "html": "<input class=\"ds-input\" type=\"text\" value=\"plat/keycloak-realm\" aria-label=\"Branch template\" />",
+      "css": ".ds-input { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 12.5px; color: var(--ink, #dddddd); background: var(--surface, #101010); border: 1px solid var(--rule-2, #444444); border-radius: 5px; padding: 5px 8px; width: 260px; max-width: 100%; } .ds-input:focus { outline: 2px solid var(--accent, #a6a6e7); outline-offset: -1px; }"
+    },
+    {
+      "name": "Board Column",
+      "kind": "custom",
+      "refersTo": "column",
+      "description": "Fixed 292px, surface-2 fill, a mono head with a pill count, a hairline, then the only scrolling part. The (none) column is this same column dashed at 0.72 opacity.",
+      "html": "<div class=\"ds-col\"><div class=\"ds-col-head\"><span class=\"ds-col-name\">now</span><span class=\"ds-col-count\">7</span></div><div class=\"ds-col-body\"><div class=\"ds-col-card\"><span class=\"ds-col-mark\">·</span><span>Answer Person D on the 2-minute OpenL window</span></div><div class=\"ds-col-card\"><span class=\"ds-col-mark ds-col-mark-project\">▣</span><span>Access management</span><span class=\"ds-col-n\">12</span></div></div></div>",
+      "css": ".ds-col { width: 292px; max-width: 100%; background: var(--surface-2, #1a1a1a); border: 1px solid var(--rule, #262626); border-radius: 8px; display: flex; flex-direction: column; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; } .ds-col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--rule, #262626); } .ds-col-name { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-weight: 600; font-size: 12.5px; letter-spacing: 0.01em; color: var(--ink, #dddddd); } .ds-col-count { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 11px; color: var(--ink-3, #999999); background: var(--surface-3, #262626); border-radius: 10px; padding: 1px 7px; font-variant-numeric: tabular-nums; } .ds-col-body { padding: 8px; display: flex; flex-direction: column; gap: 7px; } .ds-col-card { background: var(--surface, #101010); border: 1px solid var(--rule, #262626); border-radius: 6px; padding: 9px 10px; display: flex; gap: 7px; align-items: baseline; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--ink, #dddddd); cursor: pointer; } .ds-col-card:hover { border-color: var(--rule-2, #444444); } .ds-col-mark { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 0.8em; line-height: 1; color: var(--ink-3, #999999); flex: none; transform: translateY(0.03em); } .ds-col-mark-project { transform: translateY(-0.058em); } .ds-col-n { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10px; color: var(--ink-3, #999999); background: var(--surface-3, #262626); border-radius: 8px; padding: 0 5px; margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Rail Row",
+      "kind": "nav",
+      "refersTo": "input-rail",
+      "description": "The sidebar is the navigation and has no links: a 62px mono uppercase label and a control, repeated. Rail inputs drop to surface-2 so they read as recessed into the sidebar rather than raised out of it.",
+      "html": "<div class=\"ds-rail\"><div class=\"ds-rail-row\"><span class=\"ds-rail-label\">Group</span><select class=\"ds-rail-select\" aria-label=\"Group by\"><option>priority</option></select></div><div class=\"ds-rail-row\"><span class=\"ds-rail-label\">Focus</span><button class=\"ds-rail-focus\">access-management</button></div><div class=\"ds-rail-row\"><span class=\"ds-rail-label\">Search</span><input class=\"ds-rail-input\" type=\"text\" placeholder=\"keycloak\" aria-label=\"Search\" /></div></div>",
+      "css": ".ds-rail { background: var(--surface, #101010); border: 1px solid var(--rule, #262626); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 5px; width: 248px; max-width: 100%; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; } .ds-rail-row { display: flex; align-items: center; gap: 6px; min-height: 24px; } .ds-rail-label { font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3, #999999); width: 62px; flex: none; } .ds-rail-select { appearance: none; flex: 1; min-width: 0; background: var(--surface-2, #1a1a1a); color: var(--ink, #dddddd); border: 1px solid var(--rule, #262626); border-radius: 5px; font-family: inherit; font-size: 12px; padding: 3px 6px; cursor: pointer; } .ds-rail-focus { appearance: none; flex: 1; min-width: 0; background: var(--accent-soft, #2a2a3c); color: var(--accent, #a6a6e7); border: 0; border-radius: 5px; font-family: inherit; font-size: 12px; padding: 3px 7px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-rail-input { flex: 1; min-width: 0; background: var(--surface-2, #1a1a1a); border: 1px solid var(--rule, #262626); border-radius: 5px; color: var(--ink, #dddddd); font-family: inherit; font-size: 12px; padding: 5px 8px; } .ds-rail-input:focus { outline: none; border-color: var(--accent, #a6a6e7); } .ds-rail-select:focus-visible { outline: 2px solid var(--accent, #a6a6e7); outline-offset: 1px; }"
+    },
+    {
+      "name": "Link Chip",
+      "kind": "chip",
+      "refersTo": "chip-muted",
+      "description": "A typed link renders as its parsed label with the kind as a 9px accent prefix. Enrichment replaces the label if and when it arrives; nothing waits on it.",
+      "html": "<span class=\"ds-link\"><b>JIRA</b><span class=\"ds-link-label\">PROJ-303 Realm migration</span></span> <span class=\"ds-link\"><b>GH:PR</b><span class=\"ds-link-label\">Acme/platform#412</span></span>",
+      "css": ".ds-link { display: inline-flex; align-items: center; gap: 4px; font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10px; border: 1px solid var(--rule, #262626); border-radius: 3px; padding: 1px 5px; color: var(--ink-3, #999999); max-width: 100%; } .ds-link b { color: var(--accent, #a6a6e7); font-weight: 600; font-size: 9px; letter-spacing: 0.04em; } .ds-link-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Terminal Drafting",
+    "overview": "*Terminal* supplies the dense, text-first grammar and the xoria lineage. *Drafting* supplies projection, annotation, hierarchy and technical precision. Not a retro terminal wearing blueprint decoration — a working drawing made interactive.\n\nThe palette is xoria256, Dmitriy Zotikov's pastel Vim scheme, taken whole. Nothing is interpolated: every value in the stylesheet is a literal from estilo/palettes/xoria256.yml. The scheme is dark-first and has no light neutrals, so the dark theme *is* xoria and the light theme is derived from it — the same seven hue families, using the dark shades as ink where the light shades would disappear on white.\n\nTwo things make this a drawing rather than a dashboard. First, colour is notation. Each facet axis owns one hue family, mapped from xoria's own syntax roles — priority is Number (orange), status is PreProc (green), project is Type (purple), tech is Statement (blue), layer is Identifier (pink) — so a chip's hue tells you which axis it is before you read the word. Second, the surface is still. Two CSS transitions exist in 48 KB of stylesheet and both animate a width; there are no keyframes. A surface that sits open on a second monitor all day is a readout, and a readout that moves is a distraction.\n\nThe precision is literal, not atmospheric. The record mark beside every title carries two translateY constants — 0.03em and -0.058em — derived from where each glyph’s ink actually centres against lowercase text. They are measurements, not taste.",
+    "keyCharacteristics": [
+      "Dark-first xoria256, taken literally; light derived from the same seven families",
+      "Monospace for everything the app says, sans for everything a human typed",
+      "A nine-step type scale in which the largest working size is 16px and the signature size is 9.5px",
+      "One hue family per facet axis; hueless chips for facets that are hints rather than identity",
+      "Four tonal surfaces and 1px hairlines — depth by layering, shadows only for what genuinely floats",
+      "Still at rest: instant regrouping, motion only where a mouse gesture would feel broken without it",
+      "Desktop-only by construction; no breakpoints, no responsive system, no top bar",
+      "Precise and unadorned: no fill, stroke or radius that is not load-bearing"
+    ],
+    "rules": [
+      {
+        "name": "The One Hue Per Axis Rule",
+        "section": "colors",
+        "body": "A facet axis owns exactly one hue family, and a hue family serves exactly one axis. Adding a facet means claiming a family, not picking a colour you like. Two axes in one family destroys the property the whole palette exists for: that a chip's colour is legible before its text is."
+      },
+      {
+        "name": "The Hints Are Hueless Rule",
+        "section": "colors",
+        "body": "A facet that is a hint rather than an identity gets no hue at all — transparent fill, rule border, ink-3 text, italic for energy. If a new facet does not deserve a hue family, it does not get a diluted one; it recedes."
+      },
+      {
+        "name": "The Dilution Rule",
+        "section": "colors",
+        "body": "--chip-tint is 42% in light and 100% in dark. Xoria's light shades are saturated pastels: full strength is fine on one chip and loud on eight stacked down a column, so light mode mixes the fill toward the surface with color-mix. Any new tinted surface goes through --chip-tint, not a hand-picked value."
+      },
+      {
+        "name": "The App Voice Rule",
+        "section": "colors",
+        "body": "The accent marks live state and the app speaking — focus, selection, a drop target, an active filter, an unsaved view, a count the app computed. It never marks data structure. A property of a record is drawn in that facet’s own hue."
+      },
+      {
+        "name": "The Mono Label Rule",
+        "section": "typography",
+        "body": "If a human typed it, it is sans; if the app is naming, counting or annotating something, it is mono. There is no third case, and the division is what makes a screen with nine type sizes read as two voices rather than nine."
+      },
+      {
+        "name": "The Tabular Number Rule",
+        "section": "typography",
+        "body": "Any number that can change while its neighbours stay put carries font-variant-numeric: tabular-nums. A count that shifts width when it increments is a count you cannot read at a glance."
+      },
+      {
+        "name": "The Measured Glyph Rule",
+        "section": "typography",
+        "body": "A glyph placed in a text run is measured, not eyeballed. The record marks sit at 0.8em with line-height: 1, baseline-aligned, plus a per-glyph translateY derived from where its ink actually centres."
+      },
+      {
+        "name": "The Desktop-Only Rule",
+        "section": "layout",
+        "body": "The only @media query in the stylesheet is prefers-color-scheme. There are no breakpoints, because the surface is a second monitor and never a phone. Overlays clamp themselves with min(px, vw) and that is the whole of the adaptive behaviour."
+      },
+      {
+        "name": "The No Chrome Rule",
+        "section": "layout",
+        "body": "New global controls go into a rail block or the footer. The app has no top bar and adding one would cost 40px of board height on every shape to serve whichever shape needed it."
+      },
+      {
+        "name": "The Flat Plane Rule",
+        "section": "elevation",
+        "body": "Anything that lives in the layout is flat: a fill, a hairline, and no shadow. A shadow is permission to leave the plane, and only five elements have it."
+      },
+      {
+        "name": "The Stroke-As-Shadow Rule",
+        "section": "elevation",
+        "body": "Two box-shadow declarations are not shadows and must not be read as elevation: 0 0 0 1px accent is the selected card ring, and 0 ±2px 0 0 accent is the reorder drop line. Both draw a stroke outside the box without moving anything, because the border is already spoken for."
+      },
+      {
+        "name": "The Load-Bearing Left Border Rule",
+        "section": "shapes",
+        "body": "The 3px left border is the only place a card face changes shape, and it always encodes state — project, blocked, open reference, finished reference. It is not available for decoration or for a fifth meaning without retiring one of the four."
+      },
+      {
+        "name": "The Dashed Means Absent Rule",
+        "section": "shapes",
+        "body": "Dashed is reserved for a container whose value does not exist — the (none) column, a context-only canvas band. It never means draft, disabled or optional."
+      }
+    ],
+    "dos": [
+      "Do claim a whole hue family when adding a facet axis, and take its text, -bg fill and 30–34% border together. A chip’s colour is its axis name.",
+      "Do put mono on anything the app says — labels, keys, counts, chips, column names, table headers — and sans on anything a human typed.",
+      "Do give every count font-variant-numeric: tabular-nums.",
+      "Do reach for the tonal stack before a shadow. ground → surface → surface-2 → surface-3 is four levels of depth and covers every case that is not literally floating.",
+      "Do keep new type inside the nine roles. If something needs a tenth size, it probably needs an existing one.",
+      "Do measure a glyph you place in a text run, and write the measurement down in a comment beside the constant.",
+      "Do clamp overlays with min(px, vw) when a window might be narrow.",
+      "Do let motion exist exactly where a mouse gesture would feel broken without it — dragging a card, panning or zooming the canvas, collapsing the rail. Regrouping, re-sorting and filtering are instant."
+    ],
+    "donts": [
+      "Don’t animate a card, chip, column, panel or table. There are no keyframes in this system and no transition longer than 140ms, and both existing ones animate a width.",
+      "Don’t drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii, gradients, illustrated empty states, spring easing. The working type size here is 12.5px and the largest radius is 10px, on purpose.",
+      "Don’t drift toward enterprise tracker chrome either: stacked toolbars, breadcrumbs, avatar rows, modal over modal, or status rendered as a filled pill competing for attention.",
+      "Don’t dress the terminal up. Xoria and the mono labels are a working grammar, not a costume — no ASCII borders, scanlines, CRT glow, blinking cursors or fixed 80-column measures.",
+      "Don’t use the accent for data structure. Known deviation: .cardface.is-project draws its 3px left border in accent; per The App Voice Rule that should be hue-purple.",
+      "Don’t put --ink on a filled semantic background. Known deviation: .chip.is-overdue and .chip.is-today set color: var(--ink) on bad and warn, measuring 1.92:1 and 2.31:1 in light and 1.94:1 and 1.03:1 in dark — the today chip is effectively invisible. Switching the declaration to var(--ground) yields 7.58:1 to 14.35:1 across all four, the way .btn.primary already does.",
+      "Don’t add a breakpoint. There are none, and the surface is a second monitor.",
+      "Don’t interpolate a colour. Every value comes from xoria256.yml; the two exceptions (rel-blocks at #b06060 in light, and the chip-tint mixes) are documented where they occur and each has a stated reason.",
+      "Don’t give a hint facet a diluted hue. It gets no hue, or it earns a family of its own.",
+      "Don’t nest a scroll inside a scroll. One region scrolls per axis.",
+      "Don’t use dashed borders for anything but a container whose value does not exist."
+    ]
+  }
+}
