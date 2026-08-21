@@ -67,7 +67,7 @@ priority:
 # either beside the thing it is computed from gives two answers to one question.
 status:
   label: Status
-  values: [planning, active, frozen, done, dropped]
+  values: [planning, active, frozen, done, archived]
   open: false
   single: true
 

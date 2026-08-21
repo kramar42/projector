@@ -276,7 +276,7 @@ the shape of the graph rather than where it is stored. Before P7 a membership cy
 
 **Blocked and waiting are computed, never written.** `blocked` is an unfinished `blocks` reference and
 `waiting` is a non-empty `waiting_on`; neither is a `status` value. `status` is lifecycle only —
-`planning · active · frozen · done · dropped`. Storing a state beside the thing it is derived from
+`planning · active · frozen · done · archived`. Storing a state beside the thing it is derived from
 gives two answers to one question and nothing to arbitrate between them (C11).
 
 **A single-valued facet is a vocabulary constraint, not a storage one.** Every facet is a `string[]`

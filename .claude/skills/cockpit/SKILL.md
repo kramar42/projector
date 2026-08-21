@@ -95,12 +95,12 @@ refilling the inbox.
 
 - **An unknown flag is an error.** `ck` used to drop them silently, so a typo looked like success.
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
-  `planning|active|frozen|done|dropped`; `energy` is `deep|shallow|decide|delegate`. Check
+  `planning|active|frozen|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
   `cockpit/data/facets.yaml` before inventing a value; `ck set` will refuse anyway.
 - **Never write `status: blocked` or `status: waiting`.** They are not values. If something is
   blocked by another card, add a `blocks` edge from the blocker; if it is waiting on a person, set
   `waiting_on`. Both surface on the `blocked` axis without being stored twice.
-- **`dropped` is how you reject a captured card**, not deletion. Deleting it destroys the
+- **`archived` is how you retire a captured card**, not deletion. Deleting it destroys the
   `source_fingerprint` too, so the next `/capture` sweep creates it again.
 - **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a card
   outside Project A.

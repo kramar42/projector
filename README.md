@@ -518,7 +518,7 @@ accumulates its own history.
 `/capture` and `/triage` both **propose and stop**: they present a table and apply nothing until it is
 approved. A wrong project assignment hides a card in a column nobody will look in, which is worse than
 leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
-is why a rejected card gets `status: dropped` rather than being deleted: deleting it destroys the
+is why a rejected card gets `status: archived` rather than being deleted: deleting it destroys the
 fingerprint with it, and the next sweep creates it again.
 
 `/capture` reads its candidates from `ck intake` rather than deciding what is new itself, and it makes

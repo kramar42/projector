@@ -83,7 +83,7 @@ export function watermarkFor(dataRoot: string, channel: string): Watermark | nul
  * abandoned halfway must not swallow what it had already listed. The consequence
  * is deliberate — once committed, an item declined as "not a card" does not come
  * back, and the cursor is the only record that it was ever considered. A
- * rejection worth keeping belongs on a card with `status: dropped`, which keeps
+ * rejection worth keeping belongs on a card with `status: archived`, which keeps
  * its fingerprint.
  */
 export function commitWatermark(

@@ -129,7 +129,7 @@ Three things to get right here:
 - **Commit after, never before.** A sweep abandoned halfway must not swallow what it had listed.
 - **Committing forgets the declines.** Once the cursor passes something you called "not a card", there
   is no record it was ever considered. If a rejection is worth keeping, make the card and set
-  `status: dropped` — that keeps the fingerprint, and the next sweep leaves it alone.
+  `status: archived` — that keeps the fingerprint, and the next sweep leaves it alone.
 
 Finish with `ck check`, and report: created, linked, skipped as duplicate, left uncaptured, and which
 cursors moved.
