@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { firstLine } from './run.ts';
@@ -8,8 +8,9 @@ import { firstLine } from './run.ts';
  *
  * The durable identifier is the transcript uuid — the filename under
  * `~/.claude/projects/<slug>/<uuid>.jsonl`, which is also the `sessionId` a
- * running session records. Ids of the form `local_<uuid>` come from the desktop
- * app's own store, which is not on disk, so those cannot be resolved.
+ * running session records. Ids of the form `local_<uuid>` name a chat in the
+ * desktop app's own store instead — a different id space, read here only to map
+ * a transcript to the chat that drives it (`desktopSessionFor`).
  *
  * Three consumers, one reader: the `claude:` fetcher resolves a uuid it was
  * given, `ck link-session` finds the session working in a directory, and intake
@@ -21,6 +22,7 @@ import { firstLine } from './run.ts';
 const CLAUDE = join(homedir(), '.claude');
 const PROJECTS = join(CLAUDE, 'projects');
 const LIVE = join(CLAUDE, 'sessions');
+const DESKTOP = join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions');
 
 export interface LiveSession {
   sessionId: string;
@@ -77,6 +79,88 @@ export function findTranscript(uuid: string): string | null {
     if (existsSync(p)) return p;
   }
   return null;
+}
+
+export interface DesktopSession {
+  /** The desktop app's own id for the chat — `local_<uuid>`, its uuid not ours. */
+  sessionId: string;
+  /** The transcript the chat drives. */
+  cliSessionId: string;
+  title?: string;
+  archived: boolean;
+  lastFocusedAt: number;
+}
+
+/**
+ * The desktop app's chat for a transcript, when it has one.
+ *
+ * One file per chat at `claude-code-sessions/<org>/<account>/<sessionId>.json`,
+ * recording the transcript it drives as `cliSessionId`. A chat the app started
+ * names itself `local_<its own uuid>`, so a transcript uuid does not name its
+ * chat and the mapping only runs this way — by reading the files.
+ *
+ * Only each file's head is read: they carry the whole MCP config and run to a
+ * few hundred kilobytes each, while every field wanted here is in the first one.
+ *
+ * A transcript can have two chats: the one that ran it, and a duplicate created
+ * by importing it again. The live one wins, then the most recently looked at.
+ */
+export function desktopSessionFor(uuid: string): DesktopSession | null {
+  const found: DesktopSession[] = [];
+  for (const file of desktopSessionFiles()) {
+    const head = readHead(file);
+    // Cheap reject before parsing: the id is in the head or the file is not it.
+    if (!head || !head.includes(`"cliSessionId":"${uuid}"`)) continue;
+    const s = parseHead(head);
+    if (s?.cliSessionId === uuid) found.push(s);
+  }
+  found.sort((a, b) => Number(a.archived) - Number(b.archived) || b.lastFocusedAt - a.lastFocusedAt);
+  return found[0] ?? null;
+}
+
+function desktopSessionFiles(): string[] {
+  if (!existsSync(DESKTOP)) return [];
+  const out: string[] = [];
+  for (const org of readdirSync(DESKTOP)) {
+    for (const account of readdirSync(join(DESKTOP, org), { withFileTypes: true }).filter((e) => e.isDirectory())) {
+      const dir = join(DESKTOP, org, account.name);
+      try {
+        for (const f of readdirSync(dir)) if (f.endsWith('.json')) out.push(join(dir, f));
+      } catch {
+        /* gone between the two reads */
+      }
+    }
+  }
+  return out;
+}
+
+function readHead(file: string, bytes = 1024): string | null {
+  let fd;
+  try {
+    fd = openSync(file, 'r');
+    const buf = Buffer.alloc(bytes);
+    const read = readSync(fd, buf, 0, bytes, 0);
+    return buf.subarray(0, read).toString('utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** The head is a truncated object, so read the fields out of it rather than parse. */
+function parseHead(head: string): DesktopSession | null {
+  const str = (k: string) => head.match(new RegExp(`"${k}":"((?:[^"\\\\]|\\\\.)*)"`))?.[1];
+  const sessionId = str('sessionId');
+  const cliSessionId = str('cliSessionId');
+  if (!sessionId || !cliSessionId) return null;
+  return {
+    sessionId,
+    cliSessionId,
+    title: str('title'),
+    archived: /"isArchived":true/.test(head),
+    lastFocusedAt: Number(head.match(/"lastFocusedAt":(\d+)/)?.[1] ?? 0),
+  };
 }
 
 export interface Transcript {

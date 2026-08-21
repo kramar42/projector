@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { findTranscript, liveById, summarise } from '../sources/claude.ts';
+import { desktopSessionFor, findTranscript, liveById, summarise } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { unavailable, type Fetcher, type Tone } from './types.ts';
 
@@ -12,6 +12,29 @@ import { unavailable, type Fetcher, type Tone } from './types.ts';
  * belongs to the source, because intake reads the same files for a different
  * reason and the two must not drift.
  */
+
+/** What the desktop app's `claude://resume` handler accepts as a session id. */
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * How to get back into a session, as a deep link where the desktop app offers
+ * one and the shell command where it does not.
+ *
+ * Two different links, because the app has two different ideas of a session. A
+ * chat it already holds is opened by its own id, at the in-app route the app
+ * itself uses for a chat — `claude://claude.ai/<route>`, where the host names
+ * the app and the path is the route. A transcript it has never seen can only be
+ * imported, and `claude://resume` mints a *new* chat every time it runs, so
+ * offering it for a transcript the app already has would quietly duplicate the
+ * chat rather than reopen it.
+ */
+function resume(uuid: string): { action?: { label: string; href: string }; command?: string } {
+  const chat = desktopSessionFor(uuid);
+  if (chat) return { action: { label: '↗ open in Claude', href: `claude://claude.ai/epitaxy/${chat.sessionId}` } };
+  if (CANONICAL_UUID.test(uuid))
+    return { action: { label: '↗ import into Claude', href: `claude://resume?session=${uuid}` } };
+  return { command: `claude --resume ${uuid}` };
+}
 
 export const sessionFetcher: Fetcher = {
   // Cheap and local, so a short ttl costs nothing and keeps a running session fresh.
@@ -49,8 +72,9 @@ export const sessionFetcher: Fetcher = {
         { k: 'cwd', v: s.cwd ?? '' },
         { k: 'started', v: ago(s.firstAt) },
       ].filter((f) => f.v),
-      // Resuming is the user's move, not the app's: it prints the command to run.
-      command: `claude --resume ${uuid}`,
+      // Resuming is the user's move, not the app's: this offers the move, it does
+      // not make it.
+      ...resume(uuid),
     };
   },
 };

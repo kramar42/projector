@@ -29,6 +29,12 @@ export interface Enrichment {
   url?: string;
   /** A shell command that continues or inspects it, shown for copying. */
   command?: string;
+  /**
+   * An app deep link, rendered as a button. Distinct from `url`: that is where a
+   * browser goes, this hands the ref to the native app that owns it — so it may
+   * be a custom scheme, and the label says what the click will do.
+   */
+  action?: { label: string; href: string };
 }
 
 export interface Fetcher {

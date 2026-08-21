@@ -168,6 +168,7 @@ export interface Enrichment {
   fields?: { k: string; v: string }[];
   url?: string;
   command?: string;
+  action?: { label: string; href: string };
 }
 
 export interface Resolved {

@@ -1817,6 +1817,22 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   margin-right: 3px;
 }
 
+/* An app deep link. Reads as a button because clicking it leaves the app, and a
+   custom scheme gives the browser no status-bar preview of where. */
+.linkrow-action {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  border: 1px solid var(--rule-2);
+  border-radius: 4px;
+  padding: 2.5px 8px;
+  white-space: nowrap;
+}
+.linkrow-action:hover { background: var(--surface-3); border-color: var(--accent); }
+.linkrow-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .linkrow-cmd, .linkrow-raw {
   font-size: 11px;
   align-self: flex-start;

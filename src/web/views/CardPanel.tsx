@@ -451,6 +451,12 @@ function LinkRow({ raw, onRemove }: { raw: string; onRemove: () => void }) {
         </div>
       ) : null}
 
+      {d?.action && (
+        <a className="linkrow-action" href={d.action.href} title={d.action.href}>
+          {d.action.label}
+        </a>
+      )}
+
       {d?.command && <code className="linkrow-cmd">{d.command}</code>}
 
       {res?.error && (
