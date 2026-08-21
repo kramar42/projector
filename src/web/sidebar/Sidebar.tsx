@@ -4,8 +4,20 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import { VaultSwitcher } from '../VaultSwitcher.tsx';
 import { FilterPanel } from './FilterPanel.tsx';
-import { DIRS, SHAPES, clearFilters, clearFocus, relations, type Patch } from '../query.ts';
-import type { Meta, QueryResponse, SavedView, Shape } from '../types.ts';
+import { SHAPES, relations, type Patch } from '../query.ts';
+import { DIRS } from '../../schema/vocabulary.ts';
+import {
+  clearFilters,
+  clearFocus,
+  setFocus,
+  setGroupBy,
+  setSearch,
+  setShape,
+  setShow,
+  setSort,
+  setUncategorised,
+} from '../../view/intents.ts';
+import type { Dir, Meta, QueryResponse, SavedViewSummary, Shape, ViewSpec } from '../types.ts';
 
 /**
  * The sidebar *is* the view.
@@ -26,12 +38,16 @@ const DIR_MEANS: Record<string, string> = {
   both: 'both directions, as two separate walks',
 };
 
+/** A control names what it wants of the spec; App turns it into URL overrides. */
+export type Edit = (fn: (spec: ViewSpec) => ViewSpec, replace?: boolean) => void;
+
 export function Sidebar({
   meta,
   data,
   search,
   wire,
   patch,
+  edit,
   onSwitchVault,
   onAddVault,
   onOpenCard,
@@ -43,7 +59,10 @@ export function Sidebar({
   search: string;
   /** The query half of `search`, which is what a save records. */
   wire: string;
+  /** Non-spec URL keys — switching to a saved view, mainly. */
   patch: (p: Patch) => void;
+  /** Edit the view itself: a control says what it wants of the spec. */
+  edit: Edit;
   onSwitchVault: (path: string) => void;
   onAddVault: () => void;
   onOpenCard: (id: string) => void;
@@ -51,7 +70,6 @@ export function Sidebar({
   onToggleCollapsed: () => void;
 }) {
   const spec = data?.spec;
-  const saved = Boolean(spec?.name);
   const typeValues = data?.counts.find((facet) => facet.facet === 'type')?.values;
   const typeCount = (type: string) => typeValues?.find((value) => value.value === type)?.count ?? 0;
 
@@ -111,22 +129,22 @@ export function Sidebar({
       </div>
 
       <div className="rail-block">
-        <ShapeSection data={data} patch={patch} />
-        <FacetsSection meta={meta} data={data} patch={patch} />
+        <ShapeSection data={data} edit={edit} />
+        <FacetsSection meta={meta} data={data} edit={edit} />
       </div>
 
       <div className="rail-block">
-        <FocusSection meta={meta} data={data} saved={saved} patch={patch} onOpenCard={onOpenCard} />
+        <FocusSection meta={meta} data={data} edit={edit} onOpenCard={onOpenCard} />
       </div>
 
       {/* The only scrolling region. */}
       <div className="rail-filter">
-        {data ? <FilterPanel counts={data.counts} search={search} saved={saved} patch={patch} /> : null}
+        {data ? <FilterPanel counts={data.counts} edit={edit} /> : null}
       </div>
 
       <div className="rail-foot">
-        <ActiveStats data={data} saved={saved} search={search} patch={patch} />
-        <SearchBox search={search} patch={patch} />
+        <ActiveStats data={data} edit={edit} />
+        <SearchBox spec={data?.spec} edit={edit} />
       </div>
     </nav>
   );
@@ -148,7 +166,7 @@ function SavedViews({
   patch,
   apiSearch,
 }: {
-  views: SavedView[];
+  views: SavedViewSummary[];
   current: QueryResponse['spec'] | undefined;
   search: string;
   patch: (p: Patch) => void;
@@ -294,7 +312,7 @@ function blankQuery(params: URLSearchParams, view: string | null = null): Patch 
  * what a handle-drag creates — float over the canvas itself, so the rail is the
  * same rail in every shape and switching does not reflow it.
  */
-function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: Patch) => void }) {
+function ShapeSection({ data, edit }: { data: QueryResponse | null; edit: Edit }) {
   const spec = data?.spec;
   const shape: Shape = spec?.shape ?? 'board';
   const query = spec?.query ?? {};
@@ -308,7 +326,7 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
         <select
           className="rail-select"
           value={shape}
-          onChange={(e) => patch({ shape: e.target.value })}
+          onChange={(e) => edit((spec) => setShape(spec, e.target.value as Shape))}
         >
           {SHAPES.map((s) => (
             <option key={s.value} value={s.value}>
@@ -323,7 +341,7 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
         <select
           className="rail-select"
           value={group[0] ?? ''}
-          onChange={(e) => patch({ group: [e.target.value, group[1]].filter(Boolean).join(',') || null })}
+          onChange={(e) => edit((spec) => setGroupBy(spec, 0, e.target.value || null))}
         >
           <option value="">—</option>
           {facets.map((f) => (
@@ -342,7 +360,7 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
               className="rail-select"
               value={group[1] ?? ''}
               title="board lanes, table sub-sections. A canvas keeps the value but cannot draw it yet: a node has one position, so it cannot sit in two clusters"
-              onChange={(e) => patch({ group: [group[0], e.target.value].filter(Boolean).join(',') })}
+              onChange={(e) => edit((spec) => setGroupBy(spec, 1, e.target.value || null))}
             >
               <option value="">—</option>
               {facets
@@ -360,7 +378,9 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
             <select
               className="rail-select"
               value={query.uncategorised ?? 'end'}
-              onChange={(e) => patch({ uncategorised: e.target.value })}
+              onChange={(e) =>
+                edit((spec) => setUncategorised(spec, e.target.value as 'end' | 'start' | 'hide'))
+              }
             >
               <option value="end">last</option>
               <option value="start">first</option>
@@ -372,7 +392,7 @@ function ShapeSection({ data, patch }: { data: QueryResponse | null; patch: (p: 
         </>
       )}
 
-      <SortRow query={query} facets={facets} shape={shape} patch={patch} />
+      <SortRow query={query} facets={facets} shape={shape} edit={edit} />
     </>
   );
 }
@@ -381,14 +401,15 @@ function SortRow({
   query,
   facets,
   shape,
-  patch,
+  edit,
 }: {
   query: QueryResponse['spec']['query'];
   facets: { value: string; label: string }[];
   shape: Shape;
-  patch: (p: Patch) => void;
+  edit: Edit;
 }) {
-  const [key = '', dir = 'asc'] = (query.sort?.[0] ?? '').split(':');
+  const [key = '', dirRaw = 'asc'] = (query.sort?.[0] ?? '').split(':');
+  const dir: 'asc' | 'desc' = dirRaw === 'desc' ? 'desc' : 'asc';
   const note =
     shape === 'canvas'
       ? 'a canvas is arranged by dagre; this seeds the order within each rank'
@@ -404,7 +425,7 @@ function SortRow({
             className="btn ghost tiny sort-direction"
             title={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
             aria-label={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
-            onClick={() => patch({ sort: `${key}:${dir === 'asc' ? 'desc' : 'asc'}` })}
+            onClick={() => edit((spec) => setSort(spec, key, dir === 'asc' ? 'desc' : 'asc'))}
           >
             {dir === 'asc' ? '↑' : '↓'}
           </button>
@@ -413,7 +434,7 @@ function SortRow({
       <select
         className="rail-select"
         value={key}
-        onChange={(e) => patch({ sort: e.target.value ? `${e.target.value}:${dir}` : null })}
+        onChange={(e) => edit((spec) => setSort(spec, e.target.value, dir))}
       >
         <option value="">—</option>
         <option value="updated">updated</option>
@@ -441,11 +462,11 @@ function SortRow({
 function FacetsSection({
   meta,
   data,
-  patch,
+  edit,
 }: {
   meta: Meta;
   data: QueryResponse | null;
-  patch: (p: Patch) => void;
+  edit: Edit;
 }) {
   const show = data?.spec.show ?? [];
   const available = Object.entries(meta.facets).map(([name, def]) => ({
@@ -476,7 +497,7 @@ function FacetsSection({
                     const next = e.target.checked
                       ? [...show, f.name]
                       : show.filter((c) => c !== f.name);
-                    patch({ show: next.join(',') || '' });
+                    edit((spec) => setShow(spec, next));
                   }}
                 />
                 {f.label}
@@ -512,14 +533,12 @@ function columnsLabel(chips: string[]): string {
 function FocusSection({
   meta,
   data,
-  saved,
-  patch,
+  edit,
   onOpenCard,
 }: {
   meta: Meta;
   data: QueryResponse | null;
-  saved: boolean;
-  patch: (p: Patch) => void;
+  edit: Edit;
   onOpenCard: (id: string) => void;
 }) {
   const focus = data?.spec.query.focus;
@@ -532,12 +551,12 @@ function FocusSection({
         {focus ? (
           <>
             <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
-              {title}
+              {title ?? focus.id}
             </button>
             <button
               className="btn ghost tiny icon-button icon-close"
               title="clear the focus"
-              onClick={() => patch(clearFocus(saved))}
+              onClick={() => edit(clearFocus)}
             >
               ✕
             </button>
@@ -554,7 +573,8 @@ function FocusSection({
                 onCancel={close}
                 onPick={(id) => {
                   close();
-                  patch({ focus: id });
+                  // The picker offers "no focus" as a pick, which is a clear.
+                  edit((spec) => (id ? setFocus(spec, { id }) : clearFocus(spec)));
                 }}
               />
             )}
@@ -568,7 +588,7 @@ function FocusSection({
             className="rail-select"
             value={focus.via}
             title="which relation to walk"
-            onChange={(e) => patch({ via: e.target.value })}
+            onChange={(e) => edit((spec) => setFocus(spec, { id: focus!.id, via: e.target.value }))}
           >
             {relations(meta).map((v) => (
               <option key={v} value={v}>
@@ -579,7 +599,9 @@ function FocusSection({
           <select
             className="rail-select narrow"
             value={focus.dir}
-            onChange={(e) => patch({ dir: e.target.value })}
+            onChange={(e) =>
+              edit((spec) => setFocus(spec, { id: focus!.id, dir: e.target.value as Dir }))
+            }
           >
             {DIRS.map((d) => (
               <option key={d} value={d} title={DIR_MEANS[d]}>
@@ -591,7 +613,11 @@ function FocusSection({
             className="rail-select narrow"
             value={focus.depth ?? ''}
             title="how many hops"
-            onChange={(e) => patch({ depth: e.target.value || null })}
+            onChange={(e) =>
+              edit((spec) =>
+                setFocus(spec, { id: focus!.id, depth: Number(e.target.value) || undefined }),
+              )
+            }
           >
             <option value="">all</option>
             <option value="1">1</option>
@@ -615,14 +641,10 @@ function FocusSection({
  */
 function ActiveStats({
   data,
-  saved,
-  search,
-  patch,
+  edit,
 }: {
   data: QueryResponse | null;
-  saved: boolean;
-  search: string;
-  patch: (p: Patch) => void;
+  edit: Edit;
 }) {
   if (!data) return <div className="rail-active">…</div>;
   const hidden = Math.max(0, data.universe - data.total);
@@ -655,7 +677,7 @@ function ActiveStats({
           </>
         ))}
       {extra > 0 && (
-        <button className="btn ghost tiny" onClick={() => patch(clearFilters(search, saved))}>
+        <button className="btn ghost tiny" onClick={() => edit(clearFilters)}>
           clear
         </button>
       )}
@@ -664,8 +686,10 @@ function ActiveStats({
 }
 
 /** Live, debounced, and just another predicate in the same query. */
-function SearchBox({ search, patch }: { search: string; patch: (p: Patch) => void }) {
-  const current = new URLSearchParams(search.replace(/^\?/, '')).get('q') ?? '';
+function SearchBox({ spec, edit }: { spec: ViewSpec | undefined; edit: Edit }) {
+  // Off the resolved spec, so a saved view's own `q:` shows in the box instead of
+  // leaving it blank while the query is filtered.
+  const current = spec?.query.q ?? '';
   const [text, setText] = useState(current);
 
   // Adopt an external change (a saved view, the back button) without fighting
@@ -674,9 +698,9 @@ function SearchBox({ search, patch }: { search: string; patch: (p: Patch) => voi
 
   useEffect(() => {
     if (text === current) return;
-    const t = setTimeout(() => patch({ q: text.trim() || null }), 200);
+    const t = setTimeout(() => edit((s) => setSearch(s, text), true), 200);
     return () => clearTimeout(t);
-  }, [text, current, patch]);
+  }, [text, current, edit]);
 
   return (
     <div className="rail-search">

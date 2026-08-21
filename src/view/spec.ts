@@ -1,6 +1,7 @@
-import { NONE, type Dir, type Focus, type Query } from '../index/query.ts';
-import type { Facets } from '../schema/types.ts';
-import { isRef } from '../schema/facets.ts';
+import type { Focus, Query } from '../index/query.ts';
+import { DIRS, NONE, SHAPES, type Dir, type Shape } from '../schema/vocabulary.ts';
+
+export { DIRS, NONE, SHAPES, type Dir, type Shape };
 
 /**
  * The one description of a view, shared by the three places that describe one:
@@ -11,10 +12,28 @@ import { isRef } from '../schema/facets.ts';
  * `order` are hand-curated arrangement and exist only in a named file (C9).
  */
 
-export type Shape = 'board' | 'canvas' | 'table';
-
-export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
-export const DIRS: readonly Dir[] = ['out', 'in', 'both'];
+/**
+ * Every parameter name a spec is made of, `f.<facet>` aside.
+ *
+ * One list, because there were three: this module's reader, the client's
+ * "which params belong to the query" predicate, and the CLI's flag list — which
+ * was short by `shape`, `show` and `uncategorised`, so `pj ls --shape canvas`
+ * simply did not exist. Adding a key here is what makes every surface able to say
+ * it.
+ */
+export const SPEC_PARAMS = [
+  'view',
+  'shape',
+  'group',
+  'sort',
+  'q',
+  'focus',
+  'via',
+  'dir',
+  'depth',
+  'show',
+  'uncategorised',
+] as const;
 
 export interface ViewSpec {
   /** Set when this came from a saved view; absent for an ad-hoc query. */
@@ -113,23 +132,6 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
     // enumerating what exists. An unknown one draws nothing.
     show: list(params.show),
   };
-}
-
-/**
- * Which relation gives a canvas its shape: the **first reference facet** in
- * `show`.
- *
- * A hierarchy can lay a graph out and a cross-cutting relation cannot — a
- * blocker pointing sideways distorts every rank it crosses — but which is which
- * is a property of the view, not of the relation. Put `parent` before `blocks`
- * and you get a decomposition tree with dependencies drawn over it; put
- * `project` first and you get the portfolio.
- *
- * The same answer decides which relation `connect` keeps ancestors along, so a
- * canvas cannot lay out along one hierarchy and pull context from another.
- */
-export function layoutRelation(show: string[], facets: Facets): string | undefined {
-  return show.find((name) => isRef(facets[name]));
 }
 
 // ---------------------------------------------------------------- serialising

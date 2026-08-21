@@ -1,145 +1,42 @@
-export interface CardDTO {
-  id: string;
-  title: string;
-  isProject: boolean;
-  facets: Record<string, string[]>;
-  links: { kind: string; ref: string; label: string; raw: string }[];
-  progress: { done: number; total: number } | null;
-  excerpt: string;
-  body: string;
-  /** Bucketed values per ordered facet, computed server-side (C8). */
-  buckets: Record<string, string[]>;
-  updated: string | null;
-  childCount: number;
-  blockedBy: { id: string; title: string; done: boolean }[];
-  unblocks: string[];
-}
+/**
+ * What the client consumes, re-exported rather than restated.
+ *
+ * This file used to be 183 lines of hand-copied interfaces, and four of its
+ * fields had quietly drifted from the server's — `rollups` optional here and
+ * required there, `views[].title` required here and optional there, and two
+ * nullability pairs that ran the other way. Nothing checked one against the
+ * other, because there was nothing to check: the client could not import
+ * `src/view/spec.ts` at all while it pulled `node:fs` in through the facet
+ * loader.
+ *
+ * It can now, so the types come from where they are produced. A drift becomes a
+ * type error. The barrel stays because one place naming what crosses the wire is
+ * worth keeping — it just re-exports instead of transcribing.
+ */
 
-/** What a facet's values are. Storage is uniform; the type governs meaning. */
-export type FacetType = 'label' | 'ref' | 'date' | 'number';
+export type { CardDTO } from '../view/dto.ts';
+export type { QueryPayload } from '../view/payload.ts';
+export type { ViewSpec } from '../view/spec.ts';
+export type { Dir, Shape } from '../schema/vocabulary.ts';
+export type { Meta, SavedViewSummary } from '../server/meta.ts';
+export type { FacetDef, FacetType, Facets, ResolvedProject } from '../schema/types.ts';
+export type { FacetCount, Focus, Group, Query, Rollup, ValueCount } from '../index/query.ts';
+export type { Enrichment, Tone } from '../enrich/types.ts';
+export type { Resolved } from '../server/enrich.ts';
 
-export interface FacetDef {
-  label: string;
-  type: FacetType;
-  values: string[];
-  open: boolean;
-  /** At most one value at a time — a vocabulary constraint, not a storage one. */
-  single: boolean;
-  /** Named ranges an ordered facet presents itself as, in order. */
-  buckets?: { name: string; upTo: number }[];
-  overflow?: string;
-}
-
-export interface Meta {
-  vault: string;
-  vaultName: string;
-  facets: Record<string, FacetDef>;
-  counts: Record<string, number>;
-  enrichment: Record<string, number>;
-  views: SavedView[];
-}
-
-export interface SavedView {
-  name: string;
-  title: string;
-  shape: Shape;
-}
-
-export type Shape = 'board' | 'canvas' | 'table';
-
-export interface Focus {
-  id: string;
-  /** A reference facet name, or an edge type while those still exist. */
-  via: string;
-  /** `out` follows a record's own references; `in` finds the records naming it. */
-  dir: 'out' | 'in' | 'both';
-  depth?: number;
-}
-
-/** The query half of a spec: what is in scope, and how it is grouped and ordered. */
-export interface Query {
-  filter?: Record<string, string[]>;
-  q?: string;
-  focus?: Focus;
-  /** Primary axis, then the secondary one — board lanes, table sub-sections. */
-  groupBy?: string[];
-  sort?: string[];
-  uncategorised?: 'end' | 'start' | 'hide';
-}
+import type { CardDTO } from '../view/dto.ts';
+import type { ResolvedProject } from '../schema/types.ts';
+import type { QueryPayload } from '../view/payload.ts';
 
 /**
- * One view, whether it came from a saved file or from the URL. `nodes` and
- * `order` are hand-curated arrangement and only ever arrive from a saved view —
- * an ad-hoc query has no file to hold them (C9).
+ * The query response, as the client sees it.
+ *
+ * An alias rather than a copy: `queryPayload` builds this, and there is no second
+ * opinion about what it contains.
  */
-export interface ViewSpec {
-  name?: string;
-  title?: string;
-  shape: Shape;
-  query: Query;
-  /**
-   * Which facets this view surfaces. A label draws as a chip and a column; a
-   * reference draws as those *and* a line, and the first reference lays the
-   * canvas out.
-   */
-  show: string[];
-  nodes?: Record<string, { x?: number; y?: number }>;
-  order?: Record<string, string[]>;
-}
+export type QueryResponse = QueryPayload;
 
-export interface ValueCount {
-  value: string;
-  count: number;
-  selected: boolean;
-}
-
-export interface FacetCount {
-  facet: string;
-  label: string;
-  /** Computed rather than stored. The panel does not distinguish them. */
-  pseudo: boolean;
-  values: ValueCount[];
-}
-
-/** `lane` is set only when a second grouping axis is in play. */
-export interface Group {
-  value: string;
-  lane?: string;
-  ids: string[];
-}
-
-/** Derived counts for a project record — what the projects table exists for. */
-export interface Rollup {
-  direct: number;
-  total: number;
-  blocked: number;
-  untriaged: number;
-  touched: string | null;
-}
-
-export interface QueryResponse {
-  spec: ViewSpec;
-  /** Keyed by id: a card in three columns is one card. */
-  cards: Record<string, CardDTO>;
-  ids: string[];
-  /** Ancestors kept so a graph stays connected. Never matches. */
-  context: string[];
-  groups: Group[] | null;
-  axis: string[];
-  lanes: string[];
-  counts: FacetCount[];
-  total: number;
-  /** What focus and search left, before the facet filter. */
-  universe: number;
-  placements: number;
-  /** The relation a canvas lays out by — the first reference facet in `show`. */
-  layout: string | null;
-  /** What the canvas draws: every reference in `show` with both ends shown. */
-  relations: { src: string; dst: string; type: string }[];
-  rollups?: Record<string, Rollup>;
-  views: SavedView[];
-}
-
+/** One card and everything the panel needs around it — `GET /api/card/:id`. */
 export interface CardDetail {
   card: CardDTO;
   file: string;
@@ -147,37 +44,5 @@ export interface CardDetail {
   mtime: number;
   parents: { id: string; title: string }[];
   children: { id: string; title: string }[];
-  project: {
-    key: string;
-    repos: { path: string; base?: string }[];
-    jira?: string;
-    branch?: string;
-    instructions: string[];
-    chain: string[];
-  } | null;
-}
-
-// ---------------------------------------------------------------- enrichment
-
-export type Tone = 'neutral' | 'good' | 'warn' | 'bad' | 'accent';
-
-export interface Enrichment {
-  label: string;
-  title?: string;
-  badges?: { label: string; tone: Tone }[];
-  fields?: { k: string; v: string }[];
-  url?: string;
-  command?: string;
-  action?: { label: string; href: string };
-}
-
-export interface Resolved {
-  ref: string;
-  kind: string;
-  state: 'fresh' | 'stale' | 'missing' | 'error' | 'unsupported';
-  data?: Enrichment;
-  error?: string;
-  needsSetup?: boolean;
-  fetchedAt?: number;
-  note?: string;
+  project: ResolvedProject | null;
 }

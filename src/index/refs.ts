@@ -12,7 +12,7 @@ import type { Facets, Rec } from '../schema/types.ts';
  */
 
 /** Which way to walk. `out` follows a record's own references; `in` finds the records naming it. */
-export type Dir = 'out' | 'in' | 'both';
+export type { Dir } from '../schema/vocabulary.ts';
 
 export interface Ref {
   src: string;

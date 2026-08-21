@@ -11,6 +11,8 @@ import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
 import { CARD_PARAM, apiSearch, patchSearch, type Patch } from './query.ts';
+import { specToPatch } from '../view/intents.ts';
+import type { ViewSpec } from './types.ts';
 import type { Meta, QueryResponse } from './types.ts';
 
 /**
@@ -51,6 +53,25 @@ export function App() {
     const { search: s, location: loc, navigate: go } = nav.current;
     go(`${loc}${patchSearch(s, p)}`, { replace });
   }, []);
+
+  /**
+   * Editing the view itself.
+   *
+   * A control says what it wants of the spec; this turns the result back into the
+   * overrides the URL carries. The spec it edits is the *resolved* one — saved
+   * view merged under the query string — and the diff is taken against the saved
+   * view, which is the only way "unselect this value" and "clear these filters"
+   * can mean anything on a view whose defaults live in a file.
+   */
+  const editRef = useRef<{ spec: ViewSpec; savedSpec: ViewSpec | null } | null>(null);
+  const edit = useCallback(
+    (fn: (spec: ViewSpec) => ViewSpec, replace = false) => {
+      const cur = editRef.current;
+      if (!cur) return;
+      patch(specToPatch(fn(cur.spec), cur.savedSpec), replace);
+    },
+    [patch],
+  );
 
   const setOpenCard = useCallback((id: string | null) => {
     const { search: s, location: loc, navigate: go } = nav.current;
@@ -110,6 +131,8 @@ export function App() {
   );
 
   const shape = data?.spec.shape ?? 'board';
+  // Kept in a ref so `edit` can stay identity-stable; see `nav` above for why.
+  editRef.current = data ? { spec: data.spec, savedSpec: data.savedSpec } : null;
   const content = useMemo(() => {
     if (queryError) return <div className="pane-error">{queryError}</div>;
     if (!data || !meta) return <div className="pane-loading">loading…</div>;
@@ -160,6 +183,7 @@ export function App() {
           search={search}
           wire={wire}
           patch={patch}
+          edit={edit}
           onSwitchVault={switchVault}
           onAddVault={() => setAddingVault(true)}
           onOpenCard={setOpenCard}

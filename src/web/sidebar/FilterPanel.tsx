@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { NONE } from '../views/dragSemantics.ts';
-import { toggleValue, type Patch } from '../query.ts';
+import { NONE } from '../../schema/vocabulary.ts';
+import { toggleFilterValue } from '../../view/intents.ts';
 import type { FacetCount } from '../types.ts';
+import type { Edit } from './Sidebar.tsx';
 
 /**
  * The facet panel.
@@ -20,24 +21,14 @@ import type { FacetCount } from '../types.ts';
  * - **Selected facets come first**, so an active refinement is never scrolled
  *   out of sight.
  */
-export function FilterPanel({
-  counts,
-  search,
-  saved,
-  patch,
-}: {
-  counts: FacetCount[];
-  search: string;
-  saved: boolean;
-  patch: (p: Patch) => void;
-}) {
+export function FilterPanel({ counts, edit }: { counts: FacetCount[]; edit: Edit }) {
   const active = counts.filter((c) => c.values.some((v) => v.selected));
   const rest = counts.filter((c) => !c.values.some((v) => v.selected));
 
   return (
     <div className="filters">
       {[...active, ...rest].map((facet) => (
-        <Facet key={facet.facet} facet={facet} search={search} saved={saved} patch={patch} />
+        <Facet key={facet.facet} facet={facet} edit={edit} />
       ))}
       {!counts.length && <div className="filters-empty">nothing to filter on</div>}
     </div>
@@ -46,17 +37,7 @@ export function FilterPanel({
 
 const CUTOFF = 8;
 
-function Facet({
-  facet,
-  search,
-  saved,
-  patch,
-}: {
-  facet: FacetCount;
-  search: string;
-  saved: boolean;
-  patch: (p: Patch) => void;
-}) {
+function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
   const selected = facet.values.filter((v) => v.selected);
   // A facet you are using stays open; one you are not starts collapsed, or ten
   // facets of vocabulary bury the two you care about.
@@ -86,7 +67,7 @@ function Facet({
               <input
                 type="checkbox"
                 checked={v.selected}
-                onChange={() => patch(toggleValue(search, facet.facet, v.value, saved))}
+                onChange={() => edit((s) => toggleFilterValue(s, facet.facet, v.value))}
               />
               <span className={`facet-name ${v.value === NONE ? 'is-none' : ''}`}>
                 {v.value === NONE ? 'none' : v.value}

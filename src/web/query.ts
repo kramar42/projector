@@ -1,4 +1,4 @@
-import { NONE } from './views/dragSemantics.ts';
+import { SPEC_PARAMS } from '../view/spec.ts';
 import type { Meta, Shape, ViewSpec } from './types.ts';
 
 /**
@@ -16,10 +16,7 @@ export const CARD_PARAM = 'card';
 
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
-  return (
-    key.startsWith('f.') ||
-    ['view', 'shape', 'group', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'show', 'uncategorised'].includes(key)
-  );
+  return key.startsWith('f.') || (SPEC_PARAMS as readonly string[]).includes(key);
 }
 
 export function paramsOf(search: string): URLSearchParams {
@@ -40,9 +37,13 @@ export type Patch = Record<string, string | null>;
 
 /**
  * Apply a patch to the current search string. `null` removes a key; `''` keeps it
- * with an empty value, which for `f.<facet>` is the difference between "no
- * opinion" and "explicitly nothing" — the latter is how the URL overrides a
- * saved view's default selection instead of inheriting it.
+ * present and empty.
+ *
+ * What those two mean is `view/intents.ts`'s business now — this only writes what
+ * it is told. It used to decide as well, from the query string alone, while the
+ * controls rendered from the resolved spec; a checkbox drawn from one source and
+ * toggled against the other is how unchecking a saved view's filter came to
+ * narrow it instead.
  */
 export function patchSearch(search: string, patch: Patch): string {
   const params = paramsOf(search);
@@ -54,65 +55,20 @@ export function patchSearch(search: string, patch: Patch): string {
   return s ? `?${s}` : '';
 }
 
-/**
- * Toggling one facet value.
- *
- * A value already selected is removed; the last one going out leaves the key
- * present and empty rather than absent, because a saved view whose default is
- * `status: [planning, active]` must be overridable to "any status" — and an
- * absent key means "inherit", not "none".
- */
-export function toggleValue(search: string, facet: string, value: string, saved: boolean): Patch {
-  const key = `f.${facet}`;
-  const current = wireValues(paramsOf(search).get(key));
-  const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
-  if (next.length) return { [key]: next.map(toWire).join(',') };
-  // Nothing selected: drop the key outright unless a saved view would refill it.
-  return { [key]: saved ? '' : null };
-}
 
-export function clearFilters(search: string, saved: boolean): Patch {
-  const patch: Patch = { q: null, ...clearFocus(saved) };
-  for (const key of paramsOf(search).keys()) {
-    if (key.startsWith('f.')) patch[key] = saved ? '' : null;
-  }
-  return patch;
-}
 
-/**
- * Removing the focus.
- *
- * Deleting the key is not enough on a saved view: the server merges the file's
- * parameters under the URL's, so an absent `focus` means "inherit" and the saved
- * one comes straight back. An empty one means "explicitly none" — the same
- * sentinel the facet filters use, for the same reason.
- */
-export function clearFocus(saved: boolean): Patch {
-  return { focus: saved ? '' : null, via: null, dir: null, depth: null };
-}
 
-/** `(none)` travels as itself so a literal value `none` cannot collide with it. */
-function toWire(value: string): string {
-  return value === NONE ? '(none)' : value;
-}
 
-function wireValues(raw: string | null): string[] {
-  return (raw ?? '')
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean)
-    .map((v) => (v === '(none)' ? NONE : v));
-}
 
 // ---------------------------------------------------------------- reading back
 
+/** The shapes with their button labels — the only thing `vocabulary.ts` has no opinion about. */
 export const SHAPES: { value: Shape; label: string }[] = [
   { value: 'board', label: 'Board' },
   { value: 'canvas', label: 'Canvas' },
   { value: 'table', label: 'Table' },
 ];
 
-export const DIRS = ['out', 'in', 'both'] as const;
 
 /**
  * Every relation a focus can walk and a canvas can draw: the reference facets.

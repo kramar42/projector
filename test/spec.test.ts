@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NONE } from '../src/index/query.ts';
-import { layoutRelation, parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
+import { parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
+import { layoutRelation } from '../src/view/payload.ts';
+import {
+  clearFilters,
+  patchIsEmpty,
+  setGroupBy,
+  setShape,
+  specToPatch,
+  toggleFilterValue,
+} from '../src/view/intents.ts';
 
 test('a spec survives the round trip through URL parameters', () => {
   const params = {
@@ -136,4 +145,69 @@ test('a canvas lays out by the first reference facet in show', () => {
   assert.equal(layoutRelation(['project', 'parent'], facets), 'project');
   assert.equal(layoutRelation(['priority'], facets), undefined);
   assert.equal(layoutRelation([], facets), undefined);
+});
+
+/**
+ * The two bugs that lived in the gap between reading and writing a spec.
+ *
+ * The sidebar rendered a checkbox from the *resolved* spec — the saved view
+ * merged under the URL — and then computed the new URL from the query string
+ * alone. On `?view=home`, whose file selects `status: [planning, active]`, the
+ * URL holds no `f.status`, so a checkbox that was drawn *checked* had an empty
+ * current list underneath it.
+ */
+test('unchecking a saved view’s selected value clears it instead of narrowing', () => {
+  const saved = specFromFile('home', {
+    shape: 'board',
+    filter: { status: ['planning', 'active'] },
+    groupBy: ['priority'],
+  });
+
+  // What the user sees and clicks is the resolved spec, which here is the saved one.
+  const after = toggleFilterValue(saved, 'status', 'planning');
+  assert.deepEqual(after.query.filter?.status, ['active'], 'the clicked value comes off');
+
+  // And the URL says so as an override, not by re-listing what is left out.
+  const patch = specToPatch(after, saved);
+  assert.equal(patch['f.status'], 'active');
+  assert.equal(patch.group, null, 'an untouched axis stays inherited');
+
+  // The old behaviour: current values read from an empty URL, so the click
+  // produced "only planning" and silently dropped `active`.
+  assert.notEqual(patch['f.status'], 'planning');
+});
+
+test('clearing a saved view’s filters empties them rather than doing nothing', () => {
+  const saved = specFromFile('home', {
+    shape: 'board',
+    filter: { status: ['planning', 'active'], priority: ['now'] },
+    q: 'keycloak',
+  });
+
+  const patch = specToPatch(clearFilters(saved), saved);
+  // The empty string is the override. Dropping the key would inherit the file's
+  // selection straight back, which is what made the old "clear" a no-op.
+  assert.equal(patch['f.status'], '', 'an emptied filter is stated, not omitted');
+  assert.equal(patch['f.priority'], '');
+  assert.equal(patch.q, '', 'the text search clears with the same sentinel');
+  assert.equal(patch.shape, null, 'shape is untouched and inherited');
+  assert.ok(!patchIsEmpty(patch), 'clearing a filled view is a change');
+});
+
+test('a patch against an unchanged spec says nothing at all', () => {
+  const saved = specFromFile('home', { shape: 'board', filter: { status: ['planning'] } });
+  assert.ok(patchIsEmpty(specToPatch(saved, saved)), 'no diff, no override, no dirty badge');
+});
+
+test('an ad-hoc query with no saved view writes every key it sets', () => {
+  const spec = setGroupBy(setShape(parseSpec({}), 'canvas'), 0, 'priority');
+  const patch = specToPatch(spec, null);
+  assert.equal(patch.shape, 'canvas');
+  assert.equal(patch.group, 'priority');
+});
+
+test('clearing the primary grouping axis promotes the secondary', () => {
+  const two = specFromFile('v', { shape: 'board', groupBy: ['priority', 'project'] });
+  assert.deepEqual(setGroupBy(two, 0, null).query.groupBy, ['project']);
+  assert.deepEqual(setGroupBy(two, 1, null).query.groupBy, ['priority']);
 });

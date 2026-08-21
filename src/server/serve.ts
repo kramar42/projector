@@ -22,8 +22,9 @@ import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf } from '../index/project.ts';
-import { blockersOf, counts, unblocks } from '../index/queries.ts';
+import { blockersOf, unblocks } from '../index/queries.ts';
 import { loadViews, findView } from './views.ts';
+import { meta } from './meta.ts';
 import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
 import { countChildren, queryPayload } from '../view/payload.ts';
 import { toDTO } from '../view/dto.ts';
@@ -44,7 +45,7 @@ import {
   deleteView,
 } from './mutate.ts';
 import { watch } from 'chokidar';
-import { clearEnrichment, enrichmentStats, readCached, refresh } from './enrich.ts';
+import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 
@@ -205,14 +206,7 @@ app.get('/api/meta', (c) => {
   const root = vaultOf(c);
   touchVault(root);
   const { facets, db, views } = load(root);
-  return c.json({
-    vault: root,
-    vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
-    facets,
-    counts: counts(db),
-    enrichment: enrichmentStats(root),
-    views: views.map((v) => ({ name: v.name, title: v.title, shape: v.shape })),
-  });
+  return c.json(meta(root, { facets, db, views }));
 });
 
 /**
@@ -223,7 +217,10 @@ app.get('/api/meta', (c) => {
  * view that had one. Shared with the save route, so *save current as…* stores
  * exactly what is on screen rather than a second interpretation of it.
  */
-function resolveSpec(root: string, url: string): ViewSpec | { error: string } {
+function resolveSpec(
+  root: string,
+  url: string,
+): { spec: ViewSpec; saved: ViewSpec | null } | { error: string } {
   const params = Object.fromEntries(new URL(url).searchParams.entries());
   const saved = params.view ? findView(root, params.view) : undefined;
   if (params.view && !saved) return { error: `no view "${params.view}"` };
@@ -234,7 +231,9 @@ function resolveSpec(root: string, url: string): ViewSpec | { error: string } {
   // Arrangement is never a query parameter: it comes from the file or nowhere.
   spec.nodes = saved?.nodes;
   spec.order = saved?.order;
-  return spec;
+  // The saved view travels too: a control that changes a view has to know what it
+  // is overriding, and only this function has both halves in hand.
+  return { spec, saved: saved ?? null };
 }
 
 /**
@@ -250,10 +249,10 @@ app.get('/api/query', (c) => {
   const root = vaultOf(c);
   const { facets, db, records, views } = load(root);
 
-  const spec = resolveSpec(root, c.req.url);
-  if ('error' in spec) return c.json({ error: spec.error }, 404);
+  const resolved = resolveSpec(root, c.req.url);
+  if ('error' in resolved) return c.json({ error: resolved.error }, 404);
 
-  return c.json(queryPayload({ facets, db, records, views }, spec));
+  return c.json(queryPayload({ facets, db, records, views }, resolved.spec, resolved.saved));
 });
 
 
@@ -404,8 +403,9 @@ app.put('/api/view/:name', async (c) => {
   const root = vaultOf(c);
   try {
     const body = (await c.req.json().catch(() => ({}))) as { title?: string };
-    const spec = resolveSpec(root, c.req.url);
-    if ('error' in spec) return c.json({ error: spec.error }, 404);
+    const resolved = resolveSpec(root, c.req.url);
+    if ('error' in resolved) return c.json({ error: resolved.error }, 404);
+    const { spec } = resolved;
     const name = c.req.param('name');
     const res = saveView(root, name, specToFile(spec, body.title?.trim() || spec.title || name));
     bump(root);

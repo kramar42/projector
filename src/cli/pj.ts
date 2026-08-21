@@ -10,7 +10,7 @@ import { formatIssues, validate, validateViews } from '../schema/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
-import { parseSpec, specToParams } from '../view/spec.ts';
+import { SPEC_PARAMS, parseSpec, specToParams, type ViewSpec } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
 import { findView, loadViews, viewFiles } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
@@ -95,7 +95,9 @@ const HELP = `pj — projector CLI${vaultNote}
 
   pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
-     --dir out|in|both --depth n] [--json]          list records, grouped
+     --dir out|in|both --depth n] [--shape s]
+     [--show f,f] [--uncategorised end|start|hide]
+     [--json]                                      list records, grouped
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--parent id]
          [--facet f=v ...] [--link ref ...]
@@ -219,15 +221,16 @@ function pad(s: string, n: number): string {
  */
 function cmdLs(argv: string[]): void {
   const { flags } = argFlags(argv, [
-    'view', 'group', 'filter', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'json',
+    ...SPEC_PARAMS, 'filter', 'json',
   ], ['json']);
   const facets = loadFacets(p.facets);
   const { db, records } = reindex(root);
 
   const params: Record<string, string> = {};
   const named = flags.get('view')?.[0];
+  let saved: ViewSpec | null = null;
   if (named) {
-    const saved = findView(root, named);
+    saved = findView(root, named) ?? null;
     if (!saved) {
       console.error(`no view "${named}"`);
       process.exit(1);
@@ -238,16 +241,12 @@ function cmdLs(argv: string[]): void {
     const [facet, values] = spec.split('=');
     if (facet && values !== undefined) params[`f.${facet}`] = values;
   }
-  for (const [flag, key] of [
-    ['group', 'group'],
-    ['sort', 'sort'],
-    ['q', 'q'],
-    ['focus', 'focus'],
-    ['via', 'via'],
-    ['dir', 'dir'],
-    ['depth', 'depth'],
-  ] as const) {
-    const v = flags.get(flag)?.[0];
+  // Every spec parameter, from the one list that says what a spec is made of —
+  // which is how `--shape`, `--show` and `--uncategorised` arrive: they were
+  // missing from a hand-kept copy, so the CLI could not ask for a canvas.
+  for (const key of SPEC_PARAMS) {
+    if (key === 'view') continue;
+    const v = flags.get(key)?.[0];
     if (v && v !== 'true') params[key] = v;
   }
 
@@ -257,7 +256,7 @@ function cmdLs(argv: string[]): void {
   // The same assembly the web app receives, from the same module (C9). A second
   // shape for the CLI is how the two surfaces would start disagreeing about the
   // answer, having been made unable to disagree about the question.
-  const payload = queryPayload({ facets, db, records, views: loadViews(root) }, spec);
+  const payload = queryPayload({ facets, db, records, views: loadViews(root) }, spec, saved);
 
   if (flags.has('json')) {
     console.log(JSON.stringify(payload, null, 2));

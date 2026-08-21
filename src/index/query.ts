@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { bucketOf, compareValues, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
+import { bucketOf, compareValues, daysBetween, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, nodesIn, refsOf, walk } from './refs.ts';
@@ -17,7 +17,8 @@ import { adjacency, nodesIn, refsOf, walk } from './refs.ts';
  */
 
 /** Absence of any value for a facet. Also the trailing group's label, as in P0. */
-export const NONE = '(none)';
+export { NONE } from '../schema/vocabulary.ts';
+import { NONE } from '../schema/vocabulary.ts';
 
 export type { Dir } from './refs.ts';
 import type { Dir } from './refs.ts';
@@ -114,15 +115,11 @@ interface Pseudo {
   of: (rec: Rec, ctx: Ctx) => string[];
 }
 
-const DAY = 86_400_000;
 
 /** Whole days between two `YYYY-MM-DD` dates, or null if the first is unparseable. */
+/** `daysBetween`, with the nullable date the `staleness` axis actually has. */
 function daysSince(date: string | undefined, today: string): number | null {
-  if (!date) return null;
-  const a = Date.parse(date);
-  const b = Date.parse(today);
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
-  return Math.floor((b - a) / DAY);
+  return date ? daysBetween(date, today) : null;
 }
 
 /**

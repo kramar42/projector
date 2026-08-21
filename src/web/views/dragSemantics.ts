@@ -1,4 +1,5 @@
-export const NONE = '(none)';
+export { NONE } from '../../schema/vocabulary.ts';
+import { NONE } from '../../schema/vocabulary.ts';
 
 export type DragMode = 'replace' | 'add' | 'remove';
 
