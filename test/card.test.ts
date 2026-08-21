@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join, patchKey, serialize, split } from '../src/schema/frontmatter.ts';
 import { parseCard, renderCard } from '../src/schema/card.ts';
 import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
-import { parseLink } from '../src/schema/links.ts';
+import { LINK_KINDS, fallbackHref, parseLink } from '../src/schema/links.ts';
 import { validate } from '../src/schema/validate.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import type { Rec } from '../src/schema/types.ts';
@@ -126,6 +126,60 @@ test('link kinds are recognised', () => {
   assert.equal(parseLink('claude:local_abc').kind, 'claude');
   assert.equal(parseLink('doc:a/b.md').ref, 'a/b.md');
   assert.equal(parseLink('nonsense').kind, '');
+});
+
+/**
+ * One example per declared kind, keyed off `LINK_KINDS` itself — so a kind added
+ * tomorrow fails here until someone has decided where it opens, rather than
+ * silently rendering as dead text the way `slack` did.
+ */
+const HREF_CASES: Record<(typeof LINK_KINDS)[number], { raw: string; href: string | null }> = {
+  jira: { raw: 'jira:PROJ-303', href: 'https://acme.atlassian.net/browse/PROJ-303' },
+  'gh:pr': { raw: 'gh:pr:Org/repo#4', href: 'https://github.com/Org/repo/pull/4' },
+  'gh:branch': { raw: 'gh:branch:Org/repo@main', href: 'https://github.com/Org/repo/tree/main' },
+  'gh:commit': { raw: 'gh:commit:Org/repo@abc123', href: 'https://github.com/Org/repo/commit/abc123' },
+  // A session on this machine and a file in the vault: neither is a web page.
+  claude: { raw: 'claude:local_abc', href: null },
+  doc: { raw: 'doc:a/b.md', href: null },
+  // The ref is already the permalink — no fetcher, and no special case either.
+  slack: { raw: 'slack:https://acme.slack.com/archives/C1/p123', href: 'https://acme.slack.com/archives/C1/p123' },
+  url: { raw: 'https://example.com/x', href: 'https://example.com/x' },
+};
+
+test('every declared link kind has a decided answer for where it opens', () => {
+  assert.deepEqual(
+    Object.keys(HREF_CASES).sort(),
+    [...LINK_KINDS].sort(),
+    'a kind was added or removed without deciding its href',
+  );
+  for (const kind of LINK_KINDS) {
+    const c = HREF_CASES[kind];
+    assert.equal(fallbackHref(parseLink(c.raw), 'https://acme.atlassian.net'), c.href, kind);
+  }
+});
+
+test('a link opens without any fetcher having run', () => {
+  // The defect this exists for: the panel made a label clickable only when
+  // enrichment supplied a url, so a kind with no fetcher was permanently dead.
+  const noFetcher = ['slack', 'url'] as const;
+  for (const kind of noFetcher) {
+    assert.ok(fallbackHref(parseLink(HREF_CASES[kind].raw), null), `${kind} must not need enrichment`);
+  }
+});
+
+test('a Jira ref has no href when no Jira host is configured', () => {
+  assert.equal(fallbackHref(parseLink('jira:PROJ-303'), null), null);
+  assert.equal(
+    fallbackHref(parseLink('jira:PROJ-303'), 'https://acme.atlassian.net/'),
+    'https://acme.atlassian.net/browse/PROJ-303',
+    'a trailing slash on the configured host does not double up',
+  );
+});
+
+test('a malformed ref yields no href rather than a broken one', () => {
+  assert.equal(fallbackHref(parseLink('gh:pr:Org/repo'), null), null, 'no PR number');
+  assert.equal(fallbackHref(parseLink('gh:branch:Org/repo@'), null), null, 'no rev');
+  assert.equal(fallbackHref(parseLink('slack:not-a-url'), null), null);
 });
 
 // ---------------------------------------------------------------- slugs

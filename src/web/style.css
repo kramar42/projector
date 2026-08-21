@@ -2112,14 +2112,13 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .linkrow-action:hover { background: var(--surface-3); border-color: var(--accent); }
 .linkrow-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.linkrow-cmd, .linkrow-raw {
+.linkrow-cmd {
   font-size: var(--text-xs);
   align-self: flex-start;
   max-width: 100%;
   overflow-x: auto;
   white-space: nowrap;
 }
-.linkrow-raw { opacity: 0.6; }
 
 .linkrow-note { font-size: var(--text-sm); color: var(--ink-3); font-style: italic; }
 .linkrow-note.is-bad { color: var(--bad); font-style: normal; }

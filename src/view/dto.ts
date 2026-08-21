@@ -1,4 +1,5 @@
-import { fallbackLabel } from '../schema/links.ts';
+import { fallbackHref, fallbackLabel } from '../schema/links.ts';
+import { jiraConfig } from '../sources/jira.ts';
 import type { Rec } from '../schema/types.ts';
 import { isProject } from '../index/project.ts';
 import { bucketOf } from '../schema/facets.ts';
@@ -10,7 +11,12 @@ export interface CardDTO {
   title: string;
   isProject: boolean;
   facets: Record<string, string[]>;
-  links: { kind: string; ref: string; label: string; raw: string }[];
+  /**
+   * `href` is where the link opens, derived from the ref alone — a fetcher adds
+   * richness, never the ability to click. `null` for the two kinds with nowhere
+   * on the web to go: a Claude session and a local doc.
+   */
+  links: { kind: string; ref: string; label: string; href: string | null; raw: string }[];
   /** Checklist progress counted from the body's markdown task lists. */
   progress: { done: number; total: number } | null;
   /** First prose paragraph, for the card face. */
@@ -87,7 +93,11 @@ export function toDTO(
     title: rec.title,
     isProject: isProject(rec),
     facets: rec.facets,
-    links: rec.links.map((l) => ({ ...l, label: fallbackLabel(l) })),
+    links: rec.links.map((l) => ({
+      ...l,
+      label: fallbackLabel(l),
+      href: fallbackHref(l, jiraConfig()?.url ?? null),
+    })),
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),
     body: rec.body,

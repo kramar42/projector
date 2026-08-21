@@ -356,7 +356,12 @@ const CARDS = [
       'claude:00000000-0000-4000-8000-000000000000',
       'doc:notes/resolves.md',
       'doc:notes/absent.md',
-      'slack:C01234567/1700000000.000100',
+      // A permalink, because that is the only shape a slack *link* takes in the
+      // real vault — all nineteen of them. The `channel/ts` pair appears there
+      // fifteen times and every one is a `source_fingerprint`, which is a dedup
+      // key and never something you click. A fixture carrying a shape the app
+      // never sees is worse than one missing a shape it does.
+      'slack:https://acme.slack.com/archives/C01234567/p1700000000000100',
       'https://example.com/a/very/long/path/that/should/be/ellipsised/well/before/here',
     ],
     body:
@@ -364,7 +369,10 @@ const CARDS = [
       '`doc:notes/absent.md` points at nothing, and the `jira`, `gh` and `claude` refs\n' +
       'cannot resolve without credentials. Each should say why *once* and stay cached,\n' +
       'not retry on every render. The bare URL is long on purpose: the label ellipsises\n' +
-      'at 130px.\n',
+      'at 130px.\n\n' +
+      'Every kind here except `claude` and `doc` is clickable with no fetcher having\n' +
+      'run — a fetcher adds a title and a status, never the ability to click. Those two\n' +
+      'have nowhere on the web to go: a session on this machine, and a file in the vault.\n',
   },
 
   // -------------------------------------------------- text limits
