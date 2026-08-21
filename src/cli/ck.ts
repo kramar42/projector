@@ -79,6 +79,7 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
          [--facet f=v ...] [--link ref ...]
          [--fingerprint fp] [--body text]              create a record
   ck link <id> <ref> [...]                             append links to a record
+  ck unlink <id> <ref> [...]                           remove links from a record
   ck check                                             validate every card file
   ck reindex                                           rebuild the index from files
   ck search <query>                                    full-text search
@@ -336,6 +337,37 @@ function cmdLink(argv: string[]): void {
   console.log(`${id}: ${merged.length} link(s)`);
 }
 
+/**
+ * Remove links, the inverse of `cmdLink`.
+ *
+ * Without this the only way to take a link off a card is `--set links=[...]`,
+ * which means retyping every ref that stays — so one typo silently drops
+ * provenance, and provenance is the whole point of a link. Moving a ref from one
+ * card to another is ordinary organisational work, not an edge case.
+ *
+ * A ref that is not there is an error rather than a no-op: `ck unlink x jira:FOO-1`
+ * reporting success while doing nothing is how you find out a month later that
+ * the link is still on the other card.
+ */
+function cmdUnlink(argv: string[]): void {
+  const [id, ...refs] = argv;
+  if (!id || !refs.length) fail('ck unlink <id> <ref> [...]');
+  const { records } = readAll(p.cards);
+  const rec = records.get(id);
+  if (!rec) fail(`no record with id "${id}"`);
+  const existing = rec.links.map((l) => l.raw);
+  const missing = refs.filter((r) => !existing.includes(r));
+  if (missing.length) {
+    fail(
+      `${id} does not link ${missing.join(', ')}.\nIt links: ${existing.join(', ') || '(nothing)'}`,
+    );
+  }
+  const kept = existing.filter((l) => !refs.includes(l));
+  const text = readFileSync(rec.file, 'utf8');
+  writeCardFile(rec.file, patchKey(text, 'links', kept));
+  console.log(`${id}: removed ${refs.length}, ${kept.length} link(s) left`);
+}
+
 function cmdCheck(): void {
   const facets = loadFacets(p.facets);
   const { records, unreadable, duplicates } = readAll(p.cards);
@@ -506,6 +538,9 @@ try {
     }
     case 'link':
       cmdLink(argv);
+      break;
+    case 'unlink':
+      cmdUnlink(argv);
       break;
     case 'check':
       cmdCheck();
