@@ -1,4 +1,5 @@
-import type { Rec } from '../schema/types.ts';
+import { isRef } from '../schema/facets.ts';
+import type { Facets, Rec } from '../schema/types.ts';
 
 /**
  * How records point at each other, and how to walk it.
@@ -33,6 +34,22 @@ export function refsOf(facet: string, records: Map<string, Rec>): Ref[] {
     }
   }
   return out;
+}
+
+/**
+ * Every record that some other record names through a reference facet.
+ *
+ * This is what makes a record a *node* rather than a plain card: things hang off
+ * it. Computed across all reference facets at once, because being named by
+ * `parent` and being named by `project` make a record a node equally.
+ */
+export function nodesIn(records: Map<string, Rec>, facets: Facets): Set<string> {
+  const nodes = new Set<string>();
+  for (const [facet, def] of Object.entries(facets)) {
+    if (!isRef(def)) continue;
+    for (const { dst } of refsOf(facet, records)) nodes.add(dst);
+  }
+  return nodes;
 }
 
 export interface Adjacency {

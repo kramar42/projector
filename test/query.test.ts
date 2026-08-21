@@ -179,16 +179,45 @@ test('pseudo-facets filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocked-card', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocker', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
-    // Three axes missing at once puts a card in three triage buckets.
+    // A card missing two axes lands in both buckets.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
       'blocker',
-      'project-b',
       'loose',
-      'project-a',
       'project-a-eventing',
     ]);
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-priority'] } }), ['loose', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { staleness: ['older'] } }), ['loose', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { staleness: ['month'] } }), ['project-a']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('triage does not ask a project for a priority, or a node for a status', () => {
+  const { root, cleanup } = vault();
+  try {
+    // `project-b` and `project-a` carry neither a project nor a priority and are complete
+    // anyway: a project record is where configuration lives, not a piece of
+    // work, and ranking a portfolio is a decision rather than a triage step.
+    assert.deepEqual(ids(root, { filter: { triage: ['complete'] } }), [
+      'blocked-card',
+      'project-b',
+      'kafka-schema',
+      'kc-realms',
+      'keycloak',
+      'project-a',
+    ]);
+    // `project-a-eventing` has no status and is not asked for one: things hang off it,
+    // so it is a grouping, and a grouping on the work board is noise.
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-status'] } }), []);
+    // The exemption is the incoming edge, not the absence. An otherwise
+    // identical card that nothing names is still asked for a status.
+    writeFileSync(
+      join(root, 'cards', 'orphan.md'),
+      '---\nid: orphan\ntitle: Named by nothing\nfacets: { project: [project-a], priority: [now] }\nupdated: 2026-08-20\n---\n',
+      'utf8',
+    );
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-status'] } }), ['orphan']);
   } finally {
     cleanup();
   }

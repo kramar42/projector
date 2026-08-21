@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { bucketOf, compareValues, facetRank, isOrdered, isRef, orderValues } from '../schema/facets.ts';
+import { bucketOf, compareValues, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
-import { adjacency, refsOf, walk } from './refs.ts';
+import { adjacency, nodesIn, refsOf, walk } from './refs.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -135,6 +135,31 @@ function daysSince(date: string | undefined, today: string): number | null {
  * app-written `updated` field. `due` used to sit here bucketing a stored value —
  * that is what an ordered facet's own `buckets` do now, so it left.
  */
+/**
+ * Which of the three triage facets a record is actually missing.
+ *
+ * Two absences are deliberate rather than gaps, so neither is reported. A
+ * **project** record needs neither a project of its own nor a priority: it is
+ * where configuration lives, not a piece of work, and ranking a portfolio is a
+ * decision rather than a triage step. A **node** — anything another record names
+ * through a reference facet — needs no status, because a card that things hang
+ * off is a grouping, and giving a grouping a lifecycle puts a container on the
+ * work board.
+ *
+ * Shared with `untriaged()` so the Triage axis and the CLI worklist cannot give
+ * two answers to one question. They used to: only the CLI exempted a project
+ * from `needs-project`.
+ */
+export function triageGaps(rec: Rec, isNode: boolean): string[] {
+  const missing: string[] = [];
+  if (!rec.project) {
+    if (!rec.facets.project?.length) missing.push('needs-project');
+    if (!rec.facets.priority?.length) missing.push('needs-priority');
+  }
+  if (!isNode && !rec.facets.status?.length) missing.push('needs-status');
+  return missing;
+}
+
 export const PSEUDO: Record<string, Pseudo> = {
   type: {
     label: 'Type',
@@ -165,11 +190,8 @@ export const PSEUDO: Record<string, Pseudo> = {
   triage: {
     label: 'Triage',
     values: ['needs-project', 'needs-priority', 'needs-status', 'complete'],
-    of: (rec) => {
-      const missing: string[] = [];
-      if (!rec.facets.project?.length) missing.push('needs-project');
-      if (!rec.facets.priority?.length) missing.push('needs-priority');
-      if (!rec.facets.status?.length) missing.push('needs-status');
+    of: (rec, ctx) => {
+      const missing = triageGaps(rec, ctx.nodes.has(rec.id));
       return missing.length ? missing : ['complete'];
     },
   },
@@ -224,12 +246,7 @@ function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx
     // `src blocks dst`, so an unfinished record blocks each of its targets.
     if (!records.get(src)?.facets.status?.includes('done')) blocked.add(dst);
   }
-  const nodes = new Set<string>();
-  for (const [facet, def] of Object.entries(facets)) {
-    if (!isRef(def)) continue;
-    for (const { dst } of refsOf(facet, records)) nodes.add(dst);
-  }
-  return { records, nodes, blocked, facets, today };
+  return { records, nodes: nodesIn(records, facets), blocked, facets, today };
 }
 
 // ---------------------------------------------------------------- traversal

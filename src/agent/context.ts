@@ -1,6 +1,8 @@
 import { paths } from '../config.ts';
-import { adjacency } from '../index/refs.ts';
+import { adjacency, nodesIn } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
+import { triageGaps } from '../index/query.ts';
+import { loadFacets } from '../schema/facets.ts';
 import { parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
@@ -95,14 +97,19 @@ export interface Untriaged {
   titleIsUrl: boolean;
 }
 
+/** How `triageGaps` names each absence, in the words a triage pass reads. */
+const REASON: Record<string, string> = {
+  'needs-project': 'no project',
+  'needs-priority': 'no priority',
+  'needs-status': 'no status',
+};
+
 export function untriaged(dataRoot: string): Untriaged[] {
   const { records } = readAll(paths(dataRoot).cards);
+  const nodes = nodesIn(records, loadFacets(paths(dataRoot).facets));
   const out: Untriaged[] = [];
   for (const rec of records.values()) {
-    const reasons: string[] = [];
-    if (!rec.facets.project?.length && !rec.project) reasons.push('no project');
-    if (!rec.facets.priority?.length) reasons.push('no priority');
-    if (!rec.facets.status?.length) reasons.push('no status');
+    const reasons = triageGaps(rec, nodes.has(rec.id)).map((g) => REASON[g]!);
     const titleIsUrl = /^https?:\/\//.test(rec.title);
     if (titleIsUrl) reasons.push('title is a bare URL');
     if (!reasons.length) continue;
