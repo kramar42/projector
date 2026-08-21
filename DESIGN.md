@@ -363,8 +363,18 @@ ribbon. A count that shifts width when it increments is a count you cannot read 
 
 **The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The record marks
 sit at `0.8em` with `line-height: 1`, baseline-aligned, plus a per-glyph `translateY` derived from
-where its ink actually centres: `·` centres at `0.347em` of its own size, `○` and `▣` at `0.260em`, and
-lowercase text at `0.254em` of *its* size, which is where `0.03em` and `-0.058em` come from.
+where its ink actually centres: `•` centres at `0.3716em` of its own size, `○` and `▣` at `0.2598em`,
+and lowercase text at `0.254em` of *its* size, which is where `0.054em` and `-0.058em` come from.
+
+The leaf mark is `•` and not the middle dot `·` because the rule cuts both ways: at 15px the middle
+dot's ink measures 1.85 × 2.23px against `○`'s 8.94 × 9.02, nearly five times smaller in each
+dimension, which reads as a speck rather than as the quietest of three marks. The bullet is 4.35 ×
+4.34 — legible, and still half the circle.
+
+The panel header is the one place the mark is also a **control**: a record is a project by carrying a
+`project:` block, so clicking the glyph adds or removes it. It takes `--text-lg` there rather than a
+second relative size, and therefore its own pair of measured constants — same formula, different size
+pair, written down beside them.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
 tuned individually (14px check, 15px close, 16px revert, 17px add) so they read as one family — but
@@ -551,7 +561,7 @@ you know nothing is written on the card — the panel otherwise treats it identi
 ### The Record Mark
 
 The signature component, and the one nothing else can substitute for. A mono glyph before every title
-saying what the record is — `·` a card, `○` a node, `▣` a project — followed by a count when others
+saying what the record is — `•` a card, `○` a node, `▣` a project — followed by a count when others
 name it as parent. It sits at `0.8em` of whatever type it precedes, so one rule serves the 12.5px table
 row, the 13px card face and the 16px panel header. See **The Measured Glyph Rule**.
 

@@ -81,7 +81,7 @@ export function Sidebar({
           <span>{typeCount('node')}</span>
         </div>
         <div className="sidebar-ribbon-info" title={`${typeCount('plain')} plain cards in this query`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">·</span>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">•</span>
           <span>{typeCount('plain')}</span>
         </div>
       </nav>

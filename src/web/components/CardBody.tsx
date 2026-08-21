@@ -173,7 +173,7 @@ export function CardBody({
 
 /**
  * What a record is, in one glyph — read off the record rather than declared on
- * it. `▣` owns config its members inherit; `○` something is part of it; `·`
+ * it. `▣` owns config its members inherit; `○` something is part of it; `•`
  * neither.
  *
  * There used to be a stored `kind` saying "card" or "node". It asserted what
@@ -196,7 +196,11 @@ export function markOf(card: Marked): { glyph: string; role: string; means: stri
       means: `${card.childCount} record(s) name this one as their parent`,
     };
   }
-  return { glyph: '·', role: 'leaf', means: 'nothing is part of this one' };
+  // `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's
+  // ink is 1.85 × 2.23px against `○`'s 8.94 × 9.02 — nearly five times smaller
+  // in each dimension, which is not a quieter mark, it is a speck. The bullet is
+  // 4.35 × 4.34: legible, and still half the circle.
+  return { glyph: '•', role: 'leaf', means: 'nothing is part of this one' };
 }
 
 /**
@@ -221,6 +225,36 @@ export function RecordMark({ card }: { card: Marked }) {
     <span className={`recordmark is-${role}`} title={means}>
       {glyph}
     </span>
+  );
+}
+
+/**
+ * The mark, as the control that changes what it says.
+ *
+ * A record *is* a project by carrying a `project:` block, and the mark is the one
+ * place the app already states that. So the toggle is the mark: there is no
+ * separate button whose label has to restate the glyph beside it, and no chance
+ * of the two disagreeing. Clicking `·` or `○` adds the block; clicking `▣`
+ * removes it, and the record falls back to whichever of the two it earns from its
+ * child count.
+ */
+export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => void }) {
+  const { glyph, role } = markOf(card);
+  const next = card.isProject
+    ? 'Remove the project block. Records naming this one in their project facet stop inheriting repos and instructions from it.'
+    : 'Add a project block, so this record can own repos and instructions that its members inherit.';
+  return (
+    <button
+      className={`recordmark is-${role} is-toggle`}
+      title={`${markOf(card).means}\n\nClick: ${next}`}
+      onClick={(e) => {
+        // The title beside it opens the rename editor on click.
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      {glyph}
+    </button>
   );
 }
 

@@ -918,10 +918,10 @@ body {
  *     box from adding its own offset.
  *  3. **A per-glyph nudge**, because the three characters do not sit at the same
  *     height. Measured ink centres above the baseline, in em of their own size:
- *     `·` 0.347, `○` and `▣` 0.260. Lowercase text centres at 0.254em of *its*
- *     size, so at 0.8em the middle dot lands 0.024em too high and the two
- *     geometric shapes 0.046em too low. These two constants are those
- *     differences — they are measurements, not taste.
+ *     `•` 0.3716, `○` and `▣` 0.2598. Lowercase text centres at 0.254em of *its*
+ *     size, so at 0.8em the bullet lands 0.043em too low and the two geometric
+ *     shapes 0.046em too high. These two constants are those differences — they
+ *     are measurements, not taste.
  */
 .recordmark {
   font-family: var(--mono);
@@ -932,8 +932,11 @@ body {
   align-self: baseline;
 }
 
+/* `•` centres at 0.3716em of its own size (measured; the middle dot it replaced
+   was 0.3474em, which is where the old 0.03em came from). At mark = 0.8 × text:
+   0.3716×0.8 − 0.254 = 0.0433 of text size = 0.054em of the mark's own. */
 .recordmark.is-leaf {
-  transform: translateY(0.03em);
+  transform: translateY(0.054em);
 }
 
 .recordmark.is-container,
@@ -1684,10 +1687,81 @@ textarea { resize: vertical; font-family: inherit; }
   overflow-wrap: anywhere;
 }
 
-/* The mark carries what the record is; hovering it says so in words. It scales
-   with the title, so it needs no size of its own. */
+/*
+ * In the panel the mark is also the control that changes it — a record is a
+ * project by carrying a `project:` block, and this glyph is where the app says
+ * so. Two buttons whose labels restated the glyph beside them are gone.
+ *
+ * Bigger than elsewhere because it is a target now rather than an annotation:
+ * 0.95em of the headline is ~15px, and the padding takes the hit area past 20px
+ * without moving the glyph. The optical nudges still apply — they are in `em` of
+ * the mark's own size, so they scale with it.
+ */
 .panel-title .recordmark {
   cursor: help;
+}
+
+.panel-title .recordmark.is-toggle {
+  appearance: none;
+  border: 0;
+  background: none;
+  font-family: var(--mono);
+  /* A step from the scale rather than another `em`. The 0.8em rule exists
+     because the mark sits beside 12.5 / 13 / 16px text in three places and one
+     relative rule serves all three; the panel is a single fixed context, so it
+     can name a size — and a second relative value would make the exemption in
+     `test/theme.test.ts` a list instead of a reason. */
+  font-size: var(--text-lg);
+  line-height: 1;
+  padding: 3px 5px;
+  margin: -3px -2px -3px -5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--ink-3);
+}
+
+/*
+ * Re-measured, because the nudge is a function of BOTH sizes and one of them
+ * just changed. Per the Measured Glyph Rule: `•` centres at 0.3716em of its own
+ * size, `○` and `▣` at 0.2598em, and lowercase text at 0.254em of *its* size, so
+ *
+ *     translate = centre(glyph) × markSize − 0.254 × textSize
+ *
+ * At the 12.8px/16px pair it reproduces the constants on `.recordmark` above,
+ * which is how the formula was checked before being used here. At 15px/16px:
+ *
+ */
+/*     •        0.3716×15 − 0.254×16 = +1.510px = +0.101em
+ *     ○ / ▣    0.2598×15 − 0.254×16 = -0.164px = -0.011em */
+.panel-title .recordmark.is-toggle.is-leaf {
+  transform: translateY(0.101em);
+}
+
+.panel-title .recordmark.is-toggle.is-container,
+.panel-title .recordmark.is-toggle.is-project {
+  transform: translateY(-0.011em);
+}
+
+.panel-title .recordmark.is-toggle:hover {
+  background: var(--surface-3);
+  color: var(--hue-purple);
+}
+
+.panel-title .recordmark.is-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A project already draws in its axis's own family everywhere else. */
+.panel-title .recordmark.is-toggle.is-project {
+  color: var(--hue-purple);
+}
+
+/* The one control in the panel drawn in `bad`, so the corner cannot be mistaken
+   for the close it replaced. */
+.panel-x.danger:hover {
+  background: color-mix(in srgb, var(--bad) 16%, transparent);
+  color: var(--bad);
 }
 
 .titleedit textarea { width: 100%; font-size: var(--text-lg); }

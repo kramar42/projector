@@ -55,6 +55,19 @@ const GLYPH = {
   add: { mark: '+', px: 17 },
   check: { mark: '✓', px: 14 },
   revert: { mark: '↶', px: 16, nudge: '-0.02em' },
+  /**
+   * The one glyph that is a drawing rather than a character.
+   *
+   * There is no monochrome trash can in a text font: `🗑` is emoji-presentation
+   * and would be the only colour ink in an app whose every value comes from one
+   * palette file. So this row carries a path instead of a mark, drawn in
+   * `currentColor` at the same nominal size the characters use — the table is
+   * still the one place a glyph's metrics live.
+   */
+  trash: {
+    px: 15,
+    path: 'M2.6 4h10.8M6 4V2.6h4V4M4.1 4l.75 9.4h6.3L11.9 4M6.6 6.6v4.7M9.4 6.6v4.7',
+  },
 } as const;
 
 export type GlyphName = keyof typeof GLYPH;
@@ -66,16 +79,32 @@ export function IconButton({
   extra,
   ...rest
 }: Base & { glyph: GlyphName; tone?: Tone; size?: Size; extra?: string }) {
-  const { mark, px, nudge } = GLYPH[glyph] as { mark: string; px: number; nudge?: string };
+  const g = GLYPH[glyph] as { mark?: string; path?: string; px: number; nudge?: string };
   return (
     <button
       className={cls('btn', TONE[tone], SIZE[size], 'icon-button', extra)}
       // Inline because it is per-glyph metric data, not a theme decision: a new
       // glyph should mean a row in the table above and nothing in the stylesheet.
-      style={{ fontSize: `${px}px`, ...(nudge ? { transform: `translateY(${nudge})` } : {}) }}
+      style={{ fontSize: `${g.px}px`, ...(g.nudge ? { transform: `translateY(${g.nudge})` } : {}) }}
       {...rest}
     >
-      <span aria-hidden="true">{mark}</span>
+      {g.path ? (
+        <svg
+          viewBox="0 0 16 16"
+          width="1em"
+          height="1em"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d={g.path} />
+        </svg>
+      ) : (
+        <span aria-hidden="true">{g.mark}</span>
+      )}
     </button>
   );
 }

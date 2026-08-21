@@ -19,7 +19,7 @@ import type { CardDTO, CardDetail, Meta } from '../types.ts';
  *
  * Each takes the slice of the writer it uses rather than the whole object, so
  * what a block can change is legible from its signature: `Facets` cannot delete
- * a card, and `Actions` cannot touch an axis.
+ * a card, and `Body` cannot touch an axis.
  */
 
 /** Past this, an inbound list stops being a list and becomes the page. */
@@ -87,45 +87,6 @@ export function Inbound({
   );
 }
 
-export function Actions({
-  card,
-  write,
-}: {
-  card: CardDTO;
-  write: Pick<CardWriter, 'projectBlock' | 'remove'>;
-}) {
-  return (
-    <div className="panel-actions">
-      {/* There is no promote/demote, because there is no class of record to move
-          between. A record is work when it carries a lifecycle, which is the
-          Status facet below. */}
-      <Button
-        size="small"
-        title={
-          card.isProject
-            ? 'Remove the project block. Records naming this one in their project facet stop inheriting repos and instructions from it.'
-            : 'Add a project block, so this record can own repos and instructions that its members inherit.'
-        }
-        // A project's key is its record id, so the block starts empty.
-        onClick={() => write.projectBlock(card.isProject ? null : {})}
-      >
-        {card.isProject ? 'Not a project' : 'Make a project'}
-      </Button>
-      <Button
-        tone="danger"
-        size="small"
-        onClick={() => {
-          if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
-            return;
-          write.remove();
-        }}
-      >
-        Delete
-      </Button>
-    </div>
-  );
-}
-
 /**
  * Every axis, drawn the same way.
  *
@@ -151,9 +112,11 @@ export function Facets({
   write: Pick<CardWriter, 'facet'>;
   onOpen: (id: string) => void;
 }) {
+  // No head. The rail names no such group either, and this is now the first
+  // thing under the title — a label reading FACETS above a list of facet labels
+  // was the section restating its own contents.
   return (
     <section className="panel-section">
-      <h3>Facets</h3>
       {Object.entries(defs).map(([name, def]) => (
         <FacetEditor
           key={name}

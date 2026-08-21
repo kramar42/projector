@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { RecordMark } from '../components/CardBody.tsx';
+import { ProjectMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
-import { Actions, Body, Facets, Frontmatter, Inbound, Links } from './blocks.tsx';
+import { Body, Facets, Frontmatter, Inbound, Links } from './blocks.tsx';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -81,7 +81,7 @@ export function CardPanel({
           {card &&
             (editTitle === null ? (
               <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
-                <RecordMark card={card} />
+                <ProjectMark card={card} onToggle={() => write.projectBlock(card.isProject ? null : {})} />
                 <span className="panel-title-text">{card.title}</span>
               </h2>
             ) : (
@@ -111,7 +111,25 @@ export function CardPanel({
               </div>
             ))}
           {write.busy && <span className="panel-busy">{write.busy}…</span>}
-          <IconButton glyph="close" size="normal" extra="panel-x" onClick={onClose} aria-label="Close" />
+          {/* The panel is closed by Escape or by clicking outside it, which is
+              how it was actually being closed — so the corner goes to the one
+              action that had nowhere good to live. It keeps its confirm, and it
+              is the only control in the panel drawn in `bad`. */}
+          {card && (
+            <IconButton
+              glyph="trash"
+              tone="danger"
+              size="normal"
+              extra="panel-x"
+              aria-label={`Delete ${card.title}`}
+              title="Delete this record. The file is in git, so this is recoverable."
+              onClick={() => {
+                if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
+                  return;
+                write.remove();
+              }}
+            />
+          )}
         </div>
 
         {error && <div className="pane-error">{error}</div>}
@@ -234,8 +252,6 @@ export function CardPanel({
                 <dd><code>{data.file}</code></dd>
                 {card.updated && (<><dt>updated</dt><dd>{card.updated}</dd></>)}
               </dl>
-
-              <Actions card={card} write={write} />
             </div>
           </div>
         )}
