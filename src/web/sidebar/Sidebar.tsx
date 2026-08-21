@@ -65,16 +65,18 @@ export function Sidebar({
         >
           »
         </button>
-        <div className="sidebar-ribbon-info" title={`${meta.vaultName}: ${meta.counts.records} records`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">▣</span>
+        <div className="sidebar-ribbon-info" title={`${meta.vaultName}: ${meta.counts.records} cards`}>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">·</span>
           <span>{meta.counts.records}</span>
         </div>
-        {data && (
-          <div className="sidebar-ribbon-info" title={`${data.total} records shown`}>
-            <span className="sidebar-ribbon-icon" aria-hidden="true">◉</span>
-            <span>{data.total}</span>
-          </div>
-        )}
+        <div className="sidebar-ribbon-info" title={`${meta.counts.projects} projects`}>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">▣</span>
+          <span>{meta.counts.projects}</span>
+        </div>
+        <div className="sidebar-ribbon-info" title={`${meta.counts.containers} linked nodes`}>
+          <span className="sidebar-ribbon-icon" aria-hidden="true">○</span>
+          <span>{meta.counts.containers}</span>
+        </div>
       </nav>
     );
   }
