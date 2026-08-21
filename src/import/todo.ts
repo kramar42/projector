@@ -168,7 +168,7 @@ export function importTodo(
           out.push({
             id: cont.id,
             title: cont.title,
-            facets: { kind: ['node'] },
+            facets: {},
             links: [],
             created: today(),
             updated: today(),

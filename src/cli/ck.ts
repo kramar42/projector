@@ -11,7 +11,7 @@ import { parseLink } from '../schema/links.ts';
 import { patchKey } from '../schema/frontmatter.ts';
 import { readFileSync } from 'node:fs';
 import { readAll, reindex } from '../index/indexer.ts';
-import { kindOf, resolveProject } from '../index/project.ts';
+import { resolveProject } from '../index/project.ts';
 import { counts, nextUp, search, unblocks, valuesFor } from '../index/queries.ts';
 import { runQuery } from '../index/query.ts';
 import { parseSpec, specToParams } from '../view/spec.ts';
@@ -24,10 +24,9 @@ import { cardContext, renderContext, untriaged } from '../agent/context.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
 import { sessionForCwd } from '../agent/session.ts';
-import { createCard, patchCard } from '../server/mutate.ts';
+import { createCard, deleteCard, patchCard, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { slugify, uniqueId } from '../import/slug.ts';
 
 /**
  * Which vault this invocation acts on: `--vault`, then `COCKPIT_DATA`, then the
@@ -62,13 +61,14 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
 
   ck ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via parent|member-of|blocks
-     --dir down|up|both --depth n] [--nodes]        list records, grouped
+     --dir out|in|both --depth n]                   list records, grouped
   ck show <id>                                         one record in full
   ck next                                              actionable cards: open and unblocked
   ck log [--since "1 week ago"]                        what changed, from git history
-  ck add <title> [--parent id] [--facet f=v ...]
-         [--link ref ...] [--due YYYY-MM-DD]
-         [--fingerprint fp] [--body text]              create a record
+  ck add <title> [--id slug] [--parent id]
+         [--facet f=v ...] [--link ref ...]
+         [--due YYYY-MM-DD] [--fingerprint fp]
+         [--body text]                                 create a record
   ck link <id> <ref> [...]                             append links to a record
   ck check                                             validate every card file
   ck reindex                                           rebuild the index from files
@@ -81,9 +81,11 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
 
   ck context <id> [--json]                             everything known about a card, assembled
   ck untriaged [--json] [--limit n]                    cards needing attention, and why
-  ck set <id> [--title t] [--facet f=v] [--add f=v]
+  ck set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--parent id|none]
-         [--due YYYY-MM-DD|none]                       scripted edits, for skills
+         [--due YYYY-MM-DD|none]
+         [--set path=yaml ...]                         scripted edits, for skills
+  ck rm <id>...                                        delete, dropping references to it
   ck work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
   ck link-session <id> [--cwd dir]                     link the live session working here
 
@@ -94,14 +96,36 @@ const HELP = `ck — cockpit CLI${root ? `  (vault: ${root})` : ''}
   --vault <path>                                       act on a specific vault
 `;
 
-function argFlags(argv: string[]): { flags: Map<string, string[]>; rest: string[] } {
+/**
+ * Split flags from positional arguments.
+ *
+ * `known` is not optional courtesy. An unrecognised flag used to be dropped
+ * silently, so `ck set x --project '{}'` printed a success line and did nothing
+ * — the sort of failure you only find by checking the file afterwards.
+ */
+/** Report and stop. A CLI that half-applies a bad batch is worse than one that refuses. */
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+function argFlags(
+  argv: string[],
+  known?: readonly string[],
+): { flags: Map<string, string[]>; rest: string[] } {
   const flags = new Map<string, string[]>();
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a.startsWith('--')) {
       const key = a.slice(2);
+      if (known && !known.includes(key)) {
+        console.error(`unknown flag --${key}. This command takes: ${known.map((k) => '--' + k).join(' ')}`);
+        process.exit(1);
+      }
       const next = argv[i + 1];
+      // `--set project=` has to reach the command as an empty string, since that
+      // is how it says "delete this key" — so only a `--flag` ends a flag.
       if (next === undefined || next.startsWith('--')) {
         flags.set(key, [...(flags.get(key) ?? []), 'true']);
       } else {
@@ -184,14 +208,13 @@ function cmdLs(argv: string[]): void {
     const v = flags.get(flag)?.[0];
     if (v && v !== 'true') params[key] = v;
   }
-  // `--nodes` is the `kind` pseudo-facet; without it, cards only, as before.
-  if (!flags.has('nodes') && !params['f.kind']) params['f.kind'] = 'card';
 
   const spec = parseSpec(params);
   const res = runQuery(db, records, facets, spec.query);
   const mark = (id: string) => {
     const rec = records.get(id);
-    return rec?.project ? 'P' : rec && kindOf(rec) === 'node' ? 'n' : ' ';
+    // A container is a record something points at, not a kind it declares.
+    return rec?.project ? 'P' : records.values().some((r) => (r.facets.parent ?? []).includes(id)) ? '+' : ' ';
   };
   const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${records.get(id)?.title ?? ''}`;
 
@@ -224,7 +247,7 @@ function cmdShow(id: string): void {
   }
   console.log(`# ${rec.title}\n`);
   console.log(`id       ${rec.id}`);
-  console.log(`kind     ${kindOf(rec)}${rec.project ? ' (project)' : ''}`);
+  if (rec.project) console.log(`project  (owns config its members inherit)`);
   console.log(`file     ${rec.file.replace(root + '/', '')}`);
   if (rec.due) console.log(`due      ${rec.due}`);
   for (const [f, v] of Object.entries(rec.facets)) console.log(`${pad(f, 8)} ${v.join(', ')}`);
@@ -257,15 +280,13 @@ function cmdNext(): void {
 }
 
 function cmdAdd(argv: string[]): void {
-  const { flags, rest } = argFlags(argv);
+  const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'due', 'fingerprint']);
   const title = rest.join(' ').trim();
   if (!title) {
     console.error('ck add <title>');
     process.exit(1);
   }
   ensureData();
-  const taken = takenIds();
-  const id = flags.get('id')?.[0] ?? uniqueId(slugify(title), taken);
   const facets: Record<string, string[]> = {};
   for (const spec of flags.get('facet') ?? []) {
     const [f, v] = spec.split('=');
@@ -274,6 +295,7 @@ function cmdAdd(argv: string[]): void {
   const fingerprint = flags.get('fingerprint')?.[0];
   const res = createCard(root, {
     title,
+    id: flags.get('id')?.[0],
     parent: flags.get('parent')?.[0],
     facets,
     links: flags.get('link') ?? [],
@@ -463,7 +485,7 @@ try {
       cmdNext();
       break;
     case 'log': {
-      const { flags } = argFlags(argv);
+      const { flags } = argFlags(argv, ['since']);
       if (!isRepo(root)) {
         console.error(
           'this vault is not a git repository — `ck log` reads the history git already keeps',
@@ -566,7 +588,7 @@ try {
       break;
     }
     case 'context': {
-      const { flags, rest } = argFlags(argv);
+      const { flags, rest } = argFlags(argv, ['json']);
       const ctx = cardContext(rest[0] ?? '', root);
       if (!ctx) {
         console.error(`no record with id "${rest[0] ?? ''}"`);
@@ -577,7 +599,7 @@ try {
     }
 
     case 'untriaged': {
-      const { flags } = argFlags(argv);
+      const { flags } = argFlags(argv, ['json', 'limit']);
       const limit = Number(flags.get('limit')?.[0] ?? 200);
       const all = untriaged(root);
       const list = all.slice(0, limit);
@@ -591,67 +613,96 @@ try {
     }
 
     case 'set': {
-      const { flags, rest } = argFlags(argv);
-      const id = rest[0];
-      if (!id) {
+      const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'parent', 'due', 'set']);
+      if (!rest.length) {
         console.error(
-          'ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due YYYY-MM-DD|none]',
+          'ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]\n' +
+            '                [--parent id|none] [--due YYYY-MM-DD|none] [--set path=yaml]',
         );
         process.exit(1);
       }
       const { records } = readAll(p.cards);
-      const rec = records.get(id);
-      if (!rec) {
-        console.error(`no record with id "${id}"`);
-        process.exit(1);
-      }
-      const facets: Record<string, string[]> = { ...rec.facets };
+      for (const id of rest) if (!records.has(id)) fail(`no record with id "${id}"`);
+
       const split = (spec: string): [string, string[]] => {
         const i = spec.indexOf('=');
         const f = i === -1 ? spec : spec.slice(0, i);
         const v = i === -1 ? '' : spec.slice(i + 1);
         return [f, v ? v.split(',').map((x) => x.trim()).filter(Boolean) : []];
       };
-      for (const spec of flags.get('facet') ?? []) {
-        const [f, v] = split(spec);
-        if (v.length) facets[f] = v;
-        else delete facets[f];
-      }
-      for (const spec of flags.get('add') ?? []) {
-        const [f, v] = split(spec);
-        facets[f] = [...new Set([...(facets[f] ?? []), ...v])];
-      }
-      for (const spec of flags.get('remove') ?? []) {
-        const [f, v] = split(spec);
-        const kept = (facets[f] ?? []).filter((x) => !v.includes(x));
-        if (kept.length) facets[f] = kept;
-        else delete facets[f];
+      const sets: Record<string, string> = {};
+      for (const spec of flags.get('set') ?? []) {
+        const i = spec.indexOf('=');
+        if (i === -1) fail(`--set needs path=value, got "${spec}"`);
+        sets[spec.slice(0, i)] = spec.slice(i + 1);
       }
 
-      const title = flags.get('title')?.[0];
-      const due = flags.get('due')?.[0];
-      patchCard(root, id, {
-        ...(title ? { title } : {}),
-        ...(due !== undefined ? { due: due === 'none' ? null : due } : {}),
-        ...(flags.has('facet') || flags.has('add') || flags.has('remove') ? { facets } : {}),
-      });
+      // Every id gets the same edit, so a bulk move is one invocation rather
+      // than one process per card re-reading the whole vault.
+      for (const id of rest) {
+        const rec = records.get(id)!;
+        const facets: Record<string, string[]> = { ...rec.facets };
+        for (const spec of flags.get('facet') ?? []) {
+          const [f, v] = split(spec);
+          if (v.length) facets[f] = v;
+          else delete facets[f];
+        }
+        for (const spec of flags.get('add') ?? []) {
+          const [f, v] = split(spec);
+          facets[f] = [...new Set([...(facets[f] ?? []), ...v])];
+        }
+        for (const spec of flags.get('remove') ?? []) {
+          const [f, v] = split(spec);
+          const kept = (facets[f] ?? []).filter((x) => !v.includes(x));
+          if (kept.length) facets[f] = kept;
+          else delete facets[f];
+        }
+        // `--parent` is `--facet parent=` spelled the way it reads.
+        const parent = flags.get('parent')?.[0];
+        if (parent !== undefined) {
+          if (parent === 'none') delete facets.parent;
+          else facets.parent = [parent];
+        }
 
-      // `--parent` is `--facet parent=` spelled the way it reads. One relation
-      // mechanism, so re-parenting is an ordinary facet write.
-      const parent = flags.get('parent')?.[0];
-      if (parent !== undefined) {
-        patchCard(root, id, { facets: { ...facets, ...(parent === 'none' ? { parent: [] } : { parent: [parent] }) } });
+        const title = flags.get('title')?.[0];
+        const due = flags.get('due')?.[0];
+        const touchesFacets =
+          flags.has('facet') || flags.has('add') || flags.has('remove') || flags.has('parent');
+        if (title || due !== undefined || touchesFacets) {
+          patchCard(root, id, {
+            ...(title ? { title } : {}),
+            ...(due !== undefined ? { due: due === 'none' ? null : due } : {}),
+            ...(touchesFacets ? { facets } : {}),
+          });
+        }
+        if (Object.keys(sets).length) patchFields(root, id, sets);
+
+        const after = cardContext(id, root)!;
+        console.log(
+          `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}`,
+        );
       }
-      const after = cardContext(id, root)!;
-      console.log(
-        `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}` +
-          (after.parents.length ? `  parent=${after.parents.map((x) => x.id).join(',')}` : ''),
-      );
+      break;
+    }
+
+    case 'rm': {
+      const { rest } = argFlags(argv, []);
+      if (!rest.length) {
+        console.error('ck rm <id>...');
+        process.exit(1);
+      }
+      // Through `deleteCard`, which drops every reference pointing at the record.
+      // Removing the file by hand leaves them dangling, which `ck check` then
+      // reports — the reason this command exists.
+      for (const id of rest) {
+        const { removedEdges } = deleteCard(root, id);
+        console.log(`removed ${id}${removedEdges ? ` and ${removedEdges} reference(s) to it` : ''}`);
+      }
       break;
     }
 
     case 'work': {
-      const { flags, rest } = argFlags(argv);
+      const { flags, rest } = argFlags(argv, ['dry-run', 'no-open']);
       const id = rest[0];
       const ctx = id ? cardContext(id, root) : null;
       if (!ctx) {
@@ -720,7 +771,7 @@ try {
     }
 
     case 'link-session': {
-      const { flags, rest } = argFlags(argv);
+      const { flags, rest } = argFlags(argv, ['cwd']);
       const id = rest[0];
       if (!id) {
         console.error('ck link-session <id> [--cwd dir]');

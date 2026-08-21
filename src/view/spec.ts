@@ -20,14 +20,17 @@ export interface ViewSpec {
   title?: string;
   shape: Shape;
   query: Query;
-  /** Which relations the canvas draws. Layout follows the first of them. */
-  edges: string[];
   /**
-   * Which facets are visible on a record. A board and a canvas draw them as chips;
-   * a table draws the same list as its columns — one parameter, so switching shape
-   * never asks the question twice.
+   * Which facets this view surfaces, in order.
+   *
+   * One list, because how each is drawn follows from what it is. A **label**
+   * facet is a chip on a face and a column in a table; a **reference** facet is
+   * that *and* a line on a canvas, and the first reference in this list is what
+   * the canvas lays out by. There used to be two keys — `chips` and
+   * `edges.show` — asking the same question, and "why does my canvas draw
+   * nothing" was answered by the one you forgot.
    */
-  chips: string[];
+  show: string[];
   /** Saved views only: positions, and card order within a column. */
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
@@ -99,19 +102,17 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   if (uncategorised) query.uncategorised = uncategorised;
 
   const shape = one(params.shape, SHAPES) ?? 'board';
-  // A graph has to stay connected to be readable; a column does not.
-  query.connect = shape === 'canvas' ? one(params.connect, ['ancestors', 'none'] as const) ?? 'ancestors' : 'none';
+  // A graph has to stay connected to be readable; a column does not. Not a
+  // query key: only a canvas honours it, so it belongs to the shape.
+  query.connect = shape === 'canvas' ? 'ancestors' : 'none';
 
-  const edges = list(params.edges);
-  const chips = list(params.chips);
   return {
     shape,
     query,
-    // Relation names are not checked against a list, for the same reason `via`
-    // is not: a reference facet declared in `facets.yaml` must work without a
-    // second place enumerating what exists. An unknown one draws nothing.
-    edges: edges.length ? edges : ['parent', 'blocks'],
-    chips,
+    // Facet names are not checked against a list, for the same reason `via` is
+    // not: one declared in `facets.yaml` must work without a second place
+    // enumerating what exists. An unknown one draws nothing.
+    show: list(params.show),
   };
 }
 
@@ -134,9 +135,7 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
     out.dir = q.focus.dir;
     if (q.focus.depth !== undefined) out.depth = String(q.focus.depth);
   }
-  if (spec.shape === 'canvas' && q.connect === 'none') out.connect = 'none';
-  if (spec.edges.length) out.edges = spec.edges.join(',');
-  if (spec.chips.length) out.chips = spec.chips.join(',');
+  if (spec.show.length) out.show = spec.show.join(',');
   return out;
 }
 
@@ -170,11 +169,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (Array.isArray(raw.groupBy)) params.group = raw.groupBy.map(String).join(',');
   if (Array.isArray(raw.sort)) params.sort = raw.sort.map(String).join(',');
   if (typeof raw.uncategorised === 'string') params.uncategorised = raw.uncategorised;
-  if (typeof raw.connect === 'string') params.connect = raw.connect;
-
-  const edges = (raw.edges ?? {}) as { show?: unknown };
-  if (Array.isArray(edges.show)) params.edges = edges.show.map(String).join(',');
-  if (Array.isArray(raw.chips)) params.chips = raw.chips.map(String).join(',');
+  if (Array.isArray(raw.show)) params.show = raw.show.map(String).join(',');
 
   const spec = parseSpec(params);
   spec.name = name;
@@ -203,10 +198,6 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
     ...(q.uncategorised ? { uncategorised: q.uncategorised } : {}),
-    // Only worth writing when it differs from the shape's default, which is what
-    // `parseSpec` supplies on the way back in.
-    ...(spec.shape === 'canvas' && q.connect === 'none' ? { connect: 'none' } : {}),
-    ...(spec.shape === 'canvas' ? { edges: { show: spec.edges } } : {}),
-    ...(spec.chips.length ? { chips: spec.chips } : {}),
+    ...(spec.show.length ? { show: spec.show } : {}),
   };
 }

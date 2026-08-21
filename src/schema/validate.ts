@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isKnownKind } from './links.ts';
 import type { Facets, Issue, Rec } from './types.ts';
-import { isProject, kindOf } from '../index/project.ts';
+import { isProject } from '../index/project.ts';
 import { wouldCycle } from '../index/refs.ts';
 import { resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
@@ -116,7 +116,6 @@ export function validate(
     if (rec.project) projectKeys.add(rec.id);
   }
   for (const rec of records.values()) {
-    if (kindOf(rec) !== 'card') continue;
     const mine = rec.facets.project ?? [];
     // A project record is its own context, so a root project belongs to nothing
     // above it and that is not a problem to report.

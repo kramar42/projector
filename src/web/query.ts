@@ -19,7 +19,7 @@ const VIEW_PARAM = 'view';
 function isQueryParam(key: string): boolean {
   return (
     key.startsWith('f.') ||
-    ['view', 'shape', 'group', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'connect', 'edges', 'chips', 'uncategorised'].includes(key)
+    ['view', 'shape', 'group', 'sort', 'q', 'focus', 'via', 'dir', 'depth', 'show', 'uncategorised'].includes(key)
   );
 }
 

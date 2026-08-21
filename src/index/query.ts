@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { facetRank, orderValues } from '../schema/facets.ts';
+import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, refsOf, walk } from './refs.ts';
 
@@ -205,6 +206,18 @@ export const PSEUDO: Record<string, Pseudo> = {
    * bucket, so "everything with no deadline" is the ordinary `(none)`
    * refinement every other facet already has — one absence mechanism, not two.
    */
+  /**
+   * Which kinds of external reference a record carries.
+   *
+   * Every axis on a card was askable except this one: 90 of 157 records here
+   * hold a link and there was no way to ask which. A record with none yields no
+   * value, so "nothing linked" is the ordinary `(none)` refinement.
+   */
+  linked: {
+    label: 'Linked',
+    values: [...LINK_KINDS],
+    of: (rec) => [...new Set(rec.links.map((l) => l.kind).filter(Boolean))],
+  },
   due: {
     label: 'Due',
     values: ['overdue', 'today', 'week', 'later'],

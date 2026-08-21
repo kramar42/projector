@@ -168,43 +168,40 @@ export function CardBody({
 }
 
 /**
- * What a record is, in one glyph. `▣` a project, `○` a node, `·` a card.
+ * What a record is, in one glyph — read off the record rather than declared on
+ * it. `▣` owns config its members inherit; `○` something is part of it; `·`
+ * neither.
  *
- * One definition, because it appears on a card face, in a table row and in the
- * card panel — and in the panel it is what makes *Demote to node* and *Not a
- * project* legible as actions on something.
+ * There used to be a stored `kind` saying "card" or "node". It asserted what
+ * these two counts already show, and it was never structural: what kept a
+ * grouping record off a board was the status filter, not the kind. C11 — nothing
+ * derivable is also stored.
  */
-export function kindGlyph(card: CardDTO): string {
-  if (card.isProject) return '▣';
-  return card.kind === 'node' ? '○' : '·';
-}
-
-/** The same thing in words, for a tooltip or a badge. */
-export function kindWords(card: CardDTO): string[] {
-  const out = card.isProject ? ['project'] : [];
-  out.push(card.kind === 'node' ? 'node' : 'card');
-  return out;
-}
-
-const MEANS: Record<string, string> = {
-  project: 'a project — it owns repos and instructions that its members inherit',
-  node: 'a node — a thought, canvas only, kept off boards by the default filter',
-  card: 'a card — work, with facets and links',
-};
-
-export function kindTitle(card: CardDTO): string {
-  return kindWords(card)
-    .map((w) => MEANS[w])
-    .join('\n');
+export function markOf(card: CardDTO): { glyph: string; role: string; means: string } {
+  if (card.isProject) {
+    return {
+      glyph: '▣',
+      role: 'project',
+      means: 'a project — it owns repos and instructions that its members inherit',
+    };
+  }
+  if (card.childCount > 0) {
+    return {
+      glyph: '○',
+      role: 'container',
+      means: `${card.childCount} record(s) name this one as their parent`,
+    };
+  }
+  return { glyph: '·', role: 'leaf', means: 'nothing is part of this one' };
 }
 
 export function KindMark({ card }: { card: CardDTO }) {
-  // The kind is also a class, because each glyph needs its own optical nudge —
+  // The role is also a class, because each glyph needs its own optical nudge —
   // see `.kindmark` in style.css.
-  const kind = card.isProject ? 'project' : card.kind === 'node' ? 'node' : 'card';
+  const { glyph, role, means } = markOf(card);
   return (
-    <span className={`kindmark is-${kind}`} title={kindTitle(card)}>
-      {kindGlyph(card)}
+    <span className={`kindmark is-${role}`} title={means}>
+      {glyph}
     </span>
   );
 }
@@ -213,7 +210,6 @@ function cls(card: CardDTO, base: string): string {
   return [
     base,
     card.isProject ? 'is-project' : '',
-    card.kind === 'node' ? 'is-node' : '',
     card.blockedBy.some((b) => !b.done) ? 'is-blocked' : '',
   ]
     .filter(Boolean)

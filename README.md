@@ -29,25 +29,25 @@ hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
 
 ## Facets, not lists
 
-A card does not live in a column. It carries **facets** — `kind`, `project`, `priority`, `status`,
-`domain`, `energy`, `owner`, `waiting_on`, `source`, `tech`, and any others you declare — and **every
-facet value is an array**, uniformly. Group by any facet to get columns; group by a multi-valued one
-and a card appears in every column it belongs to, by construction.
+A card does not live in a column. It carries **facets** — `priority`, `status`, `domain`, `energy`,
+`owner`, `waiting_on`, `source`, `tech`, the relations `parent`, `blocks` and `project`, and any others
+you declare — and **every facet value is an array**, uniformly. Group by any facet to get columns;
+group by a multi-valued one and a card appears in every column it belongs to, by construction.
 
-No facet is structurally privileged. `kind` and `project` are facets like the rest, so "group by
-project" and "group by priority" are the same board with one control moved rather than two boards to
-keep in sync — and there is no axis with a top-level frontmatter key, a bespoke button or a column of
-its own in the index.
+No facet is structurally privileged. Relations are facets like the rest, so "group by project" and
+"group by priority" are the same board with one control moved rather than two boards to keep in sync —
+and there is no axis with a top-level frontmatter key, a bespoke button or a column of its own in the
+index.
 
 Storage is uniform; the **vocabulary** is where the constraints live. `open: false` refuses a value the
 list does not declare, and `single: true` refuses a second value at all — because `status: [planning,
 done]` is not a card in two columns, it is a card in no coherent state, and the thing writing most of
-these files is an agent (C3). `priority`, `status`, `kind`, `energy` and `owner` are single; `project`,
-`tech`, `domain`, `waiting_on` and `source` are not.
+these files is an agent (C3). `priority`, `status`, `energy`, `owner` and `parent` are single;
+`project`, `blocks`, `tech`, `domain`, `waiting_on` and `source` are not.
 
 ## Pseudo-facets
 
-Four axes are computed rather than stored, and appear in the filter panel indistinguishable from real
+Five axes are computed rather than stored, and appear in the filter panel indistinguishable from real
 facets:
 
 | | Values | Derived from |
@@ -56,6 +56,7 @@ facets:
 | `blocked` | `blocked`, `waiting`, `clear` | an unfinished `blocks` edge · a non-empty `waiting_on` |
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
 | `due` | `overdue`, `today`, `week`, `later` | `due` against today |
+| `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a record carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
 Each is a count, a date comparison or the presence of an edge — never a judgement. `type=project`
@@ -67,17 +68,19 @@ Each is a count, a date comparison or the presence of an edge — never a judgem
 than an `undated` bucket of its own, so "no deadline" is the same `(none)` refinement every other
 facet already has.
 
-## Cards and nodes
+## There is only a record
 
 A canvas and a board sit at different altitudes: most leaves of a mind-map are scaffolding, not work.
-So `kind: [node]` is a thought and `kind: [card]` is work. Same file format, same directory, and
-**an ordinary facet** — not a top-level field and not a class of record. Brainstorm at canvas altitude
-and promote when something becomes real: promotion is toggling a chip, through exactly the code path
-that changes a priority.
+There used to be a `kind` saying `card` or `node`, and it turned out to assert two things the record
+already showed:
 
-It is a facet rather than a field because it was never doing anything a facet cannot. What it actually
-controls is whether a record appears on a board, and that is `filter: kind: [card]` — an ordinary
-selection you can clear.
+- **Is it work?** Whether it carries a `status`. That is what keeps a grouping record off every
+  status-filtered board — `kind: [card]` was doing a job the status filter already did.
+- **Does it contain anything?** Whether anything names it as a `parent`. That is the count the glyph
+  draws: `▣` a project, `○` something is part of it, `·` neither.
+
+So it is gone (C11). Only `id` and `title` are required, and a record becomes work by acquiring a
+lifecycle rather than by being reclassified.
 
 Every record carries a mark before its title saying which it is, and a count after it when it contains
 others:
@@ -161,7 +164,7 @@ There is one page and one endpoint. The sidebar composes a query, the URL holds 
 shareable or bookmarkable without being saved first.
 
 ```
-view = filter × focus × shape × facets
+view = filter × focus × shape × show
 ```
 
 That is also the sidebar, top to bottom. No top bar, and only the filter panel scrolls:
@@ -173,7 +176,7 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
                      no value [ end ▾ ]
                      sort     [ priority ▾ ] [ ↑ ]
-[ facets: project +1 ▾ ]
+[ show: project +1 ▾ ]
 ──────────────────────────────────────────
 [ focus ]    record · via · direction · depth
 [ filter ]   the facet panel
@@ -182,11 +185,11 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 [ search ]
 ```
 
-**The rail does not change when the shape does** — no row appears or disappears. The three controls
-only a canvas can honour float over the canvas instead, next to its transient actions:
+**The rail does not change when the shape does** — no row appears or disappears. What floats over the
+canvas is what only a canvas can do *and* only while one is open:
 
 ```
-[ edges ▾ ] [ keep context ▾ ] [ drag creates: parent ▾ ] [ + node ] [ Save layout ]
+[ drag creates: parent ▾ ] [ + record ] [ Save layout ]
 ```
 
 The board floats its bulk-selection bar for the same reason: it exists only while a selection does.
@@ -223,11 +226,21 @@ toward the blocker, which is the same arrow as `parent`'s "down".
 It applies to every shape: `via=blocks dir=out` is "what does finishing this unblock", and
 `via=parent dir=out` is "what is this part of".
 
-## shape and facets
+## shape and show
 
-`shape` is `board`, `canvas` or `table` — explicit, never inferred. `facets` is which of them show on a
-record: a board and a canvas draw them as chips, a table draws the same list as its columns, so
-switching shape never asks the same question twice.
+`shape` is `board`, `canvas` or `table` — explicit, never inferred.
+
+`show` is which facets this view surfaces, and there is one list rather than two because how each is
+drawn follows from what it is:
+
+| | label facet | reference facet |
+|---|---|---|
+| board / canvas face | a chip | a chip that opens the target |
+| canvas | — | a line between records, and the **first** one lays the graph out |
+| table | a column | a column of links |
+
+There used to be `chips` for the first row and `edges.show` for the second, asking the same question
+twice — and "why does my canvas draw nothing" was answered by the one you forgot.
 
 ## grouping
 
@@ -268,17 +281,19 @@ somewhere for its layout to live.
 ```yaml
 shape: board | canvas | table
 title: Home
-filter: { kind: [card], status: [planning, active] }
-focus: { id: platform, via: parent, dir: down, depth: 2 }
+filter: { status: [planning, active] }
+focus: { id: platform, via: parent, dir: in, depth: 2 }
 q: keycloak
 groupBy: [priority, project]
-sort: [priority:asc, updated:desc]
+sort: [due:asc, priority:asc]
 uncategorised: end | start | hide
-chips: [project, tech]              # which facets show on a record
-edges: { show: [parent, blocks] }  # canvas only
+show: [parent, project, tech]      # references first: the canvas lays out by the first
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
 order: { now: [id, id] }           # written by a drag, not by hand
 ```
+
+`connect` is not a key: keeping unmatched ancestors so a graph stays readable is something only a
+canvas ever honoured, so it follows the shape.
 
 ---
 
@@ -299,7 +314,7 @@ bar.
 So "card in two columns" is always a gesture, never an accident.
 
 **Canvas.** A tree laid out from its roots, plus free positioning once saved. Every record draws the
-same face — how much of a record to show is a property of the view, which is what `chips` is, so a card
+same face — how much of a record to show is a property of the view, which is what `show` is, so a card
 never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw first — decomposition (`parent`) or membership (`project`).
@@ -441,12 +456,13 @@ one.
 
 | | |
 |---|---|
-| `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir d --depth n] [--nodes]` | list records, through the same query compiler the app uses |
+| `ck ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n]` | list records, through the same query compiler the app uses |
 | `ck show <id>` | one record, with its resolved project config |
 | `ck next` | open cards with nobody waited on and no unfinished blocker, deadline first |
 | `ck log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `ck add <title> [--parent] [--facet f=v] [--link ref] [--due d] [--fingerprint fp]` | create a record |
-| `ck set <id> …` | scripted edits: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--due d\|none` |
+| `ck set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--due d\|none`, `--set path=yaml` |
+| `ck rm <id>…` | delete, dropping every reference pointing at it |
 | `ck link <id> <ref> …` | append links |
 | `ck project <id>` | resolved project config and inherited instructions |
 | `ck context <id> [--json]` | everything known about a card, assembled |

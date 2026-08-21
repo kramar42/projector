@@ -1,5 +1,3 @@
-export type Kind = 'card' | 'node';
-
 export interface ProjectRepo {
   /** Absolute, `~`-prefixed, or relative to the data directory. */
   path: string;
@@ -28,10 +26,11 @@ export interface Link {
 /**
  * One record file. Facet values are always arrays, uniformly.
  *
- * There is no `kind` field and no `edges` block. Card-vs-node is an ordinary
- * facet, and so is every relation: a facet declared `ref: true` holds record ids
- * and is traversable, which is what edges were for. One relation mechanism, so
- * `parent` filters and groups exactly as `priority` does.
+ * There is no `kind` and no `edges`. A record is not a class of thing: whether it
+ * is work is whether it carries a lifecycle, and whether it contains anything is
+ * whether anything references it — both readable from the record itself, so
+ * neither is stored (C11). Every relation is a facet declared `ref: true`, which
+ * is why `parent` filters and groups exactly as `priority` does.
  */
 export interface Rec {
   id: string;

@@ -1,6 +1,5 @@
 export interface CardDTO {
   id: string;
-  kind: 'card' | 'node';
   title: string;
   isProject: boolean;
   facets: Record<string, string[]>;
@@ -78,9 +77,12 @@ export interface ViewSpec {
   title?: string;
   shape: Shape;
   query: Query;
-  edges: string[];
-  /** Which facets show on a record: chips on a face, columns in a table. */
-  chips: string[];
+  /**
+   * Which facets this view surfaces. A label draws as a chip and a column; a
+   * reference draws as those *and* a line, and the first reference lays the
+   * canvas out.
+   */
+  show: string[];
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
 }
@@ -141,7 +143,7 @@ export interface CardDetail {
   /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
   mtime: number;
   parents: { id: string; title: string }[];
-  children: { id: string; title: string; kind: string }[];
+  children: { id: string; title: string }[];
   project: {
     key: string;
     repos: { path: string; base?: string }[];

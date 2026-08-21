@@ -16,14 +16,13 @@ test('a spec survives the round trip through URL parameters', () => {
     group: 'priority,status',
     sort: 'priority:asc,updated:desc',
     uncategorised: 'start',
-    edges: 'parent,project',
-    chips: 'project,tech',
+    show: 'parent,project,tech',
   };
   const spec = parseSpec(params);
   assert.deepEqual(spec.query.filter, { project: ['project-a', NONE], blocked: ['clear'] });
   assert.deepEqual(spec.query.groupBy, ['priority', 'status']);
   assert.deepEqual(spec.query.focus, { id: 'project-b', via: 'project', dir: 'in', depth: 2 });
-  // `connect` is only written when it differs from the shape's default.
+  assert.deepEqual(spec.show, ['parent', 'project', 'tech']);
   assert.deepEqual(specToParams(spec), params);
 });
 
@@ -40,21 +39,23 @@ test('an empty selection is a statement, not an absent key', () => {
   assert.deepEqual(parseSpec({}).query.filter, {});
 });
 
-test('a canvas connects itself by default; other shapes do not', () => {
+test('connect is a property of the shape, not a control', () => {
+  // A graph has to stay connected to be readable and a column does not, and
+  // nothing but a canvas ever honoured it — so it follows the shape and there is
+  // no key to set, save or forget.
   assert.equal(parseSpec({ shape: 'canvas' }).query.connect, 'ancestors');
-  assert.equal(parseSpec({ shape: 'canvas', connect: 'none' }).query.connect, 'none');
   assert.equal(parseSpec({ shape: 'board' }).query.connect, 'none');
   assert.equal(parseSpec({ shape: 'table' }).query.connect, 'none');
+  assert.equal(parseSpec({ shape: 'canvas', connect: 'none' }).query.connect, 'ancestors');
 });
 
 test('a stale bookmark opens rather than erroring', () => {
-  const spec = parseSpec({ shape: 'mindmap', dir: 'sideways', size: 'expanded', edges: 'parent,telepathy' });
+  const spec = parseSpec({ shape: 'mindmap', dir: 'sideways', size: 'expanded', show: 'parent,telepathy' });
   assert.equal(spec.shape, 'board');
-  assert.deepEqual(spec.chips, []);
-  // Relation names are *not* checked against a list — a reference facet declared
-  // in facets.yaml has to work without a second place enumerating what exists,
-  // so an unknown one is carried through and simply draws nothing.
-  assert.deepEqual(spec.edges, ['parent', 'telepathy']);
+  // Facet names are *not* checked against a list — one declared in facets.yaml
+  // has to work without a second place enumerating what exists, so an unknown
+  // one is carried through and simply draws nothing.
+  assert.deepEqual(spec.show, ['parent', 'telepathy']);
   assert.equal(spec.query.focus, undefined);
 });
 
@@ -66,7 +67,7 @@ test('a view file reads back as the query it was written from', () => {
     groupBy: ['due'],
     sort: ['due:asc'],
     uncategorised: 'hide',
-    chips: ['project'],
+    show: ['project'],
     q: 'keycloak',
   });
   assert.equal(spec.shape, 'board');
@@ -74,17 +75,10 @@ test('a view file reads back as the query it was written from', () => {
   assert.deepEqual(spec.query.groupBy, ['due']);
   assert.deepEqual(spec.query.sort, ['due:asc']);
   assert.equal(spec.query.uncategorised, 'hide');
-  assert.deepEqual(spec.chips, ['project']);
+  assert.deepEqual(spec.show, ['project']);
   // `q` used to be written and never read back, so a saved search vanished on
   // the next open.
   assert.equal(spec.query.q, 'keycloak');
-});
-
-test('a canvas keeps `connect` across a save', () => {
-  const spec = parseSpec({ shape: 'canvas', connect: 'none' });
-  const file = specToFile(spec, 'Graph');
-  assert.equal(file.connect, 'none');
-  assert.equal(specFromFile('graph', file).query.connect, 'none');
 });
 
 test('saving writes the query half and never the arrangement', () => {
@@ -93,8 +87,7 @@ test('saving writes the query half and never the arrangement', () => {
     'f.project': 'project-a',
     'f.status': '',
     group: 'priority',
-    edges: 'parent',
-    chips: 'tech',
+    show: 'parent,tech',
   });
   spec.nodes = { project-a: { x: 10, y: 20 } };
   spec.order = { now: ['a', 'b'] };
@@ -106,8 +99,7 @@ test('saving writes the query half and never the arrangement', () => {
     // filters on, and says nothing about what it does not.
     filter: { project: ['project-a'] },
     groupBy: ['priority'],
-    edges: { show: ['parent'] },
-    chips: ['tech'],
+    show: ['parent', 'tech'],
   });
   assert.ok(!('nodes' in file));
   assert.ok(!('order' in file));
@@ -119,7 +111,7 @@ test('a file round-trips through save and reload', () => {
     'f.type': 'project',
     group: 'status',
     sort: 'title:asc',
-    chips: 'project,priority',
+    show: 'project,priority',
   });
   const reloaded = specFromFile('projects', specToFile(original, 'Projects'));
   assert.equal(reloaded.shape, 'table');
@@ -127,7 +119,7 @@ test('a file round-trips through save and reload', () => {
   assert.deepEqual(reloaded.query.groupBy, original.query.groupBy);
   assert.deepEqual(reloaded.query.sort, original.query.sort);
   // A table renders the same list as its columns, so there is no separate key.
-  assert.deepEqual(reloaded.chips, ['project', 'priority']);
+  assert.deepEqual(reloaded.show, ['project', 'priority']);
 });
 
 test('an explicitly empty focus overrides a saved one', () => {

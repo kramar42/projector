@@ -16,16 +16,10 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #                    also traversable: it lays out a canvas, walks under focus,
 #                    and refuses a cycle. open is implied and values ignored.
 #
-# Every facet is stored and written identically. There is deliberately no kind of
-# facet the app writes through some other mechanism — kind and project included.
-
-# Work, or the scaffolding that organises it. An ordinary facet: it filters,
-# groups, drags and bulk-edits through the same code path as everything else.
-kind:
-  label: Kind
-  values: [card, node]
-  open: false
-  single: true
+# Every facet is stored and written identically, project and the relations
+# included. There is deliberately no kind of facet the app writes through some
+# other mechanism — and no facet saying what class of thing a record is: that is
+# read off the record, never declared on it.
 
 # What a record is part of. A reference facet, so it is both classification and
 # structure: it filters and groups a board like any facet, and it lays out the
@@ -114,7 +108,6 @@ Agents can create and edit these files directly with Write/Edit. No API, no runn
 id: project-a-kpow-fix          # required. lowercase slug, stable, immutable
 title: Fix Kpow           # required
 facets:                   # every value is an array, even when there is one
-  kind: [card]            # card = work, node = scaffolding. An ordinary facet
   priority: [now]
   status: [active]
   tech: [k8s, kafka]
@@ -142,8 +135,9 @@ know is preserved rather than dropped — \`ck check\` reports it.
   \`status\` and \`priority\` say that holding two at once is incoherent rather than expressive.
 - **Facet names and values are validated** against \`../facets.yaml\`. A facet with \`open: false\` rejects
   new values.
-- **\`kind\` is an ordinary facet.** \`card\` is work and appears on boards; \`node\` is scaffolding that
-  organises it. Nothing about it is special — it filters, groups and drags like \`priority\`.
+- **There is no \`kind\`.** A record is not a class of thing. Whether it is work is whether it carries a
+  \`status\`, which is what keeps a grouping record off a status-filtered board; whether it contains
+  anything is whether anything names it as a \`parent\`. Both are read off the record.
 - **Relations are facets too.** A facet declared \`ref: true\` holds record **ids** rather than labels —
   \`parent\`, \`blocks\` and \`project\` are the ones that exist. Being a facet means a relation filters,
   groups a board and bulk-edits like \`priority\`; being a reference means it also draws on the canvas,
@@ -215,11 +209,10 @@ export const SEED_VIEWS: { path: string; body: string }[] = [
 shape: board
 title: Home
 filter:
-  kind: [card]
   status: [planning, active]
 groupBy: [priority]
 sort: [updated:desc]
-chips: [project, tech]
+show: [project, tech]
 uncategorised: end
 `,
   },
@@ -230,12 +223,11 @@ uncategorised: end
 shape: board
 title: Due
 filter:
-  kind: [card]
   status: [planning, active]
   due: [overdue, today, week]
 groupBy: [due]
 sort: [due:asc]
-chips: [project, priority]
+show: [project, priority]
 uncategorised: hide
 `,
   },
@@ -247,7 +239,7 @@ title: Projects
 filter:
   type: [project]
 sort: [title:asc]
-chips: [status, priority]
+show: [status, priority]
 `,
   },
   {
@@ -257,7 +249,6 @@ chips: [status, priority]
 shape: board
 title: Unblocked now
 filter:
-  kind: [card]
   status: [planning, active]
   blocked: [clear]
 groupBy: [energy]
@@ -269,8 +260,7 @@ sort: [priority:asc]
     body: `# Every record as a graph, laid out from the roots.
 shape: canvas
 title: Everything
-edges:
-  show: [parent, blocks]
+show: [parent, blocks]
 `,
   },
 ];

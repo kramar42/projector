@@ -191,7 +191,7 @@ export function BoardView({
                   key={`${lane ?? ''}/${g.value}`}
                   group={g}
                   cards={cards}
-                  chips={data.spec.chips}
+                  chips={data.spec.show}
                   selected={selected}
                   dragging={dragging}
                   groupBy={groupBy}

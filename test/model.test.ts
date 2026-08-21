@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, patchKey, patchYamlFile, serialize, split } from '../src/schema/frontmatter.ts';
-import { parseCard, renderCard } from '../src/schema/card.ts';
+import { loadCard, parseCard, renderCard } from '../src/schema/card.ts';
+import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
+import { isProject } from '../src/index/project.ts';
 import { clean, slugify, uniqueId } from '../src/import/slug.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { extractInstructions, kindOf, projectsOf, resolveProject } from '../src/index/project.ts';
+import { extractInstructions, projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { validate } from '../src/schema/validate.ts';
 import { loadFacets } from '../src/schema/facets.ts';
@@ -31,7 +33,7 @@ import {
 import { buildBriefing } from '../src/agent/briefing.ts';
 import { looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
 import { resolveCliVault } from '../src/config.ts';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -94,7 +96,6 @@ const CARD = `---
 id: demo-card
 title: Demo
 facets:
-  kind: [card]
   priority: [now]
   status: active
   parent: [project-a]
@@ -178,7 +179,6 @@ function rec(
     id,
     title: id,
     facets: {
-      kind: ['card'],
       ...(parents.length ? { parent: parents } : {}),
       ...(belongsTo.length ? { project: belongsTo } : {}),
     },
@@ -605,17 +605,14 @@ test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
 
 // ---------------------------------------------------------------- kind and due
 
-test('kind is read from the facet, and card is what a record without one is', () => {
-  const node = parseCard('/n.md', '---\nid: n\ntitle: N\nfacets: { kind: [node] }\n---\n');
-  assert.ok(node.ok);
-  assert.equal(kindOf(node.rec), 'node');
-
-  const card = parseCard('/c.md', '---\nid: c\ntitle: C\n---\n');
-  assert.ok(card.ok);
-  // No default is stored: the facet is simply absent, exactly as `priority`
-  // would be. `kindOf` is a total function over it, nothing more.
-  assert.equal(card.rec.facets.kind, undefined);
-  assert.equal(kindOf(card.rec), 'card');
+test('a record declares no class of thing; only id and title are required', () => {
+  const bare = parseCard('/c.md', '---\nid: c\ntitle: C\n---\n');
+  assert.ok(bare.ok);
+  assert.deepEqual(bare.rec.facets, {});
+  // `kind` used to live here, asserting card-vs-node. What it gated is read off
+  // the record now: no `status` keeps it off a status-filtered board, and being
+  // named as a `parent` is what makes it a container.
+  assert.equal('kind' in bare.rec.facets, false);
 });
 
 test('due round-trips as a date, and a yaml date is not a timestamp', () => {
@@ -768,5 +765,100 @@ test('the seeded vocabulary covers every facet the seeded views use', () => {
     for (const name of [...Object.keys(y.filter ?? {}), ...(y.groupBy ?? []), ...(y.chips ?? [])]) {
       assert.ok(name in facets || computed.has(name), `${view.path} uses unknown facet "${name}"`);
     }
+  }
+});
+
+// ---------------------------------------------------------------- nested set
+
+function scratchVault(): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'ck-set-'));
+  mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+  writeFileSync(pathJoin(root, 'facets.yaml'), 'status: { values: [planning, done], open: false, single: true }\n', 'utf8');
+  writeFileSync(
+    pathJoin(root, 'cards', 'x.md'),
+    '---\nid: x\n# a comment worth keeping\ntitle: X\nfacets: { status: [planning] }\n---\n\nbody\n',
+    'utf8',
+  );
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('--set writes a nested field, and YAML values carry structure', () => {
+  const { root, cleanup } = scratchVault();
+  try {
+    patchFields(root, 'x', { 'project.jira': 'PROJ' });
+    patchFields(root, 'x', { 'project.repos': '[{path: ~/a, base: main}]' });
+    const rec = loadCard(pathJoin(root, 'cards', 'x.md'));
+    assert.ok(rec.ok);
+    // A flat key=value cannot express a list of maps, which is why the value is
+    // parsed as YAML rather than split on a separator.
+    assert.equal(rec.rec.project?.jira, 'PROJ');
+    assert.deepEqual(rec.rec.project?.repos, [{ path: '~/a', base: 'main' }]);
+    // Only the touched key is rewritten, so everything else survives.
+    const text = readFileSync(pathJoin(root, 'cards', 'x.md'), 'utf8');
+    assert.match(text, /# a comment worth keeping/);
+    assert.equal(text.endsWith('\nbody\n'), true);
+  } finally {
+    cleanup();
+  }
+});
+
+test('--set project={} makes a project and --set project= unmakes one', () => {
+  const { root, cleanup } = scratchVault();
+  try {
+    patchFields(root, 'x', { project: '{}' });
+    const made = loadCard(pathJoin(root, 'cards', 'x.md'));
+    assert.ok(made.ok);
+    assert.equal(isProject(made.rec), true);
+    patchFields(root, 'x', { project: '' });
+    const after = loadCard(pathJoin(root, 'cards', 'x.md'));
+    assert.ok(after.ok);
+    assert.equal(after.rec.project, undefined);
+  } finally {
+    cleanup();
+  }
+});
+
+test('--set is validated against the result, not the input', () => {
+  const { root, cleanup } = scratchVault();
+  try {
+    // The same vocabulary rules as any other write: a single facet cannot hold
+    // two, and `id` is refused because other records reference it.
+    assert.throws(() => patchFields(root, 'x', { 'facets.status': '[planning, done]' }), /one value at a time/);
+    assert.throws(() => patchFields(root, 'x', { id: 'y' }), /id cannot be changed/);
+    assert.throws(() => patchFields(root, 'x', { 'facets.nope': '[a]' }), /unknown facet/);
+    assert.throws(() => patchFields(root, 'x', { due: '"next friday"' }), /YYYY-MM-DD/);
+    assert.throws(() => patchFields(root, 'x', { 'title.deep': 'x' }), /not a mapping/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a caller-supplied id is honoured or refused, never silently changed', () => {
+  const { root, cleanup } = scratchVault();
+  try {
+    assert.equal(createCard(root, { title: 'Whatever', id: 'chosen' }).id, 'chosen');
+    // Something is about to reference this by name, so a collision is an error
+    // rather than a quietly suffixed id.
+    assert.throws(() => createCard(root, { title: 'Again', id: 'chosen' }), /already taken/);
+    assert.throws(() => createCard(root, { title: 'Bad', id: 'Not A Slug' }), /lowercase slug/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('deleting a record drops every reference pointing at it', () => {
+  const { root, cleanup } = scratchVault();
+  try {
+    writeFileSync(pathJoin(root, 'facets.yaml'), 'parent: { ref: true, single: true }\n', 'utf8');
+    createCard(root, { title: 'Container', id: 'box' });
+    createCard(root, { title: 'Inside', id: 'thing', parent: 'box' });
+    const { removedEdges } = deleteCard(root, 'box');
+    assert.equal(removedEdges, 1);
+    const left = loadCard(pathJoin(root, 'cards', 'thing.md'));
+    assert.ok(left.ok);
+    // A dangling reference is what removing the file by hand leaves behind.
+    assert.equal(left.rec.facets.parent, undefined);
+  } finally {
+    cleanup();
   }
 });

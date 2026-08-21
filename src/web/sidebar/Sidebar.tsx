@@ -54,7 +54,7 @@ export function Sidebar({
       <div className="rail-block">
         <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
         <div className="rail-stats">
-          {meta.counts.cards} cards · {meta.counts.nodes} nodes · {meta.counts.projects} projects
+          {meta.counts.records} records · {meta.counts.projects} projects
         </div>
         <SavedViews
           views={data?.views ?? meta.views}
@@ -397,33 +397,42 @@ function FacetsSection({
   data: QueryResponse | null;
   patch: (p: Patch) => void;
 }) {
-  const chips = data?.spec.chips ?? [];
-  const available = Object.entries(meta.facets).map(([name, def]) => ({ name, label: def.label }));
+  const show = data?.spec.show ?? [];
+  const available = Object.entries(meta.facets).map(([name, def]) => ({
+    name,
+    label: def.label,
+    ref: def.ref,
+  }));
   const table = data?.spec.shape === 'table';
+  const canvas = data?.spec.shape === 'canvas';
 
   return (
     <div className="rail-row">
       <label className="rail-label">Facets</label>
       <PopoverButton
         className="chipsbtn"
-        minWidth={200}
-        label={table ? columnsLabel(chips) : chipsLabel(chips)}
+        minWidth={210}
+        label={table ? columnsLabel(show) : chipsLabel(show)}
+        title="which facets this view surfaces — a reference facet also draws on a canvas, and the first one lays it out"
         render={() => (
           <>
-            <div className="pop-head">{table ? 'Columns' : 'Shown on a card'}</div>
+            <div className="pop-head">{table ? 'Columns' : 'Shown on a record'}</div>
             {available.map((f) => (
               <label key={f.name} className="pop-check">
                 <input
                   type="checkbox"
-                  checked={chips.includes(f.name)}
+                  checked={show.includes(f.name)}
                   onChange={(e) => {
                     const next = e.target.checked
-                      ? [...chips, f.name]
-                      : chips.filter((c) => c !== f.name);
-                    patch({ chips: next.join(',') || '' });
+                      ? [...show, f.name]
+                      : show.filter((c) => c !== f.name);
+                    patch({ show: next.join(',') || '' });
                   }}
                 />
                 {f.label}
+                {/* Only a canvas can act on the difference, so only a canvas
+                    says it: order decides which relation lays the graph out. */}
+                {f.ref && canvas && <span className="pop-note">drawn</span>}
               </label>
             ))}
           </>

@@ -21,7 +21,7 @@ export function TableView({
   data: QueryResponse;
   onOpen: (id: string) => void;
 }) {
-  const chips = data.spec.chips;
+  const chips = data.spec.show;
   // A project row earns the roll-up columns; a table of ordinary cards has
   // nothing to put in them.
   const projects = data.ids.some((id) => data.cards[id]?.isProject);

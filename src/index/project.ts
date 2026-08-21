@@ -1,18 +1,7 @@
-import type { Kind, ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
+import type { ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
 import { resolvePath } from '../config.ts';
 import { adjacency, chains } from './refs.ts';
 
-/**
- * Card or node, from the `kind` facet.
- *
- * A derived accessor, like `isProject` — the value is stored as an ordinary
- * facet so it filters and groups through the one code path, and this is just the
- * convenient way to ask. `parseCard` guarantees the facet is present, so the
- * fallback here only covers records built in memory.
- */
-export function kindOf(rec: Pick<Rec, 'facets'>): Kind {
-  return rec.facets.kind?.[0] === 'node' ? 'node' : 'card';
-}
 
 /** What a record is part of. An ordinary reference facet, read by name. */
 export function parentsOf(rec: Pick<Rec, 'facets'>): string[] {

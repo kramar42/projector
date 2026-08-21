@@ -1,7 +1,7 @@
 import { paths } from '../config.ts';
 import { adjacency } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
-import { kindOf, parentsOf, resolveProject } from '../index/project.ts';
+import { parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
 import type { Resolved } from '../server/enrich.ts';
@@ -16,7 +16,6 @@ import type { Resolved } from '../server/enrich.ts';
  */
 export interface CardContext {
   id: string;
-  kind: 'card' | 'node';
   title: string;
   isProject: boolean;
   file: string;
@@ -24,7 +23,7 @@ export interface CardContext {
   body: string;
   project: ResolvedProject | null;
   parents: { id: string; title: string }[];
-  children: { id: string; title: string; kind: string }[];
+  children: { id: string; title: string }[];
   /** Records that must finish before this one, and whether they have. */
   blockedBy: { id: string; title: string; done: boolean }[];
   /** Records this one unblocks, directly. */
@@ -66,7 +65,6 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
 
   return {
     id: rec.id,
-    kind: kindOf(rec),
     title: rec.title,
     isProject: !!rec.project,
     file: rec.file.replace(p.root + '/', ''),
@@ -76,7 +74,7 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     parents: parentIds.map((pid) => records.get(pid)).filter((r): r is Rec => !!r).map(brief),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(id))
-      .map((r) => ({ id: r.id, title: r.title, kind: kindOf(r) })),
+      .map((r) => ({ id: r.id, title: r.title })),
     blockedBy: blockers.map((r) => ({ ...brief(r), done: isDone(r) })),
     blocks: along(adj.out).map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
@@ -101,7 +99,6 @@ export function untriaged(dataRoot: string): Untriaged[] {
   const { records } = readAll(paths(dataRoot).cards);
   const out: Untriaged[] = [];
   for (const rec of records.values()) {
-    if (kindOf(rec) !== 'card') continue;
     const reasons: string[] = [];
     if (!rec.facets.project?.length && !rec.project) reasons.push('no project');
     if (!rec.facets.priority?.length) reasons.push('no priority');
@@ -120,7 +117,7 @@ export function renderContext(ctx: CardContext): string {
   const L: string[] = [];
   L.push(`# ${ctx.title}`);
   L.push('');
-  L.push(`- id: \`${ctx.id}\`  ·  kind: ${ctx.kind}${ctx.isProject ? ' (project)' : ''}`);
+  L.push(`- id: \`${ctx.id}\`${ctx.isProject ? '  ·  a project: it owns config its members inherit' : ''}`);
   L.push(`- file: \`${ctx.file}\``);
   const facets = Object.entries(ctx.facets)
     .map(([k, v]) => `${k}=${v.join(',')}`)

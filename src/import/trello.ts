@@ -166,7 +166,7 @@ export function importTrello(
         out.push({
           id,
           title: clean(section[1]!),
-          facets: { kind: ['node'], ...(projectId ? { parent: [projectId] } : {}) },
+          facets: projectId ? { parent: [projectId] } : {},
           links: [],
           created: today(),
           updated: today(),

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.ts';
+import { markOf } from './CardBody.tsx';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -64,7 +65,7 @@ export function RecordPicker({
         </button>
         {matches.map((r) => (
           <button key={r.id} className="picker-item" onClick={() => onPick(r.id)}>
-            <span className="picker-mark">{r.isProject ? '▣' : r.kind === 'node' ? '○' : '·'}</span>
+            <span className="picker-mark">{markOf(r).glyph}</span>
             <span className="picker-title">{r.title}</span>
             {r.facets.project?.length ? (
               <span className="picker-proj">{r.facets.project.join(', ')}</span>

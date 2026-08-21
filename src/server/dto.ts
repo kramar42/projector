@@ -1,12 +1,11 @@
 import { fallbackLabel } from '../schema/links.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
-import { isProject, kindOf } from '../index/project.ts';
+import { isProject } from '../index/project.ts';
 import { dueBucket, type DueBucket } from '../index/query.ts';
 
 /** What the web app receives for one record. Everything here is derived, never guessed (C8). */
 export interface CardDTO {
   id: string;
-  kind: 'card' | 'node';
   title: string;
   isProject: boolean;
   facets: Record<string, string[]>;
@@ -68,7 +67,6 @@ export function toDTO(
 ): CardDTO {
   return {
     id: rec.id,
-    kind: kindOf(rec),
     title: rec.title,
     isProject: isProject(rec),
     facets: rec.facets,

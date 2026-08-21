@@ -444,6 +444,15 @@ body {
   flex: none;
 }
 
+.pop-note {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .pop-check {
   display: flex;
   align-items: center;
@@ -740,11 +749,6 @@ body {
   border-left: 3px solid var(--accent);
 }
 
-.cardface.is-node {
-  background: var(--surface-2);
-  border-style: dashed;
-}
-
 .cardface.is-blocked {
   border-left: 3px solid var(--bad);
 }
@@ -756,7 +760,7 @@ body {
 }
 
 /*
- * The kind mark, optically centred on the lowercase text beside it.
+ * The record mark, optically centred on the lowercase text beside it.
  *
  * Three things have to be true, and none of them was:
  *
@@ -783,11 +787,11 @@ body {
   align-self: baseline;
 }
 
-.kindmark.is-card {
+.kindmark.is-leaf {
   transform: translateY(0.03em);
 }
 
-.kindmark.is-node,
+.kindmark.is-container,
 .kindmark.is-project {
   transform: translateY(-0.058em);
 }

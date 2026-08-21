@@ -152,7 +152,7 @@ export function CanvasView({
     // Stored positions only ever come from a saved view. An ad-hoc query has no
     // file to hold arrangement, so it is auto-laid-out — naming a view is what
     // buys manual positioning (C9).
-    const hierarchy = layoutTypes(data.spec.edges);
+    const hierarchy = layoutTypes(data.spec.show, meta.facets);
     const placed = Object.keys(stored).length
       ? manualLayout(shown, data.edges, stored, hierarchy)
       : treeLayout(shown, data.edges, 'LR', hierarchy);
@@ -171,7 +171,7 @@ export function CanvasView({
         style: { width: p.w, height: p.h },
         data: {
           card,
-          chips: data.spec.chips,
+          chips: data.spec.show,
           context: context.has(card.id),
           onOpen,
         },
@@ -257,10 +257,12 @@ export function CanvasView({
   );
 
   const addNode = async () => {
-    const title = prompt('New node — a thought, canvas only. Title:');
+    const title = prompt('New record. Title:');
     if (!title?.trim()) return;
     try {
-      await api.createCard({ title: title.trim(), facets: { kind: ['node'] } });
+      // No facets: a record with no status is not on any status-filtered board,
+      // which is what "just a node" ever meant.
+      await api.createCard({ title: title.trim() });
       reload();
     } catch (err) {
       setProblem((err as ApiError).message);
@@ -289,50 +291,13 @@ export function CanvasView({
         </ReactFlow>
 
         {/*
-          Everything a canvas has that the other shapes do not — geometry and
-          edges — lives here rather than in the rail, so switching shape never
-          changes the sidebar. Transient actions (Save layout, + node) float for
-          the same reason: a control that appears and vanishes mid-rail makes the
-          whole thing jump.
+          What floats here is what only a canvas can do *and* only while a canvas
+          is open: creating a relation by dragging, adding a record, saving a
+          layout. Which facets are drawn is `show`, which every shape has, so it
+          lives in the rail — and keeping context is now a property of the shape
+          rather than a control, since nothing but a canvas ever honoured it.
         */}
         <div className="canvas-float">
-          <PopoverButton
-            className="floatbtn"
-            minWidth={170}
-            label={edgeLabel(data.spec.edges)}
-            title="which edge types are drawn — the hierarchy ones also lay the graph out"
-            render={() => (
-              <>
-                <div className="pop-head">Edges drawn</div>
-                {relations(meta).map((kind) => (
-                  <label key={kind} className="pop-check">
-                    <input
-                      type="checkbox"
-                      checked={data.spec.edges.includes(kind)}
-                      onChange={(e) => {
-                        const next = new Set(data.spec.edges);
-                        if (e.target.checked) next.add(kind);
-                        else next.delete(kind);
-                        patch({ edges: [...next].join(',') || 'parent' });
-                      }}
-                    />
-                    {kind}
-                  </label>
-                ))}
-              </>
-            )}
-          />
-
-          <select
-            className="floatselect"
-            value={data.spec.query.connect ?? 'ancestors'}
-            title="keep unmatched ancestors so the graph stays connected — drawn muted, never counted as matches"
-            onChange={(e) => patch({ connect: e.target.value })}
-          >
-            <option value="ancestors">keep context</option>
-            <option value="none">matches only</option>
-          </select>
-
           <label className="edgepick">
             drag creates
             <select value={newEdgeType} onChange={(e) => setNewEdgeType(e.target.value)}>
@@ -345,7 +310,7 @@ export function CanvasView({
           </label>
 
           <button className="btn small" onClick={() => void addNode()}>
-            + node
+            + record
           </button>
           {dirty && !naming && (
             <button
@@ -405,12 +370,6 @@ function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: str
 }
 
 /** A short reading of the edge selection, so the button says what it holds. */
-function edgeLabel(edges: string[]): string {
-  if (!edges.length) return 'no edges';
-  if (edges.length === 1) return edges[0]!;
-  return `${edges.length} edge types`;
-}
-
 function slug(text: string): string {
   return text
     .trim()

@@ -13,13 +13,13 @@ number.
 | C1 | Markdown files are the source of truth | any index is derived and disposable |
 | C2 | Everything external is read-only | no code path writes to Jira, GitHub, Trello or Slack |
 | C3 | Cards stay agent-editable | an agent edits them with plain file writes — no API, no app running |
-| C4 | No facet is privileged | every axis, `kind` and `project` included, is stored, filtered, grouped and written the same way |
+| C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
 | C5 | Every shape is equally first-class | all three are editable, not just viewable |
 | C6 | The card body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is records and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
-| C9 | A view is a query, not a place | `view = filter × focus × shape × facets`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
+| C9 | A view is a query, not a place | `view = filter × focus × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
 | C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?card=` |
 
 ## The pipeline
@@ -66,11 +66,11 @@ histogram; in JS they need one function and the rest of the engine cannot tell t
 the two jobs it is genuinely better at: full text (FTS5) and the recursive `blocks` closure — and both
 now read the `facets` table, since a relation is a facet value like any other.
 
-**Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field, which made
-it a real facet given a bespoke home — a top-level frontmatter key, a zod enum, a patch field and a
-button of its own. It is declared in `facets.yaml` now and reaches the panel the ordinary way, and the
-`records` table carries no column shadowing it (C4). `type` and `is_project` are derived from the
-`project:` block, which is not a facet, so those do earn their place.
+**Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field. Moving it
+into `facets.yaml` showed it asserted two things the record already said — carrying a `status` is what
+makes it work, being named as a `parent` is what makes it a container — so it is gone entirely (C11).
+`type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
+their place.
 
 **Universe vs. hits.** `universe` is what focus and search left; `hits` is that narrowed by the facet
 filter. The distinction is load-bearing in two places: the sidebar reports `universe − total` as
@@ -182,10 +182,14 @@ expects regardless of intent, and the two disagree often enough to need both. Th
 have one definition, in `dueBucket` — the card face asks it rather than comparing dates of its own, so
 the face and the filter panel cannot disagree about where "overdue" begins.
 
-**One face, for every record.** There was a smaller `chip` face for plain nodes, on the reasoning that
-a node has no facets to draw. It does not hold — a node carries facets like anything else, and how much
-of a record to draw is a property of the *view*, which is what `chips` is. Two faces meant the same
-card changed shape depending on a stored field.
+**One face, for every record**, and one list saying what it shows. `chips` and `edges.show` asked the
+same question — *which facets does this view surface* — and how each is drawn follows from what it is:
+a label is a chip and a column, a reference is those *and* a line, and the first reference in `show`
+lays the canvas out. Two keys meant "why does my canvas draw nothing" was answered by the one you
+forgot.
+
+**`connect` follows the shape.** Only a canvas ever honoured it, so it is not a query key and there is
+nothing to set, save or lose.
 
 **Conflicts are refused, not merged.** A card read into the panel carries its file mtime; a write sends
 it back and a mismatch is a 409. This matters because an agent may be editing the same file in another

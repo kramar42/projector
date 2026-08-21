@@ -21,7 +21,7 @@ import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
-import { kindOf, resolveProject, parentsOf } from '../index/project.ts';
+import { resolveProject, parentsOf } from '../index/project.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { blockersOf, counts, unblocks } from '../index/queries.ts';
 import { toDTO } from './dto.ts';
@@ -283,7 +283,7 @@ app.get('/api/query', (c) => {
     total: res.total,
     universe: res.universe,
     placements: res.placements,
-    edges: edgesAmong(records, new Set(shown), spec.edges),
+    edges: edgesAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
     rollups: projectRollups(records, new Date().toISOString().slice(0, 10)),
@@ -292,18 +292,22 @@ app.get('/api/query', (c) => {
 });
 
 /**
- * The relations to draw: every reference in `show` with both ends on screen.
+ * The relations to draw: every *reference* facet in `show`, with both ends shown.
  *
- * One reader for every relation, since every relation is a reference facet — a
- * name that no facet declares simply draws nothing.
+ * `show` mixes labels and references, and the filter to references is not
+ * cosmetic: a label facet whose value happened to equal a record id would
+ * otherwise read as a relation. `source: [git]` next to a record called `git` is
+ * unlikely and would be a real bug.
  */
 function edgesAmong(
   records: Map<string, Rec>,
+  facets: Facets,
   ids: Set<string>,
   show: string[],
 ): { src: string; dst: string; type: string }[] {
   const out: { src: string; dst: string; type: string }[] = [];
   for (const via of show) {
+    if (!facets[via]?.ref) continue;
     for (const e of refsOf(via, records)) {
       if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
     }
@@ -333,7 +337,7 @@ app.get('/api/card/:id', (c) => {
       .map((r) => ({ id: r!.id, title: r!.title })),
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))
-      .map((r) => ({ id: r.id, title: r.title, kind: kindOf(r) })),
+      .map((r) => ({ id: r.id, title: r.title })),
     project,
   });
 });

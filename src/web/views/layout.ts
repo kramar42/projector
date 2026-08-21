@@ -30,20 +30,20 @@ export function dims(_card: CardDTO): { w: number; h: number } {
 }
 
 /**
- * Which relation gives a canvas its shape: the **first** one shown.
+ * Which relation gives a canvas its shape: the **first reference facet** in
+ * `show`.
  *
  * A hierarchy can lay a graph out and a cross-cutting relation cannot — a
  * blocker pointing sideways across the tree distorts every rank it crosses — but
  * which is which is a property of the view rather than of the relation. Put
- * `parent` first and `blocks` second and you get a decomposition tree with
- * dependencies drawn over it; put `project` first and you get the portfolio.
+ * `parent` before `blocks` and you get a decomposition tree with dependencies
+ * drawn over it; put `project` first and you get the portfolio.
  *
- * This has to follow what is *shown*. A membership canvas has no parent edges at
- * all, and laying it out by parent put 27 records in one column with the
- * hierarchy invisible.
+ * Label facets in `show` are skipped, since they name no records to lay out.
  */
-export function layoutTypes(shown: string[]): string[] {
-  return shown.length ? [shown[0]!] : ['parent'];
+export function layoutTypes(show: string[], facets: Record<string, { ref: boolean }>): string[] {
+  const first = show.find((name) => facets[name]?.ref);
+  return first ? [first] : [];
 }
 
 /**

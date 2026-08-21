@@ -20,7 +20,7 @@ const CARDS: Record<string, string> = {
   project-b: `---
 id: project-b
 title: Project B
-facets: { kind: [card], status: [active] }
+facets: { status: [active] }
 project: {}
 updated: 2026-08-19
 ---
@@ -28,7 +28,8 @@ updated: 2026-08-19
   keycloak: `---
 id: keycloak
 title: Keycloak
-facets: { kind: [card], project: [project-b], status: [active], priority: [now] }
+facets: { project: [project-b], status: [active], priority: [now] }
+links: [jira:PROJ-1, "https://example.com/x"]
 project: {}
 updated: 2026-08-19
 ---
@@ -36,14 +37,15 @@ updated: 2026-08-19
   'kc-realms': `---
 id: kc-realms
 title: Realm provisioning
-facets: { kind: [card], project: [keycloak], status: [planning], priority: [month], tech: [keycloak] }
+facets: { project: [keycloak], status: [planning], priority: [month], tech: [keycloak] }
+links: [doc:notes.md]
 updated: 2026-08-18
 ---
 `,
   project-a: `---
 id: project-a
 title: Project A
-facets: { kind: [card], status: [active] }
+facets: { status: [active] }
 project: {}
 updated: 2026-08-01
 ---
@@ -58,35 +60,34 @@ updated: 2026-07-01
   'kafka-schema': `---
 id: kafka-schema
 title: Glue schema registry
-facets: { kind: [card], project: [project-a], priority: [now], status: [planning], tech: [kafka], parent: [project-a-eventing] }
+facets: { project: [project-a], priority: [now], status: [planning], tech: [kafka], parent: [project-a-eventing] }
 updated: 2026-08-20
 ---
 `,
   blocker: `---
 id: blocker
 title: Must land first
-facets: { kind: [card], status: [active], priority: [now], blocks: [blocked-card] }
+facets: { status: [active], priority: [now], blocks: [blocked-card] }
 updated: 2026-08-20
 ---
 `,
   'blocked-card': `---
 id: blocked-card
 title: Waits on the blocker
-facets: { kind: [card], status: [planning], priority: [now], project: [project-a] }
+facets: { status: [planning], priority: [now], project: [project-a] }
 updated: 2026-08-20
 ---
 `,
   loose: `---
 id: loose
 title: No project and no priority
-facets: { kind: [card], status: [planning] }
+facets: { status: [planning] }
 updated: 2026-01-01
 ---
 `,
 };
 
 const FACETS = `
-kind:       { label: Kind,     values: [card, node], open: false, single: true }
 parent:     { label: Part of,  ref: true, single: true }
 blocks:     { label: Blocks,   ref: true }
 priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
@@ -581,7 +582,7 @@ const DATED: Record<string, string> = {
   'ship-it': `---
 id: ship-it
 title: Ship it
-facets: { kind: [card], status: [active] }
+facets: { status: [active] }
 due: 2026-08-18
 updated: 2026-08-19
 ---
@@ -589,7 +590,7 @@ updated: 2026-08-19
   'ask-person-a': `---
 id: ask-person-a
 title: Ask Person A
-facets: { kind: [card], status: [planning], waiting_on: [person-a] }
+facets: { status: [planning], waiting_on: [person-a] }
 due: 2026-08-24
 updated: 2026-08-19
 ---
@@ -597,14 +598,14 @@ updated: 2026-08-19
   someday: `---
 id: someday
 title: No deadline
-facets: { kind: [card], status: [planning] }
+facets: { status: [planning] }
 updated: 2026-08-19
 ---
 `,
   blocker: `---
 id: gate
 title: Gate
-facets: { kind: [card], status: [active], blocks: [someday] }
+facets: { status: [active], blocks: [someday] }
 updated: 2026-08-19
 ---
 `,
@@ -665,15 +666,17 @@ test('blocked and waiting are both derived onto one axis', () => {
   }
 });
 
-test('kind is an ordinary facet, not a computed axis', () => {
+test('there is no kind axis, stored or computed', () => {
   const { root, cleanup } = vault();
   try {
-    assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
-    // It reaches the filter panel as a stored facet — `pseudo` is false, which
-    // is what says it is no longer given a home of its own.
-    const kind = open(root)({}).counts.find((c) => c.facet === 'kind');
-    assert.ok(kind);
-    assert.equal(kind.pseudo, false);
+    const offered = open(root)({}).counts.map((c) => c.facet);
+    assert.ok(!offered.includes('kind'));
+    // What it used to gate: a record with no status is off a status-filtered
+    // board, and a record something is part of is a container.
+    const noStatus = ids(root, { filter: { status: [NONE] } });
+    assert.ok(noStatus.includes('project-a-eventing'));
+    assert.ok(!ids(root, { filter: { status: ['active', 'planning'] } }).includes('project-a-eventing'));
+    assert.deepEqual(ids(root, { filter: { parent: ['project-a'] } }), ['project-a-eventing']);
   } finally {
     cleanup();
   }
@@ -704,7 +707,7 @@ test('a value naming a record that does not exist is not a reference', () => {
   try {
     writeFileSync(
       join(root, 'cards', 'orphan.md'),
-      '---\nid: orphan\ntitle: Orphan\nfacets: { kind: [card], project: [gone] }\n---\n',
+      '---\nid: orphan\ntitle: Orphan\nfacets: { project: [gone] }\n---\n',
       'utf8',
     );
     const { records } = reindex(root);
@@ -765,3 +768,23 @@ test('the blocked axis reads the blocks facet, and a done blocker stops blocking
     cleanup();
   }
 });
+
+test('the linked axis makes external references askable', () => {
+  const { root, cleanup } = vault();
+  try {
+    // Every axis on a card was askable except this one, across the 90 records
+    // here that carry a link.
+    assert.deepEqual(ids(root, { filter: { linked: ['jira'] } }), ['keycloak']);
+    assert.deepEqual(ids(root, { filter: { linked: ['doc'] } }), ['kc-realms']);
+    // A record with no links has no value, so absence is the ordinary (none).
+    assert.ok(ids(root, { filter: { linked: [NONE] } }).includes('project-a'));
+    // One record, two kinds: it lands in every bucket it carries.
+    assert.deepEqual(ids(root, { filter: { linked: ['url'] } }), ['keycloak']);
+    const axis = open(root)({}).counts.find((c) => c.facet === 'linked');
+    assert.ok(axis);
+    assert.equal(axis.pseudo, true);
+  } finally {
+    cleanup();
+  }
+});
+

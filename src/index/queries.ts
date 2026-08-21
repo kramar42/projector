@@ -129,11 +129,9 @@ export function counts(db: DatabaseSync): Record<string, number> {
   const one = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
   return {
     records: one('SELECT count(*) AS n FROM records'),
-    // `kind` lives in the facets table like every other facet; there is no
-    // column shadowing it in `records`.
-    cards: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'card'"),
-    nodes: one("SELECT count(*) AS n FROM facets WHERE facet = 'kind' AND value = 'node'"),
     projects: one('SELECT count(*) AS n FROM records WHERE is_project = 1'),
+    // A container is a record something is part of — derived, like the glyph.
+    containers: one("SELECT count(DISTINCT value) AS n FROM facets WHERE facet = 'parent'"),
     // Relations are facet values, so there is no separate table to count.
     relations: one(
       "SELECT count(*) AS n FROM facets WHERE facet IN ('parent', 'blocks', 'project')",

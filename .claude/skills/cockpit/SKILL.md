@@ -30,8 +30,9 @@ alias ck='node "$PWD/src/cli/ck.ts"'   # from the cockpit project root
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
    are independent, so a card may have either, both or neither. Set it with `--parent X`, which is
    `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers `ck next`.
-4. **`kind` is an ordinary facet too** — `[card]` for work, `[node]` for scaffolding. Nothing about it
-   is special: set it with `--facet kind=node` like any other axis. There is no top-level `kind:` key.
+4. **There is no `kind`.** A record is not a class of thing. Whether it is work is whether it carries a
+   `status` — which is what keeps a grouping record off a status-filtered board — and whether it
+   contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
 5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
    from a non-empty `waiting_on`; neither is a status. `status` is lifecycle only.
 6. **`due` is a field, not a facet.** `priority` is what you intend to do next; `due` is what the world
@@ -47,6 +48,7 @@ ck ls --group project        # or any facet
 ck ls --focus project-a --via project --dir in    # the whole portfolio, transitively
 ck ls --focus project-a --via parent --dir in     # everything decomposed under it
 ck ls --group parent                        # or filter parent=X, or parent=(none)
+ck ls --filter linked=jira                  # which records carry a Jira link
                                             # out = follows references, in = referenced by
 ck ls --filter status=active,planning
 ck next                      # open cards with no unfinished blocker
@@ -65,8 +67,11 @@ re-derive those by reading files.
 ## Writing
 
 ```bash
-ck add "<title>" [--facet f=v] [--link ref] [--parent id] [--due d] [--fingerprint fp] [--body text]
-ck set <id> [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due d|none]
+ck add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--due d] [--fingerprint fp] [--body text]
+ck set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none] [--due d|none]
+ck set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
+ck set <id> --set 'project={}'      # this is how a record becomes a project
+ck rm <id>...                       # deletes, dropping every reference pointing at it
 ck link <id> <ref> [...]
 ck link-session <id>         # link the live Claude session working in this directory
 ck check                     # validate everything; run this after a batch of edits
@@ -78,6 +83,7 @@ refilling the inbox.
 
 ## Rules that matter
 
+- **An unknown flag is an error.** `ck` used to drop them silently, so a typo looked like success.
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
   `planning|active|frozen|done|dropped`; `energy` is `deep|shallow|decide|delegate`. Check
   `cockpit/data/facets.yaml` before inventing a value; `ck set` will refuse anyway.

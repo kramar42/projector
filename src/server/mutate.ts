@@ -166,6 +166,8 @@ export function createCard(
   root: string,
   input: {
     title: string;
+    /** Overrides the slug derived from the title. Refused if already taken. */
+    id?: string;
     parent?: string;
     facets?: Record<string, string[]>;
     body?: string;
@@ -190,7 +192,13 @@ export function createCard(
       if (rec.source_fingerprint === input.fingerprint) return { id: rec.id, existed: true };
     }
   }
-  const id = uniqueId(slugify(title), new Set(records.keys()));
+  const id = input.id ?? uniqueId(slugify(title), new Set(records.keys()));
+  if (input.id) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(input.id)) throw new Invalid(`"${input.id}" is not a lowercase slug`);
+    // Never silently pick a different id than the caller asked for: something is
+    // about to reference this one by name.
+    if (records.has(input.id)) throw new Invalid(`id "${input.id}" is already taken`);
+  }
   // `parent` is a reference facet, so a caller's `parent` is one more facet
   // value rather than a separate structure.
   const facets = { ...(input.facets ?? {}), ...(input.parent ? { parent: [input.parent] } : {}) };
@@ -316,6 +324,86 @@ export function bulkDelete(root: string, ids: string[]): { deleted: number } {
 
 function same(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * Set frontmatter fields by dotted path, with YAML values.
+ *
+ *   project.jira=SUPPORT
+ *   project.repos=[{path: ~/Code/work/infra, base: main}]
+ *   project={}                 → this is what "make it a project" is
+ *   project=                   → and this is "stop being one"
+ *
+ * One mechanism rather than a verb per structure. `project:` is a block, not a
+ * facet, so no amount of facet machinery reaches it — and a flat `key=value`
+ * cannot express a list of maps, so the value is parsed as YAML. That also makes
+ * `facets.priority=[now]` work, which is `--facet` spelled generally.
+ *
+ * Only the top-level keys actually touched are rewritten, so comments and hand
+ * formatting elsewhere in the file survive (C1).
+ */
+export function patchFields(
+  root: string,
+  id: string,
+  sets: Record<string, string>,
+  baseMtime?: number,
+): { mtime: number } {
+  const file = fileFor(root, id);
+  guard(file, baseMtime);
+
+  const text = readFileSync(file, 'utf8');
+  const { yaml } = split(text);
+  const fm = (parseDoc(yaml ?? '').toJS() ?? {}) as Record<string, unknown>;
+  const touched = new Set<string>();
+
+  for (const [path, raw] of Object.entries(sets)) {
+    const parts = path.split('.').filter(Boolean);
+    if (!parts.length) throw new Invalid('a --set needs a field name');
+    const top = parts[0]!;
+    if (top === 'id') throw new Invalid('id cannot be changed — other records reference it');
+    touched.add(top);
+
+    let value: unknown;
+    if (raw === '') value = undefined;
+    else {
+      try {
+        value = parseDoc(raw).toJS();
+      } catch (err) {
+        throw new Invalid(`${path}: not valid YAML — ${(err as Error).message}`);
+      }
+    }
+
+    // Walk to the parent of the leaf, creating plain objects on the way.
+    let cursor: Record<string, unknown> = fm;
+    for (const part of parts.slice(0, -1)) {
+      const next = cursor[part];
+      if (next === undefined || next === null) cursor[part] = {};
+      else if (typeof next !== 'object' || Array.isArray(next)) {
+        throw new Invalid(`${path}: "${part}" is not a mapping`);
+      }
+      cursor = cursor[part] as Record<string, unknown>;
+    }
+    const leaf = parts.at(-1)!;
+    if (value === undefined) delete cursor[leaf];
+    else cursor[leaf] = value;
+  }
+
+  // The same checks as any other write, against the result rather than the input.
+  const check = frontmatterSchema.safeParse({ ...fm, id });
+  if (!check.success) {
+    throw new Invalid(
+      check.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '),
+    );
+  }
+  const facets: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries((check.data.facets ?? {}) as Record<string, unknown>)) {
+    facets[k] = (Array.isArray(v) ? v : [v]).filter((x) => x != null).map(String);
+  }
+  checkFacets(root, id, facets, readAll(paths(root).cards).records);
+  if (typeof check.data.due === 'string') checkDue(check.data.due);
+
+  for (const key of touched) patchAll(file, { [key]: fm[key] });
+  return { mtime: mtimeOf(file) };
 }
 
 /**
