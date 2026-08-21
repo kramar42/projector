@@ -398,6 +398,11 @@ export function CanvasView({
  *
  * This is the materialisation step, not a convenience: arrangement lives in a
  * file, so it needs a file to live in.
+ *
+ * The typed name goes up verbatim. The server derives the slug and returns it,
+ * so there is one answer to "what is this view called" (C11) — slugging here too
+ * meant a third implementation of it, and it also slugged the *title*, so
+ * "Project A Portfolio" was saved as `project-a-portfolio`.
  */
 function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: string) => void }) {
   const [text, setText] = useState('');
@@ -410,21 +415,13 @@ function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: str
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') onCancel();
-          if (e.key === 'Enter' && text.trim()) onSave(slug(text));
+          if (e.key === 'Enter' && text.trim()) onSave(text.trim());
         }}
       />
-      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(slug(text))}>
+      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
         Save
       </button>
     </span>
   );
 }
 
-/** A short reading of the edge selection, so the button says what it holds. */
-function slug(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
