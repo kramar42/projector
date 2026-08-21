@@ -9,7 +9,8 @@ import type { CardDTO, Group, QueryResponse } from '../types.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import { applyOrder } from '../query.ts';
+import { groupsFor, labelFor } from './groups.ts';
+import { Button, IconButton } from '../components/Button.tsx';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -57,10 +58,12 @@ export function BoardView({
    */
   const orderedFor = useCallback(
     (column: string): string[] => {
+      // The payload arrives in the view's order, so this is the union across lanes
+      // and nothing more.
       const ids = data.groups
         ? data.groups.filter((g) => g.value === column).flatMap((g) => g.ids)
         : data.ids;
-      return applyOrder([...new Set(ids)], data.spec.order?.[column]);
+      return [...new Set(ids)];
     },
     [data],
   );
@@ -164,10 +167,8 @@ export function BoardView({
       return next;
     });
 
-  const columns = (lane: string | undefined): Group[] =>
-    (data.groups ? data.groups.filter((g) => g.lane === lane) : [{ value: '', ids: data.ids }]).map(
-      (g) => ({ ...g, ids: applyOrder(g.ids, data.spec.order?.[g.value]) }),
-    );
+  // A board keeps an empty declared column: it is somewhere to drag a card to.
+  const columns = (lane: string | undefined): Group[] => groupsFor(data, { lane, empties: 'keep' });
 
   const lanes = data.lanes.length ? data.lanes : [undefined];
 
@@ -180,7 +181,7 @@ export function BoardView({
           <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>
             {lane !== undefined && (
               <div className="lane-head">
-                <span className="lane-name">{lane === NONE ? 'no value' : lane}</span>
+                <span className="lane-name">{labelFor(lane ?? '')}</span>
                 <span className="lane-count">
                   {columns(lane).reduce((n, g) => n + g.ids.length, 0)}
                 </span>
@@ -313,11 +314,9 @@ function Column({
       className={`column ${value === NONE ? 'is-none' : ''} ${over ? 'is-over' : ''}`}
     >
       <header className="column-head">
-        <span className="column-name">{value === NONE ? 'no value' : value || 'all'}</span>
+        <span className="column-name">{value ? labelFor(value) : 'all'}</span>
         <span className="column-count">{group.ids.length}</span>
-        <button className="btn ghost tiny icon-button icon-add" title="new card here" onClick={() => setAdding(true)}>
-          +
-        </button>
+        <IconButton glyph="add" title="new card here" onClick={() => setAdding(true)} />
       </header>
       <div className="column-body" ref={bodyRef}>
         {adding && (
@@ -472,9 +471,9 @@ function BulkBar({
     <div className="bulkbar">
       <span className="bulkbar-count">{ids.length} selected</span>
 
-      <button className="btn small" onClick={() => setPickParent((v) => !v)}>
+      <Button size="small" onClick={() => setPickParent((v) => !v)}>
         Set parent…
-      </button>
+      </Button>
 
       <select className="bulkbar-select" value={facet} onChange={(e) => setFacet(e.target.value)}>
         <option value="">set a facet…</option>
@@ -508,8 +507,8 @@ function BulkBar({
         </span>
       )}
 
-      <button
-        className="btn small danger"
+      <Button
+        tone="danger" size="small"
         onClick={() => {
           if (!confirm(`Delete ${ids.length} card(s)?\n\nThe files are in git, so this is recoverable.`))
             return;
@@ -517,10 +516,10 @@ function BulkBar({
         }}
       >
         Delete
-      </button>
-      <button className="btn ghost small" onClick={onClear}>
+      </Button>
+      <Button tone="ghost" size="small" onClick={onClear}>
         Clear selection
-      </button>
+      </Button>
 
       {pickParent && (
         <div className="bulkbar-picker">

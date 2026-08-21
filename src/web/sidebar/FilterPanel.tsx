@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NONE } from '../../schema/vocabulary.ts';
+import { labelFor } from '../views/groups.ts';
 import { toggleFilterValue } from '../../view/intents.ts';
 import type { FacetCount } from '../types.ts';
 import type { Edit } from './Sidebar.tsx';
@@ -70,7 +71,7 @@ function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
                 onChange={() => edit((s) => toggleFilterValue(s, facet.facet, v.value))}
               />
               <span className={`facet-name ${v.value === NONE ? 'is-none' : ''}`}>
-                {v.value === NONE ? 'none' : v.value}
+                {labelFor(v.value)}
               </span>
               <span className="facet-count">{v.count}</span>
             </label>

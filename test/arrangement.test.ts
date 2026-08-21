@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
 import { saveArrangement, saveView, deleteView } from '../src/server/mutate.ts';
 import { loadViews } from '../src/server/views.ts';
-import { applyOrder } from '../src/web/query.ts';
+import { applyOrder } from '../src/view/payload.ts';
 import { resolveCliVault, vaultAbove } from '../src/config.ts';
 
 /**

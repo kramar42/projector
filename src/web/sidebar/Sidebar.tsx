@@ -18,6 +18,7 @@ import {
   setUncategorised,
 } from '../../view/intents.ts';
 import type { Dir, Meta, QueryResponse, SavedViewSummary, Shape, ViewSpec } from '../types.ts';
+import { Button, IconButton } from '../components/Button.tsx';
 
 /**
  * The sidebar *is* the view.
@@ -238,22 +239,18 @@ function SavedViews({
         />
         {modified && (
           <span className="rail-dirty" title="This saved view has unsaved changes">
-            <button
-              className="btn ghost tiny icon-button icon-check"
+            <IconButton
+              glyph="check"
               title="write these changes into the saved view — its layout and card order are kept"
               aria-label="Save changes to this view"
               onClick={() => void save(current!.name!, current!.title)}
-            >
-              ✓
-            </button>
-            <button
-              className="btn ghost tiny icon-button icon-revert"
+            />
+            <IconButton
+              glyph="revert"
               title="discard the overrides and go back to the saved view"
               aria-label="Revert changes to this view"
               onClick={() => patch(blankQuery(params, current?.name ?? null))}
-            >
-              ↶
-            </button>
+            />
           </span>
         )}
       </div>
@@ -283,9 +280,9 @@ function SaveAsRow({ onCancel, onSave }: { onCancel: () => void; onSave: (title:
           if (e.key === 'Enter' && text.trim()) onSave(text.trim());
         }}
       />
-      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
+      <Button tone="primary" size="small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
         Save
-      </button>
+      </Button>
     </div>
   );
 }
@@ -421,14 +418,14 @@ function SortRow({
       <div className="rail-label-control">
         <label className="rail-label">Sort</label>
         {key && (
-          <button
-            className="btn ghost tiny sort-direction"
+          <Button
+            tone="ghost" size="tiny" extra="sort-direction"
             title={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
             aria-label={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
             onClick={() => edit((spec) => setSort(spec, key, dir === 'asc' ? 'desc' : 'asc'))}
           >
             {dir === 'asc' ? '↑' : '↓'}
-          </button>
+          </Button>
         )}
       </div>
       <select
@@ -553,13 +550,11 @@ function FocusSection({
             <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
               {title ?? focus.id}
             </button>
-            <button
-              className="btn ghost tiny icon-button icon-close"
+            <IconButton
+              glyph="close"
               title="clear the focus"
               onClick={() => edit(clearFocus)}
-            >
-              ✕
-            </button>
+            />
           </>
         ) : (
           <PopoverButton
@@ -677,9 +672,9 @@ function ActiveStats({
           </>
         ))}
       {extra > 0 && (
-        <button className="btn ghost tiny" onClick={() => edit(clearFilters)}>
+        <Button tone="ghost" size="tiny" onClick={() => edit(clearFilters)}>
           clear
-        </button>
+        </Button>
       )}
     </div>
   );

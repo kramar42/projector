@@ -1,6 +1,6 @@
 import { FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import { NONE } from '../../schema/vocabulary.ts';
+import { groupsFor, labelFor } from './groups.ts';
 import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
 
 /**
@@ -30,7 +30,11 @@ export function TableView({
     ...new Set(data.ids.flatMap((id) => data.cards[id]?.links.map((l) => l.raw) ?? [])),
   ]);
 
-  const sections = data.groups ?? [{ value: '', ids: data.ids }];
+  // A table drops an empty declared section, following the canvas rather than the
+  // board: the board's case for keeping one is that it is somewhere to drag to,
+  // and a table offers nothing to drag. It used to render a header with a `0`
+  // under it, which was a behaviour rather than a decision.
+  const sections = groupsFor(data, { empties: 'drop' });
 
   return (
     <div className="table-wrap">
@@ -62,7 +66,7 @@ export function TableView({
               <tr className="section">
                 <th colSpan={chips.length + (projects ? 5 : 1) + 1}>
                   {section.lane ? `${section.lane} · ` : ''}
-                  {section.value === NONE ? 'no value' : section.value}
+                  {labelFor(section.value)}
                   <span className="section-count">{section.ids.length}</span>
                 </th>
               </tr>

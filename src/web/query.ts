@@ -95,17 +95,3 @@ export function describe(spec: ViewSpec, total: number): string {
   return bits.join(' · ');
 }
 
-/**
- * Stored card order first, then everything else in the order the query produced.
- *
- * Ordering three cards out of sixty pins those three to the top rather than
- * scattering the rest, and a card that appears later is never lost — it lands at
- * the end instead of vanishing from a list that did not mention it.
- */
-export function applyOrder(ids: string[], order: string[] | undefined): string[] {
-  if (!order?.length) return ids;
-  const have = new Set(ids);
-  const pinned = order.filter((id) => have.has(id));
-  const seen = new Set(pinned);
-  return [...pinned, ...ids.filter((id) => !seen.has(id))];
-}

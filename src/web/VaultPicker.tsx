@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { vaultApi, type Inspection, type VaultInfo } from './vault.ts';
+import { Button } from './components/Button.tsx';
 
 /**
  * Choose a folder to open as a vault.
@@ -158,8 +159,8 @@ export function VaultPicker({
           )}
 
           <div className="vaultgate-actions">
-            <button
-              className="btn primary"
+            <Button
+              tone="primary"
               disabled={busy || !inspection || (inspection.exists && !inspection.empty && !inspection.isVault)}
               onClick={() => inspection && void open(inspection.path, !inspection.isVault)}
             >
@@ -168,11 +169,11 @@ export function VaultPicker({
                 : inspection?.isVault
                   ? 'Open vault'
                   : 'Create vault here'}
-            </button>
+            </Button>
             {onCancel && (
-              <button className="btn" onClick={onCancel} disabled={busy}>
+              <Button onClick={onCancel} disabled={busy}>
                 Cancel
-              </button>
+              </Button>
             )}
           </div>
         </section>
@@ -181,7 +182,7 @@ export function VaultPicker({
           <section className="vaultgate-section">
             <h2>Browse</h2>
             <div className="browse-path">
-              <button className="btn tiny" onClick={up}>↑ up</button>
+              <Button size="tiny" onClick={up}>↑ up</Button>
               <code>{listing.path}</code>
             </div>
             <div className="browse-list">

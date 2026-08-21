@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RecordPicker } from './RecordPicker.tsx';
 import type { FacetDef } from '../types.ts';
+import { Button } from './Button.tsx';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -57,9 +58,9 @@ export function FacetEditor({
             </button>
           ))}
           {picking ? null : (
-            <button className="btn ghost small" onClick={() => setPicking(true)}>
+            <Button tone="ghost" size="small" onClick={() => setPicking(true)}>
               + record
-            </button>
+            </Button>
           )}
         </div>
         {picking && (
@@ -90,9 +91,9 @@ export function FacetEditor({
             onChange={(e) => set(e.target.value || null)}
           />
           {values[0] && (
-            <button className="btn ghost small" onClick={() => set(null)}>
+            <Button tone="ghost" size="small" onClick={() => set(null)}>
               clear
-            </button>
+            </Button>
           )}
         </div>
         <input type="hidden" name={name} />

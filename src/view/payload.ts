@@ -81,6 +81,10 @@ export function queryPayload(
   const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
   const res = runQuery(db, records, facets, spec.query, { connect: layout });
 
+  // Ordered here, so every surface receives the view's curated order rather than
+  // each renderer deciding whether to honour it.
+  const groups = res.groups?.map((g) => ({ ...g, ids: applyOrder(g.ids, spec.order?.[g.value]) })) ?? res.groups;
+
   const shown = [...res.ids, ...res.context];
   const cards: Record<string, CardDTO> = {};
   for (const id of shown) {
@@ -101,7 +105,7 @@ export function queryPayload(
     cards,
     ids: res.ids,
     context: res.context,
-    groups: res.groups,
+    groups,
     axis: res.axis,
     lanes: res.lanes,
     counts: res.counts,
@@ -129,6 +133,26 @@ export function queryPayload(
  */
 export function layoutRelation(show: string[], facets: Facets): string | undefined {
   return show.find((name) => isRef(facets[name]));
+}
+
+/**
+ * A column's cards in the order the saved view curates, then the rest.
+ *
+ * An id in `order` that no longer matches is skipped rather than held open, and a
+ * card the order has never seen goes after the pinned ones — so a stored order
+ * survives cards coming and going without needing to be rewritten.
+ *
+ * This ran in the browser, applied twice by two different paths in `BoardView` and
+ * not at all in `TableView`, and never here — so `pj ls --view portfolio` and the
+ * board disagreed about card order, as did a board column and a table section of
+ * the same view. It is a property of the answer, not of one renderer.
+ */
+export function applyOrder(ids: string[], order: string[] | undefined): string[] {
+  if (!order?.length) return ids;
+  const have = new Set(ids);
+  const pinned = order.filter((id) => have.has(id));
+  const seen = new Set(pinned);
+  return [...pinned, ...ids.filter((id) => !seen.has(id))];
 }
 
 export function countChildren(records: Map<string, Rec>, id: string): number {

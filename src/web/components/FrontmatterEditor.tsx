@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
 import { ApiError } from '../api.ts';
+import { Button } from './Button.tsx';
 
 /**
  * Direct frontmatter editing.
@@ -103,9 +104,9 @@ export function FrontmatterEditor({
       </p>
       <div ref={host} className="editor-host is-yaml" />
       <div className="editor-bar">
-        <button className="btn primary" onClick={doSave} disabled={!dirty || saving}>
+        <Button tone="primary" onClick={doSave} disabled={!dirty || saving}>
           {saving ? 'saving…' : dirty ? 'Save frontmatter' : 'Saved'}
-        </button>
+        </Button>
         <span className="editor-hint">⌘S</span>
         {dirty && <span className="editor-dirty">unsaved</span>}
       </div>

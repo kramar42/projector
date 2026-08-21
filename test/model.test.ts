@@ -25,6 +25,7 @@ import {
   type DragMode,
 } from '../src/view/dropOutcome.ts';
 import { blockedBy, blockedSet, unblocks } from '../src/index/blocking.ts';
+import { groupsFor, labelFor } from '../src/web/views/groups.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
 import type { CardDTO } from '../src/web/types.ts';
 import { ago, firstLine } from '../src/sources/run.ts';
@@ -1244,4 +1245,62 @@ test('a self-reference and a dangling one are dropped by every blocks answer', (
   );
   assert.ok(blockedSet(records).has('target'), 'one unfinished blocker is enough');
   assert.ok(!blockedSet(records).has('loop'), 'and a self-reference is not one');
+});
+
+/**
+ * One grouping answer for three shapes.
+ *
+ * Each shape used to spell the ungrouped fallback its own way and filter lanes its
+ * own way, and none of them read `axis` — the server's declared column order — so
+ * all three leaned on `groups` happening to arrive in it. The empty-group policy
+ * differs on purpose, which is why it is an argument: a board keeps an empty
+ * declared column because it is somewhere to drag to, and a canvas drops it
+ * because a canvas drag moves a position without changing a facet.
+ */
+test('grouping is one answer, and the empty-group policy is an argument', () => {
+  const data = {
+    ids: ['a', 'b'],
+    axis: ['now', 'month', 'backlog'],
+    groups: [
+      // Deliberately out of axis order, and one empty.
+      { value: 'backlog', ids: ['b'] },
+      { value: 'month', ids: [] },
+      { value: 'now', ids: ['a'] },
+    ],
+  } as unknown as Parameters<typeof groupsFor>[0];
+
+  assert.deepEqual(
+    groupsFor(data, { empties: 'keep' }).map((g) => g.value),
+    ['now', 'month', 'backlog'],
+    'ordered by the axis the server declared, not by arrival',
+  );
+  assert.deepEqual(
+    groupsFor(data, { empties: 'drop' }).map((g) => g.value),
+    ['now', 'backlog'],
+    'a canvas band and a table section need something in them',
+  );
+
+  // Ungrouped: one nameless group holding everything, which every shape open-coded.
+  const flat = { ids: ['a', 'b'], axis: [], groups: null } as unknown as Parameters<
+    typeof groupsFor
+  >[0];
+  assert.deepEqual(groupsFor(flat, { empties: 'keep' }), [{ value: '', ids: ['a', 'b'] }]);
+});
+
+test('a value the axis does not declare sorts after the ones it does', () => {
+  const data = {
+    ids: [],
+    axis: ['now'],
+    groups: [
+      { value: 'adhoc', ids: ['x'] },
+      { value: 'now', ids: ['y'] },
+    ],
+  } as unknown as Parameters<typeof groupsFor>[0];
+  assert.deepEqual(groupsFor(data, { empties: 'keep' }).map((g) => g.value), ['now', 'adhoc']);
+});
+
+/** Five places said it four ways, one of them by printing the wire form. */
+test('the absence refinement has one wording', () => {
+  assert.equal(labelFor(NONE), 'no value');
+  assert.equal(labelFor('now'), 'now');
 });

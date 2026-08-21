@@ -97,7 +97,7 @@ the two are expected to be editing the same card at the same time.
 |---|---|
 | `src/schema/` | card and facet types, frontmatter read/write, validation |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
-| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — and `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` |
+| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, and `dropOutcome.ts`, what a drag means |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
 | `src/web/` | React: sidebar, three shapes, card panel |
 | `src/cli/` | `pj` |
@@ -334,6 +334,12 @@ window (C3).
 `swimlanes` concept, which is why a matrix needed no new code path. Every value a facet declares gets a
 group, empty or not — a board missing a declared column reads as though it did not exist, and an empty
 column is somewhere to drag a card to.
+
+A **table** draws groups as sections, and follows the canvas rather than the board: an empty declared
+value gets no section. The board's case for keeping one is that it is somewhere to *drag to*, and a
+table offers nothing to drag. It used to render a header with a `0` under it, which was a behaviour
+rather than a decision — all three now go through one `groupsFor`, which takes the policy as an
+argument precisely because it differs on purpose.
 
 A canvas draws groups as **bands**. It cannot honour a multi-valued placement, because a record has one
 position, so it draws the card in the first group the axis declares and the footer reports the count

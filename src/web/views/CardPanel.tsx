@@ -9,6 +9,7 @@ import { RecordPicker } from '../components/RecordPicker.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDetail, Meta } from '../types.ts';
+import { Button, IconButton } from '../components/Button.tsx';
 
 /**
  * Render a card body to HTML.
@@ -123,8 +124,8 @@ export function CardPanel({
                   }}
                 />
                 <div className="titleedit-bar">
-                  <button
-                    className="btn primary small"
+                  <Button
+                    tone="primary" size="small"
                     onClick={() => {
                       const next = editTitle;
                       setEditTitle(null);
@@ -134,18 +135,16 @@ export function CardPanel({
                     }}
                   >
                     Rename
-                  </button>
-                  <button className="btn ghost small" onClick={() => setEditTitle(null)}>
+                  </Button>
+                  <Button tone="ghost" size="small" onClick={() => setEditTitle(null)}>
                     Cancel
-                  </button>
+                  </Button>
                   <span className="editor-hint">⏎ to save · ⇧⏎ for a newline</span>
                 </div>
               </div>
             ))}
           {busy && <span className="panel-busy">{busy}…</span>}
-          <button className="btn ghost panel-x icon-button icon-close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+          <IconButton glyph="close" size="normal" extra="panel-x" onClick={onClose} aria-label="Close" />
         </div>
 
         {error && <div className="pane-error">{error}</div>}
@@ -155,9 +154,9 @@ export function CardPanel({
           <div className="banner is-conflict">
             <b>Changed on disk.</b> Something else — probably a Claude session — wrote this file after
             it was loaded here. Nothing was overwritten.
-            <button className="btn small" onClick={() => { setConflict(false); reload(); }}>
+            <Button size="small" onClick={() => { setConflict(false); reload(); }}>
               Reload
-            </button>
+            </Button>
           </div>
         )}
         {problem && !conflict && <div className="banner is-bad">{problem}</div>}
@@ -168,8 +167,8 @@ export function CardPanel({
               {/* There is no promote/demote, because there is no class of
                   record to move between. A record is work when it carries a
                   lifecycle, which is the Status facet below. */}
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 title={
                   card.isProject
                     ? 'Remove the project block. Records naming this one in their project facet stop inheriting repos and instructions from it.'
@@ -186,9 +185,9 @@ export function CardPanel({
                 }
               >
                 {card.isProject ? 'Not a project' : 'Make a project'}
-              </button>
-              <button
-                className="btn small danger"
+              </Button>
+              <Button
+                tone="danger" size="small"
                 onClick={() => {
                   if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
                     return;
@@ -199,7 +198,7 @@ export function CardPanel({
                 }}
               >
                 Delete
-              </button>
+              </Button>
             </div>
 
             <dl className="kv">
@@ -218,9 +217,9 @@ export function CardPanel({
                 </button>
               ))}
               {!pickParent ? (
-                <button className="btn small" onClick={() => setPickParent(true)}>
+                <Button size="small" onClick={() => setPickParent(true)}>
                   {data.parents.length ? 'Change parent' : 'Set parent'}
-                </button>
+                </Button>
               ) : (
                 <RecordPicker
                   exclude={[card.id]}
@@ -441,9 +440,7 @@ function LinkRow({ raw, onRemove }: { raw: string; onRemove: () => void }) {
           </span>
         ))}
         {res?.state === 'stale' && <span className="badge tone-warn" title="refreshing">stale</span>}
-        <button className="btn ghost tiny icon-button icon-close" title="remove this link" onClick={onRemove}>
-          ✕
-        </button>
+        <IconButton glyph="close" title="remove this link" onClick={onRemove} />
       </div>
 
       {d?.title && <div className="linkrow-title">{d.title}</div>}

@@ -588,6 +588,9 @@ search ranks by relevance, which belongs to a result set rather than to any reco
 be a sort key. `pj context` is the only way to read one card — `show` and `project` printed subsets of
 what it already assembles.
 
+A saved view's curated card order is applied in the payload, so `pj ls`, a board column and a table
+section of the same view agree about it — it used to run only in the browser, and only on a board.
+
 The CLI and the app share one query compiler *and* one payload builder, so `pj ls --view unblocked` and
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`
 returns. There is no `pj next` or `pj untriaged`: those were two queries hardcoded in TypeScript, and

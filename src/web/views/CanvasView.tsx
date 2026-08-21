@@ -20,6 +20,7 @@ import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { relations } from '../query.ts';
 import { connectOutcome } from '../../view/dropOutcome.ts';
+import { groupsFor, labelFor } from './groups.ts';
 import {
   CONTEXT_BAND,
   assignClusters,
@@ -30,6 +31,7 @@ import {
 } from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse, Meta } from '../types.ts';
+import { Button } from '../components/Button.tsx';
 
 /**
  * A canvas node hosts the same `<CardBody>` every other shape renders. That is
@@ -69,7 +71,7 @@ function ClusterNode({ data }: NodeProps) {
   const { value } = data as unknown as { value: string };
   return (
     <div className={`cluster ${value === CONTEXT_BAND ? 'is-context' : ''}`}>
-      <span className="cluster-label">{value}</span>
+      <span className="cluster-label">{labelFor(value)}</span>
     </div>
   );
 }
@@ -184,7 +186,9 @@ export function CanvasView({
     // `groupBy` used to be accepted and ignored here, so switching shape never
     // dropped the parameter. It draws now: one band per value of the primary
     // axis, in the order the facet declares.
-    const groups = data.groups?.filter((g) => !g.lane) ?? [];
+    // No empty bands: a canvas drag moves a position without changing a facet, so
+    // an empty band would be decoration with no affordance.
+    const groups = data.groups ? groupsFor(data, { empties: 'drop' }) : [];
     const clustered = groups.length > 0;
     const auto = clustered
       ? clusteredLayout(shown, data.relations, hierarchy, groups)
@@ -371,12 +375,12 @@ export function CanvasView({
             </select>
           </label>
 
-          <button className="btn small" onClick={() => void addRecord()}>
+          <Button size="small" onClick={() => void addRecord()}>
             + record
-          </button>
+          </Button>
           {dirty && !naming && (
-            <button
-              className="btn primary small"
+            <Button
+              tone="primary" size="small"
               disabled={saving}
               onClick={() => {
                 const name = data.spec.name;
@@ -387,7 +391,7 @@ export function CanvasView({
               }}
             >
               {saving ? 'saving…' : data.spec.name ? 'Save layout' : 'Save as view…'}
-            </button>
+            </Button>
           )}
           {naming && (
             <SaveAs
@@ -429,9 +433,9 @@ function SaveAs({ onCancel, onSave }: { onCancel: () => void; onSave: (name: str
           if (e.key === 'Enter' && text.trim()) onSave(text.trim());
         }}
       />
-      <button className="btn primary small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
+      <Button tone="primary" size="small" disabled={!text.trim()} onClick={() => onSave(text.trim())}>
         Save
-      </button>
+      </Button>
     </span>
   );
 }

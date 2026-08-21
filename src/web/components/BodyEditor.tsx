@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { api } from '../api.ts';
+import { Button } from './Button.tsx';
 
 /**
  * CodeMirror over the raw markdown, deliberately not a WYSIWYG.
@@ -134,9 +135,9 @@ export function BodyEditor({
     <div className="editor">
       <div ref={host} className="editor-host" />
       <div className="editor-bar">
-        <button className="btn primary" onClick={save} disabled={!dirty || saving}>
+        <Button tone="primary" onClick={save} disabled={!dirty || saving}>
           {saving ? 'saving…' : dirty ? 'Save' : 'Saved'}
-        </button>
+        </Button>
         <span className="editor-hint">⌘S</span>
         {note && <span className="editor-note">{note}</span>}
         {dirty && <span className="editor-dirty">unsaved</span>}

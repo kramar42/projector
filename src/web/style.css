@@ -338,18 +338,15 @@ body {
   height: 20px;
   padding: 0 !important;
   color: inherit;
-  font-size: 15px !important;
   line-height: 1 !important;
 }
 
 .rail-dirty .icon-button { color: var(--warn); }
 
-/* These glyphs have markedly different ink areas at one nominal size. Keep
-   the hit targets equal and tune only the marks, so they read as one family. */
-.icon-check { font-size: 14px !important; }
-.icon-revert { font-size: 16px !important; transform: translateY(-0.02em); }
-.icon-close { font-size: 15px !important; }
-.icon-add { font-size: 17px !important; }
+/* Per-glyph sizing lives with the glyph table in `components/Button.tsx`: these
+   marks have markedly different ink areas at one nominal size, and keeping the
+   metric beside the character means a new glyph needs no rule here. The box below
+   is shared, which is the part that belongs in a stylesheet. */
 
 .rail-focus {
   appearance: none;

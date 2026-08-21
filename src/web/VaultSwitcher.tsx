@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { vaultApi, type VaultInfo } from './vault.ts';
 import { PopoverButton } from './components/Popover.tsx';
 import type { Meta } from './types.ts';
+import { IconButton } from './components/Button.tsx';
 
 /**
  * The vault this window is looking at, and a way to change it.
@@ -80,13 +81,11 @@ function VaultMenu({
             <span className="pop-count">{v.exists ? `${v.cards ?? 0}` : 'missing'}</span>
           </button>
           {v.path !== meta.vault && (
-            <button
-              className="btn ghost tiny icon-button icon-close"
+            <IconButton
+              glyph="close"
               title="stop tracking this vault (the folder is untouched)"
               onClick={() => void forget(v.path)}
-            >
-              ✕
-            </button>
+            />
           )}
         </div>
       ))}
