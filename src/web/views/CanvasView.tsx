@@ -337,6 +337,20 @@ export function CanvasView({
           minZoom={0.02}
           maxZoom={2}
           elementsSelectable
+          /*
+           * React Flow deletes the selected nodes on Backspace by default, and
+           * `elementsSelectable` means there is always something selected to
+           * delete. The change went through `applyNodeChanges` and the node left
+           * the canvas — with no request sent and nothing to undo it but a
+           * reload, which brought the card straight back. It read as a delete
+           * that had silently failed, when nothing had been asked of the server
+           * at all.
+           *
+           * Deleting a record is `bulkDelete` behind a confirm, because the files
+           * are the vault. A keystroke that bypasses both is not a shortcut for
+           * it, so the key is turned off rather than rebound.
+           */
+          deleteKeyCode={null}
           onNodeDoubleClick={(_, n) => onOpen(n.id)}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--dot)" />
