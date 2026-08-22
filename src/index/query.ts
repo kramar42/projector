@@ -391,6 +391,35 @@ function matches(rec: Rec, filter: Record<string, string[]>, ctx: Ctx): boolean 
 }
 
 /**
+ * Which values of one axis the query admits, or `null` for all of them.
+ *
+ * A filter on the facet a view *groups by* is a statement about which columns the
+ * view has, not only about which cards land in them. Grouping by `status`,
+ * filtering it to `active` and still drawing a `frozen` column is the view
+ * contradicting itself — and it is what left `due` with a permanently empty
+ * `later` column and `triage` with a permanently empty `complete` one, columns no
+ * card could reach by construction.
+ *
+ * It also settles an incoherence rather than adding a rule. The axis kept every
+ * *declared* value whatever the filter said and dropped every undeclared one, so
+ * whether an excluded value survived came down to whether somebody had written it
+ * in `facets.yaml`. One question now answers for both.
+ *
+ * `null` for an axis the filter does not mention, and — the part worth the
+ * paragraph — for one selected by range (`f.due=>2026-09-01`), where the tokens
+ * are expressions rather than value names and nothing here can say which buckets
+ * they cover. Narrowing on a range would hide every column at once, and it would
+ * cost the property that makes this safe at all: every hit keeps a column to sit
+ * in, because to match a name selection a card must carry one of the names. A
+ * card admitted by a range need not.
+ */
+function admitted(selection: string[] | undefined): Set<string> | null {
+  if (!selection?.length) return null;
+  if (selection.some((v) => RANGE.test(v))) return null;
+  return new Set(selection);
+}
+
+/**
  * Disjunctive counts.
  *
  * Two separate questions, and conflating them is a trapdoor:
@@ -560,10 +589,22 @@ export function runQuery(
         }
       }
       const pseudo = PSEUDO[facet];
-      // Every declared value gets a group, empty or not: a priority board missing
-      // its `now` column reads as though the column did not exist, and an empty
-      // column is somewhere to drag a card to.
-      const order = pseudo ? [...pseudo.values] : orderValues(facets[facet], seen);
+      // Every value the query *admits* gets a group, empty or not: a priority
+      // board missing its `now` column reads as though the column did not exist,
+      // and an empty admitted column is somewhere to drag a card to. A value the
+      // filter excludes is not this axis being empty, it is this axis being
+      // smaller — which is the distinction the board could not draw.
+      //
+      // Intersected with the vocabulary rather than replacing it, so the axis
+      // stays a subset of what the facet declares. A selection naming a value no
+      // card carries and no vocabulary declares is a broken URL, not a column.
+      const admit = admitted(filter[facet]);
+      const order = (pseudo ? [...pseudo.values] : orderValues(facets[facet], seen)).filter(
+        (v) => admit === null || admit.has(v),
+      );
+      // `(none)` needs no test of its own. A card with no value here is a hit only
+      // when the selection names `(none)`, so `none` is already empty whenever it
+      // is not admitted — and `uncategorised` remains its own explicit policy.
       if (none.length && query.uncategorised !== 'hide') {
         if (query.uncategorised === 'start') order.unshift(NONE);
         else order.push(NONE);

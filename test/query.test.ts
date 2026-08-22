@@ -521,22 +521,125 @@ test('a second grouping axis makes a matrix, not a new concept', () => {
   const { root, cleanup } = vault();
   try {
     const res = open(root)({ groupBy: ['priority', 'status'], filter: { priority: ['now', 'month'] } });
-    assert.deepEqual(res.axis, ['now', 'month', 'backlog']);
+    // `backlog` is excluded by the filter on the very axis this groups by, so it
+    // is not a column. `status` is unfiltered, so every lane it declares stays.
+    assert.deepEqual(res.axis, ['now', 'month']);
     assert.deepEqual(res.lanes, ['planning', 'active', 'done']);
     // Every cell exists, in reading order, so an empty one still holds its place.
     assert.deepEqual(
       res.groups!.filter((g) => g.lane !== 'done').map((g) => `${g.lane}/${g.value}:${g.ids.length}`),
-      [
-        'planning/now:2',
-        'planning/month:1',
-        'planning/backlog:0',
-        'active/now:2',
-        'active/month:0',
-        'active/backlog:0',
-      ],
+      ['planning/now:2', 'planning/month:1', 'active/now:2', 'active/month:0'],
     );
     // Each record lands in exactly one cell here, so nothing is double-counted.
     assert.equal(res.placements, res.total);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * A filter on the axis you group by says which columns exist.
+ *
+ * The axis used to be the vocabulary and nothing else, so `due` — grouped by
+ * `due`, filtered to three of its four buckets — drew a `later` column no card
+ * could ever reach, and `triage` drew `complete` the same way. The two cases a
+ * board has to tell apart: a value the filter *admits* that happens to be empty
+ * is a place to drag a card to, and a value the filter *excludes* is not part of
+ * this axis at all.
+ */
+test('a value the filter excludes is not a column; an admitted empty one still is', () => {
+  const { root, cleanup } = vault();
+  try {
+    const run = open(root);
+    // `backlog` is declared and admitted, and no card carries it — the empty
+    // column a board wants, because it is somewhere to drag to.
+    const wide = run({ groupBy: ['priority'] });
+    assert.deepEqual(wide.axis, ['now', 'month', 'backlog', NONE]);
+
+    // Narrow the same axis and the excluded values stop being columns. `month`
+    // stays at zero: admitted, and emptied by the *other* half of the filter.
+    const narrow = run({ groupBy: ['priority'], filter: { priority: ['now', 'month'], status: ['active'] } });
+    assert.deepEqual(narrow.axis, ['now', 'month']);
+    assert.deepEqual(
+      narrow.groups!.map((g) => `${g.value}:${g.ids.length}`),
+      ['now:2', 'month:0'],
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('the lane axis narrows on the same rule as the column axis', () => {
+  const { root, cleanup } = vault();
+  try {
+    // Grouping is one function called twice, so this needs no policy of its own —
+    // which is the assertion.
+    const res = open(root)({
+      groupBy: ['status', 'priority'],
+      filter: { priority: ['now'] },
+    });
+    assert.deepEqual(res.lanes, ['now']);
+    assert.deepEqual(res.axis, ['planning', 'active', 'done'], 'the unfiltered axis is untouched');
+  } finally {
+    cleanup();
+  }
+});
+
+test('a derived axis narrows too, having no vocabulary of its own to defend', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ groupBy: ['blocked'], filter: { blocked: ['clear'] } });
+    // `blocked` and `waiting` are excluded. Nothing can be dragged onto a derived
+    // axis in any case, so an empty column there was decoration.
+    assert.deepEqual(res.axis, ['clear']);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * The property that makes narrowing safe, stated as a test: to match a selection
+ * of value *names* a card must carry one of those names, so it always keeps a
+ * column. A card admitted by a *range* need not — its bucket can sit outside the
+ * selection entirely — so a range selection narrows nothing rather than emptying
+ * the board.
+ */
+test('a range selection narrows nothing, so no card loses its column', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ groupBy: ['due'], filter: { due: ['>2026-01-01'] } });
+    // Every bucket the facet declares, exactly as before: the tokens are
+    // expressions, and nothing here can say which buckets they cover.
+    assert.deepEqual(res.axis, ['overdue', 'today', 'week', 'later']);
+    // And the invariant itself, for the name case: every hit is placed somewhere.
+    const named = open(root)({ groupBy: ['priority'], filter: { priority: ['now'] } });
+    const placed = new Set(named.groups!.flatMap((g) => g.ids));
+    assert.deepEqual([...named.ids].sort().filter((id) => !placed.has(id)), []);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * On a multi-valued axis the narrowing drops *placements*, and that is the point:
+ * a column headed `keycloak` in a view that holds only `kafka` cards invites the
+ * wrong reading. What it must never drop is a card.
+ */
+test('narrowing a multi-valued axis drops extra placements but never a card', () => {
+  const { root, cleanup } = vault();
+  try {
+    const run = open(root);
+    const both = { tech: ['kafka', 'keycloak'] };
+    const wide = run({ groupBy: ['tech'], filter: both });
+    assert.deepEqual(wide.axis, ['keycloak', 'kafka']);
+
+    const one = run({ groupBy: ['tech'], filter: { tech: ['kafka'] } });
+    assert.deepEqual(one.axis, ['kafka']);
+    // The cards themselves are untouched — only the column they also sat in went.
+    assert.equal(one.total, 1);
+    assert.equal(one.placements, 1);
+    const placed = new Set(one.groups!.flatMap((g) => g.ids));
+    assert.deepEqual(one.ids.filter((id) => !placed.has(id)), []);
   } finally {
     cleanup();
   }
@@ -925,6 +1028,35 @@ test('an axis the query names stays offered after its last value is cleared', ()
  * value got a column and no way to filter by it. Two answers to "what values does
  * this axis have", in one response.
  */
+/**
+ * ...and disagree, on purpose, once that axis is filtered.
+ *
+ * The panel says what the axis *is* and counts each value with its own selection
+ * lifted, so it is the control that widens a view — `backlog 1`, unchecked, one
+ * click from being a column again. The board says what you asked for. They were
+ * redundant while the board drew the whole vocabulary; making them complementary
+ * is the change, so this pins the divergence rather than treating it as drift.
+ */
+test('the panel keeps offering a value the board has stopped drawing', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ groupBy: ['priority'], filter: { priority: ['now'] } });
+    const columns = res.groups!.map((g) => g.value);
+    const offered = res.counts.find((c) => c.facet === 'priority')!.values;
+
+    assert.deepEqual(columns, ['now'], 'the board draws the slice');
+    assert.ok(
+      offered.some((v) => v.value === 'backlog' && !v.selected),
+      'and the panel still offers the way back',
+    );
+    // Counted with `priority`'s own selection lifted, so an unselected value can
+    // read non-zero — which is what makes it worth clicking.
+    assert.equal(offered.find((v) => v.value === 'month')!.count, 1);
+  } finally {
+    cleanup();
+  }
+});
+
 test('grouping and the panel agree about a declared value nobody carries', () => {
   const { root, cleanup } = vault();
   try {

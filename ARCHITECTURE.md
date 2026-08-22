@@ -331,9 +331,23 @@ it back and a mismatch is a 409. This matters because an agent may be editing th
 window (C3).
 
 **Grouping is one function called twice.** A second axis is a position in `groupBy`, not a separate
-`swimlanes` concept, which is why a matrix needed no new code path. Every value a facet declares gets a
-group, empty or not — a board missing a declared column reads as though it did not exist, and an empty
-column is somewhere to drag a card to.
+`swimlanes` concept, which is why a matrix needed no new code path. Every value the query *admits* gets
+a group, empty or not — a board missing an admitted column reads as though it did not exist, and an
+empty admitted column is somewhere to drag a card to.
+
+**A filter on the axis you group by decides which columns exist, not just what lands in them.** It read
+every declared value whatever the filter said, so `due` — grouped by `due`, filtered to three of its
+four buckets — drew a `later` column no card could reach, and `triage` drew `complete` the same way. It
+also dropped every *undeclared* value, so whether an excluded value survived came down to whether
+somebody had written it in `facets.yaml`. `admitted` answers for both: the axis is the vocabulary
+narrowed to the selection. Two consequences worth stating. A selection by *range* (`f.due=>2026-09-01`)
+narrows nothing, because its tokens are expressions rather than value names — and because the property
+that makes narrowing safe is that a card matching a name selection must carry one of those names, so it
+always keeps a column; a range match need not. And on a multi-valued axis the narrowing drops
+*placements*: filtering `tech` to `k8s` stops drawing the `aws` column those same cards also sit in.
+That is the point rather than a cost — a column headed `aws` in a view that holds only `k8s` cards
+invites the wrong reading — but it is why `placements` can now fall below what the vocabulary would
+have shown.
 
 A **table** draws groups as sections, and follows the canvas rather than the board: an empty declared
 value gets no section. The board's case for keeping one is that it is somewhere to *drag to*, and a
