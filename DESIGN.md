@@ -152,7 +152,7 @@ components:
   input-rail:
     backgroundColor: "{colors.surface-2}"
     textColor: "{colors.ink}"
-    typography: "{typography.body-compact}"
+    typography: "{typography.body-sm}"
     rounded: "{rounded.base}"
     padding: "5px 8px"
   chip:
@@ -454,10 +454,13 @@ interchangeable: the offset points away from the edge the element is attached to
 A shadow is permission to leave the plane, and only five elements have it. A card, a column, a chip, a
 button, a table row and an input never do.
 
-**The Stroke-As-Shadow Rule.** Two `box-shadow` declarations are not shadows and must not be read as
-elevation: `0 0 0 1px var(--accent)` is the selected card's ring, and `0 ±2px 0 0 var(--accent)` is the
-reorder drop line above or below a card. Both use the shadow property to draw a stroke outside the box
-without moving anything — the border is already spoken for.
+**The Stroke-As-Shadow Rule.** Three `box-shadow` declarations are not shadows and must not be read as
+elevation: `0 0 0 1px var(--accent)` is the selected card's ring, `0 ±2px 0 0 var(--accent)` is the
+reorder drop line above or below a card, and `inset 2px 0 0 0 var(--accent)` marks a selected table
+row. All three use the shadow property to draw a stroke where the border is already spoken for. The
+table row's is inset and on one side because a row cannot take a border — `outline` on a `<tr>` is
+drawn per cell and a border shifts the column grid — so it is the same 3px-left-edge idea reaching a
+container the border vocabulary cannot.
 
 ## Shapes
 
@@ -475,8 +478,10 @@ work:
 - **1px solid `rule`** — a boundary. Between regions, around a card, under a table row.
 - **1px dashed** — *not a real value.* The `(none)` column and a context-only canvas band, both drawn
   dashed and at reduced opacity, because in each case the container exists but the value does not.
-- **3px solid, left edge only** — state. A project (`accent`), a blocked card (`bad`), an open
-  reference (`bad`), a finished one (`ok`, at 0.7 opacity).
+- **3px solid, left edge only** — state. A project (`hue-purple`), a blocked card (`bad`), an open
+  reference (`bad`), a finished one (`ok`, at 0.7 opacity). The project's edge is the project axis's
+  own family, not the accent: see the Don't list, and `.cardface.is-project`, which have always said
+  so — this bullet said `accent` and was the odd one out.
 
 ### Named Rules
 
@@ -546,9 +551,11 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
 - **Style:** `surface` fill, 1px `rule-2`, `5px` radius, `5px 8px`, 12.5px. In the rail the fill drops
   to `surface-2` so an input reads as recessed into the sidebar rather than raised out of it.
 - **Focus:** `2px solid accent` at `outline-offset: -1px`, drawn inside the box so a focused field in a
-  dense list does not shift its neighbours. The rail search is the one exception: it removes the
-  outline and moves its border to `accent` instead, because a 2px ring against the rail's edge read as
-  a second boundary.
+  dense list does not shift its neighbours. `.field-recessed` is the exception, at three sites: it
+  removes the outline and moves its border to `accent` instead, because a 2px ring against the rail's
+  edge read as a second boundary. It was written for the rail and now also paints the canvas
+  toolbar's view-namer and the panel's new-value field, where the reason is inherited rather than
+  re-argued — see **Accepted Exceptions**.
 - **Selects:** `appearance: none`, `surface-2` fill, `rule` border, 12px — flatter than a text input,
   because a select is a control rather than a field.
 - **Disabled:** `0.45–0.5` opacity and `cursor: not-allowed`. No colour change.
@@ -564,9 +571,13 @@ you know nothing is written on the card — the panel otherwise treats it identi
 ### The Record Mark
 
 The signature component, and the one nothing else can substitute for. A mono glyph before every title
-saying what the record is — `•` a card, `○` a node, `▣` a project — followed by a count when others
-name it as parent. It sits at `0.8em` of whatever type it precedes, so one rule serves the 12.5px table
-row, the 13px card face and the 16px panel header. See **The Measured Glyph Rule**.
+saying what the record is — `•` a card, `○` a node, `▣` a project — followed by a count of how many
+records name it. `○` means named by **any** reference facet, which is what `nodesIn` has always meant
+by a node: being named by `parent` and being named by `project` make a record a node equally. It read
+the `parent` facet alone until this was settled, which is how the mark and the `type` axis came to
+disagree about the same record. It sits at `0.8em` of whatever type it precedes, so one rule serves the
+12.5px table row, the 13px card face and the 16px panel header — and that `em` resolves against the
+type it sits beside, not against whatever its row inherited. See **The Measured Glyph Rule**.
 
 ### Progress
 
@@ -622,3 +633,206 @@ Used for a project's roll-up. It is the only bar in the system.
   text — or it earns a family of its own.
 - **Don't** nest a scroll inside a scroll. One region scrolls per axis.
 - **Don't** use dashed borders for anything but a container whose value does not exist.
+
+## Accepted Exceptions
+
+Cases where a named rule above appears to be broken and is not, decided during the whole-app
+`extract` pass. Each is here because someone looked, found a reason, and chose to keep the
+difference — so the next reader does not spend the same hour, and so the decision can be
+**revisited on purpose** rather than rediscovered as drift.
+
+Format: what looks wrong, why it stays, and what would have to change for it to go.
+
+### The count that keeps its fill
+
+`.column-count` carries a `surface-3` pill where The Count Rule says a count is quiet unless it
+is the only signal a filter is on.
+
+It stays because this document commits it in five places — the `components.column-count`
+frontmatter, `surface-3 (a count badge, a button on hover)` under Elevation, `--radius-pill 10px
+on a count badge and a canvas band` under Shapes, `a pill count in surface-3` under Cards, and
+the token comment beside `--radius-pill` in the stylesheet — and because it is the only count in
+the app that sits *between* two other things: a flexing column name on its left and a 20px add
+button on its right. The fill is what separates it from both.
+
+To remove it: update all five statements, and note that `--radius-pill` then has one remaining
+user (the canvas band).
+
+### The counts that declare no type
+
+`.lane-count` and the table's `.section-count` declare `color` and nothing else, so they inherit
+family, size, tracking and case from the heading they annotate.
+
+That inheritance *is* the mechanism: the count reads as part of its heading's type run rather
+than as a badge beside it. Giving either one a step from the scale would break it on purpose.
+
+### The number that is not a count
+
+`.count` on a table row looks like the count family and is not — it is the second half of the
+Record Mark, the child count DESIGN.md's Record Mark section describes. It appears in the table
+and not on a card face because a table's title cell is a single-line flex row with a stable end,
+where a face's title is unclamped in a column and clamped to two lines on a canvas node. The face
+carries the same fact as the `○` glyph itself, with the number in the mark's tooltip.
+
+`.bulkbar-count` is also not a count: it renders the sentence *"N selected"*, in the accent, on
+the bulk bar's own `accent-soft` fill — The App Voice Rule speaking about live state. Folding it
+into the quiet class would put the app's quietest ink on an accent fill as that bar's only
+statement.
+
+`.pop-count` is misnamed rather than misdesigned: it renders `v.shape` ("board") and the word
+`'missing'` as often as it renders a number. It is the right-hand annotation slot on a popover
+row — the same job as `.pop-note` beside it. Worth renaming; not worth merging into a count.
+
+### The three headings that stay four treatments
+
+The current value of the grouping axis is drawn four ways — board column at mono 12.5/600, board
+lane at the Label step, canvas band at `--text-xs`, table section at the Label step — and the
+outer level (the lane) is smaller than the inner one it contains.
+
+Both ends are committed independently above: the Label step names lane heads among its users, and
+Cards / Containers names the column head as *"the axis value in mono 12.5px/600"*. The lane's
+prominence is carried by uppercase and `0.1em` tracking rather than by size, and its job is a
+sticky marker surviving horizontal scroll, not a page heading.
+
+Unifying them would also flatten a real distinction: the column head is the only one of the four
+whose value is a **write target** — a drag lands there and an inline-created card inherits it,
+which is why a board keeps an empty declared column and a table and canvas do not. The canvas
+label additionally inherits its band's `0.55` (or `0.35`) opacity, so giving it the column's type
+would not make it read like the column's type, and compensating with a hand-picked colour is
+forbidden elsewhere in this document.
+
+### The uppercase that is not a transform
+
+The One Casing Rule says a string is cased once, and three surfaces still render a facet value or
+label in uppercase: the table's column header, the table's section head, and the board's lane
+head.
+
+They are permitted by the rule's own second clause — they take the **Label** type step, whose
+register *is* uppercase mono, rather than transforming a string at some other step. The panel's
+axis label was the violation, because it hand-rolled `text-transform: uppercase` plus `0.1em` at
+the *Chip* step: the Label register at the wrong size, which is a third register rather than a use
+of the second. It now renders the vocabulary's own casing.
+
+Open, and deliberately not settled here: the filter rail renders its facet label in **sans** at
+`--text-body-sm` while the panel renders the same string in mono. The Mono Label Rule reads
+against the rail, but the rail is a dense vertical list of thirteen axes and the Navigation
+section does not settle the facet head's font. Same casing, two fonts.
+
+### The reference chip and the reference row
+
+`.refchip` and `.reflink` both show a record you can click, in a `surface-2` fill with a `rule`
+border and the same hover, and they are not one component.
+
+They differ five documented ways: the radius pair is prescribed by name in Shapes (`3px` on a
+chip, `5px` on a reference row); the type step differs, which rescales the record mark's own
+`0.8em` from 10px to 9.6px — the compounding failure the mark's own comment warns about; only the
+inbound form carries the 3px left-edge state border, which is two of the four meanings The
+Load-Bearing Left Border Rule permits; the DOM differs, one `<button>` against a span holding a
+go-button and an unlink, which was a deliberate fix for one gesture doing two things; and
+`.refchip-title` must ellipsise at 26ch because it wraps inside the panel while an inbound row
+gets a line of its own.
+
+Five modes across **two** call sites is under the three-use threshold. There is also a structural
+reason: `blockedBy` and `children` ship as `{ id, title }` with no `isProject` or `childCount`, and
+`countChildren` lives in `src/view/` which `src/index/` may not import from — so giving the
+inbound row its record mark is a server DTO change across an architectural boundary, not a CSS
+change.
+
+Still outstanding from that: `.reflink` and the focus pill are the two places a record appears
+with no mark at all, against the Record Reference Rule. Recorded as unfinished, not as accepted.
+
+### The badge that takes `surface`, not `ground`
+
+`.facet-badge` puts `color: var(--surface)` on an `--accent` fill where the Don't list says every
+filled state takes `ground`.
+
+Contrast holds either way — measured, the change is 7.9:1 → 8.1:1 in dark — and there is a live
+reading in which `surface` is the right value: the badge sits in the sidebar, whose fill *is*
+`surface`, so the digits read as knocked out of the accent rather than printed on it. It also
+inherits `font-weight: 600` from the active facet head, which is the other half of what the five
+`ground` filled states pair together, so it is not the outlier it looks like.
+
+Low confidence, and the cheapest of these to revisit.
+
+### The mode switch that cancels its parent
+
+`.tab` declares `text-transform: none` and `letter-spacing: 0`, which appear inert.
+
+They are the only place in this repo that cancels an *explicit* ancestor `text-transform:
+uppercase` — the panel section heading it sits inside. Deleting them moves the tab's casing onto
+the browser's own form-control stylesheet, and the failure mode is a mode switch reading
+`READ / EDIT` on the one control this system says is not a chip. The `letter-spacing: 0` is not
+inert either: it records the tab's departure from the chip step's `0.01em`.
+
+### The three left edges outside the record vocabulary
+
+The Load-Bearing Left Border Rule enumerates four meanings for the 3px left edge and closes by
+saying a fifth is not available without retiring one of the four. Seven rules draw one. The four
+enumerated are the *record* vocabulary — `.cardface.is-project`, `.cardface.is-blocked`,
+`.reflink.is-open`, `.reflink.is-done`. Three more sit outside it deliberately:
+
+- **`.banner.is-bad` and `.banner.is-conflict`** are two branches of one typed decision —
+  `bannerFor` returns `tone: 'conflict' | 'bad'` — on an element that *is* a message about state
+  rather than a record carrying one. They are washed as well as striped, which no record edge is.
+  `--warn` on a left edge appears nowhere else in this document; it is what separates "refused"
+  from "saved, with warnings" where both render in one stack.
+- **`.linkrow.state-error`** is `bad` meaning "a failure", which is this token's own first job. It
+  is the documented survivor of a pruning from four link-row stripes to one, and the row it marks
+  is not a record — it is a link on one.
+
+So the rule governs the vocabulary a *record* is drawn in, and the count is four there. To change
+it: retire one of the four, or restate the rule as being about records specifically.
+
+Not consolidated into a shared `.stripe` rule, and this is the interesting part. Three independent
+reasons killed it: a bare `.stripe` at one class loses to `.column-card:hover .cardface` and the
+two selection rules at three; the rule count would go up rather than down, because both banners
+keep their `color-mix` wash and `.reflink.is-done` its `0.7` opacity; and the design detector
+matches per declaration, so folding seven declarations into one would take its count from 8 to 2 —
+disarming the only automated tripwire on this very rule.
+
+### The accent-border focus, at three sites
+
+DESIGN.md's Inputs/Fields section gives every field a 2px `accent` ring at `outline-offset: -1px`.
+`.field-recessed` replaces it with an accent *border* instead, because a 2px ring against the
+rail's edge read as a second boundary.
+
+That reason is a rail reason, and the class now paints two fields that are not in the rail: the
+canvas toolbar's view-namer, and the panel's new-value field. Both keep the treatment on purpose —
+the alternative is a field whose focus depends on which surface its caller happened to mount it
+in, which is exactly the defect that produced this component. `CommitInput` chose between two
+paints based on the wrapper *tag* its caller passed; one register with one focus rule is what
+replaced that.
+
+To change it: scope the border-swap to `.rail-row .field-recessed` and let the other two take the
+global ring — and expect the canvas float and the panel to then disagree with the rail about a
+field that is otherwise identical.
+
+### The project that is named but not chipped
+
+A record's project is a chip everywhere you meet it — a card face, a canvas node, a table cell —
+and bare text in the record picker: `.picker-proj` is mono `--text-label` in `hue-purple`, with no
+fill, no border, no radius and no padding.
+
+It keeps the axis's hue, which is the part that carries meaning, and drops the chip because the
+container is the case The Dilution Rule was written for: *"full strength is fine on one chip and
+loud on eight stacked down a column"*, which is why the light theme already mixes the fill to 42%.
+A picker lists every record in the vault — thirteen project labels on the fixture, and 27 rows —
+so the chips would arrive not eight to a column but one per row for the length of the list. The
+row is also already carrying a record mark and a title competing for the same eye; a filled chip
+would be the third thing on it asking to be read first.
+
+Measured side by side in one viewport: 13 bare labels in the popover against 14 filled chips on
+the faces behind it.
+
+To change it: give `.picker-proj` the `.chip.facet-project` treatment and check the popover in
+both themes at full list length — the light theme is the harder of the two, since its fill is a
+saturated pastel diluted toward the surface rather than a dark shade.
+
+### The vault mark that borrows a record glyph
+
+`.vaultbtn-mark` draws `▣`, which the Record Mark vocabulary assigns to a project, for a thing
+that is not a record at all. It also takes `--accent`, which is correct here — which vault you are
+looking at is live state.
+
+A pun, not a collision, since a vault and a project never appear in the same list. Changing it
+would be tidying.

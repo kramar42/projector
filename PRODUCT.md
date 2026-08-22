@@ -130,8 +130,9 @@ handful of records. Seven `pj check` warnings remain, three of them structural.
   chip's colour says which axis it is before you read it: priority orange, status green, project
   purple, tech blue. Every value in `src/web/style.css` comes from the palette file; nothing is
   interpolated.
-- **The record marks are vocabulary, not decoration:** `•` a card, `○` a node, `▣` a project, plus a
-  count of what names it as parent.
+- **The record marks are vocabulary, not decoration:** `•` a card, `○` a record something else
+  names, `▣` a project, plus a
+  count of how many records name it through any reference facet.
 - **Voice:** lowercase, declarative, reasons-first. The docs state what a mechanism is and what it
   replaced; there is no marketing register anywhere in this project, and adding one would be
   off-voice.

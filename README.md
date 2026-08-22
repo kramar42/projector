@@ -114,21 +114,21 @@ already showed:
 
 - **Is it work?** Whether it carries a `status`. That is what keeps a grouping record off every
   status-filtered board — `kind: [card]` was doing a job the status filter already did.
-- **Does it contain anything?** Whether anything names it as a `parent`. That is the count the glyph
-  draws: `▣` a project, `○` something is part of it, `·` neither.
+- **Does anything point at it?** Whether any reference facet names it. That is the count the glyph
+  draws: `▣` a project, `○` something names it, `•` neither.
 
 So it is gone (C11). Only `id` and `title` are required, and a record becomes work by acquiring a
 lifecycle rather than by being reclassified.
 
-Every record carries a mark before its title saying which it is, and a count after it when it contains
-others:
+Every record carries a mark before its title saying which it is, and a count after it when others
+name it:
 
 | | |
 |---|---|
-| `·` | a card — work |
-| `○` | a node — a thought |
+| `•` | a card — work |
+| `○` | a node — some other record names it, through any reference facet |
 | `▣` | a project — it owns configuration that its members inherit |
-| `12` | how many records name this one as their parent |
+| `12` | how many records name this one, across every reference facet |
 
 ## Relations are facets
 
