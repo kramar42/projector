@@ -1301,21 +1301,24 @@ body {
   padding-top: 20px;
 }
 
-/* The workshop: the raw file, its path, and the two actions you take least
-   often. It recedes rather than hides — everything in it is still one glance
-   away, and none of it is what the panel was opened for. */
+/*
+ * The workshop: the raw file and its path, the things you look at least often.
+ *
+ * It recedes by *position* — last, under a rule, after everything the panel was
+ * opened for — and by `ink-3` on its keys, which is what this system already
+ * calls the ground state of annotation. It does not recede by opacity.
+ *
+ * It did, at 0.72, with a hover that took it back to 1. Two things wrong with
+ * that, and the second is the reason the first mattered. A readout that
+ * brightens under the cursor is not still, and the trigger was the whole tier,
+ * so pointing at the frontmatter editor lit up the file path underneath it —
+ * feedback on a sibling you were not touching. And the reveal existed because
+ * the rest state was too dim to read: measured, the `dt` label sat at 3.16:1,
+ * under the 4.5:1 floor, against 5.74:1 with the opacity gone. The hover was
+ * paying for a contrast failure rather than expressing anything.
+ */
 .panel-tier.is-workshop {
   margin-top: 4px;
-}
-
-.panel-tier.is-workshop .kv,
-.panel-tier.is-workshop .panel-actions {
-  opacity: 0.72;
-}
-
-.panel-tier.is-workshop:hover .kv,
-.panel-tier.is-workshop:hover .panel-actions {
-  opacity: 1;
 }
 
 .panel-section h3 {
