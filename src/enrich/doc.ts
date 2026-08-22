@@ -22,16 +22,15 @@ import { resolveDoc } from '../vault.ts';
  *   PROJECTOR_DOC_URL='vscode://file{path}'
  *   PROJECTOR_DOC_URL='obsidian://open?path={path}'
  */
-function openers(abs: string): { action?: { label: string; href: string }; command: string } {
+function openers(abs: string): { action?: { label: string; href: string }; command?: string } {
   // `open` is macOS's own "hand this to whatever owns it", which is the only
   // thing here that needs no configuration and no assumption about an editor.
-  const command = `open ${abs.includes(' ') ? JSON.stringify(abs) : abs}`;
   const template = process.env.PROJECTOR_DOC_URL?.trim();
-  if (!template?.includes('{path}')) return { command };
-  return {
-    action: { label: '↗ open', href: template.replace('{path}', encodeURI(abs)) },
-    command,
-  };
+  // A click beats a paste, and offering both would spend a line on the worse of
+  // the two — the same either/or `claude:` already applies.
+  if (template?.includes('{path}'))
+    return { action: { label: 'open in editor', href: template.replace('{path}', encodeURI(abs)) } };
+  return { command: `open ${abs.includes(' ') ? JSON.stringify(abs) : abs}` };
 }
 
 /**

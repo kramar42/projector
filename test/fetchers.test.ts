@@ -119,8 +119,11 @@ test('jira status colour follows statusCategory, not workflow names', () => {
  * `claude:` already uses: a deep link where an app is registered for one, and a
  * command where none is. No URL scheme means "open with whatever owns this", so
  * the deep link has to be configured rather than guessed.
+ *
+ * Either/or, never both. The row draws a command only when it can draw no click,
+ * so offering both would spend a line on the worse of the two.
  */
-test('a doc offers a command always, and a deep link only when one is configured', async () => {
+test('a doc offers a deep link when one is configured, and a command only when none is', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pj-doc-'));
   writeFileSync(join(dir, 'note.md'), '# Title\n\nSome prose.\n', 'utf8');
   const before = process.env.PROJECTOR_DOC_URL;
@@ -136,13 +139,15 @@ test('a doc offers a command always, and a deep link only when one is configured
     const configured = await docFetcher(dir).fetch('note.md');
     assert.ok(!isUnavailable(configured));
     assert.equal(configured.action?.href, `cursor://file${encodeURI(join(dir, 'note.md'))}`);
-    assert.ok(configured.command, 'the command survives alongside the deep link');
+    assert.equal(configured.command, undefined, 'a click replaces the paste, it does not join it');
 
-    // A template that does not say where the path goes cannot be used.
+    // A template that does not say where the path goes cannot be used, and the
+    // command comes back rather than the row being left with no way in at all.
     process.env.PROJECTOR_DOC_URL = 'cursor://file';
     const bad = await docFetcher(dir).fetch('note.md');
     assert.ok(!isUnavailable(bad));
     assert.equal(bad.action, undefined);
+    assert.ok(bad.command, 'an unusable template falls back rather than failing closed');
   } finally {
     if (before === undefined) delete process.env.PROJECTOR_DOC_URL;
     else process.env.PROJECTOR_DOC_URL = before;
@@ -153,11 +158,38 @@ test('a doc offers a command always, and a deep link only when one is configured
 test('a path with a space is quoted so the command can be pasted', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pj-doc space-'));
   writeFileSync(join(dir, 'a note.md'), '# T\n', 'utf8');
+  const before = process.env.PROJECTOR_DOC_URL;
+  delete process.env.PROJECTOR_DOC_URL;
   try {
     const res = await docFetcher(dir).fetch('a note.md');
     assert.ok(!isUnavailable(res));
     assert.match(res.command!, /^open "/);
   } finally {
+    if (before !== undefined) process.env.PROJECTOR_DOC_URL = before;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The row gives a link one way in and puts it in one place, so a fetcher must not
+ * offer two. Asserted across the two kinds that can produce either.
+ */
+test('no fetcher offers a command beside a click', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pj-doc-'));
+  writeFileSync(join(dir, 'note.md'), '# T\n', 'utf8');
+  const before = process.env.PROJECTOR_DOC_URL;
+  try {
+    for (const template of [undefined, 'cursor://file{path}']) {
+      if (template) process.env.PROJECTOR_DOC_URL = template;
+      else delete process.env.PROJECTOR_DOC_URL;
+      const res = await docFetcher(dir).fetch('note.md');
+      assert.ok(!isUnavailable(res));
+      const ways = [res.url, res.action?.href, res.command].filter(Boolean);
+      assert.equal(ways.length, 1, `doc with ${template ?? 'no'} template offered ${ways.length} ways in`);
+    }
+  } finally {
+    if (before === undefined) delete process.env.PROJECTOR_DOC_URL;
+    else process.env.PROJECTOR_DOC_URL = before;
     rmSync(dir, { recursive: true, force: true });
   }
 });

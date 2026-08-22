@@ -431,12 +431,18 @@ command where it does not.
 Every fetcher is read-only and runs server-side, so credentials stay out of the browser. Failures are
 cached too, so a link that cannot resolve says why once instead of retrying on every render.
 
+**A link row is one skeleton for all eight kinds** — the kind, then the label, then a remove — with
+what a fetcher returned below it in a fixed order: what it is, what is true about it, what went wrong.
+**The label is the way in**, whatever the href's origin, so "where do I click" is answered in the same
+place for every kind. There is no separate control reading "open in Claude": the label already names
+the session, and a click already means go there.
+
 A `doc:` path is relative to the vault root, or absolute. It cannot be a `file://` link — a browser
 will not navigate to one from an http page, and where it does anything at all it downloads a copy,
-which is not opening the document but making a second one. So a doc offers `open <path>`, macOS's own
-"hand this to whatever owns it", and becomes clickable when `PROJECTOR_DOC_URL` names an editor
-scheme. No scheme means "open with the default app", so guessing one would be choosing your editor
-for you:
+which is not opening the document but making a second one. So a doc opens through `PROJECTOR_DOC_URL`
+when that names an editor scheme, and falls back to `open <path>` — macOS's own "hand this to whatever
+owns it" — when it does not. No scheme means "open with the default app", so guessing one would be
+choosing your editor for you:
 
 ```bash
 export PROJECTOR_DOC_URL='cursor://file{path}'      # or vscode://file{path}

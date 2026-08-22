@@ -6,7 +6,21 @@ import type { CardDTO } from '../types.ts';
 /**
  * One link, shown with whatever the server managed to resolve about it.
  *
- * Two rules, and everything else follows from them.
+ * Three rules, and everything else follows from them.
+ *
+ * **One skeleton, eight kinds.** Every row is the same five slots in the same
+ * order — identity, what it is, what is true about it, the fallback, what went
+ * wrong — and a kind differs only in which of the optional four it fills. They
+ * were not: the way in sat in the head for `slack` and `url`, in the head for
+ * `jira` and `gh:*`, in a button *below the fields* for `claude`, and in a code
+ * block below them for `doc`. On a resolved session that put it at y=153 of a
+ * 184px row where the same question is answered at y=9 on a Slack row — one
+ * component asking you to look in three places depending on what you linked.
+ *
+ * **The label is the way in.** Whatever the href's origin — a browser url, a ref
+ * that is already a url, or an app deep link — it lands on the label and nowhere
+ * else. So there is no control reading "open in Claude": the label already names
+ * the session, and a click already means go there.
  *
  * **A link is clickable if it has anywhere to go**, which is a property of the
  * ref and not of a fetcher. This row used to linkify only when enrichment
@@ -34,18 +48,21 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
   // exactly as it is on a card face.
   const label = d?.label ?? link.label;
   const kind = res?.kind || link.kind;
-  const href = d?.url ?? link.href;
+  // One slot, three possible sources. `action` is an app deep link rather than a
+  // browser url, which changes where it goes and not what it is.
+  const href = d?.url ?? link.href ?? d?.action?.href ?? null;
+  const tip = [link.raw, d?.action?.label].filter(Boolean).join(' — ');
 
   return (
     <div className={`linkrow ${res?.state ? `state-${res.state}` : ''}`}>
       <div className="linkrow-head">
         <span className="linkkind">{kind}</span>
         {href ? (
-          <a className="linkrow-label" href={href} target="_blank" rel="noreferrer noopener" title={link.raw}>
+          <a className="linkrow-label" href={href} target="_blank" rel="noreferrer noopener" title={tip}>
             {label}
           </a>
         ) : (
-          <span className="linkrow-label" title={link.raw}>
+          <span className="linkrow-label" title={tip}>
             {label}
           </span>
         )}
@@ -70,15 +87,9 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
         </div>
       ) : null}
 
-      {/* The two things a browser cannot do for you: hand the ref to the app that
-          owns it, and give you a command to paste. Only `claude` has either. */}
-      {d?.action && (
-        <a className="linkrow-action" href={d.action.href} title={d.action.href}>
-          {d.action.label}
-        </a>
-      )}
-
-      {d?.command && <code className="linkrow-cmd">{d.command}</code>}
+      {/* The fallback, and only that: a fetcher offers a command when it could
+          offer no click at all, so this never appears beside a working label. */}
+      {d?.command && !href && <code className="linkrow-cmd">{d.command}</code>}
 
       {/* A real failure, which is worth a line. `res.note` is not rendered: it
           only ever said a kind has no fetcher, which stopped being a fact the

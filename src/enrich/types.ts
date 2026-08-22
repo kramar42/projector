@@ -25,14 +25,24 @@ export interface Enrichment {
   badges?: Badge[];
   /** Small key/value details shown when a link is expanded. */
   fields?: { k: string; v: string }[];
-  /** Where to open it, when there is somewhere to open. */
+  /** Where to open it in a browser, when there is somewhere to open. */
   url?: string;
-  /** A shell command that continues or inspects it, shown for copying. */
+  /**
+   * A shell command that continues or inspects it, shown for copying.
+   *
+   * The last resort, and only that: it costs a full line and a paste, so a
+   * fetcher offers it when there is no `url` and no `action` — never beside one.
+   */
   command?: string;
   /**
-   * An app deep link, rendered as a button. Distinct from `url`: that is where a
-   * browser goes, this hands the ref to the native app that owns it — so it may
-   * be a custom scheme, and the label says what the click will do.
+   * An app deep link. Distinct from `url` only in that it hands the ref to the
+   * native app that owns it, so it may be a custom scheme.
+   *
+   * `label` is never drawn. The row gives a link exactly one way in and puts it
+   * in exactly one place — the row's own label, which already names the thing —
+   * so a second control reading "open in Claude" would be six words explaining
+   * what a click does. It survives as the link's tooltip and its accessible
+   * name, where it costs nothing at rest.
    */
   action?: { label: string; href: string };
 }

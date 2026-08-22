@@ -27,11 +27,22 @@ const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
  * offering it for a transcript the app already has would quietly duplicate the
  * chat rather than reopen it.
  */
-function resume(uuid: string): { action?: { label: string; href: string }; command?: string } {
+function resume(uuid: string): {
+  action?: { label: string; href: string };
+  command?: string;
+  badges?: { label: string; tone: Tone }[];
+} {
   const chat = desktopSessionFor(uuid);
-  if (chat) return { action: { label: '↗ open in Claude', href: `claude://claude.ai/epitaxy/${chat.sessionId}` } };
+  if (chat) return { action: { label: 'open in Claude', href: `claude://claude.ai/epitaxy/${chat.sessionId}` } };
   if (CANONICAL_UUID.test(uuid))
-    return { action: { label: '↗ import into Claude', href: `claude://resume?session=${uuid}` } };
+    return {
+      action: { label: 'import into Claude', href: `claude://resume?session=${uuid}` },
+      // The row draws one way in, in one place, for every kind — so the label no
+      // longer carries this distinction and something else has to. It is worth
+      // seeing without hovering: importing mints a *new* chat, so following this
+      // twice leaves two.
+      badges: [{ label: 'import', tone: 'warn' }],
+    };
   return { command: `claude --resume ${uuid}` };
 }
 
@@ -63,12 +74,13 @@ export const sessionFetcher: Fetcher = {
     }
 
     const { summary: s, lastAt } = found;
+    const how = resume(uuid);
     const badges: { label: string; tone: Tone }[] = [BADGE[found.state]];
     if (s.branch) badges.push({ label: s.branch, tone: 'accent' });
     return {
       label: live?.name ?? uuid.slice(0, 8),
       title: s.opening || '(no opening prompt recorded)',
-      badges,
+      badges: [...badges, ...(how.badges ?? [])],
       fields: [
         { k: 'last activity', v: ago(lastAt) },
         { k: 'turns', v: String(s.turns) },
@@ -76,8 +88,10 @@ export const sessionFetcher: Fetcher = {
         { k: 'started', v: ago(s.firstAt) },
       ].filter((f) => f.v),
       // Resuming is the user's move, not the app's: this offers the move, it does
-      // not make it.
-      ...resume(uuid),
+      // not make it. `badges` is spread above rather than here, so it merges with
+      // the session's own rather than replacing them.
+      action: how.action,
+      command: how.command,
     };
   },
 };
