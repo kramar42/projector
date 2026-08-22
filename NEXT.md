@@ -36,6 +36,38 @@ needs to be part of two things.
 
   Revisit when a numeric facet exists or deadlines are in use, i.e. when there is a question on screen
   that cannot be answered.
+- **Keyboard operation.** The largest thing the app cannot do. Structure is edited by gesture on
+  purpose — drag, the bulk bar, canvas handles — and content through the panel, so there is no keyboard
+  path to either: eight `aria`/`role` attributes in the whole client, and a board you can only
+  rearrange with a pointer.
+
+  It is not an accessibility item, which is why it sits here rather than being owed to anyone. This is
+  a single-user tool on one machine, and the cost is *speed*: a surface open all day beside a terminal,
+  with a Vim palette and full CLI parity, where every column is one hand on a mouse. `j`/`k` down a
+  column, `1`–`4` for priority, `/` to search, `g` to regroup, `x` to select.
+
+  Two reasons to wait. **The gesture semantics are the hard part, not the bindings**: a drag says
+  replace, ⌥ says add, ⇧ says remove, and a keystroke has no modifier to carry that — so a key-driven
+  facet edit needs a third way to say which of the three it means, and inventing one badly would put a
+  second write path beside the one P2 unified. And **there is no evidence yet about which motions are
+  frequent**; the honest input is a few days of noticing what the mouse keeps being reached for, which
+  is cheaper to collect than to guess. Revisit with that list in hand.
+- **Tokenizing the rest of the scale.** `font-size` and `border-radius` are `--text-*` and `--radius-*`
+  now, and `test/theme.test.ts` refuses a raw one — which held through 349 lines of new panel CSS
+  without a single new step. `padding`, `gap` and `letter-spacing` did not get the same treatment:
+  163 raw declarations, a documented rhythm (`1 · 4 · 6 · 7 · 8 · 12 · 14 · 18 · 20`) and nothing
+  enforcing it.
+
+  Deliberate, and the asymmetry is the point. A type step and a radius step are *scales* — one value,
+  reused, where a fifteenth is almost always a mistake. Spacing is not: `1.5px 6px` on a chip and
+  `9px 10px` on a card face are two-axis measurements tuned against their own contents, and naming
+  them would either invent a fake ladder or produce forty tokens with one user each, which is the
+  clutter the naming was supposed to prevent.
+
+  What would change the answer is finding the same padding pair in five unrelated components — a real
+  repeat rather than a coincidence of taste. Until then the rhythm is documented in DESIGN.md and
+  checked by reading, and the guard covers type and shape but not rhythm. Say so rather than implying
+  the stylesheet is fully policed.
 
 ## The model is done for now
 

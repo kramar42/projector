@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { paths } from '../config.ts';
 import { parseLink } from '../schema/links.ts';
 import { NOT_ENRICHED, registry } from '../enrich/registry.ts';
-import { isUnavailable, type Enrichment, type Unavailable } from '../enrich/types.ts';
+import { isUnavailable, type Enrichment, type Fetcher, type Unavailable } from '../enrich/types.ts';
 
 /**
  * The enrichment cache, and the stale-while-revalidate policy around it.
@@ -66,9 +66,29 @@ function open(dataRoot: string): DatabaseSync {
  * Refreshes in flight, so N cards linking the same PR cause one fetch. Keyed by
  * vault as well as ref: a `doc:` ref is vault-relative, so the same string means
  * different files in different vaults.
+ *
+ * It holds a **promise** per ref rather than just the key, so a second caller can
+ * wait for a fetch it did not start. As a bare set, "someone else is already
+ * fetching this" and "there is nothing to fetch" were the same answer: the ref was
+ * skipped, the caller was told the queue had drained, and it read the cache back
+ * before the value landed. The browser survives that — one SSE listener catches
+ * the signal whenever it fires — but `pj enrich <ref>` printed `missing` for a ref
+ * that was being fetched as it printed.
+ *
+ * Waiting cannot deadlock: a borrowed promise always belongs to a fetch that
+ * started earlier, so the wait graph only ever points backwards in time.
  */
-const inFlight = new Set<string>();
+const inFlight = new Map<string, { promise: Promise<void>; done: () => void }>();
 const flightKey = (root: string, ref: string) => `${root}\u0000${ref}`;
+
+/** A promise plus its resolver, so a fetch can be awaited by someone else. */
+function slot(): { promise: Promise<void>; done: () => void } {
+  let done!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    done = resolve;
+  });
+  return { promise, done };
+}
 
 export interface EnrichOptions {
   dataRoot: string;
@@ -81,6 +101,18 @@ export interface EnrichOptions {
    * minute per run — see the note on `refresh`.
    */
   onRefreshed?: () => void;
+  /**
+   * The fetchers to use, defaulting to the registry for this vault.
+   *
+   * A seam for tests, and the only way this module's concurrency contract can be
+   * asserted rather than hoped for: every real fetcher either needs a network, a
+   * token or the `gh` CLI, or — `doc:` — resolves inside a microtask, which is
+   * fast enough that "waited for the other caller's fetch" and "happened to read
+   * after it" produce the same result. A fetcher that takes a controllable tick
+   * tells the two apart. `readCached` keeps the real registry either way, since
+   * what it reports about a kind does not depend on who fetches it.
+   */
+  fetchers?: Record<string, Fetcher>;
 }
 
 export function readCached(dataRoot: string, refs: string[]): Resolved[] {
@@ -170,25 +202,44 @@ function store(dataRoot: string, ref: string, kind: string, value: Enrichment | 
  * It used to return `void`, so the only way to know the work had finished was
  * `onRefreshed` — which fires on exactly one of this function's two exits. The
  * early return below is the other, and it is the *common* case: an already-fresh
- * ref, one already in flight, or a kind with no fetcher. `pj enrich` therefore
- * raced the callback against a 60-second fallback timer and lost every time,
- * which is how a command whose work took 0ms took a minute to come back.
+ * ref, or a kind with no fetcher. `pj enrich` therefore raced the callback against
+ * a 60-second fallback timer and lost every time, which is how a command whose
+ * work took 0ms took a minute to come back.
+ *
+ * A ref another caller is already fetching is neither of those: it is not ours to
+ * fetch and it is not settled either, so it is **borrowed** rather than skipped —
+ * see `inFlight`. `onRefreshed` still fires only when this call stored something,
+ * because a borrower has nothing to announce that the owner will not announce.
  */
 export function refresh(opts: EnrichOptions, refs: string[], force = false): Promise<void> {
-  const fetchers = registry(opts.dataRoot);
+  const fetchers = opts.fetchers ?? registry(opts.dataRoot);
   const todo: { ref: string; kind: string }[] = [];
+  /** Fetches someone else started that this call is nonetheless waiting for. */
+  const borrowed: Promise<void>[] = [];
 
   for (const r of force ? [...new Set(refs)] : readCached(opts.dataRoot, refs)
     .filter((x) => x.state === 'missing' || x.state === 'stale')
     .map((x) => x.ref)) {
     const link = parseLink(r);
     if (!fetchers[link.kind]) continue;
-    if (inFlight.has(flightKey(opts.dataRoot, r))) continue;
+    const running = inFlight.get(flightKey(opts.dataRoot, r));
+    if (running) {
+      borrowed.push(running.promise);
+      continue;
+    }
     todo.push({ ref: r, kind: link.kind });
   }
-  if (!todo.length) return Promise.resolve();
+  // Nothing of our own to fetch. Still not necessarily nothing to wait for.
+  if (!todo.length) {
+    return borrowed.length ? Promise.all(borrowed).then(() => undefined) : Promise.resolve();
+  }
 
-  for (const t of todo) inFlight.add(flightKey(opts.dataRoot, t.ref));
+  const own = new Map<string, () => void>();
+  for (const t of todo) {
+    const s = slot();
+    inFlight.set(flightKey(opts.dataRoot, t.ref), s);
+    own.set(t.ref, s.done);
+  }
 
   return (async () => {
     // Small concurrency: these are subprocesses and HTTP calls, and a board can
@@ -198,9 +249,12 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): Pro
       for (;;) {
         const next = queue.shift();
         if (!next) return;
-        const fetcher = fetchers[next.kind]!;
-        const link = parseLink(next.ref);
+        // Everything inside the `try`, `parseLink` included. A throw above it left
+        // the key in the map forever, which used to cost one un-refetchable ref
+        // and would now hang anyone waiting on it.
         try {
+          const fetcher = fetchers[next.kind]!;
+          const link = parseLink(next.ref);
           store(opts.dataRoot, next.ref, next.kind, await fetcher.fetch(link.ref));
         } catch (err) {
           // A fetcher that throws is a bug, but it must not take the server down.
@@ -210,10 +264,13 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): Pro
           });
         } finally {
           inFlight.delete(flightKey(opts.dataRoot, next.ref));
+          own.get(next.ref)?.();
         }
       }
     });
-    await Promise.all(workers);
+    // Ours and anything borrowed: the promise says "every ref this call asked
+    // about has settled", not "the refs this call happened to own have settled".
+    await Promise.all([...workers, ...borrowed]);
     opts.onRefreshed?.();
   })();
 }

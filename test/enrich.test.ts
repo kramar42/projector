@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readCached, refresh } from '../src/server/enrich.ts';
+import type { Fetcher } from '../src/enrich/types.ts';
 
 /**
  * Enrichment has two signals and they are not the same event: `onRefreshed` says
@@ -100,6 +101,173 @@ test('force refetches a ref that is already fresh', async () => {
     await refresh(opts, ['doc:notes/c.md'], true);
     assert.equal(signalled, 2);
     assert.equal(readCached(root, ['doc:notes/c.md'])[0]!.data?.title, 'Two');
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- in flight
+
+/**
+ * A fetcher that resolves when told to, so "waited for the other caller" and
+ * "read the cache after it happened to finish" are distinguishable.
+ *
+ * Every real fetcher is either unusable here — network, a token, the `gh` CLI —
+ * or, in `doc:`'s case, resolves inside a microtask. That is fast enough that the
+ * two outcomes coincide, so a test written against it passes whether or not the
+ * waiting works. This is why `EnrichOptions.fetchers` exists.
+ */
+function gated(): {
+  fetchers: Record<string, Fetcher>;
+  release: (ref: string) => void;
+  calls: () => number;
+} {
+  const opens = new Map<string, () => void>();
+  const waits = new Map<string, Promise<void>>();
+  const gate = (ref: string): Promise<void> => {
+    if (!waits.has(ref)) {
+      let open!: () => void;
+      waits.set(ref, new Promise<void>((r) => (open = r)));
+      opens.set(ref, open);
+    }
+    return waits.get(ref)!;
+  };
+  let calls = 0;
+  return {
+    fetchers: {
+      doc: {
+        ttl: 30,
+        async fetch(ref: string) {
+          calls++;
+          await gate(ref);
+          return { label: ref };
+        },
+      },
+    },
+    // Per ref, so one can land while another stays open — which is what tells
+    // "waited for my own work" apart from "waited for everything I asked about".
+    release: (ref: string) => {
+      gate(ref);
+      opens.get(ref)!();
+    },
+    calls: () => calls,
+  };
+}
+
+/**
+ * A ref two callers ask for at once is fetched once, and both are told when it
+ * lands.
+ *
+ * `inFlight` was a set of keys, so the second caller could tell that someone was
+ * fetching but had no way to wait: the ref was dropped from its batch and the
+ * promise resolved as though there had been nothing to do. Then it read the cache
+ * back and saw the value that was, at that moment, still being fetched.
+ */
+test('a caller waits for a fetch another caller started', async () => {
+  const { root, cleanup } = vault();
+  const g = gated();
+  try {
+    const first = refresh({ dataRoot: root, fetchers: g.fetchers }, ['doc:notes/shared.md']);
+    // Synchronous up to the fetch's first await, so this call finds it in flight.
+    const second = refresh({ dataRoot: root, fetchers: g.fetchers }, ['doc:notes/shared.md']);
+
+    let secondDone = false;
+    void second.then(() => {
+      secondDone = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(secondDone, false, 'the borrower must not resolve while the fetch is open');
+    assert.equal(readCached(root, ['doc:notes/shared.md'])[0]!.state, 'missing');
+
+    g.release('notes/shared.md');
+    await Promise.all([first, second]);
+    assert.equal(g.calls(), 1, 'fetched once for both callers');
+    assert.equal(readCached(root, ['doc:notes/shared.md'])[0]!.state, 'fresh');
+  } finally {
+    cleanup();
+  }
+});
+
+test('only the caller that fetched announces it', async () => {
+  const { root, cleanup } = vault();
+  const g = gated();
+  try {
+    let owner = 0;
+    let borrower = 0;
+    const first = refresh({ dataRoot: root, fetchers: g.fetchers, onRefreshed: () => owner++ }, ['doc:notes/once.md']);
+    const second = refresh({ dataRoot: root, fetchers: g.fetchers, onRefreshed: () => borrower++ }, ['doc:notes/once.md']);
+    g.release('notes/once.md');
+    await Promise.all([first, second]);
+    assert.equal(owner, 1, 'the caller that fetched says so');
+    assert.equal(borrower, 0, 'a borrower has nothing to announce the owner will not');
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * A call that owns some refs and borrows others resolves when *both* are settled.
+ * The promise means "every ref I asked about", not "the ones I happened to own".
+ *
+ * Releasing only the owned half is what separates the two: awaiting just its own
+ * workers, this call would return with the borrowed ref still being fetched, and
+ * the caller would read the cache back a moment too early — which is the whole
+ * bug, one layer in.
+ */
+test('a mixed batch waits for the borrowed half too', async () => {
+  const { root, cleanup } = vault();
+  const g = gated();
+  try {
+    const first = refresh({ dataRoot: root, fetchers: g.fetchers }, ['doc:notes/a.md']);
+    const second = refresh({ dataRoot: root, fetchers: g.fetchers }, ['doc:notes/a.md', 'doc:notes/b.md']);
+    let secondDone = false;
+    void second.then(() => {
+      secondDone = true;
+    });
+
+    g.release('notes/b.md'); // ours has landed; the borrowed one has not
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(secondDone, false, 'own work done is not the same as done');
+    assert.equal(readCached(root, ['doc:notes/a.md'])[0]!.state, 'missing');
+
+    g.release('notes/a.md');
+    await Promise.all([first, second]);
+    assert.deepEqual(
+      readCached(root, ['doc:notes/a.md', 'doc:notes/b.md']).map((i) => i.state),
+      ['fresh', 'fresh'],
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * The hazard the change introduces, guarded rather than reproduced.
+ *
+ * As a set, a ref left behind by a throw was merely never refetched. As a promise
+ * it hangs everyone waiting on it, so the slot has to be released on every path.
+ * Nothing currently reaches that: `parseLink` cannot throw and a fetcher that
+ * does is already caught. Moving the last two statements inside the `try` is free
+ * insurance, and this is the test that would time out rather than fail if a
+ * future path ever leaked a slot — which is the only way a missing release shows.
+ */
+test('a fetcher that throws still settles, and unblocks a waiter', async () => {
+  const { root, cleanup } = vault();
+  const boom: Record<string, Fetcher> = {
+    doc: {
+      ttl: 30,
+      fetch() {
+        throw new Error('kaboom');
+      },
+    },
+  };
+  try {
+    const first = refresh({ dataRoot: root, fetchers: boom }, ['doc:notes/never.md']);
+    const second = refresh({ dataRoot: root, fetchers: boom }, ['doc:notes/never.md']);
+    await Promise.all([first, second]);
+    const item = readCached(root, ['doc:notes/never.md'])[0]!;
+    assert.equal(item.state, 'error');
+    assert.match(item.error ?? '', /kaboom/);
   } finally {
     cleanup();
   }
