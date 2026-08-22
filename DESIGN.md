@@ -396,9 +396,12 @@ column scrolls its own body under a fixed head. Nothing scrolls inside something
 
 **The board** is a flex row of fixed 292px columns with a 12px gutter, `align-items: flex-start` so a
 short column does not stretch. Cards stack 7px apart in an 8px-padded body. A single-lane board lets
-its columns take the full available height; a laned board caps them at `calc(100vh - 120px)` so the
-next lane is visible below. Lanes are 14px apart, and a lane head is `position: sticky; left: 0` so its
-name survives horizontal scroll.
+its columns take the full available height; a laned board shares that height between its lanes,
+`flex: 1 1 0` so they stay equal, floored at the `44vh` a column was capped at plus the head and gap
+around it — so three lanes or more overflow and the board scrolls rather than every band becoming a
+sliver. That cap was a fixed fraction of the viewport, which only added up for two lanes and left a
+strip under the last one that nothing could use. Lanes are 14px apart, and a lane head is
+`position: sticky; left: 0` so its name survives horizontal scroll.
 
 **The panel** is fixed to the right edge at `min(560px, 92vw)` over a `rgba(10, 8, 14, 0.34)` scrim,
 with 18px between sections and `18px 20px 40px` of padding — the deep bottom pad so the last section

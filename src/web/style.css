@@ -2372,8 +2372,32 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
    second axis stops being visible — which is the only thing the lane is for. The
    cap is scoped to a real lane: with one implicit lane it clipped every column to
    under half the viewport for no reason. */
+/* A laned board shares its height between its lanes rather than giving each a
+   fixed slice of the viewport. The column cap below was `44vh`, a fraction that
+   only adds up for two lanes: two came to 88vh and left a strip under the last
+   lane that nothing could use, while the lists inside scrolled in a box shorter
+   than the space going spare. `flex-basis: 0` is what keeps the lanes equal —
+   grown from their content heights, one came out taller than the other.
+
+   `min-height` is the old cap become a floor: the 44vh a column had plus the head
+   and gap a lane wraps it in, so three lanes or more overflow and the board
+   scrolls exactly as it did rather than shrinking every band to a sliver. */
+.lane.is-laned {
+  flex: 1 1 0;
+  min-height: calc(44vh + 20px);
+}
+
+.lane.is-laned .board {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .lane.is-laned .column {
-  max-height: 44vh;
+  /* `max-height`, not `height`: a column fills its lane when it has the cards for
+     it and stays a stub when it does not, which is what `align-items: flex-start`
+     on the board is for. The single-lane rules above answer this the same way,
+     differing only in having no floor to keep. */
+  max-height: 100%;
 }
 
 .board-empty,
