@@ -68,7 +68,9 @@ export function App() {
     (fn: (spec: ViewSpec) => ViewSpec, replace = false) => {
       const cur = editRef.current;
       if (!cur) return;
-      patch(specToPatch(fn(cur.spec), cur.savedSpec), replace);
+      // The current search is the third side of the diff: an override that lives
+      // only in the URL is invisible to both specs, and so was never cleared.
+      patch(specToPatch(fn(cur.spec), cur.savedSpec, nav.current.search), replace);
     },
     [patch],
   );

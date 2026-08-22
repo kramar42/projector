@@ -5,8 +5,10 @@ import { parseSpec, specFromFile, specToFile, specToParams } from '../src/view/s
 import { layoutRelation } from '../src/view/payload.ts';
 import {
   clearFilters,
+  clearFocus,
   patchIsEmpty,
   setGroupBy,
+  setSearch,
   setShape,
   specToPatch,
   toggleFilterValue,
@@ -133,6 +135,73 @@ test('an explicitly empty focus overrides a saved one', () => {
   // Absent, for contrast: the saved focus survives, which is right for every
   // other parameter and wrong for a control with a clear button.
   assert.deepEqual(parseSpec(specToParams(saved)).query.focus, saved.query.focus);
+});
+
+
+/** A URL's params after a patch, which is what `patchSearch` does to the search. */
+function paramsAfter(params: Record<string, string>, patch: Record<string, string | null>): Record<string, string> {
+  const out = { ...params };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete out[k];
+    else out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * The other half of the ✕, and the half nothing covered: not "does an empty
+ * `focus=` clear a saved focus" — asserted above by hand-building the params —
+ * but "does the code that builds them actually emit one".
+ *
+ * On a saved view it did, because the saved side carries the key and so the diff
+ * visits it. On an ad-hoc query neither spec carries it: the focus lives only in
+ * the URL, and a diff of two specs cannot see a third place. The ✕ ran, the spec
+ * lost its focus, and the patch came back saying nothing about it — so the URL
+ * kept `focus=ideas` and the focus came straight back.
+ */
+test('the X clears a focus that lives only in the URL', () => {
+  const params = { shape: 'canvas', focus: 'ideas', via: 'parent', dir: 'in' };
+  const search = `?${new URLSearchParams(params).toString()}`;
+  const spec = parseSpec(params);
+  assert.deepEqual(spec.query.focus, { id: 'ideas', via: 'parent', dir: 'in', depth: undefined });
+
+  const patch = specToPatch(clearFocus(spec), null, search);
+  // `null` deletes the key, which is right when there is no saved view beneath it
+  // to come back. `''` is for overriding a saved value — see the test above.
+  assert.equal(patch.focus, null, 'the key has to be mentioned to be removed');
+  assert.equal(patch.via, null);
+  assert.equal(patch.dir, null);
+  assert.equal(parseSpec(paramsAfter(params, patch)).query.focus, undefined);
+});
+
+/**
+ * Focus was the one that got noticed. It is not the only one: any key a resolved
+ * spec drops has the same shape, and `q` and `group` were both unclearable from
+ * an ad-hoc URL for the same reason.
+ */
+test('any override that lives only in the URL can be cleared', () => {
+  const cases: [string, Record<string, string>, (s: ReturnType<typeof parseSpec>) => ReturnType<typeof parseSpec>][] = [
+    ['q', { q: 'keycloak' }, (s) => setSearch(s, '')],
+    ['group', { group: 'priority' }, (s) => setGroupBy(s, 0, null)],
+  ];
+  for (const [key, params, clear] of cases) {
+    const search = `?${new URLSearchParams(params).toString()}`;
+    const patch = specToPatch(clear(parseSpec(params)), null, search);
+    assert.ok(key in patch, `${key} must be mentioned`);
+    assert.equal(patch[key], null, `${key} must be removed`);
+  }
+});
+
+/**
+ * `card` is which panel is open and `view` is which saved view the diff is
+ * *against*. Neither spec writes them back, so unioning the URL blindly would
+ * null both — closing the panel and dropping the view on every keystroke.
+ */
+test('an edit leaves the open card and the named view alone', () => {
+  const spec = parseSpec({ shape: 'canvas', focus: 'ideas', via: 'parent', dir: 'in' });
+  const patch = specToPatch(clearFocus(spec), null, '?view=focused&focus=ideas&card=every-facet');
+  assert.ok(!('card' in patch), 'the panel stays open');
+  assert.ok(!('view' in patch), 'the view stays named');
 });
 
 test('a canvas lays out by the first reference facet in show', () => {

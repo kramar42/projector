@@ -122,13 +122,30 @@ export type Patch = Record<string, string | null>;
  * `shape` is the one key with no empty form — `parseSpec` reads `shape=` as
  * `board` rather than as "none" — and it needs none: a resolved spec always has a
  * shape, so it either differs and is written or matches and is dropped.
+ *
+ * **`search` is the third side, and leaving it out made a whole class of override
+ * unclearable.** A patch only mentions keys it can see, and it was computed from
+ * two specs — so a key that lives *only* in the URL was mentioned by neither. On
+ * a saved view that never showed, because the saved side carried the key and so
+ * the loop visited it. On an ad-hoc query it meant `focus`, `q` and `group` could
+ * be set from the URL and never removed: the ✕ ran, the spec lost its focus, and
+ * the patch that came back said nothing about it. `blankQuery` below documents the
+ * mirror image of the same mistake — iterating one side cannot clear the other's.
+ *
+ * Only *override* keys are taken from the URL. `card` and `view` live there too
+ * and are neither: `card` is which panel is open and `view` is which saved view
+ * the diff is *against*. Unioning them in would close the panel and drop the view
+ * on every edit, since neither spec writes them back.
  */
-export function specToPatch(next: ViewSpec, saved: ViewSpec | null): Patch {
+export function specToPatch(next: ViewSpec, saved: ViewSpec | null, search = ''): Patch {
   const to = specToParams(next);
   const from = saved ? specToParams(saved) : {};
+  const inUrl = [...new URLSearchParams(search.replace(/^\?/, '')).keys()].filter(
+    (k) => k !== 'view' && ((SPEC_PARAMS as readonly string[]).includes(k) || k.startsWith('f.')),
+  );
   const patch: Patch = {};
 
-  for (const key of new Set([...Object.keys(to), ...Object.keys(from)])) {
+  for (const key of new Set([...Object.keys(to), ...Object.keys(from), ...inUrl])) {
     const a = to[key];
     const b = from[key];
     if (a === b) {
