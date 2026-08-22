@@ -33,7 +33,7 @@ import {
 import { resetWatermark } from '../intake/db.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
-import { sessionForCwd } from '../sources/claude.ts';
+import { pickSession } from '../sources/claude.ts';
 import { createCard, deleteCard, patchCard, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
@@ -104,7 +104,7 @@ const HELP = `pj — projector CLI${vaultNote}
          [--facet f=v ...] [--link ref ...]
          [--fingerprint fp] [--body text]              create a record
   pj link <id> <ref> [...] [--remove]
-         [--session] [--cwd dir]                       add or remove links; --session names the
+         [--session [id]] [--cwd dir]                       add or remove links; --session names the
                                                        live Claude session working here
   pj check                                             validate every card file and saved view
   pj reindex                                           rebuild the index, and report what it holds
@@ -340,19 +340,46 @@ function cmdAdd(argv: string[]): void {
  * A ref that is not there is an error rather than a no-op on `--remove`:
  * `pj link x --remove jira:FOO-1` reporting success while doing nothing is how
  * you find out a month later that the link is still on the other card.
+ *
+ * Which session `--session` means is answered in three tiers, most reliable
+ * first: the process tree (the session that ran this command, which is almost
+ * always the answer and cannot be ambiguous), then the working directory, then an
+ * id you name. The middle tier refuses rather than guesses — two sessions in one
+ * directory used to resolve to whichever started last, silently, and a link on
+ * the wrong card looks exactly like a link on the right one.
  */
 function cmdLink(argv: string[]): void {
-  const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd'], ['remove', 'session']);
+  const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd'], ['remove']);
   const [id, ...given] = rest;
-  if (!id) fail('pj link <id> <ref>... [--remove] [--session] [--cwd dir]');
+  if (!id) fail('pj link <id> <ref>... [--remove] [--session [id]] [--cwd dir]');
 
   const refs = [...given];
   if (flags.has('session')) {
+    // `--session` alone asks; `--session <id>` names one. `--cwd` searches a
+    // directory instead of the process tree.
+    const named = flags.get('session')?.[0];
     const cwd = flags.get('cwd')?.[0];
-    const dir = cwd && cwd !== 'true' ? cwd : process.cwd();
-    const found = sessionForCwd(dir, process.pid);
-    if (!found) fail(`no live Claude session found working in ${dir}`);
-    refs.push(`claude:${found.sessionId}`);
+    const pick = pickSession({
+      ...(named && named !== 'true' ? { id: named } : {}),
+      ...(cwd && cwd !== 'true' ? { cwd } : {}),
+    });
+    if (!pick.found) {
+      if (pick.reason === 'ambiguous') {
+        fail(
+          `several live sessions could be meant here — name one:\n` +
+            pick.candidates
+              .map((s) => `  pj link ${id} --session ${s.sessionId}   (${s.name ?? 'unnamed'}, ${s.cwd})`)
+              .join('\n'),
+        );
+      }
+      if (named && named !== 'true') fail(`no live Claude session with id "${named}"`);
+      fail(
+        cwd && cwd !== 'true'
+          ? `no live Claude session working in ${cwd}`
+          : `no live Claude session found — run this from inside one, or pass --session <id>`,
+      );
+    }
+    refs.push(`claude:${pick.found.sessionId}`);
   }
   if (!refs.length) fail('pj link <id> <ref>... — nothing to add or remove');
 

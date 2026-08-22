@@ -1,5 +1,6 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { firstLine } from './run.ts';
 
@@ -440,35 +441,87 @@ export function describeSession(uuid: string): SessionStatus | null {
 }
 
 /**
- * The live session working in a directory, or one containing it.
+ * Which live session a command means.
  *
- * This is how a session links itself back to its card: it knows its own working
- * directory but not its own transcript id, and `sessions/<pid>.json` has both.
- * Closing that loop is what makes a card's history accumulate instead of relying
- * on someone remembering to paste an id.
+ * Three tiers, because "the session working in this directory" was only ever a
+ * proxy for the real question — *which session is asking* — and that has an exact
+ * answer. `pj` is spawned by the session that ran it, so that session is in the
+ * process tree above it. No cwd matching, no recency tiebreak, no ambiguity.
  *
- * An exact match on the working directory wins. Failing that, the *first*
- * containing directory in list order — and `liveSessions()` sorts most recently
- * started first, so that is the newest containing session rather than the nearest
- * one. Worth knowing: from `/x/repo/deep`, a session started later at `/x` beats
- * an older one at `/x/repo`. `self` excludes the asking process. It lived in `src/agent/session.ts` — the last
- * `agent/` → `sources/` edge, and a 29-line file whose only export was a query
- * over the session list this file already owns. `sessionState` is a pure derived
- * answer over the same data and was already here; no principle separated them.
- *
- * The `sessions` list arrives as a parameter so the precedence rule is testable
- * without a home directory.
+ * The cwd search stays as the fallback for running `pj` by hand in a terminal that
+ * is not inside a session. It used to take the first match in a list sorted
+ * newest-started-first, which is how three sessions in one directory silently
+ * resolved to whichever started last. It now requires an *unambiguous* answer and
+ * refuses otherwise: a wrong link is silent and durable, so guessing is the one
+ * thing it must not do.
  */
-export function sessionForCwd(
-  cwd: string,
-  self?: number,
-  sessions: LiveSession[] = liveSessions(),
-): LiveSession | null {
-  const want = resolve(cwd);
-  const candidates = sessions.filter((s) => s.alive && s.pid !== self);
-  return (
-    candidates.find((s) => s.cwd && resolve(s.cwd) === want) ??
-    candidates.find((s) => s.cwd && want.startsWith(resolve(s.cwd) + '/')) ??
-    null
-  );
+export type SessionPick =
+  | { found: LiveSession; how: 'id' | 'caller' | 'cwd' }
+  | { found: null; reason: 'none' }
+  | { found: null; reason: 'ambiguous'; candidates: LiveSession[] };
+
+/**
+ * The pids above this process, nearest first.
+ *
+ * `ps` rather than `/proc`, which macOS does not have. Injectable so the tier that
+ * depends on it is testable without a process tree.
+ */
+export function ancestorPids(from = process.pid, depth = 12): number[] {
+  const out: number[] = [];
+  let pid = from;
+  for (let i = 0; i < depth && pid > 1; i++) {
+    const res = spawnSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' });
+    const parent = Number((res.stdout ?? '').trim());
+    if (!Number.isInteger(parent) || parent <= 1) break;
+    out.push(parent);
+    pid = parent;
+  }
+  return out;
+}
+
+export function pickSession(opts: {
+  /** An explicit session id or `claude:<uuid>` ref. Authoritative when given. */
+  id?: string;
+  /** Search this directory instead of asking the process tree. */
+  cwd?: string;
+  self?: number;
+  sessions?: LiveSession[];
+  /** Ancestor pids, nearest first. Defaults to a real walk. */
+  parents?: number[];
+} = {}): SessionPick {
+  const sessions = opts.sessions ?? liveSessions();
+  const live = sessions.filter((s) => s.alive && s.pid !== opts.self);
+
+  // Tier 3, used first when supplied: an id names one session and nothing else.
+  if (opts.id) {
+    const want = opts.id.replace(/^claude:/, '').trim();
+    const hit = live.find((s) => s.sessionId === want);
+    return hit ? { found: hit, how: 'id' } : { found: null, reason: 'none' };
+  }
+
+  // Tier 1: the session that ran this command. `--cwd` opts out, since asking
+  // about another directory should not answer with your own session.
+  if (opts.cwd === undefined) {
+    const parents = opts.parents ?? ancestorPids();
+    for (const pid of parents) {
+      const hit = live.find((s) => s.pid === pid);
+      if (hit) return { found: hit, how: 'caller' };
+    }
+  }
+
+  // Tier 2: the directory, and only when the answer is not a guess.
+  const want = resolve(opts.cwd ?? process.cwd());
+  const exact = live.filter((s) => s.cwd && resolve(s.cwd) === want);
+  const tier = exact.length ? exact : longestContaining(live, want);
+  if (tier.length === 1) return { found: tier[0]!, how: 'cwd' };
+  if (tier.length > 1) return { found: null, reason: 'ambiguous', candidates: tier };
+  return { found: null, reason: 'none' };
+}
+
+/** Every session whose directory contains `want`, keeping only the deepest ones. */
+function longestContaining(live: LiveSession[], want: string): LiveSession[] {
+  const containing = live.filter((s) => s.cwd && want.startsWith(resolve(s.cwd) + '/'));
+  if (!containing.length) return [];
+  const deepest = Math.max(...containing.map((s) => resolve(s.cwd).length));
+  return containing.filter((s) => resolve(s.cwd).length === deepest);
 }

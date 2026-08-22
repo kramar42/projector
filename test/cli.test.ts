@@ -46,11 +46,23 @@ function vault(): { root: string; registry: string; cleanup: () => void } {
   return { root, registry, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+/**
+ * The CLI reads its vault from the environment, so the suite has to start from a
+ * known-empty one. Inheriting `process.env` wholesale meant a `PROJECTOR_DATA`
+ * exported in the shell that ran the tests preempted the vault each test builds,
+ * and the three tests about *resolving* a vault failed for a reason no assertion
+ * mentioned. Every seam the CLI honours is dropped here; the test names what it
+ * wants.
+ */
+const SEAMS = ['PROJECTOR_DATA', 'PROJECTOR_VAULTS', 'PROJECTOR_WORKSPACES'];
+
 function run(args: string[], env: Record<string, string> = {}): Run {
+  const clean = { ...process.env };
+  for (const key of SEAMS) delete clean[key];
   try {
     const out = execFileSync('node', [CLI, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, ...env },
+      env: { ...clean, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     return { out, code: 0 };

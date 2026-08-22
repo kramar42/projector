@@ -65,6 +65,9 @@ test('a directory is a vault when it holds what a vault is made of', () => {
 });
 
 test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
+  // The registry is the subject here, so the env seam that outranks it is cleared
+  // — otherwise a `PROJECTOR_DATA` exported in the shell answers every case.
+  delete process.env.PROJECTOR_DATA;
   const one = [{ path: '/v/one', name: 'one' }];
   const two = [...one, { path: '/v/two', name: 'two' }];
 

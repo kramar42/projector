@@ -10,6 +10,16 @@ import { applyOrder } from '../src/view/payload.ts';
 import { resolveCliVault, vaultAbove } from '../src/config.ts';
 
 /**
+ * Vault resolution reads the environment, so these tests have to start from a
+ * known-empty one. Otherwise a `PROJECTOR_DATA` exported in the shell running the
+ * suite wins over the vault each test builds, and the tests about *resolving* a
+ * vault fail for a reason no assertion mentions. The tests that want a seam set it
+ * themselves.
+ */
+delete process.env.PROJECTOR_DATA;
+delete process.env.PROJECTOR_VAULTS;
+
+/**
  * Arrangement — positions and card order — lives in a named view and nowhere
  * else (C9). These lock the two rules that make that safe to use: a save merges
  * rather than replaces, and a card that has gone is the only thing dropped.

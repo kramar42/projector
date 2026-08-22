@@ -11,7 +11,7 @@ import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
-import { listTranscripts, sessionForCwd, describeTranscript } from '../src/sources/claude.ts';
+import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
@@ -513,7 +513,7 @@ test('the watermark store migrates in place rather than being replaced', () => {
  * exports to a real home directory — `src/intake/claude.ts` says so in a comment
  * defending a per-rule extraction: *"the channel reads the real `~/.claude`, which
  * a unit test has no business constructing."* It can now, so these are the first
- * tests to reach `listTranscripts`, `statusOf` and `sessionForCwd` at all.
+ * tests to reach `listTranscripts`, `describeTranscript` and `pickSession` at all.
  */
 test('a transcript store can be pointed somewhere a test built', () => {
   const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
@@ -549,28 +549,95 @@ test('a transcript store can be pointed somewhere a test built', () => {
 });
 
 /**
- * Exact cwd beats a containing one, dead sessions are out, and so is the asking
- * process.
+ * Which session a command means: three tiers, and the middle one refuses to guess.
  *
- * The containing case resolves by *list order*, and `liveSessions()` sorts most
- * recently started first — so it is the newest containing session, not the
- * nearest. Asserted as it behaves: the docstring used to say "nearest", which is a
- * different rule and would pick the deeper directory.
+ * `sessionForCwd` used to answer this from the directory alone, taking the first
+ * match in a list sorted newest-started-first — so three sessions in one directory
+ * resolved to whichever started last, silently. A wrong answer here puts a
+ * session's history on the wrong card and looks fine, so the cwd tier now requires
+ * an unambiguous match and reports the candidates when it cannot get one.
  */
-test('the session working here is found by precedence, not by luck', () => {
+const S = (sessionId: string, pid: number, cwd: string, alive = true): LiveSession => ({
+  sessionId,
+  pid,
+  cwd,
+  alive,
+});
+
+test('the session that ran the command wins, whatever the directory says', () => {
   const sessions = [
-    { sessionId: 'newest-outer', pid: 1, cwd: '/Users/x', alive: true },
-    { sessionId: 'exact', pid: 2, cwd: '/Users/x/repo', alive: true },
-    { sessionId: 'self', pid: 3, cwd: '/Users/x/repo', alive: true },
-    { sessionId: 'dead-inner', pid: 4, cwd: '/Users/x/repo/deep', alive: false },
+    S('caller', 900, '/somewhere/else'),
+    S('here', 901, '/Users/x/repo'),
   ];
-  const pick = (cwd: string, self?: number) => sessionForCwd(cwd, self, sessions)?.sessionId ?? null;
+  // The process tree reaches pid 900 two levels up; its cwd is irrelevant.
+  const pick = pickSession({ sessions, parents: [42, 900], cwd: undefined });
+  assert.ok(pick.found);
+  assert.equal(pick.found.sessionId, 'caller');
+  assert.equal(pick.how, 'caller');
+});
 
-  assert.equal(pick('/Users/x/repo', 3), 'exact', 'an exact match wins, and self is excluded');
-  assert.equal(pick('/Users/x/repo', 2), 'self', 'excluding one exact match leaves the other');
-  assert.equal(pick('/Users/x/repo/deep', 3), 'newest-outer', 'no exact match: first container in list order');
-  assert.equal(pick('/elsewhere'), null, 'nothing containing it is nothing');
+test('a named id is authoritative and needs no search', () => {
+  const sessions = [S('a', 900, '/x'), S('b', 901, '/y')];
+  for (const id of ['b', 'claude:b']) {
+    const pick = pickSession({ id, sessions, parents: [900] });
+    assert.ok(pick.found, id);
+    assert.equal(pick.found.sessionId, 'b');
+    assert.equal(pick.how, 'id');
+  }
+  // An id naming nothing live is a plain miss, not a fallback to searching.
+  assert.deepEqual(pickSession({ id: 'ghost', sessions, parents: [900] }), {
+    found: null,
+    reason: 'none',
+  });
+});
 
-  // A dead session never wins, however well its directory matches.
-  assert.equal(pick('/Users/x/repo/deep/deeper', 3), 'newest-outer');
+test('--cwd opts out of the process tree, so it answers about that directory', () => {
+  const sessions = [S('caller', 900, '/elsewhere'), S('there', 901, '/Users/x/repo')];
+  const pick = pickSession({ cwd: '/Users/x/repo', sessions, parents: [900] });
+  assert.ok(pick.found);
+  assert.equal(pick.found.sessionId, 'there', 'not the caller');
+  assert.equal(pick.how, 'cwd');
+});
+
+test('the cwd tier prefers the deepest containing directory', () => {
+  const sessions = [
+    S('outer', 901, '/Users/x'),
+    S('inner', 902, '/Users/x/repo'),
+    S('dead', 903, '/Users/x/repo/deep', false),
+  ];
+  const pick = pickSession({ cwd: '/Users/x/repo/deep/deeper', sessions, parents: [] });
+  assert.ok(pick.found);
+  assert.equal(pick.found.sessionId, 'inner', 'the deepest live container, not the newest');
+});
+
+test('the cwd tier refuses to guess between siblings', () => {
+  // Three sessions in one directory — the state that used to resolve silently.
+  const sessions = [S('one', 901, '/Users/x/repo'), S('two', 902, '/Users/x/repo'), S('three', 903, '/Users/x/repo')];
+  const pick = pickSession({ cwd: '/Users/x/repo', sessions, parents: [] });
+  assert.equal(pick.found, null);
+  assert.ok(pick.found === null && pick.reason === 'ambiguous');
+  assert.deepEqual(
+    pick.found === null && pick.reason === 'ambiguous' ? pick.candidates.map((c) => c.sessionId).sort() : [],
+    ['one', 'three', 'two'],
+    'and says which, so a caller can name one',
+  );
+});
+
+test('a dead session never wins, and nothing containing it is nothing', () => {
+  const sessions = [S('dead', 901, '/Users/x/repo', false)];
+  assert.deepEqual(pickSession({ cwd: '/Users/x/repo', sessions, parents: [] }), {
+    found: null,
+    reason: 'none',
+  });
+  assert.deepEqual(pickSession({ cwd: '/elsewhere', sessions: [S('a', 901, '/Users/x')], parents: [] }), {
+    found: null,
+    reason: 'none',
+  });
+});
+
+test('the asking process excludes itself', () => {
+  const sessions = [S('me', 901, '/Users/x/repo'), S('other', 902, '/Users/x/repo')];
+  const pick = pickSession({ cwd: '/Users/x/repo', self: 901, sessions, parents: [] });
+  assert.ok(pick.found);
+  assert.equal(pick.found.sessionId, 'other', 'excluding one sibling leaves the other unambiguous');
 });
