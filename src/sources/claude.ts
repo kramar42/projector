@@ -466,7 +466,7 @@ export type SessionPick =
  * `ps` rather than `/proc`, which macOS does not have. Injectable so the tier that
  * depends on it is testable without a process tree.
  */
-export function ancestorPids(from = process.pid, depth = 12): number[] {
+function ancestorPids(from = process.pid, depth = 12): number[] {
   const out: number[] = [];
   let pid = from;
   for (let i = 0; i < depth && pid > 1; i++) {
