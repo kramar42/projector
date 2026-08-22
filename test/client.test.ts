@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
+import { INWARD_REFS } from '../src/schema/vocabulary.ts';
 import { blankQuery } from '../src/view/intents.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { apiSearch, paramsOf, patchSearch } from '../src/web/query.ts';
@@ -72,37 +73,56 @@ test('agreeing relations collapse to one edge, and the structural type leads', (
 });
 
 test('a hierarchy edge points the way the graph opens', () => {
-  // `hierarchy` is the canvas's layout relation — always one, from `data.layout`.
-  const [flipped] = edgesFor([{ src: 'child', dst: 'parent', type: 'parent' }], ['parent']);
+  // The second argument is which relations point at their *container*, which
+  // arrives as `hierarchies` and is a property of the relation. It used to be the
+  // canvas's layout relation, from `data.layout` — a property of the view.
+  const [flipped] = edgesFor([{ src: 'child', dst: 'parent', type: 'parent' }], INWARD_REFS);
   assert.deepEqual([flipped!.src, flipped!.dst], ['parent', 'child'], 'drawn parent → child');
 
-  const [kept] = edgesFor([{ src: 'a', dst: 'b', type: 'blocks' }], ['parent']);
+  const [kept] = edgesFor([{ src: 'a', dst: 'b', type: 'blocks' }], INWARD_REFS);
   assert.deepEqual([kept!.src, kept!.dst], ['a', 'b'], 'a non-hierarchy keeps its direction');
 });
 
 /**
- * Only relations stored the same way round can collapse. Since `hierarchy` holds
- * exactly the layout relation, a `parent` edge flips while a `project` edge beside
- * it does not — so the pair the docstring describes as collapsing does not, when
- * `parent` is what the canvas lays out by. Asserted here because it is surprising,
- * not because it is obviously right.
+ * The regression. `blocks` stores *a must finish before b*, so it already points
+ * away from the root of the dependency tree and must never flip — including when
+ * it is the relation the canvas lays out by, which is exactly the query that asks
+ * "what does finishing this unblock".
+ *
+ * While the flip was keyed on the layout relation these two calls disagreed, and
+ * the graph read "is blocked by" under a label saying `blocks`.
  */
-test('a flipped relation and an unflipped one stay separate edges', () => {
+test('a blocks edge keeps its direction whatever the canvas lays out by', () => {
+  const chain = [{ src: 'blocker', dst: 'blocked', type: 'blocks' }];
+  for (const label of ['laid out by parent', 'laid out by blocks']) {
+    const [edge] = edgesFor(chain, INWARD_REFS);
+    assert.deepEqual([edge!.src, edge!.dst], ['blocker', 'blocked'], label);
+  }
+});
+
+/**
+ * A record inside a project carries `parent` and `project` naming the same
+ * record, and both point at their container — so both flip, land on one pair, and
+ * collapse. This is the case the module's docstring calls the *expected* shape.
+ *
+ * It used to draw two lines. `hierarchy` held only the layout relation, so the
+ * `parent` edge flipped and the `project` edge beside it did not, and the pair
+ * described as collapsing was the one pair that could not. The old test asserted
+ * that outcome and said in its own comment that it was surprising rather than
+ * obviously right, which is where this bug was visible all along.
+ */
+test('parent and project naming the same record collapse to one edge', () => {
   const edges = edgesFor(
     [
       { src: 'child', dst: 'p', type: 'parent' },
       { src: 'child', dst: 'p', type: 'project' },
     ],
-    ['parent'],
+    INWARD_REFS,
   );
-  assert.equal(edges.length, 2);
-  assert.deepEqual(
-    edges.map((e) => [e.src, e.dst, e.lead]),
-    [
-      ['p', 'child', 'parent'],
-      ['child', 'p', 'project'],
-    ],
-  );
+  assert.equal(edges.length, 1, 'agreeing containment reads as one relationship');
+  assert.deepEqual([edges[0]!.src, edges[0]!.dst], ['p', 'child'], 'drawn container → member');
+  assert.deepEqual(edges[0]!.types, ['parent', 'project']);
+  assert.equal(edges[0]!.lead, 'parent', 'the more structural type styles the line');
 });
 
 test('a pair that disagrees stays two edges', () => {
@@ -111,7 +131,7 @@ test('a pair that disagrees stays two edges', () => {
       { src: 'x', dst: 'p1', type: 'parent' },
       { src: 'x', dst: 'p2', type: 'project' },
     ],
-    ['parent'],
+    INWARD_REFS,
   );
   assert.equal(edges.length, 2, 'different targets are the case worth seeing');
 });

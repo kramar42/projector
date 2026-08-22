@@ -28,6 +28,25 @@ export function isOrdered(def: FacetDef | undefined): boolean {
 }
 
 /**
+ * Reference facets whose value names the **container**.
+ *
+ * A record stores `parent: [x]` and `project: [x]` meaning *I am part of x*, so
+ * both point inward, toward the root of the tree they belong to. A canvas draws
+ * them the other way round — the arrow points the way the graph opens — and dagre
+ * needs the same orientation or the roots come out on the right.
+ *
+ * `blocks` is not one of them. It stores *I must finish before x*, which already
+ * points away from the root of the dependency tree. That distinction cannot be
+ * derived from storage: all three are `type: ref`, and `single` does not separate
+ * `project` from `blocks`. It has to be declared, and this is the declaration.
+ *
+ * It is a property of the **relation**, never of the view. Keying the flip on
+ * *which relation the canvas lays out by* looks identical while `parent` leads,
+ * and reverses every arrow the moment anything else does.
+ */
+export const INWARD_REFS: readonly string[] = ['parent', 'project'];
+
+/**
  * The absence refinement, as it travels.
  *
  * `(none)` rather than a bare `none`, so a facet that one day carries a literal

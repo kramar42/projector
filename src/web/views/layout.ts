@@ -1,5 +1,6 @@
 import dagre from '@dagrejs/dagre';
 import type { CardDTO } from '../types.ts';
+import { INWARD_REFS } from '../../schema/vocabulary.ts';
 
 export interface Placed {
   id: string;
@@ -37,7 +38,8 @@ export function treeLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   direction: 'LR' | 'TB' = 'LR',
-  hierarchy: string[] = ['parent'],
+  layoutBy: string[] = ['parent'],
+  inward: readonly string[] = INWARD_REFS,
 ): Map<string, Placed> {
   const g = new dagre.graphlib.Graph();
   g.setGraph({
@@ -54,13 +56,19 @@ export function treeLayout(
     g.setNode(n.id, { width: w, height: h });
   }
   const ids = new Set(nodes.map((n) => n.id));
-  const feeds = new Set(hierarchy);
+  const feeds = new Set(layoutBy);
+  const points = new Set(inward);
   for (const e of edges) {
-    // Both hierarchy edges point child → parent and member → container; dagre
-    // wants container → member so the roots sit on the left and the tree opens
-    // outward.
     if (!feeds.has(e.type) || !ids.has(e.src) || !ids.has(e.dst)) continue;
-    g.setEdge(e.dst, e.src);
+    // Which relation defines the tree and which way that relation is stored are
+    // two questions, and one parameter used to answer both. `parent` and
+    // `project` point child → parent and member → container, and dagre wants
+    // container → member so the roots sit on the left and the tree opens
+    // outward. `blocks` already points away from its root, so flipping it laid
+    // the chain out backwards — which only showed once a canvas was laid out by
+    // something other than `parent`.
+    if (points.has(e.type)) g.setEdge(e.dst, e.src);
+    else g.setEdge(e.src, e.dst);
   }
 
   dagre.layout(g);
@@ -90,10 +98,11 @@ export function manualLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
-  hierarchy: string[] = ['parent'],
+  layoutBy: string[] = ['parent'],
+  inward: readonly string[] = INWARD_REFS,
   computed?: Map<string, Placed>,
 ): Map<string, Placed> {
-  const fallback = computed ?? treeLayout(nodes, edges, 'LR', hierarchy);
+  const fallback = computed ?? treeLayout(nodes, edges, 'LR', layoutBy, inward);
   const out = new Map<string, Placed>();
   for (const n of nodes) {
     const s = stored[n.id];
@@ -172,8 +181,9 @@ function bands(assign: Map<string, string>, groups: { value: string }[]): string
 export function clusteredLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
-  hierarchy: string[],
+  layoutBy: string[],
   groups: { value: string; ids: string[] }[],
+  inward: readonly string[] = INWARD_REFS,
 ): Map<string, Placed> {
   const assign = assignClusters(nodes, groups);
   const placed = new Map<string, Placed>();
@@ -187,7 +197,8 @@ export function clusteredLayout(
       members,
       edges.filter((e) => ids.has(e.src) && ids.has(e.dst)),
       'LR',
-      hierarchy,
+      layoutBy,
+      inward,
     );
     const xs = [...inner.values()].map((p) => p.x);
     const ys = [...inner.values()].map((p) => p.y);

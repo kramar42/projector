@@ -160,10 +160,19 @@ export function CanvasView({
     // Stored positions only ever come from a saved view. An ad-hoc query has no
     // file to hold arrangement, so it is auto-laid-out — naming a view is what
     // buys manual positioning (C9).
-    // Computed by the server, not here: the relation a canvas lays out by is the
-    // same one `connect` walked for context, and two computations of that could
-    // disagree.
-    const hierarchy = data.layout ? [data.layout] : [];
+    // Both computed by the server, not here. `layout` is the relation this canvas
+    // lays out by — the same one `connect` walked for context, and two
+    // computations of that could disagree. `hierarchies` is which relations point
+    // at their container.
+    //
+    // One value used to serve both, and they are different questions: a canvas
+    // laid out by `blocks` flipped every blocks edge, so the chain read "is
+    // blocked by" while the label said `blocks`, and dagre put the blocker on the
+    // right. It also meant a record inside a project drew two lines instead of
+    // one, because the `parent` edge flipped and the `project` edge beside it did
+    // not — defeating the collapse `edgesFor` exists to do.
+    const layoutBy = data.layout ? [data.layout] : [];
+    const inward = data.hierarchies;
     // `groupBy` used to be accepted and ignored here, so switching shape never
     // dropped the parameter. It draws now: one band per value of the primary
     // axis, in the order the facet declares.
@@ -172,10 +181,10 @@ export function CanvasView({
     const groups = data.groups ? groupsFor(data, { empties: 'drop' }) : [];
     const clustered = groups.length > 0;
     const auto = clustered
-      ? clusteredLayout(shown, data.relations, hierarchy, groups)
-      : treeLayout(shown, data.relations, 'LR', hierarchy);
+      ? clusteredLayout(shown, data.relations, layoutBy, groups, inward)
+      : treeLayout(shown, data.relations, 'LR', layoutBy, inward);
     const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.relations, stored, hierarchy, auto)
+      ? manualLayout(shown, data.relations, stored, layoutBy, inward, auto)
       : auto;
 
     const rfNodes: Node[] = shown.map((card) => {
@@ -215,7 +224,7 @@ export function CanvasView({
       : [];
 
     // Bands first, so a record is always drawn over its own background.
-    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, hierarchy) };
+    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, inward) };
   }, [data, onOpen]);
 
   useEffect(() => {

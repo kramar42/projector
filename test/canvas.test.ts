@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { loadCard, } from '../src/schema/card.ts';
 import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
-import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout } from '../src/web/views/layout.ts';
+import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, treeLayout } from '../src/web/views/layout.ts';
+import { INWARD_REFS } from '../src/schema/vocabulary.ts';
 import type { CardDTO } from '../src/web/types.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
@@ -188,3 +189,47 @@ test('an empty declared value gets no band', () => {
  * so moving the query out of TypeScript and into `views/*.yaml` would have moved
  * the failure rather than fixing it. `pj check` reading views is what closes it.
  */
+
+// ---------------------------------------------------------------- orientation
+
+/**
+ * Roots on the left, the tree opening outward — whichever relation it is laid out
+ * by.
+ *
+ * `parent` and `project` are stored child → parent and member → container, so
+ * dagre has to be handed them reversed. `blocks` is stored blocker → blocked,
+ * which already points away from its root, so it must be handed over as it is.
+ *
+ * One parameter used to answer both "which relation defines the tree" and "which
+ * way is that relation stored", and those coincide only while `parent` leads. A
+ * canvas laid out by `blocks` therefore put the blocker on the right and pointed
+ * every arrow back at it.
+ */
+test('the root sits left whichever relation the canvas lays out by', () => {
+  const nodes = [face('blocker'), face('blocked')];
+  const chain = [{ src: 'blocker', dst: 'blocked', type: 'blocks' }];
+  const placed = treeLayout(nodes, chain, 'LR', ['blocks'], INWARD_REFS);
+  assert.ok(
+    placed.get('blocker')!.x < placed.get('blocked')!.x,
+    'the blocker is the root of a dependency chain, so it is drawn first',
+  );
+});
+
+test('a container sits left of its member', () => {
+  const nodes = [face('child'), face('box')];
+  const tree = [{ src: 'child', dst: 'box', type: 'parent' }];
+  const placed = treeLayout(nodes, tree, 'LR', ['parent'], INWARD_REFS);
+  assert.ok(placed.get('box')!.x < placed.get('child')!.x, 'stored child → parent, drawn parent → child');
+});
+
+/**
+ * The relation a canvas lays out by is the only one that positions anything. A
+ * `blocks` edge on a canvas laid out by `parent` still draws — `edgesFor` decides
+ * that — but it must not drag a node into another rank.
+ */
+test('only the layout relation feeds the layout', () => {
+  const nodes = [face('a'), face('b')];
+  const edges = [{ src: 'a', dst: 'b', type: 'blocks' }];
+  const placed = treeLayout(nodes, edges, 'LR', ['parent'], INWARD_REFS);
+  assert.equal(placed.get('a')!.x, placed.get('b')!.x, 'unranked nodes share a column');
+});

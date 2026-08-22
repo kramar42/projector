@@ -12,7 +12,10 @@
  *
  * **Hierarchy edges flip.** They are stored child → parent and member →
  * container; drawn the other way, so the arrow points the way the graph opens.
- * Which relations are hierarchies is the server's answer, arriving as `layout`.
+ * Which relations are hierarchies is the server's answer, arriving as
+ * `hierarchies` — a property of the relation. It used to arrive as `layout`,
+ * which is a property of the *view*, so a canvas laid out by `blocks` drew every
+ * arrow backwards and a `parent`+`project` pair refused to collapse.
  *
  * **The most structural type leads.** A pair joined by several relations is
  * styled by one of them, and the order is fixed rather than incidental.
@@ -36,7 +39,7 @@ const LEAD_ORDER = ['parent', 'project', 'blocks'];
 
 export function edgesFor(
   raw: { src: string; dst: string; type: string }[],
-  hierarchy: string[],
+  hierarchy: readonly string[],
 ): EdgeSpec[] {
   const byPair = new Map<string, { src: string; dst: string; types: string[] }>();
   for (const e of raw) {

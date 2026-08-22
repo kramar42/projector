@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Facets, Rec } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
+import { INWARD_REFS } from '../schema/vocabulary.ts';
 import { parentsOf } from '../index/project.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
@@ -45,6 +46,13 @@ export interface QueryPayload {
   universe: number;
   placements: number;
   layout: string | null;
+  /**
+   * Which reference facets point at their container, so the canvas knows which
+   * lines to draw the other way round. Answered here rather than in the client
+   * for the same reason as `layout`: two computations of it could disagree, and
+   * the client's copy was the layout relation, which is a different question.
+   */
+  hierarchies: string[];
   relations: { src: string; dst: string; type: string }[];
   rollups: ReturnType<typeof projectRollups>;
   views: SavedViewSummary[];
@@ -115,6 +123,11 @@ export function queryPayload(
     // Computed here rather than in the client, so the relation a canvas lays out
     // by and the one `connect` walked cannot come apart (C8).
     layout: layout ?? null,
+    // Declared, not derived: `parent` and `project` name a container and `blocks`
+    // does not, and nothing about how the three are stored says which is which.
+    // Filtered to what this vault actually declares, so a vault without
+    // `project` does not advertise it.
+    hierarchies: INWARD_REFS.filter((name) => isRef(facets[name])),
     relations: relationsAmong(records, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
