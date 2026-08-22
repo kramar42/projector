@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, IconButton } from '../components/Button.tsx';
+import { RecordMark } from '../components/CardBody.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { LinkEditor } from '../components/LinkEditor.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
@@ -56,7 +57,7 @@ export function Inbound({
 }: {
   head: string;
   means: string;
-  records: { id: string; title: string; done?: boolean }[];
+  records: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
   onOpen: (id: string) => void;
   className?: (r: { done?: boolean }) => string;
 }) {
@@ -81,8 +82,14 @@ export function Inbound({
           key={r.id}
           onClick={() => onOpen(r.id)}
         >
+          {/* A record carries its mark wherever you meet it, and this was one of
+              two places it did not — the reason being that `blockedBy` and
+              `children` used to ship as `{ id, title }` with neither of the two
+              numbers a mark is read from. The `' ✓'` that used to sit here is
+              gone with it: `.reflink.is-done` already draws that state as an `ok`
+              left edge, so the tick was the same fact twice. */}
+          <RecordMark card={r} />
           {r.title}
-          {r.done ? ' ✓' : ''}
         </button>
       ))}
       {records.length > INBOUND_CUTOFF && (

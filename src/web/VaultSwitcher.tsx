@@ -100,7 +100,7 @@ function VaultMenu({
             title={v.path}
           >
             <span className="truncate pop-pick-name">{v.name}</span>
-            <span className="pop-count">{v.exists ? `${v.cards ?? 0}` : 'missing'}</span>
+            <span className="pop-annotation">{v.exists ? `${v.cards ?? 0}` : 'missing'}</span>
           </button>
           {v.path !== meta.vault && (
             <IconButton

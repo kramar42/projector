@@ -292,17 +292,25 @@ and never resolves a reference inside `components:`.
 
 ## Still open
 
-Decisions this pass deliberately did not make.
+Nothing from the first two passes. The four items that were open are settled:
 
-1. **Whether the rail's facet label becomes mono.** The casing agrees with the panel now; the font
-   does not, and The Mono Label Rule reads against sans there. It is a dense vertical list of
-   thirteen axes, which is the argument for leaving it.
-2. **The mark on `.reflink` and the focus pill.** Blocked on the DTO change described above.
-3. **The canvas has no empty state.** The board, table, rail, picker and panel all say when they
-   have nothing; the canvas renders an empty dot grid, which is indistinguishable from one that has
-   not loaded. Adding one is new work, not consolidation.
-4. **`.pop-count` should be renamed.** It is the right-hand annotation slot on a popover row — the
-   same job as `.pop-note` beside it — and it renders words at two of its three call sites.
+- **The rail's facet label stays sans, and so does the panel's.** Not an exception — the reading
+  was simply wrong. The Mono Label Rule's own first clause is "if a human typed it, it is sans", and
+  a facet label is a string in the vault's `facets.yaml`. The rail had it right; the panel was
+  changed to match, which closes The One Casing Rule on both axes at once — one string, one casing,
+  one font.
+- **`.reflink` and the focus pill carry their marks.** The blocker was a DTO shape crossing an
+  import boundary, and it dissolved on its own: moving the inbound count into `src/index/refs.ts`
+  for the `○` change put it where `blocking.ts` could already reach. `blockedBy` and `children` now
+  ship what a mark reads, and the literal `' ✓'` went with it — `.reflink.is-done` already drew that
+  state as an `ok` edge.
+- **The canvas stays silent when empty**, recorded in Accepted Exceptions. The minimap empties with
+  it, so the surface already says so twice.
+- **`.pop-count` is `.pop-annotation`**, which is what it always was.
+
+What is *not* closed is the thing that made all of this necessary: only the type scale, the radius
+ladder and — now — the frontmatter's token references are enforced. Every other rule in this
+document is prose, and prose is what drifted.
 
 ## How this relates to the other documents
 

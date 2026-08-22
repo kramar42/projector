@@ -353,7 +353,10 @@ between the two.
 ### Named Rules
 
 **The Mono Label Rule.** If a human typed it, it is sans; if the app is naming, counting or annotating
-something, it is mono. Titles, excerpts and body copy are sans. Every label, key, count, chip, meta
+something, it is mono. A facet's label is the first case, not the second: `label: Part of` is a string
+in the vault's own `facets.yaml`, written by whoever keeps the vocabulary, so the filter rail and the
+card panel both render it sans. The app names the *axis slot* — `SHAPE`, `GROUP BY`, `FACETS` — and
+those are mono. Titles, excerpts and body copy are sans. Every label, key, count, chip, meta
 line, column name, table header and glyph is mono. There is no third case, and the division is what
 makes a screen with nine type sizes read as two voices rather than nine.
 
@@ -763,6 +766,20 @@ uppercase` — the panel section heading it sits inside. Deleting them moves the
 the browser's own form-control stylesheet, and the failure mode is a mode switch reading
 `READ / EDIT` on the one control this system says is not a chip. The `letter-spacing: 0` is not
 inert either: it records the tab's departure from the chip step's `0.01em`.
+
+### The canvas that says nothing when it is empty
+
+Five surfaces state their own emptiness — the board, the table, the filter rail, the record picker
+and the panel's body — through `.emptystate`. The canvas does not: a query matching nothing leaves
+an empty dot grid.
+
+It stays that way. The minimap empties with it, so two things on screen agree that there is nothing
+there, which is the information a message would carry. And the canvas is the one surface with no
+chrome of its own by construction — the toolbar floats and vanishes — so a centred sentence would
+be the only fixed element it ever draws.
+
+To change it: it would want the same `.emptystate` register the other five use, not an illustration
+— see the Don't list.
 
 ### The three left edges outside the record vocabulary
 

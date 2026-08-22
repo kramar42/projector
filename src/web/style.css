@@ -195,8 +195,8 @@
  *
  * Declared once rather than fourteen times, the way the focus ring above is: the
  * property inherits, so naming the container is enough, and a number added inside
- * any of these is covered without anyone remembering the rule. `.pop-count` is
- * deliberately absent — it renders `v.shape` and `'missing'`, so it is a
+ * any of these is covered without anyone remembering the rule. `.pop-annotation`
+ * is deliberately absent — it renders `v.shape` and `'missing'`, so it is a
  * right-hand annotation that sometimes holds digits, not a count.
  */
 .rail-stats,
@@ -549,9 +549,19 @@ body {
   white-space: nowrap;
 }
 
+/* Holds a record mark now, so it aligns on the baseline rather than the box —
+   `.recordmark` sets `0.8em` and its nudges are measured against the text it sits
+   beside, which centring would defeat. The same note `.refchip-go` carries, and
+   for the same reason the title inside it is its own element: a bare text node in
+   a flex container is an anonymous item, and `text-overflow` has nothing to bite
+   on. */
 .rail-focus {
   appearance: none;
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   background: var(--accent-soft);
   color: var(--accent);
   border: 0;
@@ -717,7 +727,11 @@ body {
   flex: 1;
 }
 
-.pop-count {
+/* The trailing annotation on a popover row. Named `.pop-count` while rendering a
+   shape name and the word `missing` at two of its three call sites — the same job
+   `.pop-note` beside it does, and never reliably a number, which is why it is not
+   a member of the quiet-count family. */
+.pop-annotation {
   font-family: var(--mono);
   font-size: var(--text-label);
   color: var(--ink-3);
@@ -1015,7 +1029,7 @@ input:focus-visible + .checkbox {
  *    (in the table)   it. Giving them a step would break that on purpose.
  *   `.bulkbar-count`  renders "N selected" — a sentence, in the accent, on the
  *                     bulk bar's own fill.
- *   `.pop-count`      not a count at all: it renders `v.shape` ("board") and
+ *   `.pop-annotation`  not a count at all: it renders `v.shape` ("board") and
  *                     `'missing'`. A right-hand annotation that sometimes holds
  *                     digits.
  */
@@ -1678,7 +1692,12 @@ code {
 }
 
 .reflink {
-  display: block;
+  /* Was `display: block`. It holds a mark and a title now, which is the same
+     two-part line a card face and the panel title lead with, so it aligns them on
+     the baseline the mark's constants were measured against. */
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
   width: 100%;
   text-align: left;
   appearance: none;
@@ -2278,10 +2297,22 @@ textarea { resize: vertical; font-family: inherit; }
  * it, so the row had no hierarchy. Tracking falls to the chip step's `0.01em`:
  * `0.1em` exists to open up uppercase, and there is no uppercase now.
  */
+/*
+ * An axis's name, in the panel. Sans, and the same size the rail renders it at.
+ *
+ * The Mono Label Rule reads "if a human typed it, it is sans; if the app is
+ * naming, counting or annotating something, it is mono" — and a facet label is
+ * `label: Part of` in the vault's own `facets.yaml`. A human typed it. So sans is
+ * the rule applied rather than an exception to it, which is the opposite of how
+ * this was first read: the rail was taken for the deviation and the panel for the
+ * correct one, when the rail had it right all along.
+ *
+ * Casing came first: this rule used to `text-transform: uppercase` at the *Chip*
+ * step, so one string carried two identities thirty pixels apart. Now the string
+ * renders the same way in both places, which is the whole of The One Casing Rule.
+ */
 .facetedit-label {
-  font-family: var(--mono);
   font-size: var(--text-body-sm);
-  letter-spacing: 0.01em;
   color: var(--ink-3);
 }
 

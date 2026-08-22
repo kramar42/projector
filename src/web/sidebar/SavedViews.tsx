@@ -80,7 +80,7 @@ export function SavedViews({
                   }}
                 >
                   <span className="truncate pop-pick-name">{v.title}</span>
-                  <span className="pop-count">{v.shape}</span>
+                  <span className="pop-annotation">{v.shape}</span>
                 </button>
               ))}
               <button

@@ -103,7 +103,7 @@ export function queryPayload(
       facets,
       today,
       refCount: inbound.get(id) ?? 0,
-      blockedBy: blockedBy(id, records),
+      blockedBy: blockedBy(id, records, facets),
       unblocks: unblocks(id, records),
     });
   }

@@ -1,5 +1,6 @@
 import { PopoverButton } from '../components/Popover.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
+import { RecordMark } from '../components/CardBody.tsx';
 import { IconButton } from '../components/Button.tsx';
 import { DIRS } from '../../schema/vocabulary.ts';
 import { clearFocus, setFocus } from '../../view/intents.ts';
@@ -33,7 +34,16 @@ export function FocusSection({
   onOpenCard: (id: string) => void;
 }) {
   const focus = data?.spec.query.focus;
-  const title = focus ? (data?.cards[focus.id]?.title ?? focus.id) : null;
+  /**
+   * The focused record, if the current query happens to contain it.
+   *
+   * A focus can point at a record the query then filters out, so this is a
+   * lookup that may miss — which is why the pill falls back to the raw id, and
+   * why the mark falls back to a leaf: drawing `○` for a record we cannot see
+   * would be asserting something unmeasured.
+   */
+  const card = focus ? data?.cards[focus.id] : undefined;
+  const title = focus ? (card?.title ?? focus.id) : null;
 
   return (
     <>
@@ -41,8 +51,12 @@ export function FocusSection({
         <label className="rail-label">Focus</label>
         {focus ? (
           <>
-            <button className="truncate rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
-              {title ?? focus.id}
+            {/* The other place a record appeared with no mark. It is a record you
+                click through to, so it wears one — same as a card face, a table
+                row, a reference chip and a picker row. */}
+            <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
+              <RecordMark card={card ?? { isProject: false, refCount: 0 }} />
+              <span className="truncate">{title ?? focus.id}</span>
             </button>
             <IconButton
               glyph="close"

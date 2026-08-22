@@ -1,5 +1,6 @@
-import type { Rec } from '../schema/types.ts';
-import { adjacency, walk } from './refs.ts';
+import type { Facets, Rec } from '../schema/types.ts';
+import { adjacency, inboundCounts, walk } from './refs.ts';
+import { isProject } from './project.ts';
 
 /**
  * What blocks what — one answer, from the record map.
@@ -32,11 +33,32 @@ export function isDone(rec: Rec | undefined): boolean {
 export function blockedBy(
   id: string,
   records: Map<string, Rec>,
-): { id: string; title: string; done: boolean }[] {
+  /**
+   * Needed only so each blocker can carry its own record mark.
+   *
+   * A blocker is a record you can click through to, so The Record Reference Rule
+   * says it wears its mark — and the mark reads `isProject` and a count of
+   * inbound references, neither of which this shape used to carry. Optional
+   * because a caller that only wants the titles should not have to hold the
+   * vocabulary; without it every blocker draws as a leaf.
+   */
+  facets?: Facets,
+): { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[] {
   const inward = adjacency('blocks', records).in.get(id) ?? [];
+  const inbound = facets ? inboundCounts(records, facets) : null;
   return inward.flatMap((src) => {
     const rec = records.get(src);
-    return rec ? [{ id: rec.id, title: rec.title, done: isDone(rec) }] : [];
+    return rec
+      ? [
+          {
+            id: rec.id,
+            title: rec.title,
+            done: isDone(rec),
+            isProject: isProject(rec),
+            refCount: inbound?.get(rec.id) ?? 0,
+          },
+        ]
+      : [];
   });
 }
 

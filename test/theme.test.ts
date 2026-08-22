@@ -135,3 +135,59 @@ test('the scale is not redefined per theme', () => {
   const redefined = [...dark.matchAll(/--((?:text|radius)-[a-z-]+):/g)].map((m) => m[1]!);
   assert.deepEqual(redefined, [], `a size token redefined for dark mode: ${redefined.join(', ')}`);
 });
+
+/**
+ * Every `{group.key}` reference in `components:` points at a key that exists.
+ *
+ * The frontmatter's `components:` block is the one place the document states a
+ * *value* rather than naming a token, and it was the one place nothing checked.
+ * `input-rail` referenced `{typography.body-compact}` — a step this scale has
+ * never had; the string occurred exactly once in the repo and pointed at nothing.
+ * The existing frontmatter test compares the `typography:` and `rounded:` key
+ * *sets* against the stylesheet, so a dangling reference inside `components:`
+ * passed it untouched.
+ *
+ * This is the cheap half of a harder problem. Checking the component *values*
+ * against the stylesheet would need a name-to-selector map — `input-rail` is
+ * `.field-recessed`, `card-face` is `.cardface` — and that map would be one more
+ * thing to drift. Resolving the references needs no map and catches the class of
+ * defect that actually occurred: a document naming something that is not there.
+ */
+test('every token reference in DESIGN.md components resolves', () => {
+  const doc = readFileSync(fileURLToPath(new URL('../DESIGN.md', import.meta.url)), 'utf8');
+  const frontmatter = doc.match(/^---\n([\s\S]*?)\n---\n/);
+  assert.ok(frontmatter, 'DESIGN.md should open with YAML frontmatter');
+  const fm = frontmatter[1]!;
+
+  /** The keys of one top-level mapping, indented exactly two spaces. */
+  const keysOf = (group: string): Set<string> => {
+    const block = fm.split(`\n${group}:\n`)[1];
+    if (block === undefined) return new Set();
+    const out = new Set<string>();
+    for (const line of block.split('\n')) {
+      if (/^\S/.test(line)) break; // the next top-level key
+      const m = line.match(/^ {2}([a-z0-9-]+):/);
+      if (m) out.add(m[1]!);
+    }
+    return out;
+  };
+
+  const groups = ['colors', 'typography', 'rounded', 'spacing'];
+  const known = new Map(groups.map((g) => [g, keysOf(g)] as const));
+  for (const g of groups) {
+    assert.ok(known.get(g)!.size > 0, `DESIGN.md frontmatter should carry a \`${g}:\` mapping`);
+  }
+
+  const components = fm.split('\ncomponents:\n')[1];
+  assert.ok(components, 'DESIGN.md frontmatter should carry a `components:` mapping');
+
+  const dangling = [...components.matchAll(/\{([a-z]+)\.([a-z0-9-]+)\}/g)]
+    .filter(([, group, key]) => !known.get(group!)?.has(key!))
+    .map(([ref, group]) => (known.has(group!) ? `${ref} — no such key` : `${ref} — no such group`));
+
+  assert.deepEqual(
+    [...new Set(dangling)],
+    [],
+    'a components: reference pointing at a token that does not exist',
+  );
+});

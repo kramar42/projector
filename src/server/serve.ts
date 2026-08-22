@@ -271,7 +271,7 @@ app.get('/api/card/:id', (c) => {
     card: toDTO(rec, {
       facets,
       refCount: inbound.get(rec.id) ?? 0,
-      blockedBy: blockedBy(rec.id, records),
+      blockedBy: blockedBy(rec.id, records, facets),
       unblocks: unblocks(rec.id, records),
     }),
     file: relative(root, rec.file),
@@ -300,9 +300,16 @@ app.get('/api/card/:id', (c) => {
           { title: r.title, isProject: isProject(r), refCount: inbound.get(r.id) ?? 0 },
         ]),
     ),
+    // Each child is a record you click through to, so it carries its own mark —
+    // the same three fields `refs` above has always sent.
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))
-      .map((r) => ({ id: r.id, title: r.title })),
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        isProject: isProject(r),
+        refCount: inbound.get(r.id) ?? 0,
+      })),
     project,
   });
 });
