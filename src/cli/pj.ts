@@ -268,7 +268,7 @@ function cmdLs(argv: string[]): void {
   const mark = (id: string) => {
     const card = payload.cards[id];
     // A container is a record something points at, not a kind it declares.
-    return card?.isProject ? 'P' : (card?.childCount ?? 0) > 0 ? '+' : ' ';
+    return card?.isProject ? 'P' : (card?.refCount ?? 0) > 0 ? '+' : ' ';
   };
   const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${title(id)}`;
 

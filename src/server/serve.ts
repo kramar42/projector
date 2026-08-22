@@ -27,7 +27,8 @@ import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
 import type { DragMode } from '../view/dropOutcome.ts';
 import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
-import { countChildren, queryPayload } from '../view/payload.ts';
+import { queryPayload } from '../view/payload.ts';
+import { inboundCounts } from '../index/refs.ts';
 import { toDTO } from '../view/dto.ts';
 import {
   Conflict,
@@ -264,10 +265,12 @@ app.get('/api/card/:id', (c) => {
   const rec = records.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
   const project = resolveProject(rec.id, records, root);
+  // One walk, shared by this card's own mark and by every reference it names.
+  const inbound = inboundCounts(records, facets);
   return c.json({
     card: toDTO(rec, {
       facets,
-      childCount: countChildren(records, rec.id),
+      refCount: inbound.get(rec.id) ?? 0,
       blockedBy: blockedBy(rec.id, records),
       unblocks: unblocks(rec.id, records),
     }),
@@ -294,7 +297,7 @@ app.get('/api/card/:id', (c) => {
         .filter((r) => r !== undefined)
         .map((r) => [
           r.id,
-          { title: r.title, isProject: isProject(r), childCount: countChildren(records, r.id) },
+          { title: r.title, isProject: isProject(r), refCount: inbound.get(r.id) ?? 0 },
         ]),
     ),
     children: [...records.values()]

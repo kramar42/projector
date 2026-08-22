@@ -88,7 +88,7 @@ function LinkChip({ kind, linkRef, label }: { kind: string; linkRef: string; lab
   return (
     <span className={`linkchip ${state}`} title={tip}>
       <b>{LINK_GLYPH[kind] ?? '?'}</b>
-      <span className="linkchip-label">{shown}</span>
+      <span className="truncate linkchip-label">{shown}</span>
       {d?.badges?.slice(0, 1).map((b) => (
         <em key={b.label} className={`tone-${b.tone}`}>
           {b.label}
@@ -174,51 +174,118 @@ export function CardBody({
 
 /**
  * What a record is, in one glyph — read off the record rather than declared on
- * it. `▣` owns config its members inherit; `○` something is part of it; `•`
- * neither.
+ * it. `▣` owns config its members inherit; `○` something else names it; `•`
+ * nothing does.
  *
  * There used to be a stored `kind` saying "card" or "node". It asserted what
  * these two counts already show, and it was never structural: what kept a
  * grouping record off a board was the status filter, not the kind. C11 — nothing
  * derivable is also stored.
  */
-export function markOf(card: Marked): { glyph: string; role: string; means: string } {
+export function markOf(card: Marked): { glyph: string; role: Role; means: string } {
   if (card.isProject) {
     return {
-      glyph: '▣',
+      glyph: GLYPH_OF.project,
       role: 'project',
       means: 'A project: other records inherit its repos and instructions.',
     };
   }
-  if (card.childCount > 0) {
+  if (card.refCount > 0) {
     return {
-      glyph: '○',
+      glyph: GLYPH_OF.container,
       role: 'container',
       means:
-        card.childCount === 1
-          ? '1 record names this one as its parent.'
-          : `${plural(card.childCount, 'record')} name this one as their parent.`,
+        card.refCount === 1
+          ? '1 record references this one.'
+          : `${plural(card.refCount, 'record')} reference this one.`,
     };
   }
-  // `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's
-  // ink is 1.85 × 2.23px against `○`'s 8.94 × 9.02 — nearly five times smaller
-  // in each dimension, which is not a quieter mark, it is a speck. The bullet is
-  // 4.35 × 4.34: legible, and still half the circle.
-  return { glyph: '•', role: 'leaf', means: 'Nothing is part of this one.' };
+  return { glyph: GLYPH_OF.leaf, role: 'leaf', means: 'Nothing references this one.' };
+}
+
+/** The three roles a mark can name, in the order they nest. */
+export const ROLES = ['project', 'container', 'leaf'] as const;
+
+export type Role = (typeof ROLES)[number];
+
+/**
+ * The glyph per role, and the only place the three characters are written.
+ *
+ * They used to appear twice: here, and hardcoded in the collapsed rail's ribbon.
+ * That is how the ribbon came to count a *different* trichotomy from the one the
+ * marks draw — see `tallyRoles` below.
+ *
+ * `○` means "some other record names this one", across every reference facet —
+ * which is what `nodesIn` has always said a node is: "being named by `parent` and
+ * being named by `project` make a record a node equally". The mark used to read a
+ * count of the `parent` facet alone, so the two disagreed about any record named
+ * only through `blocks` or `project`.
+ *
+ * `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's ink
+ * is 1.85 × 2.23px against `○`'s 8.94 × 9.02 — nearly five times smaller in each
+ * dimension, which is not a quieter mark, it is a speck. The bullet is
+ * 4.35 × 4.34: legible, and still half the circle.
+ */
+export const GLYPH_OF: Record<Role, string> = {
+  project: '▣',
+  container: '○',
+  leaf: '•',
+};
+
+/**
+ * A tally of one role, in words — for a readout that counts roles rather than
+ * describing a single record, which is what `markOf`'s `means` is for.
+ *
+ * Through `plural` because the app has one way of making a count and its noun
+ * agree, and "1 records something else is part of" is what not using it reads
+ * like. The clause after the noun is the same sentence `markOf` uses, turned
+ * around: "nothing is part of this one" becomes "nothing is part of".
+ */
+export function tallyMeans(role: Role, n: number): string {
+  if (role === 'project') return plural(n, 'project');
+  // Phrased from the record's side rather than the referrer's: "1 record something
+  // references" is what putting the referrer first reads like. Through `plural`
+  // because the count needs a noun to be counting — "4 named by another record"
+  // leaves open what four of them are.
+  const noun = plural(n, 'record');
+  return role === 'container' ? `${noun} named by another` : `${noun} named by nothing`;
 }
 
 /**
- * The two counts a mark is read from.
+ * Tally a set of records by what their mark says.
+ *
+ * This exists because the collapsed rail was answering the same question from a
+ * different source. It read the `type` pseudo-facet, whose `node` value means
+ * "named by **any** reference facet", while the mark was drawn from a count of the
+ * `parent` facet alone — so the two disagreed on every record named only through
+ * `blocks` or `project`. Measured on the 27-card fixture, the rail reported
+ * 3 / 4 / 20 beside the glyphs `▣ ○ •` while the app drew 3 / 1 / 23: a ribbon
+ * saying "4 linked nodes" next to the single `○` on screen.
+ *
+ * Both halves moved. `○` now means what `type` always meant — named by any
+ * reference facet — and the ribbon counts through `markOf` rather than reading a
+ * facet. So the glyphs, their tally and the `type` axis are one mechanism rather
+ * than three that have to agree (PRODUCT.md), and the rail names no facet, which
+ * the old version did three times over (C4).
+ */
+export function tallyRoles(cards: Marked[]): Record<Role, number> {
+  const out: Record<Role, number> = { project: 0, container: 0, leaf: 0 };
+  for (const card of cards) out[markOf(card).role]++;
+  return out;
+}
+
+/**
+ * The two facts a mark is read from.
  *
  * Narrower than `CardDTO` on purpose: a reference facet resolves to a title and
- * these two numbers, not to a whole card, and the panel drawing its own
- * two-way `isProject ? ▣ : ·` was how `○` went missing from every reference —
- * a record named as a parent has children by definition, so the one mark that
- * should have been commonest never appeared at all.
+ * these two, not to a whole card, and the panel drawing its own two-way
+ * `isProject ? ▣ : ·` was how `○` went missing from every reference — a record
+ * you are looking at *because* something names it is referenced by definition, so
+ * the one mark that should have been commonest never appeared at all.
  */
 export interface Marked {
   isProject: boolean;
-  childCount: number;
+  refCount: number;
 }
 
 export function RecordMark({ card }: { card: Marked }) {

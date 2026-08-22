@@ -41,7 +41,7 @@ export function FocusSection({
         <label className="rail-label">Focus</label>
         {focus ? (
           <>
-            <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
+            <button className="truncate rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
               {title ?? focus.id}
             </button>
             <IconButton
@@ -52,7 +52,6 @@ export function FocusSection({
           </>
         ) : (
           <PopoverButton
-            className="focusbtn"
             minWidth={320}
             fitContent
             label="everything"

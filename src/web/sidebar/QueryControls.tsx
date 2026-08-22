@@ -187,7 +187,6 @@ export function FacetsSection({
     <div className="rail-row">
       <label className="rail-label">Facets</label>
       <PopoverButton
-        className="chipsbtn"
         minWidth={210}
         label={table ? columnsLabel(show) : chipsLabel(show)}
         title="which facets this view surfaces — a reference facet also draws on a canvas, and the first one lays it out"
@@ -206,6 +205,13 @@ export function FacetsSection({
                     edit((spec) => setShow(spec, next));
                   }}
                 />
+                {/* The last control in the app the browser was still drawing. It
+                    had no `appearance: none`, so the shared text-field rule was
+                    dressing an OS checkbox in an input's border, radius and
+                    `5px 8px` padding — which under `box-sizing: border-box`
+                    floors the box at 18 × 12 whatever width it is given. Same
+                    markup as a filter row, so it takes the same drawn box. */}
+                <span className="checkbox" aria-hidden="true" />
                 {f.label}
                 {/* Only a canvas can act on the difference, so only a canvas
                     says it: order decides which relation lays the graph out. */}

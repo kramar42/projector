@@ -179,7 +179,7 @@ export function CanvasView({
     // axis, in the order the facet declares.
     // No empty bands: a canvas drag moves a position without changing a facet, so
     // an empty band would be decoration with no affordance.
-    const groups = data.groups ? groupsFor(data, { empties: 'drop' }) : [];
+    const groups = data.groups ? groupsFor(data, { lanes: 'merged', empties: 'drop' }) : [];
     const clustered = groups.length > 0;
     const auto = clustered
       ? clusteredLayout(shown, data.relations, layoutBy, groups, inward)

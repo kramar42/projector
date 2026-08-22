@@ -174,6 +174,52 @@
   background: var(--accent-soft);
 }
 
+/*
+ * Tabular numerals, once, for everything that reports a number.
+ *
+ * The Tabular Number Rule is unconditional in DESIGN.md — "**Do** give every
+ * count `font-variant-numeric: tabular-nums`" — and it was true of five of the
+ * fourteen places this app prints a number. The omissions were not uniform in
+ * cost: most counts sit last in a flex row with nothing to their right to shift,
+ * but four genuinely move their neighbours, and those were all among the misses.
+ *
+ *   `.table .num`      the roll-up columns, which DESIGN.md names *by name* as a
+ *                      tabular case. A column of numbers read vertically is where
+ *                      proportional digits cost the most, and it had none.
+ *   `.facet-count`     right-aligned by `.facet-name { flex: 1 }`, down a list of
+ *                      up to eight values times thirteen axes.
+ *   `.bulkbar-count`   the digits are followed by the word "selected", so the word
+ *                      moves every time the count crosses a digit boundary.
+ *   `.rail-active`     the footer's own counts, which change on every keystroke of
+ *                      the search box.
+ *
+ * Declared once rather than fourteen times, the way the focus ring above is: the
+ * property inherits, so naming the container is enough, and a number added inside
+ * any of these is covered without anyone remembering the rule. `.pop-count` is
+ * deliberately absent — it renders `v.shape` and `'missing'`, so it is a
+ * right-hand annotation that sometimes holds digits, not a count.
+ */
+.rail-stats,
+.rail-active,
+.sidebar-ribbon-info,
+.facet-badge,
+.quietcount,
+.column-count,
+.lane-count,
+.count,
+/* The face's meta line holds three numbers in a wrapping row — `blocked by 2`,
+   `unblocks 3`, and the progress fraction — so each one shifts the next. It is
+   also mono, which by The Mono Label Rule means the app is counting. */
+.cardface-meta,
+/* Named as tabular in DESIGN.md's own Progress spec, so it keeps its own
+   declaration rather than relying on the meta line it currently sits in. */
+.progress-num,
+.section-count,
+.bulkbar-count,
+.table .num {
+  font-variant-numeric: tabular-nums;
+}
+
 /* CodeMirror puts focus on an inner element, so the ring belongs on the frame
    the reader actually sees. */
 .editor-host:has(.cm-focused) {
@@ -195,6 +241,38 @@ body {
   font-size: var(--text-root);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * "This surface has nothing to show."
+ *
+ * Five surfaces say it — the board, the table, the filter rail, the record picker
+ * and the panel's body block — and they said it five ways, one of which was in the
+ * wrong voice entirely: the table borrowed `.pane-loading`, which is *mono*, from
+ * the boot/loading/error block, so one concept was drawn in both of this system's
+ * two voices. The Mono Label Rule says there is no third case, and an empty state
+ * is the app describing an absence, not counting or labelling something.
+ *
+ * Italic because that is what italic already means throughout this stylesheet:
+ * no real value here. `.facet-name.is-none`, `.togglechip.is-none`,
+ * `.togglechip.is-extra`, `.derived`, `.picker-item.is-clear` and the editor's
+ * placeholder all carry it for the same reason, and an empty state is the same
+ * statement about a whole surface rather than one row.
+ *
+ * Padding stays per site, and that is not drift: each message aligns its text
+ * edge to the rows it replaces — 7px in the picker matching `.picker-item`, 2px in
+ * the rail matching `.facet-head`, lane-level in the board, and pane-level in the
+ * table, which is a `<table>` with a `thead` and no sub-container to indent into.
+ *
+ * NOT a member: `.board-nudge` (a hairline-bounded annotation, not an absence),
+ * `.pop-note`, `.linkrow-note` and the `.editor-*` trio, which annotate a value
+ * that exists. `.hint` is a member here and an annotation at the frontmatter
+ * editor — one class doing both jobs, which is the split this rule makes.
+ */
+.emptystate {
+  font-size: var(--text-body-sm);
+  color: var(--ink-3);
+  font-style: italic;
 }
 
 .boot,
@@ -300,8 +378,14 @@ body {
   align-items: center;
   gap: 1px;
   color: var(--ink-3);
-  font: var(--text-micro)/1.15 var(--mono);
-  font-variant-numeric: tabular-nums;
+  /* Longhands, not `font:`. The shorthand resets every font sub-property it does
+     not name, `font-variant-numeric` included — so it silently undid the shared
+     tabular rule at the top of this file, which is why the declaration used to
+     live in here after it. Measured: the ribbon computed `normal` while the rule
+     matched the element. */
+  font-family: var(--mono);
+  font-size: var(--text-micro);
+  line-height: 1.15;
 }
 
 .sidebar-ribbon-icon {
@@ -324,12 +408,43 @@ body {
   min-height: 24px;
 }
 
-.rail-label {
+/*
+ * The Label step's register, once.
+ *
+ * `--text-label` is a size and nothing else, so the register around it — mono,
+ * uppercase, weight 500, tracked — was hand-rolled at six sites. Two of them
+ * forgot the weight, and they are the two that get no bold from the browser:
+ * `.rail-label` is a `<label>` and `.pop-head` a `<div>`, where the other four are
+ * `h2`/`h3`/`th`. Measured, the rail's labels rendered at 400 — so the app's
+ * signature type step was a weight light across every rail row and every popover,
+ * which is exactly the kind of thing that reads as "slightly off" and never gets
+ * found by looking.
+ *
+ * Tracking is a variable rather than a fixed value, because DESIGN.md's ladder is
+ * real: 0.1em in the rails and tables, 0.13em in the panel, 0.14em at the vault
+ * gate — tracking widens with prominence. A site raises it by setting
+ * `--label-track`; it does not restate the other five declarations to do so.
+ *
+ * Colour stays per-site: `ink-3` is the annotation ground state, and the lane head
+ * takes `ink-2` because a grouping axis is a secondary *value*, not a label.
+ */
+.rail-label,
+.pop-head,
+.panel-section h3,
+.vaultgate-section h2,
+.lane-head,
+.table thead th,
+.table tr.section th {
   font-family: var(--mono);
   font-size: var(--text-label);
-  letter-spacing: 0.1em;
+  font-weight: 500;
   text-transform: uppercase;
+  letter-spacing: var(--label-track, 0.1em);
   color: var(--ink-3);
+}
+
+/* A fixed gutter, so every rail row's control starts at the same x. */
+.rail-label {
   width: 62px;
   flex: none;
 }
@@ -366,18 +481,11 @@ body {
   line-height: 1;
 }
 
+/* Fills its rail row; the rest is the shared select treatment above. */
 .rail-select {
-  appearance: none;
   flex: 1;
   min-width: 0;
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-base);
-  font: inherit;
-  font-size: var(--text-body-sm);
   padding: 3px 6px;
-  cursor: pointer;
 }
 
 .rail-select.narrow {
@@ -418,10 +526,32 @@ body {
    metric beside the character means a new glyph needs no rule here. The box below
    is shared, which is the part that belongs in a stylesheet. */
 
+/*
+ * One line, cut with an ellipsis.
+ *
+ * Ten places needed this and each wrote the same three declarations, which is not
+ * the interesting part — the interesting part is that they pair it with five
+ * different answers to "where does it cut", and those genuinely differ: `flex: 1`
+ * to take the rest of a row, `130px` on a link chip, `26ch` on a reference chip,
+ * `40%` on a picker's project column, and nothing at all on a grid cell that is
+ * already 180px wide. So the constraint stays with the site and only the idiom
+ * moves here.
+ *
+ * `min-width: 0` is the non-obvious half. A flex or grid item defaults to
+ * `min-width: auto`, which refuses to shrink below its content, so the other three
+ * declarations do nothing without it — and it is inert anywhere else, which is why
+ * it belongs in the shared half rather than in six of the ten sites.
+ */
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rail-focus {
   appearance: none;
   flex: 1;
-  min-width: 0;
   background: var(--accent-soft);
   color: var(--accent);
   border: 0;
@@ -431,9 +561,6 @@ body {
   padding: 3px 7px;
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .rail-filter {
@@ -464,21 +591,12 @@ body {
   color: var(--ink);
 }
 
-.rail-search input {
+/* Fills the rail's footer row. The register and the focus exception are
+   `.field-recessed`'s, which this rule used to restate declaration for
+   declaration — including the exception, whose comment said the same thing in
+   both places. */
+.rail-search .field-recessed {
   width: 100%;
-  box-sizing: border-box;
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-base);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-body-sm);
-  padding: 5px 8px;
-}
-
-.rail-search input:focus {
-  outline: none;
-  border-color: var(--accent);
 }
 
 /* ------------------------------------------------------- popovers */
@@ -526,10 +644,6 @@ body {
 
 .popbtn-label {
   flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -553,11 +667,7 @@ body {
 }
 
 .pop-head {
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  --label-track: 0.12em;
   padding: 4px 7px 5px;
 }
 
@@ -595,17 +705,16 @@ body {
   font-weight: 600;
 }
 
+/* `default`, not `not-allowed`. Buttons and fields differ here on purpose and
+   COMPONENTS.md records it; this was the only disabled *button* in the app taking
+   the field's cursor, against `.btn:disabled` and `.vaultrow:disabled`. */
 .pop-pick.is-missing {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .pop-pick-name {
   flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .pop-count {
@@ -628,6 +737,8 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
+  /* Contains its hidden input, as `.facet-value` does. */
+  position: relative;
   font-size: var(--text-body);
   color: var(--ink-2);
   padding: 4px 7px;
@@ -676,9 +787,10 @@ body {
   gap: 2px;
 }
 
+/* 2px matches `.facet-head`'s inset — the row this replaces. The step was
+   `--text-sm`; no rule assigns a step to an empty state, and one step for all five
+   is worth more than 0.5px of local tuning. */
 .filters-empty {
-  font-size: var(--text-sm);
-  color: var(--ink-3);
   padding: 6px 2px;
 }
 
@@ -721,21 +833,8 @@ body {
 
 .facet-label {
   flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* Marks a computed axis. The panel treats it identically to a stored one; the
-   glyph is there so you know nothing is written on the card. */
-.facet-pseudo {
-  font-family: var(--mono);
-  font-size: var(--text-title);
-  line-height: 1;
-  color: var(--ink-3);
-  font-style: italic;
-}
 
 .facet-badge {
   font-family: var(--mono);
@@ -759,6 +858,9 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Contains the hidden input, which is absolutely positioned so it takes no
+     space while staying in the tab order. */
+  position: relative;
   font-size: var(--text-body-sm);
   color: var(--ink-2);
   padding: 2px 4px;
@@ -788,10 +890,6 @@ body {
 
 .facet-name {
   flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .facet-name.is-none {
@@ -803,10 +901,132 @@ body {
   color: var(--ink-2);
 }
 
-.facet-count {
+/*
+ * The filter value's on/off mark.
+ *
+ * This was the last control in the app drawn by the browser, and the one that
+ * appears most often: once per value, eight values a facet, thirteen facets down a
+ * 248px rail. Three replacements were built and compared at that repetition — a
+ * drawn box, the panel's toggle chip, and no box at all with a 2px accent edge on
+ * the row. The box won: the chip gave up the column the eye scans down, and the
+ * edge gave up the affordance with it. `FilterPanel.tsx` records the comparison.
+ */
+
+/* The real control, always present and always focusable, never seen. `opacity`
+   and a zero box rather than `display: none`, which would take it out of the tab
+   order and out of the accessibility tree along with it. */
+.facet-value input,
+.pop-check input {
+  appearance: none;
+  position: absolute;
+  /* `padding` and `border` are zeroed because `box-sizing: border-box` is global:
+     with the shared input rule's `5px 8px` and 1px border still applying, a
+     `width: 0` box floors at 18 × 12 rather than collapsing. Measured, not
+     assumed — it is invisible and out of flow either way, which is exactly why
+     nothing would have shown it. */
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* `surface-2`, not `surface`, because this is a control in the rail and that is
+   what the rail does to a control — an input recesses into the sidebar rather
+   than sitting raised out of it. It matters more here than for a text input:
+   unchecked, the border is the *only* thing drawing this box, and `--rule-2`
+   measures 1.74:1 against white in the light theme. The recess is what carries
+   it there. */
+/*
+ * The checkbox, drawn.
+ *
+ * The Drawn Control Rule says nothing on screen is drawn by the browser, and this
+ * was the one control still breaking it — in two places, both of which the rule
+ * already named. The markup is `<label><input type="checkbox"><span class="checkbox">`,
+ * so the state comes off the input by sibling selector rather than off an ancestor
+ * class: that is what lets the filter rail and the facets popover share one
+ * drawing with no coordination between them.
+ *
+ * `surface-2`, not `surface`, because a control in the rail recesses into it —
+ * and it matters more here than for a text input, since unchecked this box is only
+ * its border, and `--rule-2` measures 1.74:1 against white in the light theme.
+ *
+ * `--radius-xs` was documented as the progress track's alone. It has a second
+ * user now, on purpose: 2px is the right corner for an 11px box, and 3px on
+ * something this small reads as a circle.
+ */
+.checkbox {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+}
+
+input:checked + .checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The tick, from two borders and a rotation — `.facet-caret` draws its chevron
+   the same way, so the app has one technique for a mark it draws rather than a
+   character here and a drawing there. `--ground` on the filled state, never
+   `--ink`: the accent and the ink follow the theme in the same direction. */
+input:checked + .checkbox::before {
+  content: '';
+  width: 5px;
+  height: 2.5px;
+  border-left: 1.5px solid var(--ground);
+  border-bottom: 1.5px solid var(--ground);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* The ring the hidden input can no longer draw for itself. */
+input:focus-visible + .checkbox {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+
+/*
+ * A quiet count: how many are under a thing that is collapsed, capped or folded.
+ *
+ * Four classes said this, in three type steps, and one of them — `.facet-count` —
+ * said it at the **Label** step, whose register is uppercase mono; a bare numeral
+ * is the one thing that step is not for. They differed otherwise only in how they
+ * sit in their row, so that is all the site classes keep now.
+ *
+ * This is the Count Rule's "quiet" case, which is every count in the app except
+ * one: `.facet-badge` takes the accent fill because it is the only signal that a
+ * filter is narrowing what you see, and that is the app speaking about live state.
+ *
+ * Deliberately NOT members, each for its own reason:
+ *   `.column-count`   carries a `surface-3` pill that DESIGN.md commits in its
+ *                     frontmatter and three prose passages, and it is the only
+ *                     count sitting between a flexing name and a 20px hit target.
+ *   `.count`          the Record Mark's second half, not a count of its own.
+ *   `.lane-count`     declare `color` and nothing else, so they inherit their
+ *   `.section-count`  heading's type run rather than reading as a badge beside
+ *    (in the table)   it. Giving them a step would break that on purpose.
+ *   `.bulkbar-count`  renders "N selected" — a sentence, in the accent, on the
+ *                     bulk bar's own fill.
+ *   `.pop-count`      not a count at all: it renders `v.shape` ("board") and
+ *                     `'missing'`. A right-hand annotation that sometimes holds
+ *                     digits.
+ */
+.quietcount {
   font-family: var(--mono);
-  font-size: var(--text-label);
+  font-size: var(--text-micro);
   color: var(--ink-3);
+}
+
+/* Last in the filter row, so it must not flex. */
+.facet-count {
   flex: none;
 }
 
@@ -890,7 +1110,6 @@ body {
   background: var(--surface-3);
   border-radius: var(--radius-pill);
   padding: 1px 7px;
-  font-variant-numeric: tabular-nums;
 }
 
 .column-body {
@@ -919,7 +1138,27 @@ body {
   gap: 6px;
 }
 
-.column-card:hover .cardface {
+/*
+ * A hover marks the card's edge; it does not repaint its state.
+ *
+ * `:where()` so this contributes nothing to specificity. `border-color` sets all
+ * four sides, and `.column-card:hover .cardface` outranked `.cardface.is-blocked`
+ * by one class — so under the cursor a blocked card's `bad` stripe went `rule-2`
+ * and a selected one's went `accent`. Measured: 223,135,135 → 166,166,231 on
+ * selection. That is The Load-Bearing Left Border Rule's one element losing the
+ * one thing the rule protects, on the surface where hover is continuous.
+ *
+ * Zeroed, this ties with `.cardface`'s own border and wins on order, while the
+ * two stripe rules at (0,2,0) keep the left edge. Narrowing to three sides would
+ * have worked too, but then an *unstriped* face would hover with three edges lit
+ * and one not — and re-asserting the stripe per state per variant is four more
+ * declarations naming the variants, which a third stripe would have to remember.
+ *
+ * `.reflink` resolves the same collision the opposite way, and by accident: its
+ * hover and its `.is-open` are both (0,2,0), so the stripe survives only because
+ * it is declared eleven lines later.
+ */
+:where(.column-card:hover) .cardface {
   border-color: var(--rule-2);
 }
 
@@ -937,10 +1176,34 @@ body {
   border-left: 3px solid var(--bad);
 }
 
+/*
+ * The mark's size comes from here, so this row names the type it precedes.
+ *
+ * DESIGN.md says the mark "sits at `0.8em` of whatever type it precedes, so one
+ * rule serves the 12.5px table row, the 13px card face and the 16px panel
+ * header". On a face it did not: the mark is a flex *sibling* of the title, not a
+ * child of it, so `0.8em` resolved against whatever this row inherited — `body`'s
+ * `--text-root` 14px — and the mark came out at 11.2px beside 13px text. A ratio
+ * of 0.862, not 0.8.
+ *
+ * That matters because the optical nudge is derived from both sizes:
+ *
+ *     translate = centre(glyph) × markSize − 0.254 × textSize
+ *
+ * At 11.2/13 the bullet needs +0.860px and the rule applies 0.054 × 11.2 =
+ * +0.605px — under-corrected by 0.255px. At 10.4/13 it needs +0.563px and the
+ * rule applies 0.054 × 10.4 = +0.562px, which is the exactness the constant was
+ * measured for. The table row was already right (`.table` sets 12.5px, so
+ * 0.8em = 10px) and so was the panel header, which names its own size.
+ *
+ * Sub-pixel, and invisible — but the constants in `.recordmark` are measurements,
+ * and a measurement applied against the wrong size is not a measurement.
+ */
 .cardface-head {
   display: flex;
   gap: 7px;
   align-items: baseline;
+  font-size: var(--text-title);
 }
 
 /*
@@ -1107,9 +1370,6 @@ body {
 }
 
 .linkchip-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   max-width: 130px;
 }
 
@@ -1134,7 +1394,6 @@ body {
 }
 
 .progress-num {
-  font-variant-numeric: tabular-nums;
 }
 
 .blocked {
@@ -1189,18 +1448,7 @@ body {
 
 /* ---------------------------------------------------------------- canvas */
 
-.canvas-wrap {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
 
-.canvas {
-  flex: 1;
-  min-height: 0;
-  background: var(--ground);
-}
 
 /*
  * A cluster band. Drawn behind its members and never interactive — it is the
@@ -1250,7 +1498,9 @@ body {
    record is a custom one, so selection had nothing to show at all: the state was
    live in `node.selected` and invisible. Descendant rather than child, because a
    record node wraps its face in a div to carry `is-context`. */
-.react-flow__node.selected .cardface {
+/* `:where()` for the same reason the column's hover has it: a selection ring must
+   not repaint a state stripe. */
+:where(.react-flow__node.selected) .cardface {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
@@ -1372,14 +1622,28 @@ body {
   margin-top: 4px;
 }
 
+/*
+ * A section's heading, and the corner its control sits in.
+ *
+ * A flex row rather than inline flow with two floated wrappers. A float
+ * top-aligns to the line box, so every control in every head sat below the
+ * optical centre of the label beside it — measured from the head's top edge, the
+ * label's ink centres at 6.5px while the tab landed at 9.0, the tiny button at
+ * 9.7 and the icon button at 10.0. Three controls, three different amounts of
+ * wrong, and none of them a decision.
+ *
+ * `min-height` is the tallest control a head can hold — a 20px icon button — so
+ * the content below a heading starts at the same offset whether or not that
+ * heading carries one. Under floats that was true by accident, because the
+ * control overflowed the 13.8px box into the 8px margin; it is now true on
+ * purpose, and costs 6px on the three heads that carry no control.
+ */
 .panel-section h3 {
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  --label-track: 0.13em;
+  display: flex;
+  align-items: center;
+  min-height: 20px;
   margin: 0 0 8px;
-  font-weight: 500;
 }
 
 .kv {
@@ -1518,8 +1782,51 @@ code {
   margin-bottom: 3px;
 }
 
+/*
+ * A task list in a card body — the third browser-drawn checkbox, and the one The
+ * Drawn Control Rule's own wording missed because it names the two the app
+ * renders itself. This one comes from the markdown, so it is content rather than
+ * a control, and it arrives `disabled`: it states a fact, it does not take input.
+ *
+ * Drawn on the input directly, unlike the filter row's, because marked emits no
+ * sibling to hang a span on. Generated content on a checkbox with
+ * `appearance: none` does render — verified in the browser rather than assumed,
+ * since it is the reason the interactive one uses a sibling. Padding and border
+ * are zeroed for the same reason as there: `box-sizing: border-box` is global, so
+ * the shared field rule's `5px 8px` floors an 11px box at 18 × 12.
+ *
+ * `ink-3` rather than the accent when checked. The accent is the app speaking
+ * about live state; a tick a human typed into a markdown file is neither.
+ */
 .md li input[type='checkbox'] {
-  margin-right: 5px;
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 11px;
+  height: 11px;
+  margin: 0 5px 0 0;
+  padding: 0;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  vertical-align: -0.08em;
+}
+
+.md li input[type='checkbox']:checked::before {
+  content: '';
+  width: 5px;
+  height: 2.5px;
+  border-left: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* A row that carries a box does not also carry a bullet: two markers for one
+   item, and one of them is the glyph that means "a leaf record" everywhere else
+   in this app. */
+.md li:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.2em;
 }
 
 .md pre {
@@ -1619,6 +1926,28 @@ input, textarea, select {
   border-radius: var(--radius-base);
   padding: 5px 8px;
 }
+/*
+ * Every select, once.
+ *
+ * DESIGN.md commits one treatment — "`appearance: none`, `surface-2` fill, `rule`
+ * border, 12px — flatter than a text input, because a select is a control rather
+ * than a field" — and The Drawn Control Rule claims every select already takes it.
+ * Two of the three did not: the bulk bar's and the canvas toolbar's fell through
+ * to the field rule above, which has no `appearance`, so they were OS controls on
+ * a `surface` fill at 11.5px and 11px. Measured: `appearance: auto` on the canvas.
+ *
+ * Declared on the element rather than on a class, because a select with no class
+ * is exactly the case that went wrong — a rule keyed to `.rail-select` cannot
+ * catch the one nobody named.
+ */
+select {
+  appearance: none;
+  background: var(--surface-2);
+  border-color: var(--rule);
+  font-size: var(--text-body-sm);
+  cursor: pointer;
+}
+
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 textarea { resize: vertical; font-family: inherit; }
 
@@ -1647,12 +1976,13 @@ textarea { resize: vertical; font-family: inherit; }
 
 
 .relationpick { display: inline-flex; gap: 6px; align-items: center; }
-.relationpick select { padding: 2px 5px; font-size: var(--text-xs); }
+.relationpick select { padding: 2px 5px; }
 
 /* board editing */
 
 .column.is-over { border-color: var(--accent); background: var(--accent-soft); }
-.column-card.is-selected .cardface { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* `:where()`: see the hover rule above — a selection outranked the state stripe. */
+:where(.column-card.is-selected) .cardface { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .column-card.is-dragging { opacity: 0.4; }
 .column-head .btn.tiny { margin-left: 4px; }
 
@@ -1673,7 +2003,7 @@ textarea { resize: vertical; font-family: inherit; }
   box-shadow: 0 6px 20px rgba(20, 15, 35, 0.16);
 }
 .bulkbar-count { font-family: var(--mono); font-size: var(--text-sm); color: var(--accent); font-weight: 600; }
-.bulkbar-select { font-size: var(--text-sm); padding: 3px 6px; }
+.bulkbar-select { padding: 3px 6px; }
 .bulkbar-values { display: flex; gap: 4px; flex-wrap: wrap; }
 .bulkbar-picker { position: absolute; bottom: 100%; left: 12px; z-index: 30; margin-bottom: 6px; }
 
@@ -1759,10 +2089,6 @@ textarea { resize: vertical; font-family: inherit; }
  * without moving the glyph. The optical nudges still apply — they are in `em` of
  * the mark's own size, so they scale with it.
  */
-.panel-title .recordmark {
-  cursor: help;
-}
-
 .panel-title .recordmark.is-toggle {
   appearance: none;
   border: 0;
@@ -1830,39 +2156,70 @@ textarea { resize: vertical; font-family: inherit; }
 .titleedit-bar { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
 
-.hint { font-size: var(--text-body-sm); color: var(--ink-3); margin: 6px 0 0; font-style: italic; }
+/* In flow under a heading rather than inside a list, so it spaces itself. */
+.hint { margin: 6px 0 0; }
 
 /* A section whose list is computed rather than stored — the same `ƒ` the filter
    panel puts on a pseudo-facet, so one mark means one thing in both places. It
    sits beside the heading rather than floating right, because it annotates the
    name; a control would float. */
+/*
+ * The `ƒ` that says a value was computed rather than read off the card.
+ *
+ * One mark, four places: the filter rail's pseudo-facet head, the panel's two
+ * inbound lists, and the panel's Inherited block. It was two classes with five
+ * identical declarations — `.facet-pseudo` and `.derived`, the second added
+ * deliberately and with a comment naming the first, stating the intent as "one
+ * mark means one thing in both places".
+ *
+ * It did not mean one thing. `ƒ` is U+0192, and `.panel-section h3` declares
+ * `text-transform: uppercase` for its own literal headings; a `<span>` gets no
+ * form-control reset, so the panel's three sites were painting U+0191 `Ƒ` while
+ * the rail painted `ƒ`. Rasterised at 13px italic in the mono stack: `ƒ` is 8×13
+ * with 29 lit pixels, `Ƒ` is 10×12 with 32.3 — a different letter, not a
+ * different weight. So `text-transform: none` is the load-bearing line in this
+ * rule, and merging the two classes is what makes that a single guarantee instead
+ * of a thing to remember twice.
+ *
+ * Named for what it means rather than for the mechanism behind it — a reader of
+ * the panel has no notion of a "pseudo-facet", and the rail's axis is derived in
+ * exactly the sense the panel's list is.
+ */
 .derived {
   font-family: var(--mono);
   font-size: var(--text-title);
   line-height: 1;
   color: var(--ink-3);
   font-style: italic;
-  margin-left: 5px;
+  /* See above: without this the panel's heading uppercases the mark into `Ƒ`. */
+  text-transform: none;
   cursor: help;
 }
 
+/* Spacing belongs to the container, not the mark. The rail's facet head is a flex
+   row that already gaps its children; a panel heading is inline flow, so it is the
+   one that has to say so. */
+.panel-section h3 .derived {
+  margin-left: 5px;
+}
 
-/* A section's action, in the corner a control lives in. It is a Button rather
-   than a tab: `.tab` says "you are in this mode", and refresh and edit-raw are
-   things you do, not modes you are in. */
-.section-do { float: right; }
+
+/* The corner a section's control lives in — `margin-left: auto` rather than a
+   float, so the flex row centres it against the label. One class: `.tabs` used to
+   be a second float doing the same job, differing only by the `gap` its two
+   children need, which is harmless on a single child.
+
+   What goes in it is a Button rather than a tab: `.tab` says "you are in this
+   mode", and refresh and edit-raw are things you do, not modes you are in. */
+.section-do {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 
 /* How many are under a head that caps its list, so the count is not hidden by
    the cap. Tabular, because it changes while its neighbours stay put. */
-.panel-section .section-count {
-  font-family: var(--mono);
-  font-size: var(--text-micro);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
-  margin-left: 8px;
-}
-
-.tabs { float: right; display: inline-flex; gap: 2px; }
 .tab {
   appearance: none;
   border: 1px solid var(--rule);
@@ -1901,25 +2258,43 @@ textarea { resize: vertical; font-family: inherit; }
   color: inherit;
 }
 
+/*
+ * An axis's name, in the panel. Cased once — see The One Casing Rule.
+ *
+ * `facets.yaml` says `label: Part of`, and the filter rail thirty pixels away
+ * renders exactly that. This rule used to `text-transform: uppercase` it, so one
+ * string carried two identities in a single viewport. Casing is part of a word's
+ * identity, not part of a surface's styling.
+ *
+ * The rule permits the uppercase mono register where a surface genuinely takes
+ * the **Label** type step, which carries that register — a table header and a
+ * lane head both do, and both keep it. This did not: it was `--text-chip` with
+ * `uppercase` and `0.1em` bolted on, which is a third register rather than the
+ * Label step, and the only place in the app hand-rolling one.
+ *
+ * Mono stays, because the app is naming an axis (The Mono Label Rule). The step
+ * moves up to the one meant for a long vertical list, which is what thirteen axes
+ * are — and at `--text-chip` the label was the same size as the chips underneath
+ * it, so the row had no hierarchy. Tracking falls to the chip step's `0.01em`:
+ * `0.1em` exists to open up uppercase, and there is no uppercase now.
+ */
 .facetedit-label {
   font-family: var(--mono);
-  font-size: var(--text-chip);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: var(--text-body-sm);
+  letter-spacing: 0.01em;
   color: var(--ink-3);
 }
 
+/* What a collapsed axis still says: how many values are under it. `FacetEditor`
+   renders that count under `!open`, so it is the head's, not the values row's —
+   which is where this note used to sit, describing an element that only exists
+   when the count does not. */
 .facetedit-head:hover .facetedit-label { color: var(--ink-2); }
 .facetedit.is-carried .facetedit-label { color: var(--ink-2); }
 
-/* What a collapsed axis still says: how many values are under it. */
-.facetedit-count {
-  font-family: var(--mono);
-  font-size: var(--text-micro);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
-}
-
+/* `align-items: center` because these children are genuinely different heights: a
+   `.refchip` sized by a 20px IconButton, a `small` ghost Button at `3.5px 8px`, a
+   `.dateinput`, and the `+ new` field. */
 .facetedit-values { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 
 /* A reference value is a record, so it carries a record's two affordances side
@@ -1968,29 +2343,47 @@ textarea { resize: vertical; font-family: inherit; }
 
 .refchip-title {
   max-width: 26ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .refchip-go:hover { color: var(--ink); }
 /* Sized to its placeholder rather than to a round number, so it reads as one more
    chip in the row instead of a gap at the end. It grows when focused. */
+/*
+ * The dash means the box is empty, not that it is unfocused.
+ *
+ * The Dashed Means Absent Rule reserves dashed for a container whose value does
+ * not exist — and this field is one, which is why the style belongs here at all.
+ * But it was keyed to `:focus`: solid while you typed, dashed the moment you
+ * looked away. `FacetEditor` clears `adding` only in `addNew()` and on Escape —
+ * there is no blur handler — so clicking away from a half-typed value left
+ * readable text sitting behind a border saying "nothing here", in a box that had
+ * just snapped 108px back to 52px and clipped it. The inverse was as wrong: a
+ * focused empty field drew "a value is present" over nothing.
+ *
+ * `:placeholder-shown` is the actual question. `:not(:focus)` is load-bearing —
+ * without it the dashed rule at (0,3,1) outranks the focus rule at (0,2,1) and a
+ * focused empty field would dash, which is where this came in.
+ */
 .facetedit-add input {
   width: 52px;
   font-family: var(--mono);
   font-size: var(--text-meta);
   padding: 2px 6px;
-  border: 1px dashed var(--rule-2);
+  border: 1px solid var(--rule-2);
   border-radius: var(--radius-sm);
   background: none;
   color: var(--ink);
   transition: width 90ms ease;
 }
+
+.facetedit-add input:placeholder-shown:not(:focus) {
+  border-style: dashed;
+}
+
+/* `border-style` is the base's now, so this only has to say which colour. */
 .facetedit-add input:focus {
   width: 108px;
   outline: none;
-  border-style: solid;
   border-color: var(--accent);
 }
 .linkedit { display: flex; flex-direction: column; gap: 6px; }
@@ -2018,6 +2411,42 @@ textarea { resize: vertical; font-family: inherit; }
   margin: -3px;
 }
 
+/*
+ * Inside a popover, the popover is the frame.
+ *
+ * The picker draws its own border, radius and shadow because in two of its three
+ * homes it is the floating thing: inline in the panel it delimits itself on a flat
+ * surface, and above the bulk bar it sits in a bare positioned div. In the focus
+ * rail it is portalled into `.popover`, which already carries a 1px `rule-2`, an
+ * 8px radius and `0 12px 32px` — so it wore a second border and a second shadow
+ * 5px inside the first, a 420px box in a 430px one.
+ *
+ * A shadow is permission to leave the plane, and nothing leaves it twice. The
+ * popover's own 5px padding becomes the inset the picker's 8px was providing.
+ */
+.popover .picker {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/*
+ * …and the popover is also the scroller.
+ *
+ * `.picker-list` caps itself at 300px and scrolls, which is right when the picker
+ * is the floating thing. Inside a popover it is not: `.popover` takes an inline
+ * `maxHeight` from `place()` — the space actually available above or below its
+ * anchor, floored at 120px — and scrolls that. Measured with the focus rail's
+ * picker open: the popover was scrolling 340px of content through 286, and the
+ * list inside it 737px through 290. Two wheels on one axis, which is the thing
+ * `.picker.is-inline` exists to avoid and cites the rule for.
+ */
+.popover .picker-list {
+  max-height: none;
+  overflow-y: visible;
+}
+
 /* Inline in the panel, the list must not scroll: the panel already does, and one
    region scrolls per axis. Forty rows is the bound, and typing is the faster way
    past it than a wheel inside a wheel. */
@@ -2042,18 +2471,15 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .picker-item:hover { background: var(--surface-2); color: var(--ink); }
 .picker-item.is-clear { color: var(--ink-3); font-style: italic; }
-.picker-mark { font-family: var(--mono); font-size: var(--text-chip); color: var(--ink-3); flex: none; }
-.picker-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-title { flex: 1; }
 /* The project axis's own hue. The accent marks live state and the app
    speaking, never a property of a record. */
-.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--hue-purple); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker-empty { font-size: var(--text-body-sm); color: var(--ink-3); padding: 6px 7px; font-style: italic; }
+.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--hue-purple); flex: none; max-width: 40%; }
+/* 7px matches `.picker-item`'s inset, so the message starts where a row does. */
+.picker-empty { padding: 6px 7px; }
 
+/* Outside the picker's scroller and aligned to its right edge. */
 .picker-capped {
-  font-family: var(--mono);
-  font-size: var(--text-micro);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
   text-align: right;
 }
 
@@ -2088,14 +2514,17 @@ textarea { resize: vertical; font-family: inherit; }
   color: var(--ink-3);
 }
 
+/*
+ * The fading success, and only that.
+ *
+ * A refusal used to share this slot behind an `.is-bad` modifier — the right
+ * colour and lifetime, in the wrong register: mono `--text-meta` in the button
+ * bar, where the frontmatter editor on the same panel and the same write contract
+ * renders the same event as a `.banner.is-bad` below the bar. "Your text was not
+ * written" is a banner's job on every other surface in the app, so it takes one
+ * here too, and this keeps `saved` and `attached N images`.
+ */
 .editor-note { color: var(--ok); }
-/* A refusal takes the failure hue and stays. The success slot was doing both
-   jobs in `ok` green, which is the wrong colour for "your text was not written"
-   and the wrong lifetime for a message you have to act on. */
-.editor-note.is-bad {
-  color: var(--bad);
-  font-style: normal;
-}
 .editor-dirty { color: var(--warn); margin-left: auto; }
 
 .editor-host.is-yaml .cm-scroller { font-size: var(--text-body-sm); }
@@ -2207,6 +2636,10 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 /* ================================================================ vaults */
 
+/* No `overflow-y` here. It could never engage — `min-height: 100%` with auto
+   height and no cap means this box grows instead of scrolling, and the document
+   is what actually scrolls the gate. Leaving it declared invited a later
+   `height: 100%` to turn it into a second wheel around the listing below. */
 .vaultgate {
   min-height: 100%;
   display: flex;
@@ -2214,7 +2647,6 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   justify-content: center;
   padding: 6vh 20px;
   background: var(--ground);
-  overflow-y: auto;
 }
 
 .vaultgate-card {
@@ -2234,14 +2666,10 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .vaultgate-lede { margin: 0; color: var(--ink-3); font-size: var(--text-lede); line-height: 1.55; max-width: 60ch; }
 
 .vaultgate-section { display: flex; flex-direction: column; gap: 8px; }
+/* The widest tracking in the app, at the one full-page surface. */
 .vaultgate-section h2 {
+  --label-track: 0.14em;
   margin: 0;
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  font-weight: 500;
 }
 
 .vaultgate-row { display: flex; gap: 8px; }
@@ -2289,12 +2717,24 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 .browse-path { display: flex; gap: 8px; align-items: center; font-size: var(--text-xs); }
 .browse-path code { word-break: break-all; }
+/*
+ * The page scrolls this, not the list.
+ *
+ * It capped itself at 220px and scrolled — a second wheel on the axis the gate's
+ * own page already owns. `browse()` does an unsliced `readdirSync`, and this grid
+ * fits about 21 rows in a 206px content box, so it engaged from roughly the
+ * twenty-second subfolder of a home directory: not latent.
+ *
+ * No cap replaces it. The record picker's `CAP = 40` is safe because it sits
+ * behind a query field and says `{n} of {N}` when it truncates; the gate's path
+ * field drives `inspect`, not this listing, so a hidden folder's only way past
+ * would be already knowing the path you opened the browser to find. This section
+ * is the last child of `.vaultgate-card`, so its length pushes nothing off screen.
+ */
 .browse-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 2px;
-  max-height: 220px;
-  overflow-y: auto;
   border: 1px solid var(--rule);
   border-radius: var(--radius-base);
   padding: 6px;
@@ -2311,9 +2751,6 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   padding: 3px 6px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .browse-item:hover { background: var(--surface-2); color: var(--ink); }
 .browse-item.is-vault { color: var(--accent); font-weight: 550; }
@@ -2369,10 +2806,21 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   gap: 7px;
   position: sticky;
   left: 0;
-  font-family: var(--mono);
-  font-size: var(--text-chip);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  /* Now that the lane spans the board's full width, the head has content to its
+     right to sit over — so it paints its own ground and names its layer rather
+     than letting a column scroll through the name. */
+  z-index: 1;
+  background: var(--ground);
+  padding-right: 8px;
+  align-self: flex-start;
+  /* The Label step — where DESIGN.md assigns a lane head, and what it had never
+     actually taken: it sat one step above at `--text-chip`, uppercase and 0.1em,
+     i.e. the register at the wrong size and without its weight. The uppercase is
+     correct here precisely because this IS the step that carries it, which is the
+     distinction The One Casing Rule turns on.
+
+     `ink-2` rather than the shared `ink-3`, because a lane head names a secondary
+     *value* rather than annotating a region. */
   color: var(--ink-2);
 }
 
@@ -2384,18 +2832,34 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
    second axis stops being visible — which is the only thing the lane is for. The
    cap is scoped to a real lane: with one implicit lane it clipped every column to
    under half the viewport for no reason. */
-/* A laned board shares its height between its lanes rather than giving each a
-   fixed slice of the viewport. The column cap below was `44vh`, a fraction that
-   only adds up for two lanes: two came to 88vh and left a strip under the last
-   lane that nothing could use, while the lists inside scrolled in a box shorter
-   than the space going spare. `flex-basis: 0` is what keeps the lanes equal —
-   grown from their content heights, one came out taller than the other.
-
-   `min-height` is the old cap become a floor: the 44vh a column had plus the head
-   and gap a lane wraps it in, so three lanes or more overflow and the board
-   scrolls exactly as it did rather than shrinking every band to a sliver. */
+/*
+ * A real lane sizes to its own row, not to the viewport.
+ *
+ * `.lane-head` is `position: sticky; left: 0` so the lane's name survives
+ * horizontal scroll — DESIGN.md says so, and it did not. A sticky element pins
+ * inside its *containing block*, and `.lane` is a stretched flex item in a column
+ * container, so it was 478px wide against a 1824px board: the box the head sticks
+ * within scrolled out of view itself, taking the head with it. Measured at
+ * `scrollLeft: 420`, every lane head sat at `left: -160`.
+ *
+ * `align-self: start` makes the cross size the content's — the board's real width
+ * — and `min-width: 100%` keeps a short lane spanning the viewport so its head
+ * still has somewhere to pin. Scoped to a real lane because a single implicit lane
+ * draws no head at all.
+ */
 .lane.is-laned {
+  align-self: start;
+  min-width: 100%;
+  /* Share the board's height between the lanes instead of giving each a fixed
+     slice of the viewport. The column cap below was `44vh`, a fraction that only
+     adds up for two lanes: two came to 88vh and left a strip under the last lane
+     that nothing could use, while the lists inside scrolled in a box shorter than
+     the space going spare. `flex-basis: 0` is what keeps them equal — grown from
+     their content heights, one lane came out taller than the other. */
   flex: 1 1 0;
+  /* The old cap, become a floor: the 44vh a column had plus the head and gap a
+     lane wraps it in, so three lanes or more overflow and the board scrolls
+     exactly as before rather than shrinking every band to a sliver. */
   min-height: calc(44vh + 20px);
 }
 
@@ -2407,19 +2871,21 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .lane.is-laned .column {
   /* `max-height`, not `height`: a column fills its lane when it has the cards for
      it and stays a stub when it does not, which is what `align-items: flex-start`
-     on the board is for. The single-lane rules above answer this the same way,
-     differing only in having no floor to keep. */
+     on the board is for. The single-lane rule above answers the same question the
+     same way. */
   max-height: 100%;
 }
 
-.board-empty,
-.board-nudge {
-  font-size: var(--text-body-sm);
-  color: var(--ink-3);
+/* Lane-level: this sits inside one lane among several, not across the pane. */
+.board-empty {
   padding: 8px 4px;
 }
 
+/* Not an empty state — an annotation about a surface that has content. It keeps
+   its own step and its hairline boundary. */
 .board-nudge {
+  font-size: var(--text-body-sm);
+  color: var(--ink-3);
   border-top: 1px solid var(--rule);
   padding: 8px 12px;
 }
@@ -2456,6 +2922,13 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
+/* Pane-level, because a `<table>` with a `thead` and no rows offers no
+   sub-container to indent into — the one reason the old borrowed `.pane-loading`
+   had the right padding and the wrong voice. */
+.table-empty {
+  padding: 28px 12px;
+}
+
 .table {
   border-collapse: collapse;
   width: 100%;
@@ -2470,16 +2943,22 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   vertical-align: middle;
 }
 
+/*
+ * The one sticky heading whose reasons were never written down.
+ *
+ * A sticky element must repaint its own ground — it has content passing beneath it
+ * by definition — and `ground` is the field a table sits on, which is also what
+ * `components.table-header.backgroundColor` commits. Without it the rows would
+ * scroll through the column names.
+ *
+ * `z-index: 1` is deliberately *below* the bulk bar's 6: `BulkBar` renders as a
+ * sibling of `.table-wrap` inside a shell that opens no stacking context of its
+ * own, so the bar has to float over this header rather than slide under it.
+ */
 .table thead th {
   position: sticky;
   top: 0;
   background: var(--ground);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  font-weight: 500;
   z-index: 1;
 }
 
@@ -2490,16 +2969,39 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 .table tr.section th {
   background: var(--surface-2);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  /* A secondary value, like the lane head, so it takes the value ink rather than
+     the annotation ink. The weight comes from the shared rule above, which is what
+     stops the UA's `th { font-weight: bold }` leaking through as 700 — measured,
+     it did, while `.table thead th` normalised the same default to 500. */
   color: var(--ink-2);
 }
 
+/* Both section counts, panel and table. It used to be declared twice with
+   identical `color` and `margin-left`, on the stated reason that "the two surfaces
+   wanted different margins" — they do not, both are 8px. What actually differs is
+   type, and only the panel declares any: the table's count takes its heading's
+   Label register by inheritance, which is what makes it read as part of that
+   heading's type run rather than a badge beside it. So the shared pair lives here
+   and the panel keeps only its own step. */
 .section-count {
   color: var(--ink-3);
   margin-left: 8px;
+}
+
+/*
+ * A chip row in a table cell does not wrap.
+ *
+ * On a card face wrapping is right: the column is a fixed 292px, so a chip row
+ * that outgrows it has to fold. A table column is elastic — it sizes to its
+ * content — so wrapping is the wrong lever: the flex container shrinks, the column
+ * stays narrow, and a three-value facet becomes three rows tall. Measured at both
+ * 900 and 1440 the cell held at 97px and stacked all three.
+ *
+ * Not wrapping restores the width the column had when the chips were an
+ * unbreakable inline run, and keeps the 4px gaps that run could not have.
+ */
+.table .chiprow {
+  flex-wrap: nowrap;
 }
 
 /* The kind mark and the child count are styled for a flex row, which is what a
@@ -2535,6 +3037,11 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 /* ---------------------------------------------------------------- canvas */
 
+/* Both of these were declared twice, ~1400 lines apart: `.canvas-wrap` with the
+   same four declarations reordered, and `.canvas` split so that `background` sat
+   in the first copy and `position` in the second. Neither pair conflicted, which
+   is why nothing showed it — the second copy simply read as though it were the
+   whole rule. */
 .canvas-wrap {
   flex: 1;
   min-height: 0;
@@ -2546,6 +3053,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   flex: 1;
   min-height: 0;
   position: relative;
+  background: var(--ground);
 }
 
 /* Transient, shape-local actions float over the content instead of appearing
@@ -2571,15 +3079,11 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   gap: 5px;
 }
 
-.saveas input {
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-base);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-body-sm);
-  padding: 3px 6px;
+/* Sized to a view name rather than to its row, because the canvas toolbar floats
+   and must not grow with what is typed into it. */
+.saveas .field-recessed {
   width: 120px;
+  padding: 3px 6px;
 }
 
 /* Unmatched ancestors, kept so the graph stays connected. Muted, and never
@@ -2612,21 +3116,54 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   box-shadow: 0 2px 0 0 var(--accent);
 }
 
-.rail-input {
-  flex: 1;
-  min-width: 0;
+/*
+ * A recessed field: an input that reads as sunk into the surface holding it
+ * rather than raised out of it. DESIGN.md declares it as `input-rail` — "In the
+ * rail the fill drops to `surface-2` so an input reads as recessed into the
+ * sidebar rather than raised out of it."
+ *
+ * It was two rules for one component. `CommitInput` chose between them on the tag
+ * its *caller* passed for the wrapper — `wrapper.tag === 'div' ? 'rail-input' :
+ * undefined` — so the saved-view namer got a class and the canvas's layout namer
+ * got none, painted instead by an identical seven-declaration copy under
+ * `.saveas input`. They then disagreed about the one thing that was not
+ * duplicated: focus. The classed one swaps its border to the accent; the unclassed
+ * one fell through to the global 2px inset ring. A layout choice was deciding a
+ * focus treatment.
+ *
+ * The register lives here and the fit lives with the container, which is the same
+ * split `.truncate` and `.quietcount` use.
+ */
+.field-recessed {
   background: var(--surface-2);
   border: 1px solid var(--rule);
   border-radius: var(--radius-base);
   color: var(--ink);
   font: inherit;
   font-size: var(--text-body-sm);
-  padding: 3px 6px;
+  /* `5px 8px`, which is what DESIGN.md's `components.input-rail` commits. The
+     class was born from `CommitInput`, whose two homes are both dense, so it took
+     their `3px 6px` as its base and left the document describing something the
+     code did nowhere. The dense fits now say so themselves. */
+  padding: 5px 8px;
 }
 
-.rail-input:focus {
+/* The rail's exception to the global focus ring: a 2px ring against the rail's
+   edge read as a second boundary, so the border takes the accent instead. It was
+   written out twice, once here and once for the rail's search — identically, with
+   the same rationale in both comments, which is the clearest evidence available
+   that the two were one component. */
+.field-recessed:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Fills its rail row, at the tighter padding a one-line control in a rail row
+   wants. */
+.rail-row .field-recessed {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
 }
 
 .rail-problem {

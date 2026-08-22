@@ -28,7 +28,18 @@ export function BodyEditor({
   onSave: (body: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  /**
+   * A success that fades, and a refusal that does not.
+   *
+   * One `note` with a `bad` flag put both in the same slot — mono `--text-meta`
+   * wedged into the button bar beside "unsaved". The sibling editor on the same
+   * panel, over the same `usePanelWriter` contract, draws its refusal as a
+   * `.banner.is-bad` in the `.editor` column instead; one component reported one
+   * event two ways. The banner is the register for "your text was not written",
+   * so the refusal moves there and `note` keeps what it is good at.
+   */
+  const [note, setNote] = useState<string | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
 
   const extensions = useMemo(
     () => [
@@ -47,10 +58,10 @@ export function BodyEditor({
             .then((results) => {
               const md = results.map((r) => `![](${r.path})`).join('\n');
               ev.dispatch(ev.state.replaceSelection(md));
-              setNote({ text: `attached ${plural(results.length, 'image')}` });
+              setNote(`attached ${plural(results.length, 'image')}`);
               setTimeout(() => setNote(null), 1800);
             })
-            .catch((e: Error) => setNote({ text: e.message, bad: true }));
+            .catch((e: Error) => setRefused(e.message));
           return true;
         },
       }),
@@ -76,7 +87,8 @@ export function BodyEditor({
   const run = () => {
     save().then(
       () => {
-        setNote({ text: 'saved' });
+        setRefused(null);
+        setNote('saved');
         setTimeout(() => setNote(null), 1400);
       },
       // A refusal is not a success and does not fade. It used to render in the
@@ -85,12 +97,11 @@ export function BodyEditor({
       // telling you it was. The conflict case also says what to do about it:
       // the text is still here, and reloading is what would take it.
       (e: { message: string; conflict?: boolean }) =>
-        setNote({
-          text: e.conflict
+        setRefused(
+          e.conflict
             ? `${e.message} — nothing was written. Copy your text out before reloading.`
             : e.message,
-          bad: true,
-        }),
+        ),
     );
   };
 
@@ -102,9 +113,13 @@ export function BodyEditor({
           {saving ? 'saving…' : dirty ? 'Save' : 'Saved'}
         </Button>
         <span className="editor-hint">⌘S</span>
-        {note && <span className={`editor-note ${note.bad ? 'is-bad' : ''}`}>{note.text}</span>}
+        {note && <span className="editor-note">{note}</span>}
         {dirty && <span className="editor-dirty">unsaved</span>}
       </div>
+      {/* Below the bar, in the `.editor` column — the placement
+          `.editor > .banner { margin: 0 }` was written for and the frontmatter
+          editor beside this one already uses. */}
+      {refused && <div className="banner is-bad">{refused}</div>}
     </div>
   );
 }

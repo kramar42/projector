@@ -42,7 +42,7 @@ export function TableView({
   // board: the board's case for keeping one is that it is somewhere to drag to,
   // and a table offers nothing to drag. It used to render a header with a `0`
   // under it, which was a behaviour rather than a decision.
-  const sections = groupsFor(data, { empties: 'drop' });
+  const sections = groupsFor(data, { lanes: 'all', empties: 'drop' });
 
   /**
    * The ids in the order the table draws them, which is what a shift-click
@@ -93,7 +93,7 @@ export function TableView({
             {section.value !== '' && (
               <tr className="section">
                 <th colSpan={chips.length + (projects ? 5 : 1) + 1}>
-                  {section.lane ? `${section.lane} · ` : ''}
+                  {section.lane ? `${labelFor(section.lane)} · ` : ''}
                   {labelFor(section.value)}
                   <span className="section-count">{section.ids.length}</span>
                 </th>
@@ -124,7 +124,7 @@ export function TableView({
           </tbody>
         ))}
       </table>
-      {!data.ids.length && <div className="pane-loading">no records match</div>}
+      {!data.ids.length && <div className="emptystate table-empty">no records match</div>}
       </div>
 
       {selection.ids.size > 0 && (

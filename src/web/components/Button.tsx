@@ -68,6 +68,39 @@ const GLYPH = {
     px: 15,
     path: 'M2.6 4h10.8M6 4V2.6h4V4M4.1 4l.75 9.4h6.3L11.9 4M6.6 6.6v4.7M9.4 6.6v4.7',
   },
+  /**
+   * The second drawing, and the reason the set was closed for a while.
+   *
+   * `refresh` was a word because nobody had looked for a mark, not because none
+   * was possible. Four candidate characters — `⟳` `⟲` `⥁` `⭮` — sit on advances
+   * of 0.68 / 0.68 / 0.56 / 0.60em against this family's 0.6021em, so each is
+   * being served by a substituted face and would draw differently on another
+   * machine. `↺` and `↷` are exact mirrors of `↶` above, which is the one glyph
+   * refresh must not be confused with. That leaves `↻`, which is on the family's
+   * own advance and at 14px matches `✕` for ink (28.8 against 29.7 lit px, both
+   * in an 8×8 box) — but on the pixel grid its arrowhead survives as about two
+   * pixels, so it reads as a broken ring and collides with `○`, the container
+   * record mark.
+   *
+   * So: 270° of arc at r5 with the gap in the north-east quadrant, and the
+   * arrowhead *filled*. A stroked chevron was tried first — 1.2 units renders
+   * ~1.1px here, too thin to read as an arrow at all.
+   *
+   * 15px because two measurements agree on it. The ink box is 11×12, identical
+   * to `trash` above, so the two drawn glyphs are the same size as each other;
+   * and coverage is 30.1 lit px, which sits with `✕` (29.7) and `+` (31.6), so
+   * it reads at the characters' weight. `trash` is 52.8 on the same box because
+   * it destroys, and that difference is the point.
+   *
+   * No nudge: a path is centred by `.icon-button`'s grid, so the Measured Glyph
+   * Rule's baseline formula — which is about a glyph in a text run — does not
+   * apply to it, any more than it does to `trash`.
+   */
+  refresh: {
+    px: 15,
+    path: 'M13 8A5 5 0 1 1 8 3',
+    fill: 'M7.6 1.1L11.5 3 7.6 4.9Z',
+  },
 } as const;
 
 export type GlyphName = keyof typeof GLYPH;
@@ -79,7 +112,14 @@ export function IconButton({
   extra,
   ...rest
 }: Base & { glyph: GlyphName; tone?: Tone; size?: Size; extra?: string }) {
-  const g = GLYPH[glyph] as { mark?: string; path?: string; px: number; nudge?: string };
+  const g = GLYPH[glyph] as {
+    mark?: string;
+    path?: string;
+    /** Drawn in `currentColor` rather than stroked — see `refresh`. */
+    fill?: string;
+    px: number;
+    nudge?: string;
+  };
   return (
     <button
       className={cls('btn', TONE[tone], SIZE[size], 'icon-button', extra)}
@@ -101,6 +141,7 @@ export function IconButton({
           aria-hidden="true"
         >
           <path d={g.path} />
+          {g.fill && <path d={g.fill} fill="currentColor" stroke="none" />}
         </svg>
       ) : (
         <span aria-hidden="true">{g.mark}</span>

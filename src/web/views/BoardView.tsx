@@ -210,7 +210,7 @@ export function BoardView({
                   onCreated={reload}
                 />
               ))}
-              {!columns(lane).length && <div className="board-empty">nothing here</div>}
+              {!columns(lane).length && <div className="emptystate board-empty">nothing here</div>}
             </div>
           </div>
         ))}

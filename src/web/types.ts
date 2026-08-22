@@ -61,7 +61,7 @@ export interface CardDetail {
    * second, better-looking control while `blocks` and `project` kept drawing
    * raw ids.
    */
-  refs: Record<string, { title: string; isProject: boolean; childCount: number }>;
+  refs: Record<string, { title: string; isProject: boolean; refCount: number }>;
   children: { id: string; title: string }[];
   project: ResolvedProject | null;
 }

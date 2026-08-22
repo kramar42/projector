@@ -150,7 +150,7 @@ export function PopoverButton({
         className={`popbtn ${className} ${open ? 'is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="popbtn-label">{label}</span>
+        <span className="truncate popbtn-label">{label}</span>
       </button>
       <Popover
         open={open}

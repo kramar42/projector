@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.ts';
-import { markOf } from './CardBody.tsx';
+import { RecordMark } from './CardBody.tsx';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -96,21 +96,28 @@ export function RecordPicker({
         )}
         {matches.map((r) => (
           <button key={r.id} className="picker-item" onClick={() => onPick(r.id)}>
-            <span className="picker-mark">{markOf(r).glyph}</span>
-            <span className="picker-title">{r.title}</span>
+            {/* The real mark, not a second copy of it. This was a bare span
+                holding `markOf(r).glyph`: the size happened to be right — 10px
+                is exactly the 0.8em of this row's `--text-body` that the shared
+                rule computes — but it carried neither the per-glyph optical
+                nudge nor, more to the point, the `means` string. The picker is
+                where a reader is choosing between records, so it is the one
+                place the mark most needs to say what it means. */}
+            <RecordMark card={r} />
+            <span className="truncate picker-title">{r.title}</span>
             {r.facets.project?.length ? (
-              <span className="picker-proj">{r.facets.project.join(', ')}</span>
+              <span className="truncate picker-proj">{r.facets.project.join(', ')}</span>
             ) : null}
           </button>
         ))}
-        {!matches.length && <div className="picker-empty">nothing matches</div>}
+        {!matches.length && <div className="emptystate picker-empty">nothing matches</div>}
       </div>
       {/* Outside the scroller: inside it this sits below the fold until you have
           already scrolled all forty, which is exactly the reader who has
           concluded the record is not there. A bare count, because the app is
           counting — mono and tabular, like every other number it reports. */}
       {found.length > matches.length && (
-        <div className="picker-capped">
+        <div className="quietcount picker-capped">
           {matches.length} of {found.length}
         </div>
       )}

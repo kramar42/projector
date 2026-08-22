@@ -104,6 +104,7 @@ test('grouping is one answer, and the empty-group policy is an argument', () => 
   const data = {
     ids: ['a', 'b'],
     axis: ['now', 'month', 'backlog'],
+    lanes: [],
     groups: [
       // Deliberately out of axis order, and one empty.
       { value: 'backlog', ids: ['b'] },
@@ -113,33 +114,34 @@ test('grouping is one answer, and the empty-group policy is an argument', () => 
   } as unknown as Parameters<typeof groupsFor>[0];
 
   assert.deepEqual(
-    groupsFor(data, { empties: 'keep' }).map((g) => g.value),
+    groupsFor(data, { lanes: 'all', empties: 'keep' }).map((g) => g.value),
     ['now', 'month', 'backlog'],
     'ordered by the axis the server declared, not by arrival',
   );
   assert.deepEqual(
-    groupsFor(data, { empties: 'drop' }).map((g) => g.value),
+    groupsFor(data, { lanes: 'all', empties: 'drop' }).map((g) => g.value),
     ['now', 'backlog'],
     'a canvas band and a table section need something in them',
   );
 
   // Ungrouped: one nameless group holding everything, which every shape open-coded.
-  const flat = { ids: ['a', 'b'], axis: [], groups: null } as unknown as Parameters<
+  const flat = { ids: ['a', 'b'], axis: [], lanes: [], groups: null } as unknown as Parameters<
     typeof groupsFor
   >[0];
-  assert.deepEqual(groupsFor(flat, { empties: 'keep' }), [{ value: '', ids: ['a', 'b'] }]);
+  assert.deepEqual(groupsFor(flat, { lanes: 'all', empties: 'keep' }), [{ value: '', ids: ['a', 'b'] }]);
 });
 
 test('a value the axis does not declare sorts after the ones it does', () => {
   const data = {
     ids: [],
     axis: ['now'],
+    lanes: [],
     groups: [
       { value: 'adhoc', ids: ['x'] },
       { value: 'now', ids: ['y'] },
     ],
   } as unknown as Parameters<typeof groupsFor>[0];
-  assert.deepEqual(groupsFor(data, { empties: 'keep' }).map((g) => g.value), ['now', 'adhoc']);
+  assert.deepEqual(groupsFor(data, { lanes: 'all', empties: 'keep' }).map((g) => g.value), ['now', 'adhoc']);
 });
 
 /** Five places said it four ways, one of them by printing the wire form. */

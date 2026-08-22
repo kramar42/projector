@@ -62,7 +62,6 @@ export function SavedViews({
     <>
       <div className="rail-row">
         <PopoverButton
-          className="viewbtn"
           panelClassName="viewmenu"
           minWidth={240}
           label={current?.title ?? current?.name ?? 'Ad-hoc query'}
@@ -80,7 +79,7 @@ export function SavedViews({
                     patch({ ...blankQuery(spec, search), view: v.name });
                   }}
                 >
-                  <span className="pop-pick-name">{v.title}</span>
+                  <span className="truncate pop-pick-name">{v.title}</span>
                   <span className="pop-count">{v.shape}</span>
                 </button>
               ))}

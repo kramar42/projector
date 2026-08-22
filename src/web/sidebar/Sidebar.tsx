@@ -5,9 +5,10 @@ import { SavedViews } from './SavedViews.tsx';
 import { FacetsSection, ShapeSection } from './QueryControls.tsx';
 import { FocusSection } from './FocusSection.tsx';
 import { Button } from '../components/Button.tsx';
+import { GLYPH_OF, ROLES, tallyMeans, tallyRoles } from '../components/CardBody.tsx';
 import { type Patch } from '../query.ts';
 import { clearFilters, setSearch } from '../../view/intents.ts';
-import type { Edit, Meta, QueryResponse, ViewSpec } from '../types.ts';
+import type { CardDTO, Edit, Meta, QueryResponse, ViewSpec } from '../types.ts';
 
 /**
  * The sidebar *is* the view.
@@ -57,8 +58,21 @@ export function Sidebar({
   onToggleCollapsed: () => void;
 }) {
   const spec = data?.spec;
-  const typeValues = data?.counts.find((facet) => facet.facet === 'type')?.values;
-  const typeCount = (type: string) => typeValues?.find((value) => value.value === type)?.count ?? 0;
+  /**
+   * What the collapsed ribbon reports: the records on screen, tallied by what
+   * their own mark says.
+   *
+   * It used to read the `type` pseudo-facet and name three of its values, which
+   * was wrong twice over: it named a facet in the UI (C4), and it answered the
+   * question from a different source than the marks did — `type`'s `node` counts a
+   * record named by *any* reference facet, where a drawn `○` then meant the
+   * `parent` facet alone. The mark has since taken the broader meaning, so the two
+   * agree on the definition; counting through `markOf` is what stops them drifting
+   * apart again, and it names no facet.
+   */
+  const marks = tallyRoles(
+    (data?.ids ?? []).map((id) => data!.cards[id]).filter((c): c is CardDTO => Boolean(c)),
+  );
 
   if (collapsed) {
     return (
@@ -72,18 +86,20 @@ export function Sidebar({
         >
           »
         </button>
-        <div className="sidebar-ribbon-info" title={`${typeCount('project')} projects in this query`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">▣</span>
-          <span>{typeCount('project')}</span>
-        </div>
-        <div className="sidebar-ribbon-info" title={`${typeCount('node')} linked nodes in this query`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">○</span>
-          <span>{typeCount('node')}</span>
-        </div>
-        <div className="sidebar-ribbon-info" title={`${typeCount('plain')} plain cards in this query`}>
-          <span className="sidebar-ribbon-icon" aria-hidden="true">•</span>
-          <span>{typeCount('plain')}</span>
-        </div>
+        {/* One row per role, from one table — rather than three blocks each
+            spelling its own glyph beside a count read from somewhere else. */}
+        {ROLES.map((role) => (
+          <div
+            key={role}
+            className="sidebar-ribbon-info"
+            title={`${tallyMeans(role, marks[role])} in this query`}
+          >
+            <span className="sidebar-ribbon-icon" aria-hidden="true">
+              {GLYPH_OF[role]}
+            </span>
+            <span>{marks[role]}</span>
+          </div>
+        ))}
       </nav>
     );
   }
@@ -215,6 +231,7 @@ function SearchBox({ spec, edit }: { spec: ViewSpec | undefined; edit: Edit }) {
     <div className="rail-search">
       <input
         type="search"
+        className="field-recessed"
         value={text}
         placeholder="search title and body"
         onChange={(e) => setText(e.target.value)}

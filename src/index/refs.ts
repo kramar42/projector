@@ -37,20 +37,32 @@ export function refsOf(facet: string, records: Map<string, Rec>): Ref[] {
 }
 
 /**
- * Every record that some other record names through a reference facet.
+ * How many records name each one, across every reference facet.
  *
  * This is what makes a record a *node* rather than a plain card: things hang off
- * it. Computed across all reference facets at once, because being named by
+ * it. Counted across all reference facets at once, because being named by
  * `parent` and being named by `project` make a record a node equally.
+ *
+ * A count rather than a set, because the record mark needs both: `○` is drawn
+ * from whether the number is non-zero, and the mark's own tooltip says what the
+ * number is. Deriving `nodesIn` from this rather than computing it separately is
+ * what stops the two disagreeing — which is exactly how the collapsed rail came
+ * to report four nodes on a vault that drew one.
  */
-export function nodesIn(records: Map<string, Rec>, facets: Facets): Set<string> {
-  const nodes = new Set<string>();
+export function inboundCounts(records: Map<string, Rec>, facets: Facets): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const [facet, def] of Object.entries(facets)) {
     if (!isRef(def)) continue;
-    for (const { dst } of refsOf(facet, records)) nodes.add(dst);
+    for (const { dst } of refsOf(facet, records)) counts.set(dst, (counts.get(dst) ?? 0) + 1);
   }
-  return nodes;
+  return counts;
 }
+
+/** Every record that some other record names through a reference facet. */
+export function nodesIn(records: Map<string, Rec>, facets: Facets): Set<string> {
+  return new Set(inboundCounts(records, facets).keys());
+}
+
 
 export interface Adjacency {
   out: Map<string, string[]>;

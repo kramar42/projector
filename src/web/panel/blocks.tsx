@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '../components/Button.tsx';
+import { Button, IconButton } from '../components/Button.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { LinkEditor } from '../components/LinkEditor.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
@@ -68,7 +68,7 @@ export function Inbound({
     <section className="panel-section">
       <h3>
         {head}
-        {records.length > 1 && <span className="section-count">{records.length}</span>}
+        {records.length > 1 && <span className="quietcount section-count">{records.length}</span>}
         {/* The same `ƒ` the filter rail puts on an axis it computed rather than
             read — there is no edit here because the edit lives on the other card. */}
         <span className="derived" title={means}>
@@ -153,16 +153,19 @@ export function Links({ card, write }: { card: CardDTO; write: Pick<CardWriter, 
         Links
         {/* An action, so it is a button. It used to wear the tab pill that the
             Body block uses for a mode switch, which made one shape mean "do a
-            thing" here and "you are in this mode" there. */}
+            thing" here and "you are in this mode" there.
+
+            And a glyph, not a word. It was the last control in the app spelled
+            out, and "refresh" beside a trash can and a `✕` is the same mistake
+            as spelling those two — so the set grew by one measured member
+            rather than the rule keeping an exception. */}
         <span className="section-do">
-          <Button
-            tone="ghost"
-            size="tiny"
+          <IconButton
+            glyph="refresh"
             title="Re-fetch every link on this card"
+            aria-label="Re-fetch every link on this card"
             onClick={() => refresh(card.links.map((l) => l.raw))}
-          >
-            refresh
-          </Button>
+          />
         </span>
       </h3>
       <LinkEditor links={card.links} onChange={(next) => write.links(next)} />
@@ -244,7 +247,7 @@ export function Body({
       <h3>
         Body
         {/* The one real mode switch in the panel, and now the only `.tab`. */}
-        <span className="tabs">
+        <span className="section-do">
           <button
             className={`tab ${mode === 'read' ? 'is-on' : ''}`}
             onClick={() => {
@@ -263,7 +266,7 @@ export function Body({
         card.body.trim() ? (
           <div className="md" dangerouslySetInnerHTML={{ __html: renderBody(card.body) }} />
         ) : (
-          <p className="hint">Empty. Switch to edit to write something.</p>
+          <p className="emptystate hint">Empty. Switch to edit to write something.</p>
         )
       ) : (
         <BodyEditor

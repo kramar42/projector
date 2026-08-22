@@ -32,7 +32,15 @@ export interface CardDTO {
    */
   buckets: Record<string, string[]>;
   updated: string | null;
-  childCount: number;
+  /**
+   * How many records name this one, across every reference facet.
+   *
+   * The number the record mark is read from. It counted the `parent` facet alone
+   * and was called `childCount`, which is why the mark and the `type`
+   * pseudo-facet — which has always meant "named by *any* reference facet" —
+   * could disagree about the same record.
+   */
+  refCount: number;
   blockedBy: { id: string; title: string; done: boolean }[];
   unblocks: string[];
 }
@@ -80,7 +88,7 @@ export function excerptOf(body: string, max = 160): string {
 export function toDTO(
   rec: Rec,
   extra: {
-    childCount?: number;
+    refCount?: number;
     blockedBy?: { id: string; title: string; done: boolean }[];
     unblocks?: string[];
     facets?: Facets;
@@ -103,7 +111,7 @@ export function toDTO(
     body: rec.body,
     buckets: bucketsOf(rec, extra.facets ?? {}, extra.today ?? new Date().toISOString().slice(0, 10)),
     updated: rec.updated ?? null,
-    childCount: extra.childCount ?? 0,
+    refCount: extra.refCount ?? 0,
     blockedBy: extra.blockedBy ?? [],
     unblocks: extra.unblocks ?? [],
   };

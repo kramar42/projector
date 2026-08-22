@@ -2,10 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Facets, Rec } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
 import { INWARD_REFS } from '../schema/vocabulary.ts';
-import { parentsOf } from '../index/project.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
-import { refsOf } from '../index/refs.ts';
+import { inboundCounts, refsOf } from '../index/refs.ts';
 import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
 import { toDTO, type CardDTO } from './dto.ts';
 
@@ -95,13 +94,15 @@ export function queryPayload(
 
   const shown = [...res.ids, ...res.context];
   const cards: Record<string, CardDTO> = {};
+  // One walk for every card on screen, rather than the same walk once per card.
+  const inbound = inboundCounts(records, facets);
   for (const id of shown) {
     const rec = records.get(id);
     if (!rec) continue;
     cards[id] = toDTO(rec, {
       facets,
       today,
-      childCount: countChildren(records, id),
+      refCount: inbound.get(id) ?? 0,
       blockedBy: blockedBy(id, records),
       unblocks: unblocks(id, records),
     });
@@ -168,19 +169,6 @@ export function applyOrder(ids: string[], order: string[] | undefined): string[]
   return [...pinned, ...ids.filter((id) => !seen.has(id))];
 }
 
-/**
- * How many records name this one as their parent.
- *
- * Typed as `Rec` deliberately: this was `ReturnType<typeof Object>` with a cast
- * inside, which is how it went on reading `rec.edges` for a whole refactor after
- * that field stopped existing. An escape hatch in a signature is a place the
- * compiler has been told not to help.
- */
-export function countChildren(records: Map<string, Rec>, id: string): number {
-  let n = 0;
-  for (const rec of records.values()) if (parentsOf(rec).includes(id)) n++;
-  return n;
-}
 
 function relationsAmong(
   records: Map<string, Rec>,

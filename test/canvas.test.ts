@@ -123,7 +123,7 @@ test('deleting a record drops every reference pointing at it', () => {
 
 const face = (id: string): CardDTO =>
   ({ id, title: id, isProject: false, facets: {}, buckets: {}, links: [], progress: null,
-     excerpt: '', body: '', updated: null, childCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
+     excerpt: '', body: '', updated: null, refCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
 
 test('a record in several groups is clustered into the first the axis declares', () => {
   const nodes = [face('a'), face('b'), face('c')];

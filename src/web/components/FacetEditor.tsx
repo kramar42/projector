@@ -78,7 +78,7 @@ export function FacetEditor({
     <button className="facetedit-head" onClick={() => setOpen((v) => !v)}>
       <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
       <span className="facetedit-label">{def.label}</span>
-      {!open && values.length > 0 && <span className="facetedit-count">{values.length}</span>}
+      {!open && values.length > 0 && <span className="quietcount">{values.length}</span>}
     </button>
   );
 
@@ -98,8 +98,8 @@ export function FacetEditor({
                     order a card face and the panel title lead with, and the
                     arrangement the per-glyph optical nudges were measured for. */}
                 <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
-                  <RecordMark card={refs?.[v] ?? { isProject: false, childCount: 0 }} />
-                  <span className="refchip-title">{refs?.[v]?.title ?? v}</span>
+                  <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
+                  <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
                 </button>
                 <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
               </span>

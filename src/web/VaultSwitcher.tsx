@@ -48,24 +48,46 @@ function VaultMenu({
   close: () => void;
 }) {
   const [vaults, setVaults] = useState<VaultInfo[]>([]);
+  /**
+   * What went wrong, if anything did.
+   *
+   * Both calls below used to swallow their rejection — `.catch(() => undefined)`
+   * and `.catch(() => ({ vaults: [] }))` — so forgetting a vault and failing to
+   * forget it looked identical, and a failed list rendered as *no vaults*, which
+   * is a real state this menu can otherwise show. Silence is the worst of the
+   * registers this app uses for a refused write, and the vault gate on the same
+   * surface already renders one as a banner.
+   */
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const load = () =>
+    vaultApi.list().then(
+      (r) => {
+        setVaults(r.vaults);
+        setProblem(null);
+      },
+      (e: Error) => setProblem(e.message),
+    );
 
   useEffect(() => {
-    vaultApi.list().then(
-      (r) => setVaults(r.vaults),
-      () => setVaults([]),
-    );
+    void load();
   }, []);
 
   const forget = async (path: string) => {
     if (path === meta.vault) return; // never forget the one you are looking at
-    await vaultApi.forget(path).catch(() => undefined);
-    const r = await vaultApi.list().catch(() => ({ vaults: [] as VaultInfo[] }));
-    setVaults(r.vaults);
+    try {
+      await vaultApi.forget(path);
+    } catch (e) {
+      setProblem((e as Error).message);
+      return; // the list is unchanged, so there is nothing to re-read
+    }
+    await load();
   };
 
   return (
     <>
       <div className="pop-head">Vaults</div>
+      {problem && <div className="banner is-bad">{problem}</div>}
       {vaults.map((v) => (
         <div key={v.path} className="pop-row">
           <button
@@ -77,7 +99,7 @@ function VaultMenu({
             }}
             title={v.path}
           >
-            <span className="pop-pick-name">{v.name}</span>
+            <span className="truncate pop-pick-name">{v.name}</span>
             <span className="pop-count">{v.exists ? `${v.cards ?? 0}` : 'missing'}</span>
           </button>
           {v.path !== meta.vault && (

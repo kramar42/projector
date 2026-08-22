@@ -37,7 +37,10 @@ export function CommitInput({
   return (
     <Tag className={wrapper.className}>
       <input
-        className={wrapper.tag === 'div' ? 'rail-input' : undefined}
+        // One class, unconditionally. This used to be
+        // `wrapper.tag === 'div' ? 'rail-input' : undefined`, which let the tag a
+        // caller picked for layout decide how the field was painted and focused.
+        className="field-recessed"
         autoFocus
         value={text}
         placeholder={placeholder}

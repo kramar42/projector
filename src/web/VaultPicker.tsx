@@ -191,7 +191,7 @@ export function VaultPicker({
                 listing.entries.map((e) => (
                   <button
                     key={e.name}
-                    className={`browse-item ${e.isVault ? 'is-vault' : ''}`}
+                    className={`truncate browse-item ${e.isVault ? "is-vault" : ""}`}
                     onClick={() => into(e.name)}
                     title={e.isVault ? 'looks like a vault' : ''}
                   >
@@ -199,7 +199,7 @@ export function VaultPicker({
                   </button>
                 ))
               ) : (
-                <div className="picker-empty">no subfolders</div>
+                <div className="emptystate picker-empty">no subfolders</div>
               )}
             </div>
           </section>
