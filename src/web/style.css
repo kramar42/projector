@@ -1559,6 +1559,13 @@ code {
   background: transparent;
 }
 
+/* Where a horizontal and a vertical scrollbar meet. Unstyled it is painted by
+   the browser rather than by us, which on a dark ground is a white square in the
+   corner of every doubly-scrolling pane — the board being the one you see. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ================================================================ P2 editing */
 
 .btn {
