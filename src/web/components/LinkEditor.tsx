@@ -71,7 +71,11 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
             {b.label}
           </span>
         ))}
-        {res?.state === 'stale' && <span className="badge tone-warn" title="refreshing">stale</span>}
+        {res?.state === 'stale' && (
+          <span className="badge tone-warn" title="cached; a refresh is running now">
+            stale
+          </span>
+        )}
         <IconButton glyph="close" title="remove this link" onClick={onRemove} />
       </div>
 

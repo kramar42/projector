@@ -1,4 +1,5 @@
 import { useEnrichment } from '../enrichment.tsx';
+import { plural } from '../plural.ts';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -186,21 +187,24 @@ export function markOf(card: Marked): { glyph: string; role: string; means: stri
     return {
       glyph: '▣',
       role: 'project',
-      means: 'a project — it owns repos and instructions that its members inherit',
+      means: 'A project: other records inherit its repos and instructions.',
     };
   }
   if (card.childCount > 0) {
     return {
       glyph: '○',
       role: 'container',
-      means: `${card.childCount} record(s) name this one as their parent`,
+      means:
+        card.childCount === 1
+          ? '1 record names this one as its parent.'
+          : `${plural(card.childCount, 'record')} name this one as their parent.`,
     };
   }
   // `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's
   // ink is 1.85 × 2.23px against `○`'s 8.94 × 9.02 — nearly five times smaller
   // in each dimension, which is not a quieter mark, it is a speck. The bullet is
   // 4.35 × 4.34: legible, and still half the circle.
-  return { glyph: '•', role: 'leaf', means: 'nothing is part of this one' };
+  return { glyph: '•', role: 'leaf', means: 'Nothing is part of this one.' };
 }
 
 /**
@@ -239,14 +243,18 @@ export function RecordMark({ card }: { card: Marked }) {
  * child count.
  */
 export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => void }) {
-  const { glyph, role } = markOf(card);
+  const { glyph, role, means } = markOf(card);
+  // What it is, then what a click makes it. Two facts, one line each, and the
+  // second names the consequence rather than the mechanism — "members stop
+  // inheriting" is what actually happens to other records; "removes the project
+  // block" is how.
   const next = card.isProject
-    ? 'Remove the project block. Records naming this one in their project facet stop inheriting repos and instructions from it.'
-    : 'Add a project block, so this record can own repos and instructions that its members inherit.';
+    ? 'Click: stop being a project — its members stop inheriting these repos and instructions'
+    : 'Click: make it a project — it can own repos and instructions its members inherit';
   return (
     <button
       className={`recordmark is-${role} is-toggle`}
-      title={`${markOf(card).means}\n\nClick: ${next}`}
+      title={`${means}\n${next}`}
       onClick={(e) => {
         // The title beside it opens the rename editor on click.
         e.stopPropagation();

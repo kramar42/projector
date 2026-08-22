@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { vaultApi, type Inspection, type VaultInfo } from './vault.ts';
+import { plural } from './plural.ts';
 import { Button } from './components/Button.tsx';
 
 /**
@@ -138,7 +139,7 @@ export function VaultPicker({
             <div className="vaultgate-verdict">
               {inspection.isVault ? (
                 <>
-                  <b className="tone-good">A vault.</b> {inspection.cards} card(s).{' '}
+                  <b className="tone-good">A vault.</b> {plural(inspection.cards, 'card')}.{' '}
                   {inspection.registered ? 'Already in your list.' : ''}
                 </>
               ) : inspection.exists && !inspection.empty ? (

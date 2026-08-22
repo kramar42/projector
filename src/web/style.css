@@ -1785,17 +1785,6 @@ textarea { resize: vertical; font-family: inherit; }
   cursor: help;
 }
 
-/* The same fact in a word, where a word is more honest than the glyph: `Project`
-   is resolved along the membership chain rather than computed from one axis, and
-   `ƒ` would claim it is the latter. Sized as a label, because it is one. */
-.derived-word {
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-  margin-left: 6px;
-  cursor: help;
-}
 
 /* A section's action, in the corner a control lives in. It is a Button rather
    than a tab: `.tab` says "you are in this mode", and refresh and edit-raw are

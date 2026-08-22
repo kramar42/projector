@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
+import { plural } from '../plural.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import type { CardDTO, Group, QueryResponse } from '../types.ts';
@@ -510,7 +511,7 @@ function BulkBar({
       <Button
         tone="danger" size="small"
         onClick={() => {
-          if (!confirm(`Delete ${ids.length} card(s)?\n\nThe files are in git, so this is recoverable.`))
+          if (!confirm(`Delete ${plural(ids.length, 'card')}?\n\nThe files are in git, so this is recoverable.`))
             return;
           void run(() => api.bulk({ ids, op: 'delete' }));
         }}

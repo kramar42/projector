@@ -5,6 +5,7 @@ import { ProjectMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { Body, Facets, Frontmatter, Inbound, Links } from './blocks.tsx';
+import { plural } from '../plural.ts';
 import type { CardDetail, Meta } from '../types.ts';
 
 /**
@@ -70,7 +71,7 @@ export function CardPanel({
   return (
     <>
       <div className="scrim" onClick={() => (dirty ? undefined : onClose())} />
-      <aside className="panel" role="dialog" aria-label="Card detail">
+      <aside className="panel" role="dialog" aria-label={card ? card.title : 'Card'}>
         {/*
           The one part of the panel that does not scroll, so it carries what a
           card face and a table row carry: the mark, then the title. Same glyph,
@@ -80,7 +81,7 @@ export function CardPanel({
         <div className="panel-top">
           {card &&
             (editTitle === null ? (
-              <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="click to rename">
+              <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="Rename">
                 <ProjectMark card={card} onToggle={() => write.projectBlock(card.isProject ? null : {})} />
                 <span className="panel-title-text">{card.title}</span>
               </h2>
@@ -122,7 +123,7 @@ export function CardPanel({
               size="normal"
               extra="panel-x"
               aria-label={`Delete ${card.title}`}
-              title="Delete this record. The file is in git, so this is recoverable."
+              title={`Delete "${card.title}" — the file is in git, so it can be recovered`}
               onClick={() => {
                 if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
                   return;
@@ -208,15 +209,25 @@ export function CardPanel({
                   onOpen={onOpen}
                 />
 
+                {/*
+                    Not "Project". That word already names two other things within
+                    one scroll — the axis above, which is the project this card is
+                    a *member* of, and the mark by the title, which says the card
+                    *is* one. This block is neither: it is what the card gets
+                    *from* its membership, and the `key` and `chain` rows under it
+                    already name which project that was. One word per idea, and
+                    `ƒ` marks all three derived blocks rather than this one saying
+                    the same thing in prose.
+                */}
                 {data.project && (
                   <section className="panel-section">
                     <h3>
-                      Project
+                      Inherited
                       <span
-                        className="derived-word"
+                        className="derived"
                         title="resolved along the project facet and its chain, not stored on this card"
                       >
-                        inherited
+                        ƒ
                       </span>
                     </h3>
                     <div className="proj">
@@ -231,7 +242,7 @@ export function CardPanel({
                       ))}
                       {data.project.instructions.length > 0 && (
                         <details>
-                          <summary>{data.project.instructions.length} instruction block(s)</summary>
+                          <summary>{plural(data.project.instructions.length, 'instruction block')}</summary>
                           <pre className="instructions">{data.project.instructions.join('\n\n')}</pre>
                         </details>
                       )}

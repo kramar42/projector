@@ -3,6 +3,7 @@ import { EditorView, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { api } from '../api.ts';
+import { plural } from '../plural.ts';
 import { Button } from './Button.tsx';
 import { useDocumentEditor } from './useDocumentEditor.ts';
 
@@ -45,7 +46,7 @@ export function BodyEditor({
             .then((results) => {
               const md = results.map((r) => `![](${r.path})`).join('\n');
               ev.dispatch(ev.state.replaceSelection(md));
-              setNote(`attached ${results.length} image(s)`);
+              setNote(`attached ${plural(results.length, 'image')}`);
               setTimeout(() => setNote(null), 1800);
             })
             .catch((e: Error) => setNote(e.message));
