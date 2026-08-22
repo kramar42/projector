@@ -31,7 +31,6 @@ import { RecordMark } from './CardBody.tsx';
  * rail already uses, on the same rule — an axis you are using stays open.
  */
 export function FacetEditor({
-  name,
   def,
   values,
   refs,
@@ -39,7 +38,6 @@ export function FacetEditor({
   onChange,
   onOpen,
 }: {
-  name: string;
   def: FacetDef;
   values: string[];
   /** Titles for reference values. Absent for a label or date axis. */
@@ -114,6 +112,7 @@ export function FacetEditor({
           </div>
           {picking && (
             <RecordPicker
+              inline
               exclude={selfId ? [...values, selfId] : values}
               placeholder={`${def.label.toLowerCase()}…`}
               clearLabel={def.single && values.length ? `— no ${def.label.toLowerCase()} —` : undefined}
@@ -171,7 +170,10 @@ export function FacetEditor({
               onChange={(e) => setAdding(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') addNew();
-                if (e.key === 'Escape') setAdding('');
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setAdding('');
+                }
               }}
             />
           </span>
@@ -184,7 +186,6 @@ export function FacetEditor({
     <div className={`facetedit ${values.length ? 'is-carried' : ''}`}>
       {head}
       {open && body()}
-      <input type="hidden" name={name} />
     </div>
   );
 }

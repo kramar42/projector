@@ -142,6 +142,45 @@
   box-sizing: border-box;
 }
 
+/*
+ * The focus ring, once, for everything.
+ *
+ * It was a per-component rule: `.btn`, the inputs, the sidebar toggle and the
+ * record mark had one, and the other twenty-eight focusable things in the card
+ * panel alone fell through to the browser's — `1px auto rgb(229, 151, 0)` in
+ * Chrome, a colour from no palette, on a surface where every other value is a
+ * literal from xoria256. Keyboard focus is a browser surface in the same sense
+ * as the caret and the scrollbar: not drawing it does not mean it is absent, it
+ * means someone else drew it.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click on a chip does not
+ * leave a ring behind. The three inputs that suppress this deliberately replace
+ * it with an accent border and win on specificity; they are focus signals, just
+ * not this one.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/*
+ * Selected text, everywhere — the other browser surface that ships with a colour
+ * from no palette. `accent-soft` is the accent's only fill in this system, which
+ * is exactly what a selection is: a wash behind text that keeps its own ink.
+ * The editor keeps its own copy of this rule because CodeMirror sets selection
+ * styles it can only be argued out of with `!important`.
+ */
+::selection {
+  background: var(--accent-soft);
+}
+
+/* CodeMirror puts focus on an inner element, so the ring belongs on the frame
+   the reader actually sees. */
+.editor-host:has(.cm-focused) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 html,
 body,
 #root {
@@ -1399,16 +1438,6 @@ code {
   gap: 3px;
 }
 
-.proj .k {
-  font-family: var(--mono);
-  font-size: var(--text-chip);
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  display: inline-block;
-  min-width: 52px;
-}
-
 .proj details {
   margin-top: 6px;
 }
@@ -1445,8 +1474,11 @@ code {
 
 /* rendered card body */
 
+/* The documented prose step, and the one `.linkrow-title` a tier up already
+   uses. Headings stay at `--text-title`, so they keep their separation by
+   weight and ink rather than by a size the body was borrowing. */
 .md {
-  font-size: var(--text-title);
+  font-size: var(--text-body);
   line-height: 1.6;
   color: var(--ink-2);
 }
@@ -1584,6 +1616,12 @@ textarea { resize: vertical; font-family: inherit; }
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* In flow inside an editor, the page margin is the container's job — `.editor` is
+   already a gapped column, so the banner only has to stop adding its own. */
+.editor > .banner {
+  margin: 0;
+}
 .banner.is-bad { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .banner.is-conflict { border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 
@@ -1620,10 +1658,12 @@ textarea { resize: vertical; font-family: inherit; }
 .bulkbar-values { display: flex; gap: 4px; flex-wrap: wrap; }
 .bulkbar-picker { position: absolute; bottom: 100%; left: 12px; z-index: 30; margin-bottom: 6px; }
 
+/* A chip that is also a hit target: the chip family's type, with padding tuned
+   up from the chip's `1.5px 6px` because this one is pressed. */
 .togglechip {
   appearance: none;
   font-family: var(--mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-chip);
   border: 1px solid var(--rule-2);
   background: var(--surface);
   color: var(--ink-3);
@@ -1770,7 +1810,6 @@ textarea { resize: vertical; font-family: inherit; }
 .titleedit textarea { width: 100%; font-size: var(--text-lg); }
 .titleedit-bar { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
-.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .hint { font-size: var(--text-body-sm); color: var(--ink-3); margin: 6px 0 0; font-style: italic; }
 
@@ -1796,12 +1835,12 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* How many are under a head that caps its list, so the count is not hidden by
    the cap. Tabular, because it changes while its neighbours stay put. */
-.section-count {
+.panel-section .section-count {
   font-family: var(--mono);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
-  margin-left: 5px;
+  margin-left: 8px;
 }
 
 .tabs { float: right; display: inline-flex; gap: 2px; }
@@ -1916,7 +1955,6 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 .refchip-go:hover { color: var(--ink); }
-.refchip .btn.tiny { padding: 0 4px 0 2px; }
 /* Sized to its placeholder rather than to a round number, so it reads as one more
    chip in the row instead of a gap at the end. It grows when focused. */
 .facetedit-add input {
@@ -1953,7 +1991,21 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 6px;
 }
 .picker > input { width: 100%; }
-.picker-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.picker-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
+  /* Room for the focus ring, borrowed from the shell's own 8px so nothing moves.
+     Without it `overflow-y: auto` clips the outline on every row — and on a
+     short list, on all four sides. */
+  padding: 3px;
+  margin: -3px;
+}
+
+/* Inline in the panel, the list must not scroll: the panel already does, and one
+   region scrolls per axis. Forty rows is the bound, and typing is the faster way
+   past it than a wheel inside a wheel. */
+.picker.is-inline .picker-list {
+  max-height: none;
+  overflow-y: visible;
+}
 .picker-item {
   appearance: none;
   border: 0;
@@ -1973,8 +2025,18 @@ textarea { resize: vertical; font-family: inherit; }
 .picker-item.is-clear { color: var(--ink-3); font-style: italic; }
 .picker-mark { font-family: var(--mono); font-size: var(--text-chip); color: var(--ink-3); flex: none; }
 .picker-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--accent); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The project axis's own hue. The accent marks live state and the app
+   speaking, never a property of a record. */
+.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--hue-purple); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-empty { font-size: var(--text-body-sm); color: var(--ink-3); padding: 6px 7px; font-style: italic; }
+
+.picker-capped {
+  font-family: var(--mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  text-align: right;
+}
 
 /* body editor */
 
@@ -2006,7 +2068,15 @@ textarea { resize: vertical; font-family: inherit; }
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
+
 .editor-note { color: var(--ok); }
+/* A refusal takes the failure hue and stays. The success slot was doing both
+   jobs in `ok` green, which is the wrong colour for "your text was not written"
+   and the wrong lifetime for a message you have to act on. */
+.editor-note.is-bad {
+  color: var(--bad);
+  font-style: normal;
+}
 .editor-dirty { color: var(--warn); margin-left: auto; }
 
 .editor-host.is-yaml .cm-scroller { font-size: var(--text-body-sm); }
@@ -2090,12 +2160,14 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   font-size: var(--text-meta);
   color: var(--ink-3);
 }
+/* No opacity. The key already recedes by being 9px, uppercase and `ink-3`; the
+   0.75 on top of that put it under the contrast floor, the same trade the
+   workshop tier made and lost. */
 .linkrow-fields em {
   font-style: normal;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: var(--text-micro);
-  opacity: 0.75;
   margin-right: 3px;
 }
 
@@ -2107,7 +2179,9 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   white-space: nowrap;
 }
 
-.linkrow-note { font-size: var(--text-sm); color: var(--ink-3); font-style: italic; }
+/* Only ever rendered with a modifier, and both set their own colour and style —
+   so this carries the one declaration they share. */
+.linkrow-note { font-size: var(--text-sm); }
 .linkrow-note.is-bad { color: var(--bad); font-style: normal; }
 .linkrow-note.is-setup { color: var(--warn); font-style: normal; }
 

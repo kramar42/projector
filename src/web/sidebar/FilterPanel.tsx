@@ -46,7 +46,6 @@ function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
   const [all, setAll] = useState(false);
 
   const shown = all ? facet.values : facet.values.slice(0, CUTOFF);
-  const more = facet.values.length - shown.length;
 
   return (
     <section className={`facet ${open ? 'is-open' : ''} ${selected.length ? 'is-active' : ''}`}>
@@ -76,14 +75,13 @@ function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
               <span className="facet-count">{v.count}</span>
             </label>
           ))}
-          {more > 0 && (
-            <button className="facet-more" onClick={() => setAll(true)}>
-              {more} more
-            </button>
-          )}
-          {all && facet.values.length > CUTOFF && (
-            <button className="facet-more" onClick={() => setAll(false)}>
-              less
+          {/* One button, not two that swap places. Rendering `more` and `less` in
+              different slots means the element you activated is gone by the time
+              the list has changed, so focus falls to the document and a keyboard
+              reader loses their place mid-list. */}
+          {facet.values.length > CUTOFF && (
+            <button className="facet-more" onClick={() => setAll((v) => !v)}>
+              {all ? 'less' : `${facet.values.length - CUTOFF} more`}
             </button>
           )}
         </div>

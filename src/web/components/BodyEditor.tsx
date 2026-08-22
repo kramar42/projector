@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EditorView, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting } from '@codemirror/language';
+import { projectorHighlight } from './highlight.ts';
 import { api } from '../api.ts';
 import { plural } from '../plural.ts';
 import { Button } from './Button.tsx';
@@ -27,12 +28,12 @@ export function BodyEditor({
   onSave: (body: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
 
   const extensions = useMemo(
     () => [
       markdown(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(projectorHighlight, { fallback: true }),
       placeholder('Free-form markdown — description, links, checklists, pasted images.'),
       // Paste an image and it lands in the card's own assets directory.
       EditorView.domEventHandlers({
@@ -46,10 +47,10 @@ export function BodyEditor({
             .then((results) => {
               const md = results.map((r) => `![](${r.path})`).join('\n');
               ev.dispatch(ev.state.replaceSelection(md));
-              setNote(`attached ${plural(results.length, 'image')}`);
+              setNote({ text: `attached ${plural(results.length, 'image')}` });
               setTimeout(() => setNote(null), 1800);
             })
-            .catch((e: Error) => setNote(e.message));
+            .catch((e: Error) => setNote({ text: e.message, bad: true }));
           return true;
         },
       }),
@@ -75,10 +76,21 @@ export function BodyEditor({
   const run = () => {
     save().then(
       () => {
-        setNote('saved');
+        setNote({ text: 'saved' });
         setTimeout(() => setNote(null), 1400);
       },
-      (e: Error) => setNote(e.message),
+      // A refusal is not a success and does not fade. It used to render in the
+      // same slot and the same `ok` green as "saved", and then sit there — so the
+      // one message telling you your text was *not* written looked like the one
+      // telling you it was. The conflict case also says what to do about it:
+      // the text is still here, and reloading is what would take it.
+      (e: { message: string; conflict?: boolean }) =>
+        setNote({
+          text: e.conflict
+            ? `${e.message} — nothing was written. Copy your text out before reloading.`
+            : e.message,
+          bad: true,
+        }),
     );
   };
 
@@ -90,7 +102,7 @@ export function BodyEditor({
           {saving ? 'saving…' : dirty ? 'Save' : 'Saved'}
         </Button>
         <span className="editor-hint">⌘S</span>
-        {note && <span className="editor-note">{note}</span>}
+        {note && <span className={`editor-note ${note.bad ? 'is-bad' : ''}`}>{note.text}</span>}
         {dirty && <span className="editor-dirty">unsaved</span>}
       </div>
     </div>

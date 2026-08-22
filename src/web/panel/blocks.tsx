@@ -12,7 +12,7 @@ import type { CardDTO, CardDetail, Meta } from '../types.ts';
 /**
  * The panel's blocks.
  *
- * A block is a module here when it owns state, a write, or a load — the six
+ * A block is a module here when it owns state, a write, or a load — the blocks
  * below. The ones that own none of the three stay as literal markup in the
  * frame, because reading their markup *is* reading their behaviour and a wrapper
  * would only rename a `<section>`.
@@ -24,6 +24,19 @@ import type { CardDTO, CardDetail, Meta } from '../types.ts';
 
 /** Past this, an inbound list stops being a list and becomes the page. */
 const INBOUND_CUTOFF = 6;
+
+/**
+ * Closing an editor destroys its document, so ask first.
+ *
+ * Both editors live behind a control that unmounts them — `read` beside `edit`,
+ * `hide` beside `edit raw` — and both read as harmless view toggles sitting a
+ * pixel from the one you meant. The panel already confirms on Escape and on
+ * Delete; this is the same question about the same text, so it is the same
+ * prompt rather than a third answer.
+ */
+function mayClose(dirty: boolean, what: string): boolean {
+  return !dirty || confirm(`The ${what} has unsaved changes. Discard them?`);
+}
 
 /**
  * A list of records this card did not choose: what blocks it, what is part of it.
@@ -50,7 +63,6 @@ export function Inbound({
   const [all, setAll] = useState(false);
   if (!records.length) return null;
   const shown = all ? records : records.slice(0, INBOUND_CUTOFF);
-  const more = records.length - shown.length;
 
   return (
     <section className="panel-section">
@@ -73,14 +85,9 @@ export function Inbound({
           {r.done ? ' ✓' : ''}
         </button>
       ))}
-      {more > 0 && (
-        <button className="facet-more" onClick={() => setAll(true)}>
-          {more} more
-        </button>
-      )}
-      {all && records.length > INBOUND_CUTOFF && (
-        <button className="facet-more" onClick={() => setAll(false)}>
-          less
+      {records.length > INBOUND_CUTOFF && (
+        <button className="facet-more" onClick={() => setAll((v) => !v)}>
+          {all ? 'less' : `${records.length - INBOUND_CUTOFF} more`}
         </button>
       )}
     </section>
@@ -120,7 +127,6 @@ export function Facets({
       {Object.entries(defs).map(([name, def]) => (
         <FacetEditor
           key={name}
-          name={name}
           def={def}
           values={values[name] ?? []}
           refs={refs}
@@ -168,18 +174,32 @@ export function Frontmatter({
   cardId,
   yaml,
   write,
+  onDirtyChange,
 }: {
   cardId: string;
   yaml: string;
   write: Pick<CardWriter, 'frontmatter'>;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const report = (d: boolean) => {
+    setDirty(d);
+    onDirtyChange(d);
+  };
   return (
     <section className="panel-section">
       <h3>
         Frontmatter
         <span className="section-do">
-          <Button tone="ghost" size="tiny" onClick={() => setOpen((v) => !v)}>
+          <Button
+            tone="ghost"
+            size="tiny"
+            onClick={() => {
+              if (open && !mayClose(dirty, 'frontmatter')) return;
+              setOpen((v) => !v);
+            }}
+          >
             {open ? 'hide' : 'edit raw'}
           </Button>
         </span>
@@ -192,7 +212,14 @@ export function Frontmatter({
           the chips above edit the frontmatter and this opens the rest; the
           control it sat under is labelled `edit raw`, on a surface with one
           reader who wrote both. */}
-      {open && <FrontmatterEditor cardId={cardId} yaml={yaml} onSave={write.frontmatter} />}
+      {open && (
+        <FrontmatterEditor
+          cardId={cardId}
+          yaml={yaml}
+          onSave={write.frontmatter}
+          onDirtyChange={report}
+        />
+      )}
     </section>
   );
 }
@@ -207,13 +234,24 @@ export function Body({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const [mode, setMode] = useState<'read' | 'edit'>('read');
+  const [dirty, setDirty] = useState(false);
+  const report = (d: boolean) => {
+    setDirty(d);
+    onDirtyChange(d);
+  };
   return (
     <section className="panel-section">
       <h3>
         Body
         {/* The one real mode switch in the panel, and now the only `.tab`. */}
         <span className="tabs">
-          <button className={`tab ${mode === 'read' ? 'is-on' : ''}`} onClick={() => setMode('read')}>
+          <button
+            className={`tab ${mode === 'read' ? 'is-on' : ''}`}
+            onClick={() => {
+              if (mode === 'edit' && !mayClose(dirty, 'body')) return;
+              setMode('read');
+            }}
+          >
             read
           </button>
           <button className={`tab ${mode === 'edit' ? 'is-on' : ''}`} onClick={() => setMode('edit')}>
@@ -231,7 +269,7 @@ export function Body({
         <BodyEditor
           cardId={card.id}
           value={card.body}
-          onDirtyChange={onDirtyChange}
+          onDirtyChange={report}
           // `write.body` rejects on failure, which is the contract this editor
           // has always assumed. It used to be handed a function that caught
           // everything and resolved, so a refused save reported "saved", cleared

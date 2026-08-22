@@ -49,8 +49,11 @@ function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: str
  *   the same function reading the same numbers. They were not — ⌘S sent the
  *   mount-time mtime, so the second ⌘S of a session failed while the Save button
  *   beside it worked.
- * - **Except `body`**, which carries `heldBase` — frozen while the editor is
- *   dirty, because its document belongs to an older read.
+ * - **Except the two documents**, `body` and `frontmatter`, which carry
+ *   `heldBase` — frozen while their editor is dirty, because the document on
+ *   screen belongs to an older read. Both editors share one adopt rule, so both
+ *   need the base that rule implies; `frontmatter` needs it more, since it
+ *   replaces the whole block rather than one key.
  * - **`press*` members return `void` and never reject**; failure lands in
  *   `status`. `void` is not assignable to `Promise<void>`, so handing one to an
  *   editor's `onSave` does not compile.
@@ -91,31 +94,42 @@ export function usePanelWriter(o: {
   /** The freshest completed read's mtime; null until the first load lands. */
   mtime: number | null;
   reload: () => void;
-  /** True while the body editor holds unsaved text; freezes the body's base. */
-  bodyHeld: boolean;
+  /**
+   * Which documents hold unsaved text. Each freezes its own base — a dirty
+   * frontmatter pane says nothing about the body's document and must not pin it.
+   */
+  held: { body: boolean; frontmatter: boolean };
   onGone: () => void;
 }): CardWriter {
   const [status, setStatus] = useState(idleStatus);
   const read = useRef(o.mtime);
   const wrote = useRef<number | null>(null);
-  const held = useRef<number | null>(null);
+  const held = useRef<{ body: number | null; frontmatter: number | null }>({
+    body: null,
+    frontmatter: null,
+  });
   const live = useRef(o);
   const seq = useRef(0);
 
   // Assigned during render, exactly as `useLive` assigns its `loadRef`. `heldBase`
   // is idempotent, so a StrictMode double render changes nothing.
   read.current = o.mtime;
-  held.current = heldBase(held.current, baseOf(o.mtime, wrote.current), o.bodyHeld);
+  const fresh = baseOf(o.mtime, wrote.current);
+  held.current = {
+    body: heldBase(held.current.body, fresh, o.held.body),
+    frontmatter: heldBase(held.current.frontmatter, fresh, o.held.frontmatter),
+  };
   live.current = o;
 
   const run = useCallback(async (w: CardWrite): Promise<{ warnings?: string[] }> => {
-    const at = w.kind === 'body' ? held.current : baseOf(read.current, wrote.current);
+    const doc = w.kind === 'body' || w.kind === 'frontmatter' ? w.kind : null;
+    const at = doc ? held.current[doc] : baseOf(read.current, wrote.current);
     if (at === null) throw new ApiError('the card is not loaded yet', 0);
     const res = await dispatch(live.current.id, planWrite(w, at));
     if (typeof res.mtime === 'number') {
       wrote.current = res.mtime;
-      // The editor is about to go clean on this text, so its base advances with it.
-      if (w.kind === 'body') held.current = res.mtime;
+      // That editor is about to go clean on this text, so its base advances too.
+      if (doc) held.current[doc] = res.mtime;
     }
     live.current.reload();
     return res;

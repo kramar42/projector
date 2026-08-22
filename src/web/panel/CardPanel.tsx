@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { ProjectMark } from '../components/CardBody.tsx';
@@ -23,6 +23,12 @@ import type { CardDetail, Meta } from '../types.ts';
  * reflink while the body editor was dirty left the scrim dead and Escape
  * prompting about text that no longer existed).
  */
+/** What the close prompt names, so it says what is actually at risk. */
+function whatIsUnsaved(u: { body: boolean; frontmatter: boolean }): string {
+  if (u.body && u.frontmatter) return 'The body and the frontmatter have';
+  return u.body ? 'The body has' : 'The frontmatter has';
+}
+
 export function CardPanel({
   id,
   meta,
@@ -36,41 +42,67 @@ export function CardPanel({
 }) {
   const { data, error, reload } = useLive<CardDetail>(() => api.card(id), [id]);
   const [editTitle, setEditTitle] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+
+  /**
+   * Which editors hold unsaved text.
+   *
+   * Two flags rather than one, because both consumers need them apart. The close
+   * guard wants *any* of them. The writer wants each on its own: `heldBase`
+   * freezes the mtime a document's write is gated on, and a dirty frontmatter
+   * pane says nothing about the body's document, so neither may pin the other.
+   *
+   * It was one flag, fed only by the body. Two things followed: unsaved YAML was
+   * discarded by Escape or a scrim click with no prompt, and — worse, because it
+   * was silent — the frontmatter editor wrote the whole block gated on the
+   * freshest mtime while displaying an older read, so saving it reverted every
+   * chip clicked since the pane was opened.
+   */
+  const [unsaved, setUnsaved] = useState({ body: false, frontmatter: false });
+  const setBodyDirty = useCallback((d: boolean) => setUnsaved((u) => (u.body === d ? u : { ...u, body: d })), []);
+  const setFmDirty = useCallback(
+    (d: boolean) => setUnsaved((u) => (u.frontmatter === d ? u : { ...u, frontmatter: d })),
+    [],
+  );
+  const held = unsaved.body || unsaved.frontmatter;
 
   const write = usePanelWriter({
     id,
     mtime: data?.mtime ?? null,
     reload,
-    bodyHeld: dirty,
+    held: unsaved,
     onGone: onClose,
   });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (dirty && !confirm('The body has unsaved changes. Close anyway?')) return;
+      if (held && !confirm(`${whatIsUnsaved(unsaved)} unsaved changes. Close anyway?`)) return;
       onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, dirty]);
+  }, [onClose, held, unsaved]);
 
   /**
    * Commit the title edit. One body, called from Enter and from the button — it
    * was written out at both, which is two chances for one decision to drift.
    */
   const rename = () => {
-    const next = editTitle;
+    const next = editTitle?.trim();
     setEditTitle(null);
-    if (next !== null) write.title(next);
+    // A rename to the same words is still a write: it rewrites the file and bumps
+    // `updated`, which is a column you sort by and a signal `pj intake` reads. The
+    // button and Enter have to agree on that, so the test lives here as well as on
+    // the control.
+    if (!next || next === card?.title.trim()) return;
+    write.title(next);
   };
 
   const card = data?.card;
 
   return (
     <>
-      <div className="scrim" onClick={() => (dirty ? undefined : onClose())} />
+      <div className="scrim" onClick={() => (held ? undefined : onClose())} />
       <aside className="panel" role="dialog" aria-label={card ? card.title : 'Card'}>
         {/*
           The one part of the panel that does not scroll, so it carries what a
@@ -93,7 +125,14 @@ export function CardPanel({
                   rows={2}
                   onChange={(e) => setEditTitle(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditTitle(null);
+                    // Stops at the control it cancels. The panel's own guard is
+                    // a `window` listener, so without this, backing out of a
+                    // rename also closes the card — and now that the guard covers
+                    // both editors, it would ask about text you were not editing.
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setEditTitle(null);
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       rename();
@@ -101,7 +140,12 @@ export function CardPanel({
                   }}
                 />
                 <div className="titleedit-bar">
-                  <Button tone="primary" size="small" onClick={rename}>
+                  <Button
+                    tone="primary"
+                    size="small"
+                    disabled={!editTitle.trim() || editTitle.trim() === card.title.trim()}
+                    onClick={rename}
+                  >
                     Rename
                   </Button>
                   <Button tone="ghost" size="small" onClick={() => setEditTitle(null)}>
@@ -190,7 +234,7 @@ export function CardPanel({
 
             <div className="panel-tier">
               <Links card={card} write={write} />
-              <Body card={card} write={write} onDirtyChange={setDirty} />
+              <Body card={card} write={write} onDirtyChange={setBodyDirty} />
             </div>
 
             {(card.blockedBy.length > 0 || data.children.length > 0 || data.project) && (
@@ -230,16 +274,25 @@ export function CardPanel({
                         ƒ
                       </span>
                     </h3>
+                    {/* The same `kv` list the workshop tier uses. These were two
+                        key/value readouts drawn as two components, with two
+                        gutters and two label sizes, a hairline apart in one
+                        scroll — one pattern is one pattern. */}
                     <div className="proj">
-                      <div><span className="k">key</span> <code>{data.project.key}</code></div>
-                      <div><span className="k">chain</span> {data.project.chain.join(' → ')}</div>
-                      {data.project.jira && (<div><span className="k">jira</span> <code>{data.project.jira}</code></div>)}
-                      {data.project.branch && (<div><span className="k">branch</span> <code>{data.project.branch}</code></div>)}
-                      {data.project.repos.map((r) => (
-                        <div key={r.path}>
-                          <span className="k">repo</span> <code>{r.path}</code>{r.base ? ` @ ${r.base}` : ''}
-                        </div>
-                      ))}
+                      <dl className="kv">
+                        <dt>key</dt>
+                        <dd><code>{data.project.key}</code></dd>
+                        <dt>chain</dt>
+                        <dd>{data.project.chain.join(' → ')}</dd>
+                        {data.project.jira && (<><dt>jira</dt><dd><code>{data.project.jira}</code></dd></>)}
+                        {data.project.branch && (<><dt>branch</dt><dd><code>{data.project.branch}</code></dd></>)}
+                        {data.project.repos.map((r) => (
+                          <Fragment key={r.path}>
+                            <dt>repo</dt>
+                            <dd><code>{r.path}</code>{r.base ? ` @ ${r.base}` : ''}</dd>
+                          </Fragment>
+                        ))}
+                      </dl>
                       {data.project.instructions.length > 0 && (
                         <details>
                           <summary>{plural(data.project.instructions.length, 'instruction block')}</summary>
@@ -253,7 +306,12 @@ export function CardPanel({
             )}
 
             <div className="panel-tier is-workshop">
-              <Frontmatter cardId={card.id} yaml={data.yaml} write={write} />
+              <Frontmatter
+                cardId={card.id}
+                yaml={data.yaml}
+                write={write}
+                onDirtyChange={setFmDirty}
+              />
 
               {/* The id row is gone: it was the `?card=` parameter in the address
                   bar and the stem of the filename beside it, so the same string

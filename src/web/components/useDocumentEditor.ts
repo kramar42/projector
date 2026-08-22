@@ -53,14 +53,27 @@ export function useDocumentEditor<R>({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const saved = useRef(value);
+  /**
+   * The text this editor wrote *over*, held until the reload carrying our own
+   * write comes back. Nothing else can tell the two apart: the props say only
+   * "here is the document", and for the length of a round trip that document is
+   * the one we just replaced.
+   */
+  const superseded = useRef<string | null>(null);
 
   const save = (): Promise<R> => {
     const text = view.current?.state.doc.toString() ?? '';
+    const previous = saved.current;
     setSaving(true);
     return onSave(text)
       .then((res) => {
         saved.current = text;
-        setDirty(false);
+        superseded.current = previous;
+        // Recomputed, not asserted. Nothing stops typing while the request is in
+        // flight — a round trip is several keystrokes — and declaring the editor
+        // clean over text the server never saw disarms the close guard and lets
+        // the adopt effect below replace those keystrokes with the server's copy.
+        setDirty((view.current?.state.doc.toString() ?? '') !== text);
         return res;
       })
       .finally(() => setSaving(false));
@@ -110,6 +123,12 @@ export function useDocumentEditor<R>({
   // declines, the write's base mtime stays where this document came from.
   useEffect(() => {
     if (!view.current || dirty) return;
+    // Our own write has not come back yet, so `value` is still the text it
+    // replaced. Adopting it here would undo the save and then flip again when
+    // the reload lands — a revert-and-restore flash on a surface whose one law
+    // is stillness.
+    if (superseded.current !== null && value === superseded.current) return;
+    if (value === saved.current) superseded.current = null;
     if (value === view.current.state.doc.toString()) return;
     saved.current = value;
     view.current.dispatch({

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { useEffect, useMemo, useState } from 'react';
+import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { projectorHighlight } from './highlight.ts';
 import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
 import { ApiError } from '../api.ts';
 import { Button } from './Button.tsx';
@@ -21,10 +22,18 @@ export function FrontmatterEditor({
   cardId,
   yaml,
   onSave,
+  onDirtyChange,
 }: {
   cardId: string;
   yaml: string;
   onSave: (yaml: string) => Promise<{ warnings: string[] }>;
+  /**
+   * Reported up so the panel's close guard covers this editor too. It did not:
+   * only the body reported, so unsaved YAML was discarded by Escape or a scrim
+   * click with no prompt — on the one pane the app calls the escape hatch for
+   * everything the chips cannot express.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -32,7 +41,7 @@ export function FrontmatterEditor({
   const extensions = useMemo(
     () => [
       StreamLanguage.define(yamlMode),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(projectorHighlight, { fallback: true }),
     ],
     [],
   );
@@ -44,8 +53,19 @@ export function FrontmatterEditor({
     onSave,
   });
 
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  // Closing the disclosure destroys the document, so the flag must not outlive it.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
   const run = () => {
+    // The attempt, not its outcome, invalidates the previous answer — otherwise a
+    // "Saved, with warnings" from two saves ago sits under a fresh failure. Same
+    // rule `nextStatus` applies to the panel's banner.
     setProblem(null);
+    setWarnings([]);
     save().then(
       (res) => setWarnings(res.warnings),
       (e: ApiError) => setProblem(e.message),

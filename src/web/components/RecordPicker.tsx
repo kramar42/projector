@@ -11,12 +11,16 @@ import type { CardDTO } from '../types.ts';
  * which is also what makes this the right control for `project` without knowing
  * that facet by name.
  */
+/** Rows drawn at once. Enough that typing is the faster path past it. */
+const CAP = 40;
+
 export function RecordPicker({
   exclude = [],
   placeholder = 'search records…',
   clearLabel,
   onPick,
   onCancel,
+  inline = false,
 }: {
   exclude?: string[];
   placeholder?: string;
@@ -32,6 +36,11 @@ export function RecordPicker({
   clearLabel?: string;
   onPick: (id: string | null) => void;
   onCancel?: () => void;
+  /**
+   * Rendered in the flow of a scrolling surface rather than floating over one, so
+   * the list must not scroll on its own — one region scrolls per axis.
+   */
+  inline?: boolean;
 }) {
   const [all, setAll] = useState<CardDTO[]>([]);
   const [q, setQ] = useState('');
@@ -45,7 +54,11 @@ export function RecordPicker({
     );
   }, []);
 
-  const matches = useMemo(() => {
+  // Held before the slice, so a capped list can say so. Chained into one
+  // expression, `matches.length === CAP` cannot tell a cap from exactly that many
+  // genuine matches — and the reader who scrolls to the end of forty and stops
+  // has no way to know the record they wanted was the forty-first.
+  const found = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const skip = new Set(exclude);
     return all
@@ -54,19 +67,24 @@ export function RecordPicker({
       .sort((a, b) => {
         if (a.isProject !== b.isProject) return a.isProject ? -1 : 1;
         return a.title.localeCompare(b.title);
-      })
-      .slice(0, 40);
+      });
   }, [all, q, exclude]);
+  const matches = found.slice(0, CAP);
 
   return (
-    <div className="picker">
+    <div className={`picker ${inline ? 'is-inline' : ''}`}>
       <input
         autoFocus
         value={q}
         placeholder={placeholder}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') onCancel?.();
+          // The picker has no cancel control and no outside-click handler, so
+          // this is its only way out — it must not take the panel with it.
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onCancel?.();
+          }
           if (e.key === 'Enter' && matches[0]) onPick(matches[0].id);
         }}
       />
@@ -87,6 +105,15 @@ export function RecordPicker({
         ))}
         {!matches.length && <div className="picker-empty">nothing matches</div>}
       </div>
+      {/* Outside the scroller: inside it this sits below the fold until you have
+          already scrolled all forty, which is exactly the reader who has
+          concluded the record is not there. A bare count, because the app is
+          counting — mono and tabular, like every other number it reports. */}
+      {found.length > matches.length && (
+        <div className="picker-capped">
+          {matches.length} of {found.length}
+        </div>
+      )}
     </div>
   );
 }
