@@ -72,7 +72,8 @@ test('a move gives every card its own answer from one gesture', () => {
     other: card('other', 'priority: [now, backlog]'),
   });
   try {
-    const res = bulkMove(v.root, ['both', 'only', 'other'], 'priority', 'now', 'month', 'remove');
+    const move = [{ facet: 'priority', from: 'now', to: 'month' }];
+    const res = bulkMove(v.root, ['both', 'only', 'other'], move, 'remove');
     assert.equal(res.changed, 3);
     // `now` came off every one; `month` came off none. Under the old uniform path
     // `both` would have become ['now'] — the inversion.
@@ -87,7 +88,7 @@ test('a move gives every card its own answer from one gesture', () => {
 test('a plain move replaces the value dragged from and keeps the rest', () => {
   const v = vault({ a: card('a', 'priority: [now, month]') });
   try {
-    bulkMove(v.root, ['a'], 'priority', 'now', 'backlog', 'replace');
+    bulkMove(v.root, ['a'], [{ facet: 'priority', from: 'now', to: 'backlog' }], 'replace');
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['month', 'backlog']);
   } finally {
     v.cleanup();
@@ -97,7 +98,7 @@ test('a plain move replaces the value dragged from and keeps the rest', () => {
 test('a move writes only the facet it names', () => {
   const v = vault({ a: card('a', 'priority: [now], status: [planning], tech: [kafka]') });
   try {
-    bulkMove(v.root, ['a'], 'priority', 'now', 'month', 'replace');
+    bulkMove(v.root, ['a'], [{ facet: 'priority', from: 'now', to: 'month' }], 'replace');
     const after = facetsOf(v.root, 'a');
     assert.deepEqual(after.priority, ['month']);
     // The whole-map replacement this replaced could revert a facet an agent had
@@ -113,8 +114,61 @@ test('a move that changes nothing writes nothing', () => {
   const v = vault({ a: card('a', 'priority: [month]') });
   try {
     const before = mtimeOf(join(v.root, 'cards', 'a.md'));
-    assert.equal(bulkMove(v.root, ['a'], 'priority', 'now', 'month', 'add').changed, 0);
+    const move = [{ facet: 'priority', from: 'now', to: 'month' }];
+    assert.equal(bulkMove(v.root, ['a'], move, 'add').changed, 0);
     assert.equal(mtimeOf(join(v.root, 'cards', 'a.md')), before, 'the file was not touched');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * A diagonal drag on a matrix board crosses two axes and is still one gesture, so
+ * it is one write. Two writes would read the card twice, bump `updated` twice and
+ * let the second land on a card the first had already changed.
+ */
+test('a move across two axes is a single write', () => {
+  const v = vault({ a: card('a', 'priority: [now], status: [planning], tech: [kafka]') });
+  try {
+    const res = bulkMove(
+      v.root,
+      ['a'],
+      [
+        { facet: 'status', from: 'planning', to: 'done' },
+        { facet: 'priority', from: 'now', to: 'month' },
+      ],
+      'replace',
+    );
+    assert.equal(res.changed, 1, 'one card, counted once however many axes moved');
+    const after = facetsOf(v.root, 'a');
+    assert.deepEqual(after.status, ['done']);
+    assert.deepEqual(after.priority, ['month']);
+    assert.deepEqual(after.tech, ['kafka'], 'and still only the facets it named');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** Every axis is checked before any is written, so there is no half-moved card. */
+test('a move refused on one axis leaves the other alone', () => {
+  const v = vault({ a: card('a', 'priority: [now], status: [planning]') });
+  try {
+    assert.throws(
+      () =>
+        bulkMove(
+          v.root,
+          ['a'],
+          [
+            { facet: 'status', from: 'planning', to: 'done' },
+            { facet: 'priority', from: 'now', to: 'urgent' },
+          ],
+          'replace',
+        ),
+      (e: Error) => e instanceof Invalid && /urgent/.test(e.message),
+    );
+    const after = facetsOf(v.root, 'a');
+    assert.deepEqual(after.status, ['planning'], 'the axis that would have succeeded');
+    assert.deepEqual(after.priority, ['now']);
   } finally {
     v.cleanup();
   }
@@ -124,7 +178,7 @@ test('a move refuses a value the vocabulary does not have', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
     assert.throws(
-      () => bulkMove(v.root, ['a'], 'priority', 'now', 'urgent', 'replace'),
+      () => bulkMove(v.root, ['a'], [{ facet: 'priority', from: 'now', to: 'urgent' }], 'replace'),
       (e: Error) => e instanceof Invalid && /urgent/.test(e.message),
     );
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['now'], 'and leaves the card alone');

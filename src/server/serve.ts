@@ -362,9 +362,12 @@ app.post('/api/bulk', async (c) => {
       facet?: string;
       values?: string[];
       mode?: 'set' | 'add' | 'remove';
-      /** `move` only: the drag's endpoints, from which each card's values follow. */
-      from?: string;
-      to?: string;
+      /**
+       * `move` only: the drag's endpoints, from which each card's values follow.
+       * One entry per grouping axis crossed — a diagonal drag on a matrix board
+       * names two, and they are applied in a single write per card.
+       */
+      moves?: { facet: string; from: string; to: string }[];
       dragMode?: DragMode;
       parent?: string | null;
     };
@@ -374,7 +377,7 @@ app.post('/api/bulk', async (c) => {
     // A drag, one card at a time: the values are per record, so only the endpoints
     // travel and `nextValues` runs here.
     else if (b.op === 'move') {
-      res = bulkMove(root, ids, b.facet!, b.from ?? '', b.to ?? '', b.dragMode ?? 'replace');
+      res = bulkMove(root, ids, b.moves ?? [], b.dragMode ?? 'replace');
     }
     else if (b.op === 'parent') {
       // Kept as a named op because the board's bulk bar has a "set parent"

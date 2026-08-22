@@ -63,16 +63,29 @@ export interface ReorderIntent {
   ids: string[];
 }
 
+/** One grouping axis's endpoints. */
+export interface AxisMove {
+  facet: string;
+  from: string;
+  to: string;
+}
+
 /**
- * Move cards along a facet. `from`/`to`/`mode` rather than final values, because
- * the values are per card and the server applies `nextValues` to each.
+ * Move cards along one or both grouping axes. Endpoints and a mode rather than
+ * final values, because the values are per card and the server applies
+ * `nextValues` to each.
+ *
+ * `moves` is a list because a matrix board has two axes and a diagonal drag
+ * crosses both, and the two travel as one write. A card is one file: two writes
+ * would be two reads, two validations and two `updated` bumps, with the second
+ * landing on a card the first had already changed. One write is also one thing
+ * to refuse — a diagonal drop onto a value the vocabulary rejects leaves the
+ * card alone rather than half moved.
  */
 export interface FacetIntent {
   kind: 'facet';
   ids: string[];
-  facet: string;
-  from: string;
-  to: string;
+  moves: AxisMove[];
   mode: DragMode;
 }
 
@@ -89,11 +102,20 @@ export interface NoIntent {
 export type DropIntent = ReorderIntent | FacetIntent | NoIntent;
 
 export interface DropInput {
-  /** The dragged card, and the column it came from. */
+  /** The dragged card, and the column and lane it came from. */
   cardId: string;
   from: string;
+  fromLane: string;
   /** The column dropped into, if the pointer was over one. */
   to: string | null;
+  /**
+   * The lane dropped into, if the board has a second axis.
+   *
+   * A lane is not a drop target of its own: it is read off the column tile the
+   * pointer is over, so one drop reports both coordinates and a diagonal drag
+   * stays one gesture.
+   */
+  toLane: string | null;
   /**
    * The card dropped onto and where in it, if any. `below` decides which side of
    * that tile the card lands on — one comparison, computed by the caller from the
@@ -102,6 +124,15 @@ export interface DropInput {
   onCard: { id: string; index: number; below: boolean } | null;
   /** The facet the board is grouped by. Without one, a drop cannot mean anything. */
   groupBy: string | undefined;
+  /**
+   * The facet the second axis lanes by, if there is one.
+   *
+   * A drop used to write `groupBy` and nothing else, so dragging a card into
+   * another swimlane did nothing at all — or, if it landed on a tile, quietly
+   * rewrote the column's stored order instead, which moves nothing on screen
+   * because order cannot cross a lane.
+   */
+  laneBy: string | undefined;
   mode: DragMode;
   /** Cards currently selected. A drag on an unselected card moves only that card. */
   selected: ReadonlySet<string>;
@@ -112,35 +143,47 @@ export interface DropInput {
 }
 
 export function dropOutcome(input: DropInput): DropIntent {
-  const { cardId, from, to, onCard, groupBy, mode, selected, order, viewName } = input;
+  const { cardId, from, fromLane, to, toLane, onCard, groupBy, laneBy, mode } = input;
+  const { selected, order, viewName } = input;
   if (!cardId) return { kind: 'none', why: 'no card being dragged' };
   if (!to) return { kind: 'none', why: 'no column under the pointer' };
 
-  // Within a column a drag means order and nothing else.
-  if (to === from) {
-    if (!onCard || onCard.id === cardId) {
-      return { kind: 'none', why: 'dropped where it already was' };
-    }
-    if (!viewName) return { kind: 'none', why: 'order has nowhere to live without a saved view' };
-
-    // The index and the list it lands in must be the same list. It used to be the
-    // per-lane cell's index spliced into the cross-lane column, which agreed only
-    // when there was no second axis.
-    const at = onCard.index + (onCard.below ? 1 : 0);
-    const cut = order.indexOf(cardId);
-    const without = order.filter((id) => id !== cardId);
-    const index = cut !== -1 && cut < at ? at - 1 : at;
-    return {
-      kind: 'reorder',
-      column: to,
-      ids: [...without.slice(0, index), cardId, ...without.slice(index)],
-    };
+  // Both axes are read the same way, because a lane is a grouping position and
+  // not a kind of its own — the same reason there is no `swimlanes` key. A drag
+  // that crosses both names two moves and still writes once.
+  const moves: AxisMove[] = [];
+  if (groupBy && to !== from) moves.push({ facet: groupBy, from, to });
+  if (laneBy && toLane !== null && toLane !== fromLane) {
+    moves.push({ facet: laneBy, from: fromLane, to: toLane });
   }
 
-  if (!groupBy) return { kind: 'none', why: 'no column under the pointer' };
-  // Dragging a card that is not part of the selection moves just that card.
-  const ids = selected.has(cardId) ? [...selected] : [cardId];
-  return { kind: 'facet', ids, facet: groupBy, from, to, mode };
+  if (moves.length) {
+    // Dragging a card that is not part of the selection moves just that card.
+    const ids = selected.has(cardId) ? [...selected] : [cardId];
+    return { kind: 'facet', ids, moves, mode };
+  }
+
+  // Nothing crossed an axis, so the drag means order and nothing else. This is
+  // the only branch a same-cell drop may reach: when the lane changed it is a
+  // move, so dropping a card on a tile one swimlane down no longer writes an
+  // arrangement that cannot show — order is per column, and cannot cross a lane.
+  if (!onCard || onCard.id === cardId) {
+    return { kind: 'none', why: 'dropped where it already was' };
+  }
+  if (!viewName) return { kind: 'none', why: 'order has nowhere to live without a saved view' };
+
+  // The index and the list it lands in must be the same list. It used to be the
+  // per-lane cell's index spliced into the cross-lane column, which agreed only
+  // when there was no second axis.
+  const at = onCard.index + (onCard.below ? 1 : 0);
+  const cut = order.indexOf(cardId);
+  const without = order.filter((id) => id !== cardId);
+  const index = cut !== -1 && cut < at ? at - 1 : at;
+  return {
+    kind: 'reorder',
+    column: to,
+    ids: [...without.slice(0, index), cardId, ...without.slice(index)],
+  };
 }
 
 /**
@@ -182,6 +225,6 @@ export function connectOutcome(input: {
   // `nextValues` takes it off and puts the new one on. A multi-valued one adds,
   // keeping whatever the record already says.
   return single
-    ? { kind: 'facet', ids: [owner], facet: relation, from: current[0] ?? '', to, mode: 'replace' }
-    : { kind: 'facet', ids: [owner], facet: relation, from: '', to, mode: 'add' };
+    ? { kind: 'facet', ids: [owner], moves: [{ facet: relation, from: current[0] ?? '', to }], mode: 'replace' }
+    : { kind: 'facet', ids: [owner], moves: [{ facet: relation, from: '', to }], mode: 'add' };
 }

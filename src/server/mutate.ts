@@ -13,7 +13,7 @@ import { viewFileFor } from './views.ts';
 import type { Rec } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../schema/slug.ts';
-import { nextValues, type DragMode } from '../view/dropOutcome.ts';
+import { nextValues, type AxisMove, type DragMode } from '../view/dropOutcome.ts';
 
 /**
  * Every write in the app funnels through this module.
@@ -350,7 +350,7 @@ function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): 
 }
 
 /**
- * Move records along a facet, one card at a time.
+ * Move records along one or more facets, one card at a time.
  *
  * Distinct from `bulkFacet` because the two are different operations that happen
  * to write the same field. "Make these twelve cards say `now`" is uniform, and
@@ -364,16 +364,14 @@ function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): 
  * shift-dragging `now`→`month` removed `now` for one card and `month` for two.
  * One transform, applied here, is what makes that unrepresentable.
  *
- * It also writes only the named facet, so a value an agent changed since the
+ * It also writes only the named facets, so a value an agent changed since the
  * client's last read cannot be reverted — which the old whole-map replacement did
  * silently, with no conflict to report.
  */
 export function bulkMove(
   root: string,
   ids: string[],
-  facet: string,
-  from: string,
-  to: string,
+  moves: readonly AxisMove[],
   mode: DragMode,
 ): { changed: number } {
   const { records } = readAll(paths(root).cards);
@@ -381,11 +379,25 @@ export function bulkMove(
   for (const id of ids) {
     const rec = records.get(id);
     if (!rec) continue;
-    const current = rec.facets[facet] ?? [];
-    const next = nextValues(current, from, to, mode);
-    if (same(current, next)) continue;
-    const facets = withFacet(rec.facets, facet, next);
-    checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
+    // A drag across a matrix board crosses two axes and is still one gesture, so
+    // both endpoints fold into one map and one write. Writing per axis would bump
+    // `updated` twice and let the second write land on a card the first changed —
+    // and would leave the card half moved when the second value is refused.
+    let facets = rec.facets;
+    const check: Record<string, string[]> = {};
+    let touched = false;
+    for (const { facet, from, to } of moves) {
+      const current = facets[facet] ?? [];
+      const next = nextValues(current, from, to, mode);
+      if (same(current, next)) continue;
+      // A cleared axis has nothing to validate — `withFacet` drops the key.
+      if (next.length) check[facet] = next;
+      facets = withFacet(facets, facet, next);
+      touched = true;
+    }
+    if (!touched) continue;
+    // Every axis is checked before any of them is written.
+    checkFacets(root, id, check, records);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }

@@ -36,6 +36,9 @@ export function BoardView({
   const [dragging, setDragging] = useState<string | null>(null);
 
   const groupBy = data.spec.query.groupBy?.[0] ?? '';
+  // The second axis is a facet like the first, so a drag across a swimlane is a
+  // write like any other. It used to be a row label and nothing else.
+  const laneBy = data.spec.query.groupBy?.[1] ?? '';
   const cards = data.cards;
   // Only a named view can hold card order — arrangement lives in a file or
   // nowhere (C9). An ad-hoc query stays in the query's sort order.
@@ -104,9 +107,7 @@ export function BoardView({
         await api.bulk({
           ids: intent.ids,
           op: 'move',
-          facet: intent.facet,
-          from: intent.from,
-          to: intent.to,
+          moves: intent.moves,
           dragMode: intent.mode,
         });
         reload();
@@ -129,6 +130,10 @@ export function BoardView({
         const onCardTarget = targets.find((t) => t.data.cardId !== undefined);
         const onColumn = targets.find((t) => t.data.column !== undefined);
         const column = onColumn ? String(onColumn.data.column ?? '') : null;
+        // A lane is not a target of its own — the column tile knows which row it
+        // is in, so one drop reports both coordinates.
+        const lane =
+          onColumn && onColumn.data.lane !== undefined ? String(onColumn.data.lane) : null;
 
         // Above or below is which half of the tile the pointer is in — one
         // comparison, and the only geometry the decision needs.
@@ -145,9 +150,12 @@ export function BoardView({
         const intent = dropOutcome({
           cardId: String(source.data.cardId ?? ''),
           from: String(source.data.column ?? ''),
+          fromLane: String(source.data.lane ?? ''),
           to: column,
+          toLane: lane,
           onCard,
           groupBy,
+          laneBy,
           mode: modeFor(location.current.input),
           selected,
           order: column ? orderedFor(column) : [],
@@ -158,7 +166,7 @@ export function BoardView({
         else if (intent.kind === 'facet') void move(intent);
       },
     });
-  }, [move, reorder, orderedFor, viewName, groupBy, selected]);
+  }, [move, reorder, orderedFor, viewName, groupBy, laneBy, selected]);
 
   const toggleSelect = (id: string, additive: boolean) =>
     setSelected((prev) => {
@@ -193,6 +201,7 @@ export function BoardView({
                 <Column
                   key={`${lane ?? ''}/${g.value}`}
                   group={g}
+                  lane={lane}
                   order={orderedFor(g.value)}
                   cards={cards}
                   chips={data.spec.show}
@@ -243,6 +252,7 @@ export function BoardView({
 
 function Column({
   group,
+  lane,
   order,
   cards,
   chips,
@@ -257,6 +267,12 @@ function Column({
   onCreated,
 }: {
   group: Group;
+  /**
+   * The row this cell sits in, or `undefined` on a board with one axis. It rides
+   * on both the drag and the drop data so a drop knows the lane it left and the
+   * lane it landed in.
+   */
+  lane: string | undefined;
   /** The column's stored order, across lanes — what a reorder rewrites. */
   order: string[];
   cards: Record<string, CardDTO>;
@@ -285,7 +301,7 @@ function Column({
     return combine(
       dropTargetForElements({
         element: el,
-        getData: () => ({ column: value }),
+        getData: () => ({ column: value, lane }),
         onDragEnter: () => setOver(true),
         onDragLeave: () => setOver(false),
         onDrop: () => setOver(false),
@@ -293,7 +309,7 @@ function Column({
       // A 68-card column has to scroll while dragging or the far end is unreachable.
       autoScrollForElements({ element: body }),
     );
-  }, [value, droppable]);
+  }, [value, lane, droppable]);
 
   const create = () => {
     const t = title.trim();
@@ -347,6 +363,7 @@ function Column({
               key={id}
               card={card}
               column={value}
+              lane={lane}
               // The index into the column's *stored* order, not into this cell.
               // Under a secondary axis the cell is a subset of it, and a reorder
               // writes the stored list — so a cell-local index landed the card
@@ -370,6 +387,7 @@ function Column({
 function CardTile({
   card,
   column,
+  lane,
   index,
   chips,
   draggableTile,
@@ -381,6 +399,7 @@ function CardTile({
 }: {
   card: CardDTO;
   column: string;
+  lane: string | undefined;
   index: number;
   chips: string[];
   draggableTile: boolean;
@@ -398,7 +417,9 @@ function CardTile({
     if (!el) return;
     const cleanups: (() => void)[] = [];
     if (draggableTile) {
-      cleanups.push(draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) }));
+      cleanups.push(
+        draggable({ element: el, getInitialData: () => ({ cardId: card.id, column, lane }) }),
+      );
     }
     if (orderable) {
       cleanups.push(
@@ -416,7 +437,7 @@ function CardTile({
       );
     }
     return () => cleanups.forEach((f) => f());
-  }, [card.id, column, index, draggableTile, orderable]);
+  }, [card.id, column, lane, index, draggableTile, orderable]);
 
   return (
     <div

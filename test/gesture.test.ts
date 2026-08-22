@@ -85,9 +85,12 @@ test('a drop means the same thing however many cards are selected', () => {
     const intent = dropOutcome({
       cardId: 'a',
       from,
+      fromLane: '',
       to,
+      toLane: null,
       onCard: null,
       groupBy: 'priority',
+      laneBy: '',
       mode,
       selected: new Set(['a', 'b', 'c']),
       order: [],
@@ -97,11 +100,13 @@ test('a drop means the same thing however many cards are selected', () => {
     assert.ok(intent.kind === 'facet');
     // The endpoints travel, never the values — which is what makes one card and
     // twelve the same request.
-    assert.deepEqual({ from: intent.from, to: intent.to, mode: intent.mode }, { from, to, mode });
+    assert.deepEqual(intent.moves, [{ facet: 'priority', from, to }]);
+    assert.equal(intent.mode, mode);
     assert.deepEqual(intent.ids, ['a', 'b', 'c'], 'a selected card drags the selection');
     // And every one of them resolves through the same transform.
+    const move = intent.moves[0]!;
     for (const id of intent.ids) {
-      assert.deepEqual(nextValues(both, intent.from, intent.to, intent.mode), want, `${id}: ${mode}`);
+      assert.deepEqual(nextValues(both, move.from, move.to, intent.mode), want, `${id}: ${mode}`);
     }
   }
 });
@@ -110,9 +115,12 @@ test('dragging an unselected card moves only that card', () => {
   const intent = dropOutcome({
     cardId: 'z',
     from: 'now',
+    fromLane: '',
     to: 'month',
+    toLane: null,
     onCard: null,
     groupBy: 'priority',
+    laneBy: '',
     mode: 'replace',
     selected: new Set(['a', 'b']),
     order: [],
@@ -135,9 +143,12 @@ test('a reorder lands where the pointer aimed, across lanes', () => {
     const intent = dropOutcome({
       cardId: 'd',
       from: 'now',
+      fromLane: '',
       to: 'now',
+      toLane: null,
       onCard: { id: order[index]!, index, below },
       groupBy: 'priority',
+      laneBy: '',
       mode: 'replace',
       selected: new Set(),
       order,
@@ -151,13 +162,114 @@ test('a reorder lands where the pointer aimed, across lanes', () => {
   assert.deepEqual(at(1, true), ['a', 'b', 'd', 'c'], 'below the second');
 });
 
+/**
+ * The second grouping axis was a row label and nothing else.
+ *
+ * A drop wrote `groupBy` and only `groupBy`, so on `group=status,priority` —
+ * status across, priority down — dragging a card into the `now` swimlane did
+ * nothing at all. Landing it on a tile was worse than nothing: same column, so
+ * the drop read as a reorder and wrote the view's arrangement file, which cannot
+ * show, because order is per column and does not cross a lane.
+ *
+ * Both are grouping positions, so both are writable. The reorder branch is now
+ * reachable only when neither axis was crossed.
+ */
+const matrix = {
+  onCard: null,
+  groupBy: 'status',
+  laneBy: 'priority',
+  mode: 'replace' as DragMode,
+  selected: new Set<string>(),
+  order: ['a', 'b'],
+  viewName: 'home',
+};
+
+test('a drag into another swimlane writes the second axis', () => {
+  const intent = dropOutcome({
+    ...matrix,
+    cardId: 'a',
+    from: 'active',
+    fromLane: 'someday',
+    to: 'active',
+    toLane: 'now',
+  });
+  assert.ok(intent.kind === 'facet');
+  assert.deepEqual(intent.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
+});
+
+test('a swimlane drop onto a tile moves the card instead of writing a phantom order', () => {
+  const intent = dropOutcome({
+    ...matrix,
+    cardId: 'a',
+    from: 'active',
+    fromLane: 'someday',
+    to: 'active',
+    // The pointer is over a tile — which used to be the whole test for "reorder".
+    onCard: { id: 'b', index: 1, below: true },
+    toLane: 'now',
+  });
+  assert.ok(intent.kind === 'facet', 'a crossed lane is a move, not an order');
+  assert.deepEqual(intent.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
+});
+
+test('a diagonal drag names both axes and stays one intent', () => {
+  const intent = dropOutcome({
+    ...matrix,
+    cardId: 'a',
+    from: 'planning',
+    fromLane: 'someday',
+    to: 'active',
+    toLane: 'now',
+  });
+  assert.ok(intent.kind === 'facet');
+  // One intent, so one request and one write per card — never a status write that
+  // lands and a priority write that is refused.
+  assert.deepEqual(intent.moves, [
+    { facet: 'status', from: 'planning', to: 'active' },
+    { facet: 'priority', from: 'someday', to: 'now' },
+  ]);
+});
+
+test('within one cell of a matrix a drag is still an order', () => {
+  const intent = dropOutcome({
+    ...matrix,
+    cardId: 'd',
+    from: 'active',
+    fromLane: 'now',
+    to: 'active',
+    toLane: 'now',
+    onCard: { id: 'a', index: 0, below: false },
+    order: ['a', 'b', 'c', 'd'],
+  });
+  assert.ok(intent.kind === 'reorder');
+  assert.deepEqual(intent.ids, ['d', 'a', 'b', 'c']);
+});
+
+test('a lane the board does not have is not a move', () => {
+  // One axis: `toLane` is null on every column, so nothing can cross a lane and
+  // the same-column drop falls through to the order branch as it always did.
+  const intent = dropOutcome({
+    ...matrix,
+    laneBy: '',
+    cardId: 'a',
+    from: 'active',
+    fromLane: '',
+    to: 'active',
+    toLane: null,
+  });
+  assert.deepEqual(intent, { kind: 'none', why: 'dropped where it already was' });
+});
+
 test('a drop with nowhere to put an order says so instead of vanishing', () => {
   const intent = dropOutcome({
     cardId: 'a',
     from: 'now',
+    fromLane: '',
     to: 'now',
+    toLane: null,
     onCard: { id: 'b', index: 1, below: false },
     groupBy: 'priority',
+    laneBy: '',
     mode: 'replace',
     selected: new Set(),
     order: ['a', 'b'],
@@ -188,7 +300,8 @@ test('connecting two nodes moves a hierarchy edge and adds an ordinary one', () 
   });
   assert.ok(up.kind === 'facet');
   assert.deepEqual(up.ids, ['child']);
-  assert.deepEqual(nextValues(['oldparent'], up.from, up.to, up.mode), ['newparent']);
+  const upMove = up.moves[0]!;
+  assert.deepEqual(nextValues(['oldparent'], upMove.from, upMove.to, up.mode), ['newparent']);
 
   // `blocks` is multi-valued: the source owns it and the value is added.
   const across = connectOutcome({
@@ -201,7 +314,8 @@ test('connecting two nodes moves a hierarchy edge and adds an ordinary one', () 
   });
   assert.ok(across.kind === 'facet');
   assert.deepEqual(across.ids, ['a']);
-  assert.deepEqual(nextValues(['c'], across.from, across.to, across.mode), ['c', 'b']);
+  const acrossMove = across.moves[0]!;
+  assert.deepEqual(nextValues(['c'], acrossMove.from, acrossMove.to, across.mode), ['c', 'b']);
 
   // A relation that is not a reference facet cannot be drawn, so nothing happens.
   const bogus = connectOutcome({

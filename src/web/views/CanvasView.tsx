@@ -301,9 +301,7 @@ export function CanvasView({
         .bulk({
           ids: intent.ids,
           op: 'move',
-          facet: intent.facet,
-          from: intent.from,
-          to: intent.to,
+          moves: intent.moves,
           dragMode: intent.mode,
         })
         .then(() => reload())

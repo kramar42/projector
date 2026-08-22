@@ -107,8 +107,8 @@ export const api = {
     op: 'facet' | 'move' | 'parent' | 'delete';
     facet?: string;
     values?: string[];
-    from?: string;
-    to?: string;
+    /** `move` only: one entry per grouping axis the drag crossed. */
+    moves?: { facet: string; from: string; to: string }[];
     dragMode?: DragMode;
     mode?: 'set' | 'add' | 'remove';
     parent?: string | null;
