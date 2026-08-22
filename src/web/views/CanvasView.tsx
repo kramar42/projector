@@ -33,6 +33,7 @@ import {
 import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse, Meta } from '../types.ts';
 import { Button } from '../components/Button.tsx';
+import { BulkBar } from '../components/BulkBar.tsx';
 import { CommitInput } from '../components/CommitInput.tsx';
 
 /**
@@ -199,6 +200,11 @@ export function CanvasView({
         width: p.w,
         height: p.h,
         style: { width: p.w, height: p.h },
+        // An unmatched ancestor is drawn to keep the graph connected, and is not
+        // a match. Selecting one and running a bulk action would edit a record
+        // the query never returned — the same widening the `context` split exists
+        // to prevent. A band was already unselectable for its own reason.
+        selectable: !context.has(card.id),
         data: {
           card,
           show: data.spec.show,
@@ -237,6 +243,25 @@ export function CanvasView({
     // Only a finished drag counts as a change worth offering to save.
     if (changes.some((c) => c.type === 'position' && c.dragging === false)) setDirty(true);
   }, []);
+
+  /**
+   * The selection, read off the nodes rather than kept beside them.
+   *
+   * React Flow owns `node.selected` — cmd/ctrl-click adds to it, a shift-drag
+   * marquee rewrites it wholesale — and it already flows through
+   * `applyNodeChanges` above. A `Set` of our own would be a second answer that a
+   * marquee never updated, so the board's `useSelection` deliberately has no place
+   * here: `BulkBar` wants ids, and these are the ids.
+   */
+  const selected = useMemo(
+    () => nodes.filter((n) => n.type === 'record' && n.selected).map((n) => n.id),
+    [nodes],
+  );
+
+  const clearSelection = useCallback(
+    () => setNodes((cur) => cur.map((n) => (n.selected ? { ...n, selected: false } : n))),
+    [],
+  );
 
   /**
    * Positions go to the view file, never to a card: views own arrangement, so the
@@ -357,6 +382,19 @@ export function CanvasView({
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable nodeColor="var(--minimap-node)" maskColor="var(--minimap-mask)" />
         </ReactFlow>
+
+        {selected.length > 0 && (
+          <BulkBar
+            ids={selected}
+            counts={data.counts}
+            onDone={() => {
+              clearSelection();
+              reload();
+            }}
+            onClear={clearSelection}
+            onProblem={setProblem}
+          />
+        )}
 
         {/*
           What floats here is what only a canvas can do *and* only while a canvas

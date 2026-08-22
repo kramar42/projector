@@ -2,16 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
-import { plural } from '../plural.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import { RecordPicker } from '../components/RecordPicker.tsx';
 import type { CardDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE } from '../../schema/vocabulary.ts';
 import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { groupsFor, labelFor } from './groups.ts';
-import { Button, IconButton } from '../components/Button.tsx';
+import { IconButton } from '../components/Button.tsx';
+import { BulkBar } from '../components/BulkBar.tsx';
+import { useSelection } from '../selection.ts';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -31,7 +31,9 @@ export function BoardView({
   onOpen: (id: string) => void;
   reload: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Shared with the table, which asks the same question of the same records.
+  const selection = useSelection();
+  const selected = selection.ids;
   const [problem, setProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
@@ -168,14 +170,6 @@ export function BoardView({
     });
   }, [move, reorder, orderedFor, viewName, groupBy, laneBy, selected]);
 
-  const toggleSelect = (id: string, additive: boolean) =>
-    setSelected((prev) => {
-      const next = additive ? new Set(prev) : new Set<string>();
-      if (prev.has(id) && additive) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
   // A board keeps an empty declared column: it is somewhere to drag a card to.
   const columns = (lane: string | undefined): Group[] => groupsFor(data, { lane, empties: 'keep' });
 
@@ -210,7 +204,7 @@ export function BoardView({
                   groupBy={groupBy}
                   droppable={draggableBoard}
                   orderable={Boolean(viewName)}
-                  onSelect={toggleSelect}
+                  onSelect={selection.toggle}
                   onOpen={onOpen}
                   onProblem={setProblem}
                   onCreated={reload}
@@ -227,10 +221,10 @@ export function BoardView({
           ids={[...selected]}
           counts={data.counts}
           onDone={() => {
-            setSelected(new Set());
+            selection.clear();
             reload();
           }}
-          onClear={() => setSelected(new Set())}
+          onClear={selection.clear}
           onProblem={setProblem}
         />
       )}
@@ -277,7 +271,7 @@ function Column({
   order: string[];
   cards: Record<string, CardDTO>;
   chips: string[];
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   dragging: string | null;
   groupBy: string;
   droppable: boolean;
@@ -455,107 +449,6 @@ function CardTile({
       }}
     >
       <CardBody card={card} showFacets={chips} />
-    </div>
-  );
-}
-
-/**
- * Bulk actions across a selection — what makes cleaning 130 imported cards
- * feasible, and structure-only, so it stays on the gesture side of C10.
- *
- * The facet list comes from the query's own histogram, so it offers the axes
- * actually present in what is on screen rather than the whole vocabulary.
- */
-function BulkBar({
-  ids,
-  counts,
-  onDone,
-  onClear,
-  onProblem,
-}: {
-  ids: string[];
-  counts: QueryResponse['counts'];
-  onDone: () => void;
-  onClear: () => void;
-  onProblem: (m: string) => void;
-}) {
-  const [pickParent, setPickParent] = useState(false);
-  const [facet, setFacet] = useState('');
-  const editable = counts.filter((c) => !c.pseudo);
-  const chosen = editable.find((c) => c.facet === facet);
-
-  const run = (fn: () => Promise<unknown>) =>
-    fn()
-      .then(onDone)
-      .catch((e: ApiError) => onProblem(e.message));
-
-  return (
-    <div className="bulkbar">
-      <span className="bulkbar-count">{ids.length} selected</span>
-
-      <Button size="small" onClick={() => setPickParent((v) => !v)}>
-        Set parent…
-      </Button>
-
-      <select className="bulkbar-select" value={facet} onChange={(e) => setFacet(e.target.value)}>
-        <option value="">set a facet…</option>
-        {editable.map((c) => (
-          <option key={c.facet} value={c.facet}>
-            {c.label}
-          </option>
-        ))}
-      </select>
-      {chosen && (
-        <span className="bulkbar-values">
-          {chosen.values
-            .filter((v) => v.value !== NONE)
-            .map((v) => (
-              <button
-                key={v.value}
-                className="togglechip"
-                onClick={() =>
-                  void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
-                }
-              >
-                {v.value}
-              </button>
-            ))}
-          <button
-            className="togglechip is-clear"
-            onClick={() => void run(() => api.bulk({ ids, op: 'facet', facet, values: [], mode: 'set' }))}
-          >
-            clear
-          </button>
-        </span>
-      )}
-
-      <Button
-        tone="danger" size="small"
-        onClick={() => {
-          if (!confirm(`Delete ${plural(ids.length, 'card')}?\n\nThe files are in git, so this is recoverable.`))
-            return;
-          void run(() => api.bulk({ ids, op: 'delete' }));
-        }}
-      >
-        Delete
-      </Button>
-      <Button tone="ghost" size="small" onClick={onClear}>
-        Clear selection
-      </Button>
-
-      {pickParent && (
-        <div className="bulkbar-picker">
-          <RecordPicker
-            exclude={ids}
-            placeholder="parent for all selected…"
-            onCancel={() => setPickParent(false)}
-            onPick={(pid) => {
-              setPickParent(false);
-              void run(() => api.bulk({ ids, op: 'parent', parent: pid }));
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }

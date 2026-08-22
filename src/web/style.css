@@ -1243,6 +1243,18 @@ body {
   overflow: hidden;
 }
 
+/* A selected node, in the same accent a selected board card takes — the gesture
+   is the same gesture, so it should not look like a different one.
+
+   React Flow ships selected styling only for its built-in node types, and a
+   record is a custom one, so selection had nothing to show at all: the state was
+   live in `node.selected` and invisible. Descendant rather than child, because a
+   record node wraps its face in a div to carry `is-context`. */
+.react-flow__node.selected .cardface {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .react-flow__node .cardface-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2414,11 +2426,34 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 /* ---------------------------------------------------------------- table */
 
+/* The shell holds the scroller and the bulk bar, the way `.board-wrap` does. The
+   bar is `position: absolute`, so it cannot live inside `.table-wrap` — that is
+   the scrolling box, and the bar would scroll away with the rows. */
+.table-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
 .table-wrap {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 0 12px 12px;
+}
+
+/* A selected row, in the accent a selected card already uses. The tint carries it
+   rather than a ring: a `<tr>` cannot take one — `outline` on a row is drawn per
+   cell in most engines, and a `border` shifts the column grid — and a row is a
+   full-width band, so a wash reads as clearly here as a ring does on a card. */
+.table tbody tr.is-selected > td {
+  background: var(--accent-soft);
+}
+
+.table tbody tr.is-selected > td:first-child {
+  box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
 .table {
