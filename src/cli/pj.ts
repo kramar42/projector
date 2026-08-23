@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { paths, resolveCliVault, resolvePath } from '../config.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
-import { declaredNames, loadFacets } from '../schema/facets.ts';
+import { declaredFacets, loadFacets } from '../schema/facets.ts';
 import { listCardFiles } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
 import { validateViews, validateVocabulary } from '../view/validate.ts';
@@ -417,7 +417,7 @@ function cmdCheck(): void {
     // Before the records, because a facet wearing a reserved name is a fault in
     // the vocabulary itself — every card checked against it is checked against
     // an axis that will not answer.
-    ...validateVocabulary(declaredNames(p.facets), p.facets),
+    ...validateVocabulary(declaredFacets(p.facets), p.facets),
     ...validate(records, facets, root, { unreadable, duplicates }),
     // A view is checked against the same vocabulary its cards are. Until it was,
     // a filter naming a deleted facet matched nothing and reported success.

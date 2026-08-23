@@ -94,8 +94,9 @@ const FACETS = `
 parent:     { label: Part of,  type: ref, single: true }
 blocks:     { label: Blocks,   type: ref }
 due:        { label: Due, type: date, single: true, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }
-priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
-status:     { label: Status,   values: [planning, active, done], open: false, single: true }
+priority:   { label: Priority, values: [now, month, backlog], open: false, single: true, expected: true }
+status:     { label: Status,   values: [planning, active, done], open: false, single: true, closed: [done], expected: true }
+project:    { expected: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
 waiting_on: { label: Waiting on, values: [], open: true }
 `;
@@ -181,13 +182,22 @@ test('pseudo-facets filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocked-card', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocker', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
-    // A card missing two axes lands in both buckets.
+    // A card missing two axes lands in both buckets. `project-b` and `project-a` are project
+    // records and appear here too: the engine no longer exempts them, the triage
+    // view does.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
       'blocker',
+      'project-b',
       'loose',
+      'project-a',
       'project-a-eventing',
     ]);
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-priority'] } }), ['loose', 'project-a-eventing']);
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-priority'] } }), [
+      'project-b',
+      'loose',
+      'project-a',
+      'project-a-eventing',
+    ]);
     assert.deepEqual(ids(root, { filter: { staleness: ['older'] } }), ['loose', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { staleness: ['month'] } }), ['project-a']);
   } finally {
@@ -195,31 +205,32 @@ test('pseudo-facets filter exactly like stored ones', () => {
   }
 });
 
-test('triage does not ask a project for a priority, or a node for a status', () => {
+test('triage asks for the facets the vault says it expects, and nothing else', () => {
   const { root, cleanup } = vault();
   try {
-    // `project-b` and `project-a` carry neither a project nor a priority and are complete
-    // anyway: a project record is where configuration lives, not a piece of
-    // work, and ranking a portfolio is a decision rather than a triage step.
-    assert.deepEqual(ids(root, { filter: { triage: ['complete'] } }), [
-      'blocked-card',
-      'project-b',
-      'kafka-schema',
-      'kc-realms',
-      'keycloak',
-      'project-a',
+    // One value per expected facet, in declaration order, then `complete`. The
+    // list used to be a literal naming three facets; a vault deciding a fourth
+    // now gets it everywhere without an edit here.
+    // Built-ins lead the vocabulary, so `project` leads this too.
+    assert.deepEqual(open(root)({ groupBy: ['triage'] }).axis, [
+      'needs-project',
+      'needs-priority',
+      'needs-status',
+      'complete',
     ]);
-    // `project-a-eventing` has no status and is not asked for one: things hang off it,
-    // so it is a grouping, and a grouping on the work board is noise.
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-status'] } }), []);
-    // The exemption is the incoming edge, not the absence. An otherwise
-    // identical card that nothing names is still asked for a status.
-    writeFileSync(
-      join(root, 'cards', 'orphan.md'),
-      '---\nid: orphan\ntitle: Named by nothing\nfacets: { project: [project-a], priority: [now] }\nupdated: 2026-08-20\n---\n',
-      'utf8',
+
+    // No exemptions live here any more. `project-b` and `project-a` are project records with
+    // no priority, and the axis says so — `views/triage.yaml` narrows to
+    // `type: [plain]`, which is where that judgement is now visible and arguable.
+    assert.ok(ids(root, { filter: { triage: ['needs-priority'] } }).includes('project-b'));
+    assert.deepEqual(
+      ids(root, { filter: { triage: ['needs-priority'], type: ['plain'] } }).includes('project-b'),
+      false,
+      'and the view is what exempts it',
     );
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-status'] } }), ['orphan']);
+
+    // An axis the vault does not expect is never asked for, however empty.
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-tech'] } }), []);
   } finally {
     cleanup();
   }

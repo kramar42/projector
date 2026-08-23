@@ -19,9 +19,26 @@ import { isProject } from './project.ts';
  * recursive CTE was the only graph walk outside `refs.ts`.
  */
 
-/** A record is finished when it says so. The one place that rule is written. */
-export function isDone(rec: Rec | undefined): boolean {
-  return !!rec?.facets.status?.includes('done');
+/**
+ * A record is finished when it carries a value some facet declares `closed`.
+ *
+ * The one place that rule is written — it had two spellings, both naming
+ * `status` and `done` in code, and neither could see that the seeded vocabulary
+ * also has `archived`. An archived card therefore blocked its dependents
+ * forever, which nothing anywhere had decided; it was what the literal happened
+ * to say.
+ *
+ * Any facet may declare it, and a record needs only one such value. That is not
+ * generality for its own sake: which axis carries a lifecycle is a vault's
+ * choice, and a vault with two of them means both.
+ */
+export function isClosed(rec: Rec | undefined, facets: Facets): boolean {
+  if (!rec) return false;
+  for (const [name, def] of Object.entries(facets)) {
+    if (!def.closed?.length) continue;
+    if (rec.facets[name]?.some((v) => def.closed!.includes(v))) return true;
+  }
+  return false;
 }
 
 /**
@@ -34,18 +51,18 @@ export function blockedBy(
   id: string,
   records: Map<string, Rec>,
   /**
-   * Needed only so each blocker can carry its own record mark.
+   * The vocabulary, for the two facts a blocker carries besides its title.
    *
-   * A blocker is a record you can click through to, so The Record Reference Rule
-   * says it wears its mark — and the mark reads `isProject` and a count of
-   * inbound references, neither of which this shape used to carry. Optional
-   * because a caller that only wants the titles should not have to hold the
-   * vocabulary; without it every blocker draws as a leaf.
+   * It was optional, so that a caller wanting only titles need not hold it, and
+   * an omitted one cost nothing but the record mark. `done` reads the vocabulary
+   * now — that is where `closed` is declared — so an omitted one would answer
+   * "nothing is finished" in a shape whose whole job is saying which blockers
+   * still stand. A wrong answer is worse than a plain one, so it is required.
    */
-  facets?: Facets,
+  facets: Facets,
 ): { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[] {
   const inward = adjacency('blocks', records).in.get(id) ?? [];
-  const inbound = facets ? inboundCounts(records, facets) : null;
+  const inbound = inboundCounts(records, facets);
   return inward.flatMap((src) => {
     const rec = records.get(src);
     return rec
@@ -53,9 +70,9 @@ export function blockedBy(
           {
             id: rec.id,
             title: rec.title,
-            done: isDone(rec),
+            done: isClosed(rec, facets),
             isProject: isProject(rec),
-            refCount: inbound?.get(rec.id) ?? 0,
+            refCount: inbound.get(rec.id) ?? 0,
           },
         ]
       : [];
@@ -82,10 +99,10 @@ export function unblocks(id: string, records: Map<string, Rec>): string[] {
  * `blocked` pseudo-facet reads this; it used to compute it inline, which is how
  * the rule came to have two spellings.
  */
-export function blockedSet(records: Map<string, Rec>): Set<string> {
+export function blockedSet(records: Map<string, Rec>, facets: Facets): Set<string> {
   const out = new Set<string>();
   for (const [src, targets] of adjacency('blocks', records).out) {
-    if (isDone(records.get(src))) continue;
+    if (isClosed(records.get(src), facets)) continue;
     for (const dst of targets) out.add(dst);
   }
   return out;

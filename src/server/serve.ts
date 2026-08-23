@@ -22,7 +22,7 @@ import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf, isProject } from '../index/project.ts';
-import { blockedBy, isDone, unblocks } from '../index/blocking.ts';
+import { blockedBy, isClosed, unblocks } from '../index/blocking.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
 import type { DragMode } from '../view/dropOutcome.ts';
@@ -316,7 +316,7 @@ app.get('/api/card/:id', (c) => {
       .map((r) => ({
         id: r.id,
         title: r.title,
-        done: isDone(r),
+        done: isClosed(r, facets),
         isProject: isProject(r),
         refCount: inbound.get(r.id) ?? 0,
       })),

@@ -67,12 +67,17 @@ status:
   values: [planning, active, frozen, done, archived]
   open: false
   single: true
+  # No further work expected, whatever the outcome — abandonment counts,
+  # on-hold does not. A closed record stops blocking whatever waits on it.
+  closed: [done, archived]
+  expected: true
 
 priority:
   label: Priority
   values: [now, month, backlog, someday]
   open: false
   single: true
+  expected: true
 
 due:
   label: Due

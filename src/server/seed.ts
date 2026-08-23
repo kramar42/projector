@@ -12,6 +12,9 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   open:    true  → new values accepted
 #            false → the validator rejects anything not listed
 #   single:  true  → at most one value at a time
+#   closed:  values meaning no further work is expected, whatever the outcome
+#   expected: true  → a well-filed card carries this; the triage axis is built
+#            from it, and \`pj check\` warns about a card that has none
 #   type:    label  → a member of the declared values list (the default)
 #            ref    → a record id, so the facet is also traversable: it lays out
 #                     a canvas, walks under focus, and refuses a cycle
@@ -46,15 +49,20 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # either beside the thing it is computed from gives two answers to one question.
 status:
   label: Status
-  values: [planning, active, frozen, done, archived]
+  values: [planning, active, on-hold, done, archived]
   open: false
   single: true
+  # No further work expected, whatever the outcome — so abandonment counts and
+  # on-hold does not. A closed record stops blocking whatever waits on it.
+  closed: [done, archived]
+  expected: true
 
 priority:
   label: Priority
   values: [now, month, backlog, someday]
   open: false
   single: true
+  expected: true
 
 # A deadline. priority says what you intend to do next; due says what the
 # world expects regardless of intent, so it is compared against today rather than

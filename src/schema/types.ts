@@ -113,6 +113,28 @@ export interface FacetDef {
   buckets?: { name: string; upTo: number }[];
   /** What a value past the last bucket is called. */
   overflow?: string;
+  /**
+   * The values that mean *no further work expected*, whatever the outcome.
+   *
+   * Outcome-neutral on purpose: it has to cover abandonment as well as success,
+   * so `archived` belongs beside `done` while `on-hold` does not — held work is
+   * still work, and still blocks whatever waits on it. `complete`, `resolved`
+   * and `done` all imply success, which is why the key is not called any of them.
+   *
+   * A sibling list rather than an annotation on each value, because `values:` is
+   * load-bearing as flat column order and must not grow entries.
+   */
+  closed?: string[];
+  /**
+   * A well-filed card in this vault carries this axis.
+   *
+   * Not enforced on write — a card missing one is a gap, not an error, which is
+   * the distinction `validate` already draws between a warning and an error. It
+   * is what the `triage` axis is computed from, and it has to be declared: it
+   * cannot be inferred from `single` or from a closed vocabulary, because
+   * `energy` and `owner` are both of those and nobody wants to be nagged for them.
+   */
+  expected?: boolean;
 }
 
 export type Facets = Record<string, FacetDef>;

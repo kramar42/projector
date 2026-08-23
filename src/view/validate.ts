@@ -1,7 +1,7 @@
 import { PSEUDO } from '../index/query.ts';
 import { isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
-import { BUILTIN_FACETS } from '../schema/facets.ts';
+import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
 import type { ViewSpec } from './spec.ts';
 
@@ -32,38 +32,60 @@ import type { ViewSpec } from './spec.ts';
  * anyway. A vocabulary is read far more often than it is written, and an axis
  * called `links` beside a card's links is a sentence you have to stop and parse.
  *
- * A built-in facet is reserved for the strongest reason of the three: its
- * definition is not read from the file, so a declaration would be inert — and
- * silently so, which is the failure this whole list exists to prevent.
+ * A built-in's *name* is not on this list, because a vault may legitimately
+ * declare one — to label it, colour it, or ask for it in triage. What it may not
+ * do is change its shape, which is the separate check below.
  */
-export const RESERVED: readonly string[] = [
-  ...KEY_ORDER,
-  'body',
-  ...Object.keys(BUILTIN_FACETS),
-  ...Object.keys(PSEUDO),
-];
+export const RESERVED: readonly string[] = [...KEY_ORDER, 'body', ...Object.keys(PSEUDO)].filter(
+  // `project` names both a frontmatter block and a built-in facet, so it reaches
+  // this list through `KEY_ORDER` and has to be lifted back out: the structural
+  // check below is the one that judges it, and it judges it more precisely.
+  (name) => !(name in BUILTIN_FACETS),
+);
 
 /**
- * Check the vocabulary's own names.
+ * Check the vocabulary's own names, and what a declaration of a built-in sets.
  *
  * Separate from `validate`, which checks *records* against the vocabulary: this
- * asks whether the vocabulary is sayable at all. An error rather than a warning,
- * because the failure it prevents is silent — the axis works everywhere except
- * where it matters.
+ * asks whether the vocabulary is sayable at all. Errors rather than warnings,
+ * because both failures are silent — the axis works everywhere except where it
+ * matters.
  *
- * It takes the names the *file* declares rather than a loaded `Facets`, because
- * a loaded one carries the built-ins too and would report every vault for a
- * declaration nobody wrote.
+ * It takes the file's raw top-level mapping rather than a loaded `Facets`: a
+ * loaded one carries the built-ins, so it could not tell a declaration apart
+ * from an injection, and it has already dropped the structural keys that make
+ * the second check possible.
  */
-export function validateVocabulary(declared: readonly string[], file: string): Issue[] {
-  return declared
-    .filter((name) => RESERVED.includes(name))
-    .map((name) => ({
-      severity: 'error' as const,
-      file,
-      field: name,
-      message: `"${name}" is a reserved name — rename this facet`,
-    }));
+export function validateVocabulary(
+  declared: Record<string, unknown>,
+  file: string,
+): Issue[] {
+  const issues: Issue[] = [];
+  for (const [name, def] of Object.entries(declared)) {
+    if (RESERVED.includes(name)) {
+      issues.push({
+        severity: 'error',
+        file,
+        field: name,
+        message: `"${name}" is a reserved name — rename this facet`,
+      });
+      continue;
+    }
+    const builtin = BUILTIN_FACETS[name];
+    if (!builtin || !def || typeof def !== 'object') continue;
+    const set = Object.keys(def as Record<string, unknown>).filter((k) => STRUCTURAL.includes(k));
+    if (set.length) {
+      issues.push({
+        severity: 'error',
+        file,
+        field: name,
+        message:
+          `"${name}" is built in and its shape is fixed — remove ${set.join(', ')}. ` +
+          `Everything else here (label, expected) is yours to set.`,
+      });
+    }
+  }
+  return issues;
 }
 
 /**

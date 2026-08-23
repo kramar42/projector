@@ -5,6 +5,17 @@ import { parseCard } from '../src/schema/card.ts';
 import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { blockedBy, blockedSet, unblocks } from '../src/index/blocking.ts';
+import { loadFacets } from '../src/schema/facets.ts';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+/** A facets.yaml in a temp dir, so a test can declare the vocabulary it needs. */
+function facetsFile(body: string): string {
+  const f = join(mkdtempSync(join(tmpdir(), 'projector-facets-')), 'facets.yaml');
+  writeFileSync(f, body, 'utf8');
+  return f;
+}
 
 
 /**
@@ -194,18 +205,31 @@ test('a self-reference and a dangling one are dropped by every blocks answer', (
     ].map((r) => [r.id, r]),
   );
 
+  // `closed` is where "finished" is declared, so the vocabulary has to be here.
+  const facets = loadFacets(
+    facetsFile('status: { values: [planning, done], closed: [done] }\nblocks: { type: ref }\n'),
+  );
+
   assert.deepEqual(unblocks('loop', records), [], 'a self-loop unblocks nothing, and terminates');
-  assert.deepEqual(blockedBy('loop', records), [], 'and is blocked by nothing');
+  assert.deepEqual(blockedBy('loop', records, facets), [], 'and is blocked by nothing');
   assert.deepEqual(unblocks('ghost', records), [], 'a value naming no record is not a target');
   assert.deepEqual(unblocks('real', records), ['target']);
 
   // A finished blocker stops blocking; an unfinished one does not.
   assert.deepEqual(
-    blockedBy('target', records).map((b) => [b.id, b.done]).sort(),
+    blockedBy('target', records, facets).map((b) => [b.id, b.done]).sort(),
     [['fin', true], ['real', false]],
   );
-  assert.ok(blockedSet(records).has('target'), 'one unfinished blocker is enough');
-  assert.ok(!blockedSet(records).has('loop'), 'and a self-reference is not one');
+  assert.ok(blockedSet(records, facets).has('target'), 'one unfinished blocker is enough');
+  assert.ok(!blockedSet(records, facets).has('loop'), 'and a self-reference is not one');
+
+  // And a vault that declares no `closed` value has no finished records: the
+  // rule is the vocabulary's, not a literal in the engine.
+  const noRule = loadFacets(facetsFile('status: { values: [planning, done] }\nblocks: { type: ref }\n'));
+  assert.deepEqual(
+    blockedBy('target', records, noRule).map((b) => b.done),
+    [false, false],
+  );
 });
 
 /**

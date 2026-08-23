@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
 import { validateViews, validateVocabulary } from '../src/view/validate.ts';
 import { specFromFile } from '../src/view/spec.ts';
-import { declaredNames, loadFacets, } from '../src/schema/facets.ts';
+import { declaredFacets, loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { groupsFor, labelFor } from '../src/web/views/groups.ts';
 import { reindex } from '../src/index/indexer.ts';
@@ -158,16 +158,23 @@ test('a facet may not take a reserved name, and the sort keys prove why', () => 
     'blocked: { values: [yes, no] }\nupdated: { type: date }\nlayer: { values: [a, b] }\n' +
       'project: { type: ref }\n',
   );
-  const issues = validateVocabulary(declaredNames(file), '/data/facets.yaml');
+  const issues = validateVocabulary(declaredFacets(file), '/data/facets.yaml');
   const named = issues.map((i) => i.field).sort();
 
   // `blocked` is a pseudo-facet and would be silently shadowed; `updated` is a
-  // sortable record field; `project` is built-in, so declaring it is inert.
+  // sortable record field; `project` is built-in and this one sets its *shape*.
   // `layer` is an ordinary axis and must survive.
   assert.deepEqual(named, ['blocked', 'project', 'updated']);
 
-  // And the built-in must not report *itself*: it is in every loaded map.
-  assert.deepEqual(validateVocabulary(declaredNames(facetsFile('layer: { values: [a] }\n')), 'f'), []);
+  // The built-in must not report itself — it is in every loaded map, declared or
+  // not — and a vault setting only what is its to set is no error at all.
+  assert.deepEqual(validateVocabulary(declaredFacets(facetsFile('layer: { values: [a] }\n')), 'f'), []);
+  const policy = facetsFile('project: { label: Portfolio, expected: true }\n');
+  assert.deepEqual(validateVocabulary(declaredFacets(policy), 'f'), []);
+  const loaded = loadFacets(policy);
+  assert.equal(loaded.project!.label, 'Portfolio', 'the label is the vault\'s');
+  assert.equal(loaded.project!.expected, true, 'so is the expectation');
+  assert.equal(loaded.project!.type, 'ref', 'the shape is not');
   assert.ok(issues.every((i) => i.severity === 'error'));
   assert.match(issues[0]!.message, /reserved/);
 });

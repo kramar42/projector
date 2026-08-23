@@ -121,28 +121,25 @@ export function validate(
 
   }
 
-  // A card with no project groups under (none) and inherits nothing. Note this
-  // is about the `project` facet, not about parent edges: the two are
-  // independent, and a card may legitimately have either, both or neither.
+  // There is deliberately no "this card has no project" warning here any more.
+  //
+  // It was one, exempting a project record and reporting the rest. The exemption
+  // was policy — a project is configuration rather than work — and policy moved
+  // to the view that asks the question, which is where you can see and change
+  // it. A validator has no view, so generalising the warning meant reporting
+  // every root project in the vault: twelve of nineteen, all of them correct as
+  // filed. The `triage` axis answers this now, with `views/triage.yaml`
+  // narrowing it, and `pj check` is left judging whether a *file* is valid.
+
+  // A project value has to name a record that actually carries configuration.
+  // Stronger than the generic reference check above, which only asks whether the
+  // value names a record at all.
   const projectKeys = new Set<string>();
   for (const rec of records.values()) {
     if (rec.project) projectKeys.add(rec.id);
   }
   for (const rec of records.values()) {
-    const mine = rec.facets.project ?? [];
-    // A project record is its own context, so a root project belongs to nothing
-    // above it and that is not a problem to report.
-    if (!mine.length && !rec.project) {
-      issues.push({
-        severity: 'warning',
-        file: rec.file,
-        id: rec.id,
-        field: 'facets.project',
-        message: 'no project — groups under (none) and inherits no repos or instructions',
-      });
-      continue;
-    }
-    for (const v of mine) {
+    for (const v of rec.facets.project ?? []) {
       if (!projectKeys.has(v)) {
         issues.push({
           severity: 'warning',

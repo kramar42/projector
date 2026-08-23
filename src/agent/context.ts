@@ -1,6 +1,8 @@
 import { paths } from '../config.ts';
 import { adjacency } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
+import { loadFacets } from '../schema/facets.ts';
+import { isClosed } from '../index/blocking.ts';
 import { parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
@@ -35,13 +37,10 @@ export interface CardContext {
 
 const brief = (r: Rec) => ({ id: r.id, title: r.title });
 
-function isDone(rec: Rec): boolean {
-  return (rec.facets.status ?? []).includes('done');
-}
-
 export function cardContext(id: string, dataRoot: string): CardContext | null {
   const p = paths(dataRoot);
   const { records } = readAll(p.cards);
+  const facets = loadFacets(p.facets);
   const rec = records.get(id);
   if (!rec) return null;
 
@@ -75,7 +74,7 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(id))
       .map((r) => ({ id: r.id, title: r.title })),
-    blockedBy: blockers.map((r) => ({ ...brief(r), done: isDone(r) })),
+    blockedBy: blockers.map((r) => ({ ...brief(r), done: isClosed(r, facets) })),
     blocks: along(adj.out).map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
     siblings: siblings.map(brief),

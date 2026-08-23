@@ -19,13 +19,30 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * and lifting `project` out of it would mean bolting it back into every one of
  * them by hand. Being a facet is what stops it being a special case.
  *
- * They sort first, and permanently — the reserved-name check means a vault
- * cannot redeclare one to move it. That is the right place for the axis every
- * vault shares, and it stops a barely-used local facet pushing it off the rail.
+ * They sort first, and permanently: a vault may declare one to set its label or
+ * its triage expectation, but the position is the built-in's. That is the right
+ * place for the axis every vault shares, and it stops a barely-used local facet
+ * pushing it off the rail.
  */
 export const BUILTIN_FACETS: Facets = {
   project: { label: 'Project', type: 'ref', values: [], open: true, single: false },
 };
+
+/**
+ * The keys of a built-in a vault may not change. Everything else on it is fair
+ * game.
+ *
+ * The reason `project` is built in at all is that its *shape* must hold: the
+ * config chain walks it as a relation, so retyping it to `label` would strand
+ * inheritance with nothing to say so. None of that is true of what it is called,
+ * what colour it draws in, or whether a card is expected to carry one — those
+ * are a vault's business, and a vault that could not say them would be stuck
+ * with a permanently grey axis and no way to ask for `needs-project`.
+ *
+ * So a declaration of a built-in is allowed and merges *under* this list.
+ * `pj check` errors only when one of these keys is the thing being set.
+ */
+export const STRUCTURAL: readonly string[] = ['type', 'values', 'open', 'single'];
 
 /**
  * Load the facet vocabulary. This file is the single place column order lives —
@@ -69,28 +86,38 @@ export function loadFacets(file: string): Facets {
       single: d.single === true,
       ...(buckets?.length ? { buckets } : {}),
       ...(typeof d.overflow === 'string' ? { overflow: d.overflow } : {}),
+      ...(Array.isArray(d.closed) ? { closed: d.closed.map(String) } : {}),
+      ...(d.expected === true ? { expected: true } : {}),
     };
   }
-  // Built-ins lead the order, and win the definition. A file that declares one
-  // is an error `pj check` reports; here it simply does not take effect, so a
-  // vault someone has broken still loads and still opens.
+  // Built-ins lead the order, and win their structural keys. A vault may still
+  // set the rest — its label, whether a card is expected to carry one — so a
+  // declaration merges *under* the built-in's shape rather than being discarded.
   const merged: Facets = { ...BUILTIN_FACETS, ...out };
-  for (const [name, def] of Object.entries(BUILTIN_FACETS)) merged[name] = def;
+  for (const [name, builtin] of Object.entries(BUILTIN_FACETS)) {
+    const declared = out[name];
+    merged[name] = declared
+      ? { ...builtin, ...declared, ...pick(builtin, STRUCTURAL) }
+      : builtin;
+  }
   return merged;
 }
 
+function pick(def: FacetDef, keys: readonly string[]): Partial<FacetDef> {
+  return Object.fromEntries(keys.map((k) => [k, def[k as keyof FacetDef]]));
+}
+
 /**
- * The names the file itself declares, in file order.
+ * The file's raw top-level mapping, exactly as written.
  *
- * Distinct from `Object.keys(loadFacets(file))`, which includes the built-ins —
- * so a validator asking "did somebody declare a name they may not" has to ask
- * here. Reading the file twice is the cost of that question being answerable at
- * all; it is asked once, by `pj check`.
+ * Distinct from `loadFacets`, which injects the built-ins and normalises every
+ * definition — so a validator asking "did somebody declare a name they may not,
+ * and what did they set on it" has to ask here. Reading the file twice is the
+ * cost of that question being answerable at all; it is asked once, by `pj check`.
  */
-export function declaredNames(file: string): string[] {
-  if (!existsSync(file)) return [];
-  const raw = parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null;
-  return raw ? Object.keys(raw) : [];
+export function declaredFacets(file: string): Record<string, unknown> {
+  if (!existsSync(file)) return {};
+  return (parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null) ?? {};
 }
 
 /**

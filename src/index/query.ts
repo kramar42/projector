@@ -111,7 +111,15 @@ interface Ctx {
 
 interface Pseudo {
   label: string;
-  values: string[];
+  /**
+   * The values this axis admits, in order.
+   *
+   * A function of the vocabulary rather than a list, because `triage` names one
+   * value per *expected* facet and a vault decides which those are. The three
+   * places that read it — the histogram, the grouping order and the sort rank —
+   * all hold a `Ctx` already, so nothing needed threading to make it askable.
+   */
+  values: (facets: Facets) => string[];
   of: (rec: Rec, ctx: Ctx) => string[];
 }
 
@@ -121,30 +129,30 @@ function daysSince(date: string | undefined, today: string): number | null {
   return date ? daysBetween(date, today) : null;
 }
 
+/** Which facets a vault expects a well-filed card to carry, in declaration order. */
+export function expectedFacets(facets: Facets): string[] {
+  return Object.entries(facets)
+    .filter(([, def]) => def.expected)
+    .map(([name]) => name);
+}
+
 /**
- * Which of the three triage facets a record is actually missing.
+ * The expected facets a record is missing.
  *
- * Two absences are deliberate rather than gaps, so neither is reported. A
- * **project** record needs neither a project of its own nor a priority: it is
- * where configuration lives, not a piece of work, and ranking a portfolio is a
- * decision rather than a triage step. A **node** — anything another record names
- * through a reference facet — needs no status, because a card that things hang
- * off is a grouping, and giving a grouping a lifecycle puts a container on the
- * work board.
+ * It named `project`, `priority` and `status` in code, and carried two
+ * exemptions with them: a project record needed neither a project nor a
+ * priority, and a node needed no status. Both were *policy* — which is to say
+ * they belonged in the view that asks the question, not in the engine that
+ * answers it. `views/triage.yaml` filters `type` for exactly this, and a filter
+ * you can see and change beats an exemption you cannot.
  *
- * The one definition of "needs triage", behind the `triage` axis. The CLI used to
- * carry a second copy in `untriaged()` — where only the CLI exempted a project
- * from `needs-project` — until the worklist became `views/triage.yaml`, which
- * both surfaces read.
+ * What is left is one sentence with no facet in it, and a vault choosing which
+ * axes it means. The one definition of "needs triage", behind the `triage` axis.
  */
-export function triageGaps(rec: Rec, isNode: boolean): string[] {
-  const missing: string[] = [];
-  if (!rec.project) {
-    if (!rec.facets.project?.length) missing.push('needs-project');
-    if (!rec.facets.priority?.length) missing.push('needs-priority');
-  }
-  if (!isNode && !rec.facets.status?.length) missing.push('needs-status');
-  return missing;
+export function triageGaps(rec: Rec, facets: Facets): string[] {
+  return expectedFacets(facets)
+    .filter((name) => !rec.facets[name]?.length)
+    .map((name) => `needs-${name}`);
 }
 
 /**
@@ -160,7 +168,7 @@ export function triageGaps(rec: Rec, isNode: boolean): string[] {
 export const PSEUDO: Record<string, Pseudo> = {
   type: {
     label: 'Type',
-    values: ['project', 'node', 'plain'],
+    values: () => ['project', 'node', 'plain'],
     // A project owns configuration, a node is named by another record, and the
     // rest are plain. The values are deliberately exclusive: a project that is
     // also linked remains a project, so the three counts always add up.
@@ -176,7 +184,7 @@ export const PSEUDO: Record<string, Pseudo> = {
    */
   blocked: {
     label: 'Blocked',
-    values: ['blocked', 'waiting', 'clear'],
+    values: () => ['blocked', 'waiting', 'clear'],
     of: (rec, ctx) => {
       const why: string[] = [];
       if (ctx.blocked.has(rec.id)) why.push('blocked');
@@ -186,15 +194,15 @@ export const PSEUDO: Record<string, Pseudo> = {
   },
   triage: {
     label: 'Triage',
-    values: ['needs-project', 'needs-priority', 'needs-status', 'complete'],
+    values: (facets) => [...expectedFacets(facets).map((n) => `needs-${n}`), 'complete'],
     of: (rec, ctx) => {
-      const missing = triageGaps(rec, ctx.nodes.has(rec.id));
+      const missing = triageGaps(rec, ctx.facets);
       return missing.length ? missing : ['complete'];
     },
   },
   staleness: {
     label: 'Touched',
-    values: ['week', 'month', 'older', 'undated'],
+    values: () => ['week', 'month', 'older', 'undated'],
     of: (rec, ctx) => {
       const d = daysSince(rec.updated, ctx.today);
       if (d === null) return ['undated'];
@@ -211,7 +219,7 @@ export const PSEUDO: Record<string, Pseudo> = {
    */
   linked: {
     label: 'Linked',
-    values: [...LINK_KINDS],
+    values: () => [...LINK_KINDS],
     of: (rec) => [...new Set(rec.links.map((l) => l.kind).filter(Boolean))],
   },
 };
@@ -239,7 +247,7 @@ function rawOf(rec: Rec, facet: string): string[] {
 }
 
 function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx {
-  return { nodes: nodesIn(records, facets), blocked: blockedSet(records), facets, today };
+  return { nodes: nodesIn(records, facets), blocked: blockedSet(records, facets), facets, today };
 }
 
 // ---------------------------------------------------------------- traversal
@@ -310,7 +318,7 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
     const pseudo = PSEUDO[name];
     // A facet's own declared order is its sort order; `priority:asc` means
     // now → month → backlog, which is the whole point of declaring it.
-    const order = pseudo ? pseudo.values : def?.values;
+    const order = pseudo ? pseudo.values(ctx.facets) : def?.values;
     return Math.min(...values.map((v) => (order ? indexOrLast(order, v) : facetRank(def, v))));
   };
 
@@ -463,7 +471,7 @@ function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): Fac
 
     // The axis's vocabulary: what it declares, plus any value the data holds that
     // it did not. For an open facet with no `values:` this is just the data.
-    const declared = pseudo ? pseudo.values : orderValues(ctx.facets[facet], seen);
+    const declared = pseudo ? pseudo.values(ctx.facets) : orderValues(ctx.facets[facet], seen);
 
     // An axis the *query mentions* stays offered, even with nothing selected on
     // it. `f.due=` is the query saying "explicitly nothing here", which is a
@@ -607,7 +615,7 @@ export function runQuery(
       // stays a subset of what the facet declares. A selection naming a value no
       // card carries and no vocabulary declares is a broken URL, not a column.
       const admit = admitted(filter[facet]);
-      const order = (pseudo ? [...pseudo.values] : orderValues(facets[facet], seen)).filter(
+      const order = (pseudo ? pseudo.values(facets) : orderValues(facets[facet], seen)).filter(
         (v) => admit === null || admit.has(v),
       );
       // `(none)` needs no test of its own. A card with no value here is a hit only
@@ -688,13 +696,12 @@ export function projectRollups(
   records: Map<string, Rec>,
   facets: Facets,
 ): Record<string, Rollup> {
-  // The two graph aggregates directly, rather than a whole `Ctx`. Building one
+  // The one graph aggregate directly, rather than a whole `Ctx`. Building one
   // meant taking a `today` this function never asks about — the clock rode in
   // because it is welded to the vocabulary and the aggregates in one struct,
   // which is the argument for splitting `Ctx` made by the code rather than by a
-  // reviewer.
-  const nodes = nodesIn(records, facets);
-  const waitedOn = blockedSet(records);
+  // reviewer. The node set left with the triage exemption that needed it.
+  const waitedOn = blockedSet(records, facets);
   const out: Record<string, Rollup> = {};
   for (const rec of records.values()) {
     if (!rec.project) continue;
@@ -710,7 +717,7 @@ export function projectRollups(
       if (waitedOn.has(id)) blocked++;
       // `triageGaps` directly: reaching through the pseudo-facet needed a `Ctx`,
       // and it is the same answer one layer less indirect.
-      if (triageGaps(member, nodes.has(id)).length) untriaged++;
+      if (triageGaps(member, facets).length) untriaged++;
       if (member.updated && (!touched || member.updated > touched)) touched = member.updated;
     }
 
