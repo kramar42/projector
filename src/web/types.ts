@@ -14,7 +14,7 @@
  * worth keeping — it just re-exports instead of transcribing.
  */
 
-export type { CardDTO } from '../view/dto.ts';
+export type { NoteDTO } from '../view/dto.ts';
 export type { QueryPayload } from '../view/payload.ts';
 export type { ViewSpec } from '../view/spec.ts';
 export type { Dir, Shape } from '../schema/vocabulary.ts';
@@ -24,7 +24,7 @@ export type { AxisCount, Focus, Group, Query, Rollup, ValueCount } from '../inde
 export type { Enrichment, Tone } from '../enrich/types.ts';
 export type { Resolved } from '../server/enrich.ts';
 
-import type { CardDTO } from '../view/dto.ts';
+import type { NoteDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
 import type { QueryPayload } from '../view/payload.ts';
 import type { ViewSpec as Spec } from '../view/spec.ts';
@@ -44,16 +44,16 @@ export type QueryResponse = QueryPayload;
  */
 export type Edit = (fn: (spec: Spec) => Spec, replace?: boolean) => void;
 
-/** One card and everything the panel needs around it — `GET /api/card/:id`. */
-export interface CardDetail {
-  card: CardDTO;
+/** One card and everything the panel needs around it — `GET /api/note/:id`. */
+export interface NoteDetail {
+  card: NoteDTO;
   file: string;
   /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
   mtime: number;
   /** The raw frontmatter, from the same read as `mtime` — one file, one answer. */
   yaml: string;
   /**
-   * Every record this card's reference facets point at, resolved.
+   * Every note this card's reference facets point at, resolved.
    *
    * Keyed by id, because that is what a reference facet stores and therefore
    * what the editor has in hand. It replaces a `parents` list that answered the
@@ -63,7 +63,7 @@ export interface CardDetail {
    */
   refs: Record<string, { title: string; isProject: boolean; refCount: number }>;
   /**
-   * The records naming this one, keyed by the relation they named it through —
+   * The notes naming this one, keyed by the relation they named it through —
    * and only for the relations whose vocabulary gave the other end a word.
    *
    * It was two fields, `children` and `blocks`, which is the same map with its

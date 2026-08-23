@@ -1,11 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Facets, Rec } from '../schema/types.ts';
+import type { Facets, Note } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
 import { projectRollups, runQuery } from '../index/query.ts';
 import { inboundCounts, refsOf } from '../index/refs.ts';
 import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
-import { toDTO, type CardDTO } from './dto.ts';
+import { toDTO, type NoteDTO } from './dto.ts';
 
 
 /**
@@ -33,7 +33,7 @@ export interface QueryPayload {
    * Keyed by id, because a card in three columns is one card. P1 embedded the
    * whole card per group and shipped it three times.
    */
-  cards: Record<string, CardDTO>;
+  notes: Record<string, NoteDTO>;
   ids: string[];
   context: string[];
   groups: ReturnType<typeof runQuery>['groups'];
@@ -59,7 +59,7 @@ export interface QueryPayload {
 export interface PayloadDeps {
   facets: Facets;
   db: DatabaseSync;
-  records: Map<string, Rec>;
+  notes: Map<string, Note>;
   /** Every saved view, projected to what a picker needs. */
   views: ViewSpec[];
   /** Overridable so a test does not depend on the day it runs. */
@@ -71,38 +71,38 @@ export function queryPayload(
   spec: ViewSpec,
   saved: ViewSpec | null = null,
 ): QueryPayload {
-  const { facets, db, records, views } = deps;
+  const { facets, db, notes, views } = deps;
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
 
   // A graph has to stay connected to be readable; a column does not. Only a
   // canvas honours it, and along the relation it is laid out by.
   const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
-  const res = runQuery(db, records, facets, spec.query, { connect: layout });
+  const res = runQuery(db, notes, facets, spec.query, { connect: layout });
 
   // Ordered here, so every surface receives the view's curated order rather than
   // each renderer deciding whether to honour it.
   const groups = res.groups?.map((g) => ({ ...g, ids: applyOrder(g.ids, spec.order?.[g.value]) })) ?? res.groups;
 
   const shown = [...res.ids, ...res.context];
-  const cards: Record<string, CardDTO> = {};
+  const byId: Record<string, NoteDTO> = {};
   // One walk for every card on screen, rather than the same walk once per card.
-  const inbound = inboundCounts(records, facets);
+  const inbound = inboundCounts(notes, facets);
   for (const id of shown) {
-    const rec = records.get(id);
+    const rec = notes.get(id);
     if (!rec) continue;
-    cards[id] = toDTO(rec, {
+    byId[id] = toDTO(rec, {
       facets,
       today,
       refCount: inbound.get(id) ?? 0,
-      blockedBy: blockedBy(id, records, facets),
-      unblocks: unblocks(id, records, facets),
+      blockedBy: blockedBy(id, notes, facets),
+      unblocks: unblocks(id, notes, facets),
     });
   }
 
   return {
     spec,
     savedSpec: saved,
-    cards,
+    notes: byId,
     ids: res.ids,
     context: res.context,
     groups,
@@ -114,10 +114,10 @@ export function queryPayload(
     // Computed here rather than in the client, so the relation a canvas lays out
     // by and the one `connect` walked cannot come apart (C8).
     layout: layout ?? null,
-    relations: relationsAmong(records, facets, new Set(shown), spec.show),
+    relations: relationsAmong(notes, facets, new Set(shown), spec.show),
     // Only a table asks for these, but they are cheap and deriving them here
     // keeps every number on screen deterministic (C8).
-    rollups: projectRollups(records, facets),
+    rollups: projectRollups(notes, facets),
     views: summariseViews(views),
   };
 }
@@ -156,7 +156,7 @@ export function applyOrder(ids: string[], order: string[] | undefined): string[]
 
 
 function relationsAmong(
-  records: Map<string, Rec>,
+  notes: Map<string, Note>,
   facets: Facets,
   ids: Set<string>,
   show: string[],
@@ -164,7 +164,7 @@ function relationsAmong(
   const out: { src: string; dst: string; type: string }[] = [];
   for (const via of show) {
     if (!isRef(facets[via])) continue;
-    for (const e of refsOf(via, records)) {
+    for (const e of refsOf(via, notes)) {
       if (ids.has(e.src) && ids.has(e.dst)) out.push({ ...e, type: via });
     }
   }

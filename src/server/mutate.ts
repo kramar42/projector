@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
-import { frontmatterSchema, listCardFiles, loadCard, renderCard, writeCardFile } from '../schema/card.ts';
+import { frontmatterSchema, listNoteFiles, loadNote, renderNote, writeNoteFile } from '../schema/note.ts';
 import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
@@ -11,7 +11,7 @@ import { wouldCycle } from '../index/refs.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
-import type { Rec } from '../schema/types.ts';
+import type { Note } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../schema/slug.ts';
 import { nextValues, type AxisMove, type DragMode } from '../view/dropOutcome.ts';
@@ -36,11 +36,11 @@ export class Invalid extends Error {}
 
 function fileFor(root: string, id: string): string {
   const p = paths(root);
-  const direct = join(p.cards, `${id}.md`);
+  const direct = join(p.notes, `${id}.md`);
   if (existsSync(direct)) return direct;
   // The filename may drift from the id, so fall back to a scan.
-  for (const f of listCardFiles(p.cards)) {
-    const res = loadCard(f);
+  for (const f of listNoteFiles(p.notes)) {
+    const res = loadNote(f);
     if (res.ok && res.rec.id === id) return f;
   }
   throw new Invalid(`no card with id "${id}"`);
@@ -67,7 +67,7 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
   let text = readFileSync(file, 'utf8');
   for (const [key, value] of Object.entries(patch)) text = patchKey(text, key, value);
   text = patchKey(text, 'updated', today());
-  writeCardFile(file, text);
+  writeNoteFile(file, text);
 }
 
 // ---------------------------------------------------------------- validation
@@ -79,14 +79,14 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
  * and a reference facet rejects a cycle. Every facet is writable and every facet
  * is checked the same way — `project` included. There is no special kind.
  *
- * `records` is only needed for reference facets, so it is optional: a caller
+ * `notes` is only needed for reference facets, so it is optional: a caller
  * writing labels does not have to read the vault first.
  */
 export function checkFacets(
   root: string,
   id: string,
   facets: Record<string, string[]>,
-  records?: Map<string, Rec>,
+  notes?: Map<string, Note>,
 ): void {
   const defs = loadFacets(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
@@ -117,10 +117,10 @@ export function checkFacets(
         if (!Number.isFinite(Number(v))) throw new Invalid(`"${name}" is a number facet, and "${v}" is not a number`);
       }
     }
-    if (isRef(def) && records) {
+    if (isRef(def) && notes) {
       for (const v of values) {
-        if (v === id) throw new Invalid(`"${name}" cannot point at its own record`);
-        if (wouldCycle(id, v, (cur) => records.get(cur)?.facets[name] ?? [])) {
+        if (v === id) throw new Invalid(`"${name}" cannot point at its own note`);
+        if (wouldCycle(id, v, (cur) => notes.get(cur)?.facets[name] ?? [])) {
           throw new Invalid(`"${v}" already reaches "${id}" through "${name}" — that would make a cycle`);
         }
       }
@@ -197,11 +197,11 @@ export interface PatchCardInput {
   baseMtime?: number;
 }
 
-export function patchCard(root: string, id: string, input: PatchCardInput): { mtime: number } {
+export function patchNote(root: string, id: string, input: PatchCardInput): { mtime: number } {
   const file = fileFor(root, id);
   guard(file, input.baseMtime);
 
-  if (input.facets) checkFacets(root, id, input.facets, readAll(paths(root).cards).records);
+  if (input.facets) checkFacets(root, id, input.facets, readAll(paths(root).notes).notes);
   if (input.title !== undefined && !input.title.trim()) throw new Invalid('title cannot be empty');
 
   const patch: Record<string, unknown> = {};
@@ -215,12 +215,12 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
     // Read *after* the guard, so this sees the file the guard just approved
     // rather than the one the client last rendered. Everything the client does
     // not name survives, which is the whole point of the narrow form.
-    const { records } = readAll(paths(root).cards);
+    const { notes } = readAll(paths(root).notes);
     const { name, values, mode = 'set' } = input.facet;
-    const current = records.get(id)?.facets ?? {};
+    const current = notes.get(id)?.facets ?? {};
     const next = applyMode(current[name] ?? [], values, mode);
     const merged = withFacet(current, name, next);
-    checkFacets(root, id, next.length ? { [name]: next } : {}, records);
+    checkFacets(root, id, next.length ? { [name]: next } : {}, notes);
     patch.facets = Object.keys(merged).length ? merged : undefined;
   }
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
@@ -232,14 +232,14 @@ export function patchCard(root: string, id: string, input: PatchCardInput): { mt
     // The body is written verbatim; only this call path may touch it.
     const text = readFileSync(file, 'utf8');
     const { yaml } = split(text);
-    writeCardFile(file, `---\n${yaml}---\n${input.body}`);
+    writeNoteFile(file, `---\n${yaml}---\n${input.body}`);
     patchAll(file, {});
   }
 
   return { mtime: mtimeOf(file) };
 }
 
-export function createCard(
+export function createNote(
   root: string,
   input: {
     title: string;
@@ -259,28 +259,28 @@ export function createCard(
   const title = input.title.trim();
   if (!title) throw new Invalid('title cannot be empty');
   const p = paths(root);
-  mkdirSync(p.cards, { recursive: true });
-  const { records } = readAll(p.cards);
+  mkdirSync(p.notes, { recursive: true });
+  const { notes } = readAll(p.notes);
 
   if (input.fingerprint) {
-    for (const rec of records.values()) {
+    for (const rec of notes.values()) {
       if (rec.source_fingerprint === input.fingerprint) return { id: rec.id, existed: true };
     }
   }
-  const id = input.id ?? uniqueId(slugify(title), new Set(records.keys()));
+  const id = input.id ?? uniqueId(slugify(title), new Set(notes.keys()));
   if (input.id) {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(input.id)) throw new Invalid(`"${input.id}" is not a lowercase slug`);
     // Never silently pick a different id than the caller asked for: something is
     // about to reference this one by name.
-    if (records.has(input.id)) throw new Invalid(`id "${input.id}" is already taken`);
+    if (notes.has(input.id)) throw new Invalid(`id "${input.id}" is already taken`);
   }
   // No relation gets a parameter of its own. `parent` had one, on both this and
   // the CLI, and it was `--facet parent=` spelled twice — so a vault calling its
   // containment relation anything else had a flag for a facet it does not have.
   const facets = input.facets ?? {};
-  if (Object.keys(facets).length) checkFacets(root, id, facets, records);
+  if (Object.keys(facets).length) checkFacets(root, id, facets, notes);
 
-  const text = renderCard({
+  const text = renderNote({
     id,
     title,
     facets,
@@ -290,7 +290,7 @@ export function createCard(
     updated: today(),
     body: input.body ? `\n${input.body}\n` : '\n',
   });
-  writeCardFile(join(p.cards, `${id}.md`), text);
+  writeNoteFile(join(p.notes, `${id}.md`), text);
   return { id };
 }
 
@@ -298,16 +298,16 @@ export function createCard(
  * Delete a card file, and drop every reference that pointed at it so the graph
  * does not keep dangling values. The files are in git, so this is recoverable.
  */
-export function deleteCard(root: string, id: string): { removedEdges: number } {
+export function deleteNote(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
   const p = paths(root);
-  const { records } = readAll(p.cards);
+  const { notes } = readAll(p.notes);
   const refFacets = Object.entries(loadDefs(p.facets))
     .filter(([, def]) => isRef(def))
     .map(([name]) => name);
   let removedEdges = 0;
 
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     if (rec.id === id) continue;
     const facets = { ...rec.facets };
     let touched = false;
@@ -330,7 +330,7 @@ export function deleteCard(root: string, id: string): { removedEdges: number } {
 }
 
 /**
- * Move records along one or more facets, one card at a time.
+ * Move notes along one or more facets, one card at a time.
  *
  * Distinct from `bulkFacet` because the two are different operations that happen
  * to write the same field. "Make these twelve cards say `now`" is uniform, and
@@ -354,10 +354,10 @@ export function bulkMove(
   moves: readonly AxisMove[],
   mode: DragMode,
 ): { changed: number } {
-  const { records } = readAll(paths(root).cards);
+  const { notes } = readAll(paths(root).notes);
   let changed = 0;
   for (const id of ids) {
-    const rec = records.get(id);
+    const rec = notes.get(id);
     if (!rec) continue;
     // A drag across a matrix board crosses two axes and is still one gesture, so
     // both endpoints fold into one map and one write. Writing per axis would bump
@@ -377,14 +377,14 @@ export function bulkMove(
     }
     if (!touched) continue;
     // Every axis is checked before any of them is written.
-    checkFacets(root, id, check, records);
+    checkFacets(root, id, check, notes);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
   return { changed };
 }
 
-/** Set one facet's values on many records at once. */
+/** Set one facet's values on many notes at once. */
 export function bulkFacet(
   root: string,
   ids: string[],
@@ -392,16 +392,16 @@ export function bulkFacet(
   values: string[],
   mode: FacetMode,
 ): { changed: number } {
-  const { records } = readAll(paths(root).cards);
+  const { notes } = readAll(paths(root).notes);
   let changed = 0;
   for (const id of ids) {
-    const rec = records.get(id);
+    const rec = notes.get(id);
     if (!rec) continue;
     const current = rec.facets[facet] ?? [];
     const next = applyMode(current, values, mode);
     if (same(current, next)) continue;
     const facets = withFacet(rec.facets, facet, next);
-    checkFacets(root, id, next.length ? { [facet]: next } : {}, records);
+    checkFacets(root, id, next.length ? { [facet]: next } : {}, notes);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
@@ -412,7 +412,7 @@ export function bulkDelete(root: string, ids: string[]): { deleted: number } {
   let deleted = 0;
   for (const id of ids) {
     try {
-      deleteCard(root, id);
+      deleteNote(root, id);
       deleted++;
     } catch {
       /* already gone */
@@ -459,7 +459,7 @@ export function patchFields(
     const parts = path.split('.').filter(Boolean);
     if (!parts.length) throw new Invalid('a --set needs a field name');
     const top = parts[0]!;
-    if (top === 'id') throw new Invalid('id cannot be changed — other records reference it');
+    if (top === 'id') throw new Invalid('id cannot be changed — other notes reference it');
     touched.add(top);
 
     let value: unknown;
@@ -498,7 +498,7 @@ export function patchFields(
   for (const [k, v] of Object.entries((check.data.facets ?? {}) as Record<string, unknown>)) {
     facets[k] = (Array.isArray(v) ? v : [v]).filter((x) => x != null).map(String);
   }
-  checkFacets(root, id, facets, readAll(paths(root).cards).records);
+  checkFacets(root, id, facets, readAll(paths(root).notes).notes);
 
   for (const key of touched) patchAll(file, { [key]: fm[key] });
   return { mtime: mtimeOf(file) };
@@ -534,7 +534,7 @@ export function putFrontmatter(
   const draft = parsed as Record<string, unknown>;
   if (draft.id !== undefined && draft.id !== id) {
     throw new Invalid(
-      `id cannot be changed here — other records' edges point at "${id}". Delete and recreate instead.`,
+      `id cannot be changed here — other notes' edges point at "${id}". Delete and recreate instead.`,
     );
   }
   draft.id = id;
@@ -546,29 +546,29 @@ export function putFrontmatter(
     );
   }
 
-  const { records } = readAll(paths(root).cards);
+  const { notes } = readAll(paths(root).notes);
   const facets: Record<string, string[]> = {};
   for (const [k, v] of Object.entries((check.data.facets ?? {}) as Record<string, unknown>)) {
     const arr = Array.isArray(v) ? v : [v];
     facets[k] = arr.filter((x) => x != null).map(String);
   }
-  checkFacets(root, id, facets, records);
+  checkFacets(root, id, facets, notes);
 
   // Self-reference and cycles are already refused by `checkFacets`; a value
-  // naming a record that does not exist yet is only a warning, because an agent
+  // naming a note that does not exist yet is only a warning, because an agent
   // may write a card before the one it points at.
   const warnings: string[] = [];
   const defs = loadDefs(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
     if (!isRef(defs[name])) continue;
     for (const v of values) {
-      if (!records.has(v)) warnings.push(`"${name}" names "${v}", which is not a record yet`);
+      if (!notes.has(v)) warnings.push(`"${name}" names "${v}", which is not a note yet`);
     }
   }
 
   // Re-render through the canonical serializer so key order and flow style match
   // every other file, then restore the body untouched.
-  writeCardFile(file, joinFm(serialize(check.data), body));
+  writeNoteFile(file, joinFm(serialize(check.data), body));
   return { mtime: mtimeOf(file), warnings };
 }
 
@@ -599,11 +599,11 @@ export function saveArrangement(
   const dead = (ids: string[]): Set<string> => {
     const out = new Set<string>();
     for (const id of ids) {
-      if (existsSync(join(p.cards, `${id}.md`))) continue;
+      if (existsSync(join(p.notes, `${id}.md`))) continue;
       if (!live) {
         live = new Set<string>();
-        for (const f of listCardFiles(p.cards)) {
-          const res = loadCard(f);
+        for (const f of listNoteFiles(p.notes)) {
+          const res = loadNote(f);
           if (res.ok) live.add(res.rec.id);
         }
       }

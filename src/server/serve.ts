@@ -8,7 +8,7 @@ import {
   isRegistered,
   listVaults,
   looksLikeVault,
-  countCards,
+  countNotes,
   normalise,
   registerVault,
   suggestName,
@@ -19,7 +19,7 @@ import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
-import type { Facets, Rec } from '../schema/types.ts';
+import type { Facets, Note } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, isProject } from '../index/project.ts';
@@ -38,11 +38,11 @@ import {
   bulkDelete,
   bulkFacet,
   bulkMove,
-  createCard,
-  deleteCard,
+  createNote,
+  deleteNote,
   fileFor,
   mtimeOf,
-  patchCard,
+  patchNote,
   saveAsset,
   putFrontmatter,
   saveArrangement,
@@ -92,9 +92,9 @@ function vaultOf(c: Context): string {
 function build(root: string) {
   const p = paths(root);
   const facets = loadFacets(p.facets);
-  const { db, records } = reindex(root);
+  const { db, notes } = reindex(root);
   const views = loadViews(root);
-  return { facets, db, records, views, p };
+  return { facets, db, notes, views, p };
 }
 
 /**
@@ -158,7 +158,7 @@ app.get('/api/vaults/inspect', (c) => {
     path,
     exists,
     isVault: exists && looksLikeVault(path),
-    cards: exists && looksLikeVault(path) ? countCards(path) : 0,
+    cards: exists && looksLikeVault(path) ? countNotes(path) : 0,
     empty: exists ? readdirSync(path).filter((f) => !f.startsWith('.')).length === 0 : true,
     suggestedName: suggestName(path),
     registered: isRegistered(path),
@@ -252,29 +252,29 @@ function resolveSpec(
  */
 app.get('/api/query', (c) => {
   const root = vaultOf(c);
-  const { facets, db, records, views } = load(root);
+  const { facets, db, notes, views } = load(root);
 
   const resolved = resolveSpec(root, c.req.url);
   if ('error' in resolved) return c.json({ error: resolved.error }, 404);
 
-  return c.json(queryPayload({ facets, db, records, views }, resolved.spec, resolved.saved));
+  return c.json(queryPayload({ facets, db, notes, views }, resolved.spec, resolved.saved));
 });
 
 
-app.get('/api/card/:id', (c) => {
+app.get('/api/note/:id', (c) => {
   const root = vaultOf(c);
-  const { records, facets } = load(root);
-  const rec = records.get(c.req.param('id'));
+  const { notes, facets } = load(root);
+  const rec = notes.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such card' }, 404);
-  const project = resolveProject(rec.id, records, root);
+  const project = resolveProject(rec.id, notes, root);
   // One walk, shared by this card's own mark and by every reference it names.
-  const inbound = inboundCounts(records, facets);
+  const inbound = inboundCounts(notes, facets);
   return c.json({
     card: toDTO(rec, {
       facets,
       refCount: inbound.get(rec.id) ?? 0,
-      blockedBy: blockedBy(rec.id, records, facets),
-      unblocks: unblocks(rec.id, records, facets),
+      blockedBy: blockedBy(rec.id, notes, facets),
+      unblocks: unblocks(rec.id, notes, facets),
     }),
     file: relative(root, rec.file),
     // The client sends this back on a write; a mismatch means an agent or an
@@ -285,7 +285,7 @@ app.get('/api/card/:id', (c) => {
     // the chips refreshed on every write and the raw pane never did, so saving
     // it reverted whatever the chips had just done. One read, one mtime.
     yaml: split(readFileSync(rec.file, 'utf8')).yaml ?? '',
-    // Every record this card points at, from any reference facet, resolved to a
+    // Every note this card points at, from any reference facet, resolved to a
     // title. A reference facet stores ids, so without this the panel can only
     // draw `check-technical-challenge-code-submissions-nikola` where the rest of
     // the app draws a title — which is why `parent` had grown a bespoke section
@@ -295,20 +295,20 @@ app.get('/api/card/:id', (c) => {
       Object.entries(rec.facets)
         .filter(([name]) => facets[name]?.type === 'ref')
         .flatMap(([, ids]) => ids)
-        .map((id) => records.get(id))
+        .map((id) => notes.get(id))
         .filter((r) => r !== undefined)
         .map((r) => [
           r.id,
           { title: r.title, isProject: isProject(r), refCount: inbound.get(r.id) ?? 0 },
         ]),
     ),
-    // Each child is a record you click through to, so it carries its own mark —
+    // Each child is a note you click through to, so it carries its own mark —
     // the same three fields `refs` above has always sent.
     //
     // `done` joins them because the panel now draws children and blocked-by as
     // adjacent rows, and "finished" is worth saying on both — a difference in
     // what the server bothered to send would read as a difference between the
-    // records. `blockedBy` has always carried it.
+    // notes. `blockedBy` has always carried it.
     //
     // It does not follow that both lists draw the same *states*. Only a blocker
     // may draw `is-open` in `bad`, because there "open" means in your way; an
@@ -318,13 +318,13 @@ app.get('/api/card/:id', (c) => {
     // vocabulary gave it. `blocked_by` changed ends when the relation did: the
     // edge is stored on the card that is stuck, so what a card *holds up* is the
     // derived half.
-    inbound: inverseOf(rec, records, facets, inbound),
+    inbound: inverseOf(rec, notes, facets, inbound),
     project,
   });
 });
 
 /**
- * The records naming this one, per relation that named its other end.
+ * The notes naming this one, per relation that named its other end.
  *
  * It was two hardcoded lists, `children` and `blocks`, each computed from a
  * facet named here — so a vault renaming either lost the row and a vault's own
@@ -335,15 +335,15 @@ app.get('/api/card/:id', (c) => {
  * before: an editable row and no derived one is correct rather than missing.
  */
 function inverseOf(
-  rec: Rec,
-  records: Map<string, Rec>,
+  rec: Note,
+  notes: Map<string, Note>,
   facets: Facets,
   inbound: Map<string, number>,
 ): Record<string, Inbound[]> {
   const out: Record<string, Inbound[]> = {};
   for (const [via, def] of Object.entries(facets)) {
     if (!isRef(def) || !def.inverse) continue;
-    const naming = [...records.values()]
+    const naming = [...notes.values()]
       .filter((r) => (r.facets[via] ?? []).includes(rec.id))
       .map((r) => ({
         id: r.id,
@@ -379,11 +379,11 @@ function fail(c: Context, err: unknown) {
   return c.json({ error: (err as Error).message }, 500);
 }
 
-app.patch('/api/card/:id', async (c) => {
+app.patch('/api/note/:id', async (c) => {
   const root = vaultOf(c);
   try {
-    const body = (await c.req.json()) as Parameters<typeof patchCard>[2];
-    const res = patchCard(root, c.req.param('id'), body);
+    const body = (await c.req.json()) as Parameters<typeof patchNote>[2];
+    const res = patchNote(root, c.req.param('id'), body);
     bump(root);
     return c.json(res);
   } catch (err) {
@@ -391,11 +391,11 @@ app.patch('/api/card/:id', async (c) => {
   }
 });
 
-app.post('/api/card', async (c) => {
+app.post('/api/note', async (c) => {
   const root = vaultOf(c);
   try {
-    const body = (await c.req.json()) as Parameters<typeof createCard>[1];
-    const res = createCard(root, body);
+    const body = (await c.req.json()) as Parameters<typeof createNote>[1];
+    const res = createNote(root, body);
     bump(root);
     return c.json(res, 201);
   } catch (err) {
@@ -403,10 +403,10 @@ app.post('/api/card', async (c) => {
   }
 });
 
-app.delete('/api/card/:id', (c) => {
+app.delete('/api/note/:id', (c) => {
   const root = vaultOf(c);
   try {
-    const res = deleteCard(root, c.req.param('id'));
+    const res = deleteNote(root, c.req.param('id'));
     bump(root);
     return c.json(res);
   } catch (err) {
@@ -434,7 +434,7 @@ app.post('/api/bulk', async (c) => {
     const ids = b.ids ?? [];
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
-    // A drag, one card at a time: the values are per record, so only the endpoints
+    // A drag, one card at a time: the values are per note, so only the endpoints
     // travel and `nextValues` runs here.
     else if (b.op === 'move') {
       res = bulkMove(root, ids, b.moves ?? [], b.dragMode ?? 'replace');
@@ -512,7 +512,7 @@ app.delete('/api/view/:name', (c) => {
  * it directly. The write validates first and refuses rather than
  * saving something the indexer would then reject.
  */
-app.put('/api/card/:id/frontmatter', async (c) => {
+app.put('/api/note/:id/frontmatter', async (c) => {
   const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as { yaml: string; baseMtime?: number };
@@ -524,7 +524,7 @@ app.put('/api/card/:id/frontmatter', async (c) => {
   }
 });
 
-app.post('/api/card/:id/asset', async (c) => {
+app.post('/api/note/:id/asset', async (c) => {
   const root = vaultOf(c);
   try {
     const id = c.req.param('id');
@@ -634,7 +634,7 @@ const watched = new Map<string, ReturnType<typeof watch>>();
 function ensureWatched(root: string): void {
   if (watched.has(root)) return;
   const p = paths(root);
-  const w = watch([p.cards, p.views, p.facets], {
+  const w = watch([p.notes, p.views, p.facets], {
     ignoreInitial: true,
     ignored: (path: string) =>
       path.includes('.tmp-') || path.endsWith('.index.db') || path.endsWith('.enrich.db'),

@@ -8,7 +8,7 @@ import { dirname } from 'node:path';
  * change without a migration.
  */
 const SCHEMA = `
-CREATE TABLE records (
+CREATE TABLE notes (
   id            TEXT PRIMARY KEY,
   title         TEXT NOT NULL,
   file          TEXT NOT NULL,
@@ -59,7 +59,7 @@ export function openDb(path: string, { fresh = false } = {}): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const hasRecords = db
-    .prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='records'")
+    .prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='notes'")
     .get() as { n: number };
   if (!hasRecords.n) db.exec(SCHEMA);
   return db;

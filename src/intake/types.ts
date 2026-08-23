@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Rec } from '../schema/types.ts';
+import type { Note } from '../schema/types.ts';
 
 /**
  * Intake: what has happened elsewhere that the vault does not know about.
@@ -76,7 +76,7 @@ export interface ChannelReport {
    */
   fetched: boolean;
   /** Why it was not fetched, or what to do instead. */
-  note?: string;
+  reason?: string;
   /**
    * True when the limit stopped the run before the window did, so there is more
    * behind the cursor this report does not show.
@@ -98,7 +98,7 @@ export interface ChannelReport {
 export interface IntakeContext {
   root: string;
   db: DatabaseSync;
-  records: Map<string, Rec>;
+  notes: Map<string, Note>;
   /** `source_fingerprint` → card ids. */
   fingerprints: Map<string, string[]>;
   /** A link's raw text → card ids carrying it. */

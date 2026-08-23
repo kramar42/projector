@@ -31,7 +31,7 @@ export function channelNames(): string[] {
 
 export const DEFAULT_LIMIT = 25;
 
-type VaultRead = Pick<IntakeContext, 'root' | 'db' | 'records' | 'fingerprints' | 'links'>;
+type VaultRead = Pick<IntakeContext, 'root' | 'db' | 'notes' | 'fingerprints' | 'links'>;
 
 /**
  * The vault, read once for all channels.
@@ -41,11 +41,11 @@ type VaultRead = Pick<IntakeContext, 'root' | 'db' | 'records' | 'fingerprints' 
  * paying for it per channel would be paying three times for one answer.
  */
 function readVault(root: string): VaultRead {
-  const { db, records } = reindex(root);
+  const { db, notes } = reindex(root);
   const fingerprints = new Map<string, string[]>();
   const links = new Map<string, string[]>();
 
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     if (rec.source_fingerprint) {
       fingerprints.set(rec.source_fingerprint, [...(fingerprints.get(rec.source_fingerprint) ?? []), rec.id]);
     }
@@ -53,7 +53,7 @@ function readVault(root: string): VaultRead {
       links.set(l.raw, [...(links.get(l.raw) ?? []), rec.id]);
     }
   }
-  return { root, db, records, fingerprints, links };
+  return { root, db, notes, fingerprints, links };
 }
 
 export interface SweepOptions {
@@ -202,8 +202,8 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     // itself rather than as an empty "since".
     const from = r.cursor ? `since ${ago(r.cursor) || r.cursor}` : 'no watermark — default window';
     L.push(`## ${r.channel}  (${from})`);
-    if (!r.fetched) L.push(`   not fetched by pj: ${r.note ?? 'no reason given'}`);
-    else if (r.note) L.push(`   ${r.note}`);
+    if (!r.fetched) L.push(`   not fetched by pj: ${r.reason ?? 'no reason given'}`);
+    else if (r.reason) L.push(`   ${r.reason}`);
 
     for (const c of r.candidates) {
       L.push(`   ${line(c.title, 66)}  ${c.fingerprint}`);

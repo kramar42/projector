@@ -2,7 +2,7 @@ import { useEnrichment } from '../enrichment.tsx';
 import { plural } from '../plural.ts';
 import { useHue } from '../vocabulary.tsx';
 import { LINK_KINDS, linkHue } from '../links.ts';
-import type { CardDTO } from '../types.ts';
+import type { NoteDTO } from '../types.ts';
 
 /**
  * The one card component, rendered at two sizes inside a board column, a canvas
@@ -67,7 +67,7 @@ function LinkChip({ kind, linkRef, label }: { kind: string; linkRef: string; lab
     d?.title,
     ...(d?.fields ?? []).map((f) => `${f.k}: ${f.v}`),
     res?.error,
-    res?.note,
+    res?.reason,
   ]
     .filter(Boolean)
     .join('\n');
@@ -107,7 +107,7 @@ export function CardBody({
   showFacets,
   onOpen,
 }: {
-  card: CardDTO;
+  card: NoteDTO;
   /** Which facets render as chips on the face — the view's `chips`. */
   showFacets: string[];
   onOpen?: (id: string) => void;
@@ -163,29 +163,29 @@ export function CardBody({
 }
 
 /**
- * What a record is, in one glyph — read off the record rather than declared on
+ * What a note is, in one glyph — read off the note rather than declared on
  * it. `▣` owns config its members inherit; `○` something else names it; `•`
  * nothing does.
  *
  * There used to be a stored `kind` saying "card" or "node". It asserted what
  * these two counts already show, and it was never structural: what kept a
- * grouping record off a board was the status filter, not the kind. C11 — nothing
+ * grouping note off a board was the status filter, not the kind. C11 — nothing
  * derivable is also stored.
  */
 export function markOf(card: Marked): { glyph: string; role: Role; means: string } {
   // One sentence for the count, so the project and container branches cannot
-  // drift: a table draws the number for any record with references, projects
+  // drift: a table draws the number for any note with references, projects
   // included, and the face carries the same fact only in this tooltip.
   const references =
     card.refCount === 1
-      ? '1 record references this one.'
-      : `${plural(card.refCount, 'record')} reference this one.`;
+      ? '1 note references this one.'
+      : `${plural(card.refCount, 'note')} reference this one.`;
   if (card.isProject) {
     return {
       glyph: GLYPH_OF.project,
       role: 'project',
       means:
-        'A project: other records inherit its repos and instructions.' +
+        'A project: other notes inherit its repos and instructions.' +
         (card.refCount > 0 ? ` ${references}` : ''),
     };
   }
@@ -207,10 +207,10 @@ export type Role = (typeof ROLES)[number];
  * That is how the ribbon came to count a *different* trichotomy from the one the
  * marks draw — see `tallyRoles` below.
  *
- * `○` means "some other record names this one", across every reference facet —
+ * `○` means "some other note names this one", across every reference facet —
  * which is what `nodesIn` has always said a node is: "being named by `parent` and
- * being named by `project` make a record a node equally". The mark used to read a
- * count of the `parent` facet alone, so the two disagreed about any record named
+ * being named by `project` make a note a node equally". The mark used to read a
+ * count of the `parent` facet alone, so the two disagreed about any note named
  * only through `blocks` or `project`.
  *
  * `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's ink
@@ -226,30 +226,30 @@ export const GLYPH_OF: Record<Role, string> = {
 
 /**
  * A tally of one role, in words — for a readout that counts roles rather than
- * describing a single record, which is what `markOf`'s `means` is for.
+ * describing a single note, which is what `markOf`'s `means` is for.
  *
  * Through `plural` because the app has one way of making a count and its noun
- * agree, and "1 records something else is part of" is what not using it reads
+ * agree, and "1 notes something else is part of" is what not using it reads
  * like. The clause after the noun is the same sentence `markOf` uses, turned
  * around: "nothing is part of this one" becomes "nothing is part of".
  */
 export function tallyMeans(role: Role, n: number): string {
   if (role === 'project') return plural(n, 'project');
-  // Phrased from the record's side rather than the referrer's: "1 record something
+  // Phrased from the note's side rather than the referrer's: "1 note something
   // references" is what putting the referrer first reads like. Through `plural`
-  // because the count needs a noun to be counting — "4 named by another record"
+  // because the count needs a noun to be counting — "4 named by another note"
   // leaves open what four of them are.
-  const noun = plural(n, 'record');
+  const noun = plural(n, 'note');
   return role === 'container' ? `${noun} named by another` : `${noun} named by nothing`;
 }
 
 /**
- * Tally a set of records by what their mark says.
+ * Tally a set of notes by what their mark says.
  *
  * This exists because the collapsed rail was answering the same question from a
  * different source. It read the `type` computed axis, whose `node` value means
  * "named by **any** reference facet", while the mark was drawn from a count of the
- * `parent` facet alone — so the two disagreed on every record named only through
+ * `parent` facet alone — so the two disagreed on every note named only through
  * `blocks` or `project`. Measured on the 27-card fixture, the rail reported
  * 3 / 4 / 20 beside the glyphs `▣ ○ •` while the app drew 3 / 1 / 23: a ribbon
  * saying "4 linked nodes" next to the single `○` on screen.
@@ -269,9 +269,9 @@ export function tallyRoles(cards: Marked[]): Record<Role, number> {
 /**
  * The two facts a mark is read from.
  *
- * Narrower than `CardDTO` on purpose: a reference facet resolves to a title and
+ * Narrower than `NoteDTO` on purpose: a reference facet resolves to a title and
  * these two, not to a whole card, and the panel drawing its own two-way
- * `isProject ? ▣ : ·` was how `○` went missing from every reference — a record
+ * `isProject ? ▣ : ·` was how `○` went missing from every reference — a note
  * you are looking at *because* something names it is referenced by definition, so
  * the one mark that should have been commonest never appeared at all.
  */
@@ -294,18 +294,18 @@ export function RecordMark({ card }: { card: Marked }) {
 /**
  * The mark, as the control that changes what it says.
  *
- * A record *is* a project by carrying a `project:` block, and the mark is the one
+ * A note *is* a project by carrying a `project:` block, and the mark is the one
  * place the app already states that. So the toggle is the mark: there is no
  * separate button whose label has to restate the glyph beside it, and no chance
  * of the two disagreeing. Clicking `·` or `○` adds the block; clicking `▣`
- * removes it, and the record falls back to whichever of the two it earns from its
+ * removes it, and the note falls back to whichever of the two it earns from its
  * child count.
  */
 export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => void }) {
   const { glyph, role, means } = markOf(card);
   // What it is, then what a click makes it. Two facts, one line each, and the
   // second names the consequence rather than the mechanism — "members stop
-  // inheriting" is what actually happens to other records; "removes the project
+  // inheriting" is what actually happens to other notes; "removes the project
   // block" is how.
   const next = card.isProject
     ? 'Click: stop being a project — its members stop inheriting these repos and instructions'
@@ -329,11 +329,11 @@ export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => 
  * A face says one thing about itself in its shape: whether it is stuck.
  *
  * It used to say two — a project took a `hue-purple` left edge beside the blocked
- * card's `bad` one. That edge was the record mark's job stated twice, and the mark
- * states it in every place a record appears rather than only on a face. So every
+ * card's `bad` one. That edge was the note mark's job stated twice, and the mark
+ * states it in every place a note appears rather than only on a face. So every
  * card is now the same rectangle until something blocks it.
  */
-function cls(card: CardDTO, base: string): string {
+function cls(card: NoteDTO, base: string): string {
   return [base, card.blockedBy.some((b) => !b.done) ? 'is-blocked' : '']
     .filter(Boolean)
     .join(' ');

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useEnrichment } from '../enrichment.tsx';
 import { IconButton } from './Button.tsx';
 import { linkHue } from '../links.ts';
-import type { CardDTO } from '../types.ts';
+import type { NoteDTO } from '../types.ts';
 
 /**
  * One link, shown with whatever the server managed to resolve about it.
@@ -40,7 +40,7 @@ import type { CardDTO } from '../types.ts';
  * "no fetcher for this kind" note went with it: it explained an absence that
  * stopped having a consequence the moment the link worked without one.
  */
-function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove: () => void }) {
+function LinkRow({ link, onRemove }: { link: NoteDTO['links'][number]; onRemove: () => void }) {
   const { get } = useEnrichment();
   const res = get(link.raw);
   const d = res?.data;
@@ -98,7 +98,7 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
           offer no click at all, so this never appears beside a working label. */}
       {d?.command && !href && <code className="linkrow-cmd">{d.command}</code>}
 
-      {/* A real failure, which is worth a line. `res.note` is not rendered: it
+      {/* A real failure, which is worth a line. `res.reason` is not rendered: it
           only ever said a kind has no fetcher, which stopped being a fact the
           reader has to act on once the link became clickable without one. */}
       {res?.error && (
@@ -123,7 +123,7 @@ export function LinkEditor({
   links,
   onChange,
 }: {
-  links: CardDTO['links'];
+  links: NoteDTO['links'];
   onChange: (next: string[]) => void;
 }) {
   const [adding, setAdding] = useState('');
@@ -149,7 +149,7 @@ export function LinkEditor({
         onChange={(e) => setAdding(e.target.value)}
         onKeyDown={(e) => {
           // Escape stops here, as it does at the title editor, the facet's
-          // `+ new` field and the record picker. It did not, and this was the one
+          // `+ new` field and the note picker. It did not, and this was the one
           // silent data-loss path in the panel: the panel's guard is a `window`
           // listener, a typed-but-uncommitted link sets no dirty flag, so Escape
           // closed the whole card and took the text with it without asking.

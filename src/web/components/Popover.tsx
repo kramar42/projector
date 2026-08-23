@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom';
  * positioned inside it is clipped at the rail's edge — which is why the vault
  * dropdown was cut off. A portal plus `position: fixed` from the trigger's own
  * rect is the general fix, and it is needed four times over: the vault switcher,
- * the face chip picker, the focus record picker and the sort key picker.
+ * the face chip picker, the focus note picker and the sort key picker.
  *
  * Placement flips above the trigger when there is no room below and more room
  * above, and the width is clamped so a long list cannot run off screen.

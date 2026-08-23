@@ -1,6 +1,6 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
-import type { CardDetail, Meta, QueryResponse, Resolved } from './types.ts';
+import type { NoteDetail, Meta, QueryResponse, Resolved } from './types.ts';
 
 /**
  * A thin typed fetch. No client-side cache: the server owns the cache and
@@ -57,7 +57,7 @@ export interface PatchCard {
   title?: string;
   links?: string[];
   body?: string;
-  /** `null` removes the block, so the record stops being a project. */
+  /** `null` removes the block, so the note stops being a project. */
   project?: Record<string, unknown> | null;
   /**
    * ONE facet, applied server-side to what is on disk.
@@ -88,19 +88,19 @@ export const api = {
    * a saved view and an ad-hoc query are the same request.
    */
   query: (search: string) => get<QueryResponse>(`/api/query${search}`),
-  card: (id: string) => get<CardDetail>(`/api/card/${encodeURIComponent(id)}`),
+  card: (id: string) => get<NoteDetail>(`/api/note/${encodeURIComponent(id)}`),
 
-  patchCard: (id: string, patch: PatchCard) =>
-    req<{ mtime: number }>('PATCH', `/api/card/${encodeURIComponent(id)}`, patch),
+  patchNote: (id: string, patch: PatchCard) =>
+    req<{ mtime: number }>('PATCH', `/api/note/${encodeURIComponent(id)}`, patch),
 
-  createCard: (input: {
+  createNote: (input: {
     title: string;
     parent?: string;
     facets?: Record<string, string[]>;
-  }) => req<{ id: string }>('POST', '/api/card', input),
+  }) => req<{ id: string }>('POST', '/api/note', input),
 
-  deleteCard: (id: string) =>
-    req<{ removedEdges: number }>('DELETE', `/api/card/${encodeURIComponent(id)}`),
+  deleteNote: (id: string) =>
+    req<{ removedEdges: number }>('DELETE', `/api/note/${encodeURIComponent(id)}`),
 
   bulk: (input: {
     ids: string[];
@@ -123,7 +123,7 @@ export const api = {
   putFrontmatter: (id: string, yaml: string, baseMtime?: number) =>
     req<{ mtime: number; warnings: string[] }>(
       'PUT',
-      `/api/card/${encodeURIComponent(id)}/frontmatter`,
+      `/api/note/${encodeURIComponent(id)}/frontmatter`,
       { yaml, baseMtime },
     ),
 
@@ -138,7 +138,7 @@ export const api = {
 
   /**
    * *Save current as…*, and updating a saved view — the same call either way.
-   * `search` is the page's own query string, so the file records what was on
+   * `search` is the page's own query string, so the file notes what was on
    * screen rather than a second interpretation of it.
    */
   saveView: (name: string, search: string, title?: string) =>
@@ -147,7 +147,7 @@ export const api = {
   deleteView: (name: string) => req<{ ok: true }>('DELETE', `/api/view/${encodeURIComponent(name)}`),
 
   uploadAsset: async (id: string, file: File): Promise<{ path: string }> => {
-    const res = await fetch(`/api/card/${encodeURIComponent(id)}/asset`, {
+    const res = await fetch(`/api/note/${encodeURIComponent(id)}/asset`, {
       method: 'POST',
       headers: { 'Content-Type': file.type },
       body: await file.arrayBuffer(),

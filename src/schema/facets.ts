@@ -56,7 +56,7 @@ export const STRUCTURAL: readonly string[] = ['type', 'values', 'open', 'single'
  *
  * It is also where the constraints live: `open` decides whether a new value is
  * accepted, `single` whether more than one may be held at once, and `type` what
- * the values *are* — a label from the declared list, a record id, a date or a
+ * the values *are* — a label from the declared list, a note id, a date or a
  * number.
  *
  * An absent or empty file is a valid vault: what comes back is the built-ins and

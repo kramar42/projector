@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.ts';
 import { RecordMark } from './CardBody.tsx';
-import type { CardDTO } from '../types.ts';
+import type { NoteDTO } from '../types.ts';
 
 /**
- * Pick a record.
+ * Pick a note.
  *
- * Used wherever a value *is* a record: setting a parent, and adding a value to a
+ * Used wherever a value *is* a note: setting a parent, and adding a value to a
  * reference facet. Projects sort first, since they are the usual landmarks —
  * which is also what makes this the right control for `project` without knowing
  * that facet by name.
@@ -16,7 +16,7 @@ const CAP = 40;
 
 export function RecordPicker({
   exclude = [],
-  placeholder = 'search records…',
+  placeholder = 'search notes…',
   clearLabel,
   onPick,
   onCancel,
@@ -36,14 +36,14 @@ export function RecordPicker({
   onPick: (id: string | null) => void;
   onCancel?: () => void;
 }) {
-  const [all, setAll] = useState<CardDTO[]>([]);
+  const [all, setAll] = useState<NoteDTO[]>([]);
   const [q, setQ] = useState('');
 
   useEffect(() => {
-    // An empty query is every record, which is exactly the list to pick from —
+    // An empty query is every note, which is exactly the list to pick from —
     // no saved view needed, and it no longer depends on one existing.
     api.query('').then(
-      (d) => setAll(Object.values(d.cards)),
+      (d) => setAll(Object.values(d.notes)),
       () => setAll([]),
     );
   }, []);
@@ -51,7 +51,7 @@ export function RecordPicker({
   // Held before the slice, so a capped list can say so. Chained into one
   // expression, `matches.length === CAP` cannot tell a cap from exactly that many
   // genuine matches — and the reader who scrolls to the end of forty and stops
-  // has no way to know the record they wanted was the forty-first.
+  // has no way to know the note they wanted was the forty-first.
   const found = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const skip = new Set(exclude);
@@ -95,7 +95,7 @@ export function RecordPicker({
                 is exactly the 0.8em of this row's `--text-body` that the shared
                 rule computes — but it carried neither the per-glyph optical
                 nudge nor, more to the point, the `means` string. The picker is
-                where a reader is choosing between records, so it is the one
+                where a reader is choosing between notes, so it is the one
                 place the mark most needs to say what it means. */}
             <RecordMark card={r} />
             <span className="truncate picker-title">{r.title}</span>
@@ -108,7 +108,7 @@ export function RecordPicker({
       </div>
       {/* Outside the scroller: inside it this sits below the fold until you have
           already scrolled all forty, which is exactly the reader who has
-          concluded the record is not there. A bare count, because the app is
+          concluded the note is not there. A bare count, because the app is
           counting — mono and tabular, like every other number it reports. */}
       {found.length > matches.length && (
         <div className="quietcount picker-capped">

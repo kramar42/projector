@@ -1,12 +1,12 @@
 import { fallbackHref, fallbackLabel } from '../schema/links.ts';
 import { jiraConfig } from '../sources/jira.ts';
-import type { Rec } from '../schema/types.ts';
+import type { Note } from '../schema/types.ts';
 import { isProject } from '../index/project.ts';
 import { bucketOf } from '../schema/facets.ts';
 import type { Facets } from '../schema/types.ts';
 
-/** What the web app receives for one record. Everything here is derived, never guessed (C8). */
-export interface CardDTO {
+/** What the web app receives for one note. Everything here is derived, never guessed (C8). */
+export interface NoteDTO {
   id: string;
   title: string;
   isProject: boolean;
@@ -33,16 +33,16 @@ export interface CardDTO {
   buckets: Record<string, string[]>;
   updated: string | null;
   /**
-   * How many records name this one, across every reference facet.
+   * How many notes name this one, across every reference facet.
    *
-   * The number the record mark is read from. It counted the `parent` facet alone
+   * The number the note mark is read from. It counted the `parent` facet alone
    * and was called `childCount`, which is why the mark and the `type`
    * computed axis — which has always meant "named by *any* reference facet" —
-   * could disagree about the same record.
+   * could disagree about the same note.
    */
   refCount: number;
   /**
-   * The records this one is waiting on, each saying which relation it came along
+   * The notes this one is waiting on, each saying which relation it came along
    * — a vault may declare several, and a single list has to distinguish them.
    */
   blockedBy: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
@@ -50,7 +50,7 @@ export interface CardDTO {
 }
 
 /** Bucketed values for every facet that declares buckets. */
-function bucketsOf(rec: Rec, facets: Facets, today: string): Record<string, string[]> {
+function bucketsOf(rec: Note, facets: Facets, today: string): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const [name, def] of Object.entries(facets)) {
     if (!def.buckets?.length) continue;
@@ -90,7 +90,7 @@ export function excerptOf(body: string, max = 160): string {
 }
 
 export function toDTO(
-  rec: Rec,
+  rec: Note,
   extra: {
     refCount?: number;
     blockedBy?: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
@@ -99,7 +99,7 @@ export function toDTO(
     /** Overridable so a test does not depend on the day it runs. */
     today?: string;
   } = {},
-): CardDTO {
+): NoteDTO {
   return {
     id: rec.id,
     title: rec.title,

@@ -143,7 +143,7 @@ function SortRow({
 // ---------------------------------------------------------------- face
 
 /**
- * Which facets show on a record. One row: the list is a popover so a long
+ * Which facets show on a note. One row: the list is a popover so a long
  * selection cannot push the filter panel off screen.
  *
  * A board and a canvas draw them as chips, a table draws them as columns — one
@@ -176,7 +176,7 @@ export function FacetsSection({
         title="which facets this view surfaces — a reference facet also draws on a canvas, and the first one lays it out"
         render={() => (
           <>
-            <div className="pop-head">{table ? 'Columns' : 'Shown on a record'}</div>
+            <div className="pop-head">{table ? 'Columns' : 'Shown on a note'}</div>
             {available.map((f) => (
               <label key={f.name} className="pop-check">
                 <input

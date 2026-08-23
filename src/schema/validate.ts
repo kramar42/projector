@@ -1,20 +1,20 @@
 import { existsSync } from 'node:fs';
 import { isKnownKind } from './links.ts';
 import { isRef } from './facets.ts';
-import type { Facets, Issue, Rec } from './types.ts';
+import type { Facets, Issue, Note } from './types.ts';
 import { isProject } from '../index/project.ts';
 import { wouldCycle } from '../index/refs.ts';
 import { resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
 
 /**
- * Validate every record against the loaded vocabulary and the graph.
+ * Validate every note against the loaded vocabulary and the graph.
  *
  * Collects every problem rather than stopping at the first — a card file is
  * something you fix in one pass, so the report has to be complete.
  */
 export function validate(
-  records: Map<string, Rec>,
+  notes: Map<string, Note>,
   facets: Facets,
   dataRoot: string,
   extra: {
@@ -37,7 +37,7 @@ export function validate(
     });
   }
 
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     const at = (field: string, message: string, severity: Issue['severity'] = 'error') =>
       issues.push({ severity, file: rec.file, id: rec.id, field, message });
 
@@ -58,8 +58,8 @@ export function validate(
           }
         }
       }
-      // A single-valued facet held twice is not a record in two columns, it is a
-      // record in no coherent state — and a derived signal reading one of the
+      // A single-valued facet held twice is not a note in two columns, it is a
+      // note in no coherent state — and a derived signal reading one of the
       // two values disagrees with the board showing the other.
       if (def.single && values.length > 1) {
         at(
@@ -67,7 +67,7 @@ export function validate(
           `"${facet}" holds one value at a time, and this has ${values.length}: ${values.join(', ')}`,
         );
       }
-      // A reference facet's values are record ids. A value that resolves to
+      // A reference facet's values are note ids. A value that resolves to
       // nothing is a warning rather than an error — an agent may write a card
       // before the one it points at exists.
       // A typed facet's values have to *be* what the type says, or every
@@ -88,10 +88,10 @@ export function validate(
       }
       if (isRef(def)) {
         for (const v of values) {
-          if (v === rec.id) at(`facets.${facet}`, `"${facet}" points at its own record`);
-          else if (!records.has(v)) {
-            at(`facets.${facet}`, `"${facet}" names "${v}", which is not a record`, 'warning');
-          } else if (wouldCycle(rec.id, v, (cur) => records.get(cur)?.facets[facet] ?? [])) {
+          if (v === rec.id) at(`facets.${facet}`, `"${facet}" points at its own note`);
+          else if (!notes.has(v)) {
+            at(`facets.${facet}`, `"${facet}" names "${v}", which is not a note`, 'warning');
+          } else if (wouldCycle(rec.id, v, (cur) => notes.get(cur)?.facets[facet] ?? [])) {
             at(`facets.${facet}`, `"${facet}" forms a cycle through "${v}"`);
           }
         }
@@ -123,7 +123,7 @@ export function validate(
 
   // There is deliberately no "this card has no project" warning here any more.
   //
-  // It was one, exempting a project record and reporting the rest. The exemption
+  // It was one, exempting a project note and reporting the rest. The exemption
   // was policy — a project is configuration rather than work — and policy moved
   // to the view that asks the question, which is where you can see and change
   // it. A validator has no view, so generalising the warning meant reporting
@@ -131,14 +131,14 @@ export function validate(
   // filed. The `triage` axis answers this now, with `views/triage.yaml`
   // narrowing it, and `pj check` is left judging whether a *file* is valid.
 
-  // A project value has to name a record that actually carries configuration.
+  // A project value has to name a note that actually carries configuration.
   // Stronger than the generic reference check above, which only asks whether the
-  // value names a record at all.
+  // value names a note at all.
   const projectKeys = new Set<string>();
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     if (rec.project) projectKeys.add(rec.id);
   }
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     for (const v of rec.facets.project ?? []) {
       if (!projectKeys.has(v)) {
         issues.push({
@@ -146,7 +146,7 @@ export function validate(
           file: rec.file,
           id: rec.id,
           field: 'facets.project',
-          message: `project "${v}" has no record carrying a matching project: block`,
+          message: `project "${v}" has no note carrying a matching project: block`,
         });
       }
     }

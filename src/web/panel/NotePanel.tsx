@@ -6,10 +6,10 @@ import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
-import type { CardDetail, Meta } from '../types.ts';
+import type { NoteDetail, Meta } from '../types.ts';
 
 /**
- * The open record.
+ * The open note.
  *
  * The frame composes: it holds the scrim, the sticky title row, the one banner
  * and the order of the blocks. Everything that owns state, a write or a load is
@@ -55,7 +55,7 @@ function Instructions({ blocks }: { blocks: string[] }) {
   );
 }
 
-export function CardPanel({
+export function NotePanel({
   id,
   meta,
   onClose,
@@ -66,7 +66,7 @@ export function CardPanel({
   onClose: () => void;
   onOpen: (id: string) => void;
 }) {
-  const { data, error, reload } = useLive<CardDetail>(() => api.card(id), [id]);
+  const { data, error, reload } = useLive<NoteDetail>(() => api.card(id), [id]);
   const [editTitle, setEditTitle] = useState<string | null>(null);
 
   /**
@@ -134,7 +134,7 @@ export function CardPanel({
    * destructive direction that write is `project: null`, which reaches
    * `doc.delete('project')` and takes the whole block: the repos `pj work` clones,
    * the branch template it names them from, the jira key and every instruction
-   * block, plus whatever the records downstream were inheriting. The panel's own
+   * block, plus whatever the notes downstream were inheriting. The panel's own
    * comment already claimed weight follows blast radius; this is the control it was
    * not true of.
    *
@@ -152,7 +152,7 @@ export function CardPanel({
       const ok = confirm(
         `Stop "${card.title}" being a project?\n\n` +
           'This deletes its project block — the repos, the branch template, the jira key ' +
-          'and any instruction blocks — and the records that name it stop inheriting them.\n\n' +
+          'and any instruction blocks — and the notes that name it stop inheriting them.\n\n' +
           'The file is in git, so this is recoverable.',
       );
       if (!ok) return;
@@ -167,7 +167,7 @@ export function CardPanel({
         {/*
           The one part of the panel that does not scroll, so it carries what a
           card face and a table row carry: the mark, then the title. Same glyph,
-          same order, no word labels — this line should read the way the record
+          same order, no word labels — this line should read the way the note
           reads everywhere else.
         */}
         <div className="panel-top">
@@ -285,7 +285,7 @@ export function CardPanel({
            *   facets      the properties — bounded, and the commonest edit
            *   body        what the card says — unbounded, and why you came
            *   links       what it points at — unbounded
-           *   refs        the records it names, and the records that name it
+           *   refs        the notes it names, and the notes that name it
            *   workshop    the raw file, what it inherits, and the rare action
            *
            * Two of those moved. **Body is above Links** because the rule cannot
@@ -294,7 +294,7 @@ export function CardPanel({
            * carry enough context for a Claude session to start unbriefed, and
            * that context is the prose, not the link list.
            *
-           * **Refs is one tier** holding every axis that points at a record and
+           * **Refs is one tier** holding every axis that points at a note and
            * both derived lists that point back. `Blocks` and `Blocked by` were
            * two names two letters apart with the whole body between them.
            *

@@ -56,7 +56,7 @@ function declarations(prop: string): { value: string; line: number }[] {
 }
 
 /**
- * The record mark is sized in `em` on purpose: it sits beside text that is
+ * The note mark is sized in `em` on purpose: it sits beside text that is
  * 12.5px in a table, 13px on a card and 16px in the panel, so one relative rule
  * serves all three where a step from the scale could serve only one.
  */

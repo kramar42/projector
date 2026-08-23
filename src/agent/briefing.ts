@@ -1,4 +1,4 @@
-import { renderContext, type CardContext } from './context.ts';
+import { renderContext, type NoteContext } from './context.ts';
 import type { RepoResult } from './worktree.ts';
 
 /**
@@ -10,7 +10,7 @@ import type { RepoResult } from './worktree.ts';
  * what was deliberately left out.
  */
 export function buildBriefing(input: {
-  ctx: CardContext;
+  ctx: NoteContext;
   workspace: string;
   branch: string;
   repos: RepoResult[];

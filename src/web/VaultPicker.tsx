@@ -86,7 +86,7 @@ export function VaultPicker({
       <div className="vaultgate-card">
         <h1>Open a vault</h1>
         <p className="vaultgate-lede">
-          A vault is a folder holding <code>cards/</code>, <code>facets.yaml</code> and{' '}
+          A vault is a folder holding <code>notes/</code>, <code>facets.yaml</code> and{' '}
           <code>views/</code>. Point at one you already have, or at an empty folder to set one up.
         </p>
         {reason && <div className="banner is-conflict">{reason}</div>}
@@ -105,7 +105,7 @@ export function VaultPicker({
                 >
                   <span className="vaultrow-name">{v.name}</span>
                   <span className="vaultrow-meta">
-                    {v.exists ? `${v.cards ?? 0} cards` : 'folder is gone'}
+                    {v.exists ? `${v.notes ?? 0} notes` : 'folder is gone'}
                   </span>
                   <span className="vaultrow-path">{v.path}</span>
                 </button>
@@ -120,7 +120,7 @@ export function VaultPicker({
             <input
               autoFocus
               value={path}
-              placeholder="/Users/you/notes/cards-vault  or  ~/vault"
+              placeholder="/Users/you/notes/my-vault  or  ~/vault"
               onChange={(e) => setPath(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter' || !inspection) return;
@@ -139,20 +139,20 @@ export function VaultPicker({
             <div className="vaultgate-verdict">
               {inspection.isVault ? (
                 <>
-                  <b className="tone-good">A vault.</b> {plural(inspection.cards, 'card')}.{' '}
+                  <b className="tone-good">A vault.</b> {plural(inspection.notes, 'card')}.{' '}
                   {inspection.registered ? 'Already in your list.' : ''}
                 </>
               ) : inspection.exists && !inspection.empty ? (
                 <>
                   <b className="tone-bad">Not a vault, and not empty.</b> Pick an empty folder, or one
-                  that already holds <code>cards/</code>.
+                  that already holds <code>notes/</code>.
                 </>
               ) : (
                 <>
                   <b className="tone-warn">
                     {inspection.exists ? 'Empty folder.' : 'Does not exist yet.'}
                   </b>{' '}
-                  Opening it will create <code>cards/</code>, <code>facets.yaml</code> and{' '}
+                  Opening it will create <code>notes/</code>, <code>facets.yaml</code> and{' '}
                   <code>views/</code>.
                 </>
               )}

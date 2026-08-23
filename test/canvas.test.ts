@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCard, } from '../src/schema/card.ts';
-import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
+import { loadNote, } from '../src/schema/note.ts';
+import { createNote, deleteNote, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, treeLayout } from '../src/web/views/layout.ts';
-import type { CardDTO } from '../src/web/types.ts';
+import type { NoteDTO } from '../src/web/types.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,14 +22,14 @@ import { tmpdir } from 'node:os';
 
 function scratchVault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(pathJoin(tmpdir(), 'pj-set-'));
-  mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+  mkdirSync(pathJoin(root, 'notes'), { recursive: true });
   writeFileSync(
     pathJoin(root, 'facets.yaml'),
     'status: { values: [planning, done], open: false, single: true }\ndue: { type: date, single: true }\n',
     'utf8',
   );
   writeFileSync(
-    pathJoin(root, 'cards', 'x.md'),
+    pathJoin(root, 'notes', 'x.md'),
     '---\nid: x\n# a comment worth keeping\ntitle: X\nfacets: { status: [planning] }\n---\n\nbody\n',
     'utf8',
   );
@@ -41,14 +41,14 @@ test('--set writes a nested field, and YAML values carry structure', () => {
   try {
     patchFields(root, 'x', { 'project.jira': 'PROJ' });
     patchFields(root, 'x', { 'project.repos': '[{path: ~/a, base: main}]' });
-    const rec = loadCard(pathJoin(root, 'cards', 'x.md'));
+    const rec = loadNote(pathJoin(root, 'notes', 'x.md'));
     assert.ok(rec.ok);
     // A flat key=value cannot express a list of maps, which is why the value is
     // parsed as YAML rather than split on a separator.
     assert.equal(rec.rec.project?.jira, 'PROJ');
     assert.deepEqual(rec.rec.project?.repos, [{ path: '~/a', base: 'main' }]);
     // Only the touched key is rewritten, so everything else survives.
-    const text = readFileSync(pathJoin(root, 'cards', 'x.md'), 'utf8');
+    const text = readFileSync(pathJoin(root, 'notes', 'x.md'), 'utf8');
     assert.match(text, /# a comment worth keeping/);
     assert.equal(text.endsWith('\nbody\n'), true);
   } finally {
@@ -60,11 +60,11 @@ test('--set project={} makes a project and --set project= unmakes one', () => {
   const { root, cleanup } = scratchVault();
   try {
     patchFields(root, 'x', { project: '{}' });
-    const made = loadCard(pathJoin(root, 'cards', 'x.md'));
+    const made = loadNote(pathJoin(root, 'notes', 'x.md'));
     assert.ok(made.ok);
     assert.equal(isProject(made.rec), true);
     patchFields(root, 'x', { project: '' });
-    const after = loadCard(pathJoin(root, 'cards', 'x.md'));
+    const after = loadNote(pathJoin(root, 'notes', 'x.md'));
     assert.ok(after.ok);
     assert.equal(after.rec.project, undefined);
   } finally {
@@ -76,7 +76,7 @@ test('--set is validated against the result, not the input', () => {
   const { root, cleanup } = scratchVault();
   try {
     // The same vocabulary rules as any other write: a single facet cannot hold
-    // two, and `id` is refused because other records reference it.
+    // two, and `id` is refused because other notes reference it.
     assert.throws(() => patchFields(root, 'x', { 'facets.status': '[planning, done]' }), /one value at a time/);
     assert.throws(() => patchFields(root, 'x', { id: 'y' }), /id cannot be changed/);
     assert.throws(() => patchFields(root, 'x', { 'facets.nope': '[a]' }), /unknown facet/);
@@ -90,25 +90,25 @@ test('--set is validated against the result, not the input', () => {
 test('a caller-supplied id is honoured or refused, never silently changed', () => {
   const { root, cleanup } = scratchVault();
   try {
-    assert.equal(createCard(root, { title: 'Whatever', id: 'chosen' }).id, 'chosen');
+    assert.equal(createNote(root, { title: 'Whatever', id: 'chosen' }).id, 'chosen');
     // Something is about to reference this by name, so a collision is an error
     // rather than a quietly suffixed id.
-    assert.throws(() => createCard(root, { title: 'Again', id: 'chosen' }), /already taken/);
-    assert.throws(() => createCard(root, { title: 'Bad', id: 'Not A Slug' }), /lowercase slug/);
+    assert.throws(() => createNote(root, { title: 'Again', id: 'chosen' }), /already taken/);
+    assert.throws(() => createNote(root, { title: 'Bad', id: 'Not A Slug' }), /lowercase slug/);
   } finally {
     cleanup();
   }
 });
 
-test('deleting a record drops every reference pointing at it', () => {
+test('deleting a note drops every reference pointing at it', () => {
   const { root, cleanup } = scratchVault();
   try {
     writeFileSync(pathJoin(root, 'facets.yaml'), 'parent: { type: ref, single: true }\n', 'utf8');
-    createCard(root, { title: 'Container', id: 'box' });
-    createCard(root, { title: 'Inside', id: 'thing', facets: { parent: ['box'] } });
-    const { removedEdges } = deleteCard(root, 'box');
+    createNote(root, { title: 'Container', id: 'box' });
+    createNote(root, { title: 'Inside', id: 'thing', facets: { parent: ['box'] } });
+    const { removedEdges } = deleteNote(root, 'box');
     assert.equal(removedEdges, 1);
-    const left = loadCard(pathJoin(root, 'cards', 'thing.md'));
+    const left = loadNote(pathJoin(root, 'notes', 'thing.md'));
     assert.ok(left.ok);
     // A dangling reference is what removing the file by hand leaves behind.
     assert.equal(left.rec.facets.parent, undefined);
@@ -120,18 +120,18 @@ test('deleting a record drops every reference pointing at it', () => {
 
 // ---------------------------------------------------------------- clusters
 
-const face = (id: string): CardDTO =>
+const face = (id: string): NoteDTO =>
   ({ id, title: id, isProject: false, facets: {}, buckets: {}, links: [], progress: null,
-     excerpt: '', body: '', updated: null, refCount: 0, blockedBy: [], unblocks: [] }) as CardDTO;
+     excerpt: '', body: '', updated: null, refCount: 0, blockedBy: [], unblocks: [] }) as NoteDTO;
 
-test('a record in several groups is clustered into the first the axis declares', () => {
+test('a note in several groups is clustered into the first the axis declares', () => {
   const nodes = [face('a'), face('b'), face('c')];
   const groups = [
     { value: 'now', ids: ['a', 'b'] },
     { value: 'month', ids: ['b'] },
   ];
   const assign = assignClusters(nodes, groups);
-  // A board draws `b` in both columns; a canvas cannot, because a record has one
+  // A board draws `b` in both columns; a canvas cannot, because a note has one
   // position. First declared wins, and the sidebar says how many that applies to.
   assert.equal(assign.get('b'), 'now');
   assert.equal(assign.get('a'), 'now');

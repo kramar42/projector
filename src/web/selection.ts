@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 
 /**
- * Which records a gesture has picked out, for the shapes that have to remember.
+ * Which notes a gesture has picked out, for the shapes that have to remember.
  *
  * Selection was a `useState` inside `BoardView` and a `BulkBar` declared beside
  * it, so a board could act on twelve cards at once and the other two shapes could
@@ -75,7 +75,7 @@ export function ranged(
  * The URL keeps the whole set, so switching to a shape that filters some of them
  * out and back again restores them. What the bulk bar counts and writes is this:
  * "3 selected" has to mean three you can see, and a bulk write must not reach a
- * record the query never returned — the same rule the canvas's `context` split
+ * note the query never returned — the same rule the canvas's `context` split
  * exists for.
  */
 export function visibleSelection(
@@ -88,7 +88,7 @@ export function visibleSelection(
 export interface Selection {
   ids: ReadonlySet<string>;
   /**
-   * Toggle one record. `index` is its position among the drawn rows, and becomes
+   * Toggle one note. `index` is its position among the drawn rows, and becomes
    * the anchor a later `extend` measures from — the shape that has no rows to
    * count simply omits it.
    */

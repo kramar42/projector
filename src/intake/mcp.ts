@@ -14,7 +14,7 @@ import type { Channel, ChannelReport } from './types.ts';
  * hold anyway.
  */
 
-function manual(name: string, defaultDays: number, note: string): Channel {
+function manual(name: string, defaultDays: number, reason: string): Channel {
   return {
     name,
     defaultDays,
@@ -26,7 +26,7 @@ function manual(name: string, defaultDays: number, note: string): Channel {
         // moves this one, once the agent has actually looked.
         nextCursor: null,
         fetched: false,
-        note,
+        reason,
         candidates: [],
         skipped: [],
       };

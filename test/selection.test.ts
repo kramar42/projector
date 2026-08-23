@@ -90,7 +90,7 @@ test('a shift-click on a row that is not there changes nothing', () => {
  * The URL keeps the whole selection so that switching to a shape which filters
  * some of it out and back again restores it. What the bulk bar counts and writes
  * is the part on screen: "3 selected" has to mean three you can see, and a bulk
- * write must not reach a record the query never returned.
+ * write must not reach a note the query never returned.
  */
 test('the bar acts on the part of the selection this shape draws', () => {
   const drawn = ['a', 'b', 'c'];

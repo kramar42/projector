@@ -57,7 +57,7 @@ export const jiraChannel: Channel = {
         cursor: ctx.cursor,
         nextCursor: null,
         fetched: false,
-        note: res.reason,
+        reason: res.reason,
         candidates: [],
         skipped: [],
       };

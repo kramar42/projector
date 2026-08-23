@@ -8,7 +8,7 @@ import { Button } from '../components/Button.tsx';
 import { GLYPH_OF, ROLES, tallyMeans, tallyRoles } from '../components/CardBody.tsx';
 import { type Patch } from '../query.ts';
 import { clearFilters, setSearch } from '../../view/intents.ts';
-import type { CardDTO, Edit, Meta, QueryResponse, ViewSpec } from '../types.ts';
+import type { NoteDTO, Edit, Meta, QueryResponse, ViewSpec } from '../types.ts';
 
 /**
  * The sidebar *is* the view.
@@ -33,7 +33,7 @@ export function Sidebar({
   edit,
   onSwitchVault,
   onAddVault,
-  onOpenCard,
+  onOpenNote,
   collapsed,
   onToggleCollapsed,
 }: {
@@ -45,7 +45,7 @@ export function Sidebar({
    * writes through `edit` — that gap is what the two filter bugs lived in.
    */
   search: string;
-  /** The query half of it, which is what a save records. */
+  /** The query half of it, which is what a save notes. */
   wire: string;
   /** Non-spec URL keys — switching to a saved view, mainly. */
   patch: (p: Patch) => void;
@@ -53,25 +53,25 @@ export function Sidebar({
   edit: Edit;
   onSwitchVault: (path: string) => void;
   onAddVault: () => void;
-  onOpenCard: (id: string) => void;
+  onOpenNote: (id: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
   const spec = data?.spec;
   /**
-   * What the collapsed ribbon reports: the records on screen, tallied by what
+   * What the collapsed ribbon reports: the notes on screen, tallied by what
    * their own mark says.
    *
    * It used to read the `type` computed axis and name three of its values, which
    * was wrong twice over: it named a facet in the UI (C4), and it answered the
    * question from a different source than the marks did — `type`'s `node` counts a
-   * record named by *any* reference facet, where a drawn `○` then meant the
+   * note named by *any* reference facet, where a drawn `○` then meant the
    * `parent` facet alone. The mark has since taken the broader meaning, so the two
    * agree on the definition; counting through `markOf` is what stops them drifting
    * apart again, and it names no facet.
    */
   const marks = tallyRoles(
-    (data?.ids ?? []).map((id) => data!.cards[id]).filter((c): c is CardDTO => Boolean(c)),
+    (data?.ids ?? []).map((id) => data!.notes[id]).filter((c): c is NoteDTO => Boolean(c)),
   );
 
   if (collapsed) {
@@ -125,7 +125,7 @@ export function Sidebar({
           </button>
         </div>
         <div className="rail-stats">
-          {meta.counts.records} records · {meta.counts.projects} projects
+          {meta.counts.notes} notes · {meta.counts.projects} projects
         </div>
       </div>
 
@@ -147,7 +147,7 @@ export function Sidebar({
         />
         <ShapeSection data={data} edit={edit} />
         <FacetsSection meta={meta} data={data} edit={edit} />
-        <FocusSection meta={meta} data={data} edit={edit} onOpenCard={onOpenCard} />
+        <FocusSection meta={meta} data={data} edit={edit} onOpenNote={onOpenNote} />
       </div>
 
       {/* The only scrolling region. */}
@@ -196,7 +196,7 @@ function ActiveStats({
           <>
             {' '}
             ·{' '}
-            <span title="a record has one position, so a card in several groups is drawn in the first the axis declares">
+            <span title="a note has one position, so a card in several groups is drawn in the first the axis declares">
               {data.placements - data.total} drawn in their first group only
             </span>
           </>

@@ -1,7 +1,7 @@
 /**
  * A count and its noun, agreeing.
  *
- * `${n} record(s)` is a sentence nobody would write by hand, and the app said it
+ * `${n} note(s)` is a sentence nobody would write by hand, and the app said it
  * in five places. It is not only ugly: a message assembled from fragments cannot
  * be read aloud correctly, and it is the shape that has to be unpicked first if
  * these strings are ever translated.

@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { appRoot, looksLikeVault, paths, resolvePath } from './config.ts';
 
 /**
- * Vaults — a directory of cards, opened the way Obsidian opens a folder.
+ * Vaults — a directory of notes, opened the way Obsidian opens a folder.
  *
  * There is no built-in location and nothing named `data` anywhere in here: a
  * vault is wherever the user points at. The registry below exists so the browser
@@ -37,7 +37,7 @@ export interface VaultEntry {
 export interface VaultInfo extends VaultEntry {
   exists: boolean;
   /** Card count, or null when the vault is missing. */
-  cards: number | null;
+  notes: number | null;
 }
 
 function readRegistry(): VaultEntry[] {
@@ -69,8 +69,8 @@ export function normalise(p: string): string {
  * that text was a copy of the `projector` skill, which an agent already has, and
  * two places saying the same thing is one place to drift.
  */
-export function countCards(path: string): number {
-  const dir = paths(path).cards;
+export function countNotes(path: string): number {
+  const dir = paths(path).notes;
   if (!existsSync(dir)) return 0;
   try {
     return readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').length;
@@ -84,7 +84,7 @@ export function listVaults(): VaultInfo[] {
     .map((v) => ({
       ...v,
       exists: existsSync(v.path),
-      cards: existsSync(v.path) ? countCards(v.path) : null,
+      notes: existsSync(v.path) ? countNotes(v.path) : null,
     }))
     .sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt));
 }
@@ -138,7 +138,7 @@ export function forgetVault(path: string): boolean {
  * The name prefilled when a vault is opened. Deliberately just the folder name.
  *
  * This used to keep a list of leaf names considered too generic to be a name —
- * `data`, `vault`, `cards` — and silently borrow the parent's name instead. It is
+ * `data`, `vault`, `notes` — and silently borrow the parent's name instead. It is
  * gone on purpose: the rule guessed for the user, the list of what counts as
  * generic was never right for anyone but its author, and its output was a *name*
  * the user could see and change anyway. A suggestion that is wrong in a visible
@@ -168,7 +168,7 @@ export function initVault(
     const entries = readdirSync(path).filter((f) => !f.startsWith('.'));
     if (entries.length) throw new Error(`${path} is not empty and does not look like a vault`);
   }
-  mkdirSync(p.cards, { recursive: true });
+  mkdirSync(p.notes, { recursive: true });
   mkdirSync(p.assets, { recursive: true });
   mkdirSync(p.views, { recursive: true });
 

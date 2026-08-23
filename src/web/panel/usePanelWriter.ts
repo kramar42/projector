@@ -27,11 +27,11 @@ import {
 function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: string[] }> {
   switch (p.call) {
     case 'patch':
-      return api.patchCard(id, p.body);
+      return api.patchNote(id, p.body);
     case 'frontmatter':
       return api.putFrontmatter(id, p.yaml, p.baseMtime);
     case 'delete':
-      return api.deleteCard(id).then(() => ({}));
+      return api.deleteNote(id).then(() => ({}));
   }
 }
 
@@ -57,7 +57,7 @@ function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: str
  * - **`press*` members return `void` and never reject**; failure lands in
  *   `status`. `void` is not assignable to `Promise<void>`, so handing one to an
  *   editor's `onSave` does not compile.
- * - **`save*` members reject and record nothing.** Their controls report for
+ * - **`save*` members reject and note nothing.** Their controls report for
  *   themselves, and a panel banner offering a Reload that does nothing while the
  *   editor is dirty is a lie. One rule: a control that can report for itself does
  *   not also raise a banner.
@@ -65,7 +65,7 @@ function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: str
  * - The panel is mounted with `key={id}`, so this hook never sees an id change
  *   and owns no reset logic.
  */
-export interface CardWriter {
+export interface NoteWriter {
   /**
    * `mode` defaults to `set`, which is right for a control that replaces an axis
    * — a date, a single-valued toggle, a parent. A control that toggles one value
@@ -100,7 +100,7 @@ export function usePanelWriter(o: {
    */
   held: { body: boolean; frontmatter: boolean };
   onGone: () => void;
-}): CardWriter {
+}): NoteWriter {
   const [status, setStatus] = useState(idleStatus);
   const read = useRef(o.mtime);
   const wrote = useRef<number | null>(null);

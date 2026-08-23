@@ -1,7 +1,7 @@
 ## Where the model landed
 
 Relations became reference facets and `edges:` left the file format; `kind` went, since carrying a
-`status` is what makes a record work and being named by any reference facet is what makes it a
+`status` is what makes a note work and being named by any reference facet is what makes it a
 container;
 `chips` and `edges.show` became one `show`; `connect` moved onto the shape; `groupBy` draws bands on a
 canvas. Then facets got a `type` — `label · ref · date · number` — so `due` is an ordinary facet, range
@@ -13,17 +13,17 @@ documents it was designed in are gone: the design is the code now, and a second 
 only drift.
 
 One decision worth remembering: **`parent` is `single: true`.** Nothing had ever created a second
-parent and no record carried one, so it states what was already true. Flip the flag if a card genuinely
+parent and no note carried one, so it states what was already true. Flip the flag if a card genuinely
 needs to be part of two things.
 
 ## Not now
 
-- **The expression language.** Moving the five remaining pseudo-facets — `type`, `blocked`, `triage`,
-  `staleness`, `linked` — into `facets.yaml` needs one, and its hardest case cannot be a per-record
-  expression at all: `blocked` requires the aggregate pass over every record's blocking references.
+- **The expression language.** Moving the five remaining computed axes — `type`, `blocked`, `triage`,
+  `staleness`, `linked` — into `facets.yaml` needs one, and its hardest case cannot be a per-note
+  expression at all: `blocked` requires the aggregate pass over every note's blocking references.
   Since P8 the case is weaker anyway: each of the five computes over something a facet *cannot*
-  describe — a `project:` block, the reference graph, an absence, a record's links, the app-written
-  `updated` — so `PSEUDO` has a coherent residual job rather than being a holding pen.
+  describe — a `project:` block, the reference graph, an absence, a note's links, the app-written
+  `updated` — so `COMPUTED` has a coherent residual job rather than being a holding pen.
 - **Per-column summaries.** Not blocked on the expression language, which was the wrong reason: a
   built-in summary is a *named aggregate* — count, sum, average, min, max — and needs no parser, and
   `type: number` now exists so the arithmetic ones would mean something.
@@ -31,7 +31,7 @@ needs to be part of two things.
   Two better reasons to wait. **It would not retire `projectRollups`**: `direct`/`total` is a
   transitive walk over the membership graph, not an aggregate over the visible result set, so a summary
   mechanism sits beside the special case instead of absorbing it — the opposite of what P6–P8 each did.
-  And **there is nothing to aggregate**: one ordered facet, no record carrying it, no numeric facet, so
+  And **there is nothing to aggregate**: one ordered facet, no note carrying it, no numeric facet, so
   the arithmetic summaries would ship with zero users. What is left — count with a predicate — mostly
   duplicates the counts already on a board column, a table section and the project table.
 
@@ -52,7 +52,7 @@ needs to be part of two things.
   Not now because `staleness` covers the common case and nothing has asked for the rest.
 
 - **`container: true`, when the proxy breaks.** Three semantics are inferred from `single: true` on a
-  reference facet: which records are siblings, which relation the bulk bar's "set …" button writes, and
+  reference facet: which notes are siblings, which relation the bulk bar's "set …" button writes, and
   — for `single` alone, any type — which axes `pj log` narrates. `single` is a *structural* property
   doing semantic work, and it is a good proxy: one value is what makes a container a container, and a
   card holding one value on an axis is a card whose change to it is a transition.
@@ -66,7 +66,7 @@ needs to be part of two things.
   express something no vault has needed is how the vocabulary grows keys nobody sets. Add it the first
   time a vault has two containers and the wrong one wins.
 
-- **`subtitle: true`, and the last two per-facet affordances.** `RecordPicker` draws a record's project
+- **`subtitle: true`, and the last two per-facet affordances.** `RecordPicker` draws a note's project
   under its title, and the projects table has a column of them; both read the built-in `project` facet
   directly. They are legal — being known by name is what built-in means — but they are the only two
   places left where one axis has UI no other axis can have.
@@ -135,7 +135,7 @@ needs to be part of two things.
 
 P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the
 model is presently known to be wrong, and the next useful work is likely to be *using* it rather than
-changing it — a handful of `pj check` warnings left, `energy` set on a few records, `owner` on one,
+changing it — a handful of `pj check` warnings left, `energy` set on a few notes, `owner` on one,
 no deadlines set anywhere.
 
 Two things the audit of 2026-08-21 turned up that belong here rather than in the model. **`blocked_by`

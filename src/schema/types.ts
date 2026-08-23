@@ -5,10 +5,10 @@ export interface ProjectRepo {
 }
 
 /**
- * Project configuration, carried by any record. A record's project key is its
+ * Project configuration, carried by any note. A note's project key is its
  * `id` — there is deliberately no separate `key`, because a second name for the
  * same thing is a second thing to keep in step, and the `project` facet stores
- * record ids exactly like every other reference in the model.
+ * note ids exactly like every other reference in the model.
  */
 export interface ProjectBlock {
   repos?: ProjectRepo[];
@@ -18,7 +18,7 @@ export interface ProjectBlock {
    * How work on this project is done, inherited by its members.
    *
    * Configuration, so it lives with the rest of it. It used to be a `##
-   * Instructions` heading in the record's body, matched by regex — the one place
+   * Instructions` heading in the note's body, matched by regex — the one place
    * prose was load-bearing, where renaming a heading silently stopped
    * inheritance with nothing to check against.
    */
@@ -33,15 +33,15 @@ export interface Link {
 }
 
 /**
- * One record file. Facet values are always arrays, uniformly.
+ * One note file. Facet values are always arrays, uniformly.
  *
- * There is no `kind` and no `edges`. A record is not a class of thing: whether it
+ * There is no `kind` and no `edges`. A note is not a class of thing: whether it
  * is work is whether it carries a lifecycle, and whether it contains anything is
- * whether anything references it — both readable from the record itself, so
+ * whether anything references it — both readable from the note itself, so
  * neither is stored (C11). Every relation is a facet declared `type: ref`, which
  * is why `parent` filters and groups exactly as `priority` does.
  */
-export interface Rec {
+export interface Note {
   id: string;
   title: string;
   facets: Record<string, string[]>;
@@ -57,14 +57,14 @@ export interface Rec {
 
 /** Project config after merging every `project:` block on the membership chain. */
 export interface ResolvedProject {
-  /** The id of the nearest project record. */
+  /** The id of the nearest project note. */
   key: string;
   repos: ProjectRepo[];
   jira?: string;
   branch?: string;
   /** Root-first, so the most specific advice reads last. */
   instructions: string[];
-  /** Project record ids from root to nearest, for briefing provenance. */
+  /** Project note ids from root to nearest, for briefing provenance. */
   chain: string[];
 }
 
@@ -76,7 +76,7 @@ export interface ResolvedProject {
  * the engine reads a facet in exactly two places, `valuesOf` and `rankOf`.
  *
  * - `label`  a member of a declared vocabulary. Sorts in declared order.
- * - `ref`    a record id in this vault, so the facet is also traversable.
+ * - `ref`    a note id in this vault, so the facet is also traversable.
  * - `date`   `YYYY-MM-DD`. Sorts chronologically, filters by bucket or by range.
  * - `number` sorts numerically rather than as text.
  */
@@ -136,13 +136,13 @@ export interface FacetDef {
    */
   expected?: boolean;
   /**
-   * While this axis is unsatisfied, a record carrying it cannot proceed.
+   * While this axis is unsatisfied, a note carrying it cannot proceed.
    *
    * What *unsatisfied* means follows from the type, which is how the rest of the
    * vocabulary already works — the type picks the editor's control and the
    * validator's check, and it picks this too:
    *
-   * - a **reference** facet blocks while any record it names is not `closed`;
+   * - a **reference** facet blocks while any note it names is not `closed`;
    * - any other facet blocks while it holds a value at all.
    *
    * That second rule is not a shortcut. A person does not *complete*: marking
@@ -174,7 +174,7 @@ export interface FacetDef {
    * `source` and is what any undeclared axis gets.
    *
    * On a **reference** axis this is a *line* colour and not a chip colour: its
-   * values draw as records rather than as values, so the family reaches the
+   * values draw as notes rather than as values, so the family reaches the
    * canvas edge and nothing else. `src/web/hue.ts` is where that is decided.
    */
   hue?: string;

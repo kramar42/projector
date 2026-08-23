@@ -19,7 +19,7 @@
  *
  * Two families stay out. **Red** means a failure here, and `.linkchip.is-failed`
  * is a state every prefix has to survive without becoming an error. **Purple** is
- * the accent — the app speaking, and the record mark — which is exactly what this
+ * the accent — the app speaking, and the note mark — which is exactly what this
  * change is spending less of.
  *
  * `url` names no family, and that is the Hints Are Hueless Rule's reasoning: it is

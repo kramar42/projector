@@ -1,17 +1,17 @@
 import { isRef } from '../schema/facets.ts';
-import type { Facets, Rec } from '../schema/types.ts';
+import type { Facets, Note } from '../schema/types.ts';
 
 /**
- * How records point at each other, and how to walk it.
+ * How notes point at each other, and how to walk it.
  *
  * One module, because there is one kind of relation. A **reference facet** holds
- * record ids as its values (`type: ref` in `facets.yaml`), which makes it both
+ * note ids as its values (`type: ref` in `facets.yaml`), which makes it both
  * classifiable and traversable — it filters, groups and drags like `priority`,
  * and it lays out a canvas, walks under `focus` and refuses a cycle like an edge
  * used to. There is no second mechanism and therefore no branch anywhere below.
  */
 
-/** Which way to walk. `out` follows a record's own references; `in` finds the records naming it. */
+/** Which way to walk. `out` follows a note's own references; `in` finds the notes naming it. */
 export type { Dir } from '../schema/vocabulary.ts';
 
 export interface Ref {
@@ -22,45 +22,45 @@ export interface Ref {
 /**
  * The references a reference facet holds.
  *
- * No per-facet knowledge: a value that resolves to a record is a reference, and
- * one that does not is a dangling value the validator reports. A record naming
+ * No per-facet knowledge: a value that resolves to a note is a reference, and
+ * one that does not is a dangling value the validator reports. A note naming
  * itself is dropped rather than becoming a self-loop.
  */
-export function refsOf(facet: string, records: Map<string, Rec>): Ref[] {
+export function refsOf(facet: string, notes: Map<string, Note>): Ref[] {
   const out: Ref[] = [];
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     for (const value of rec.facets[facet] ?? []) {
-      if (value !== rec.id && records.has(value)) out.push({ src: rec.id, dst: value });
+      if (value !== rec.id && notes.has(value)) out.push({ src: rec.id, dst: value });
     }
   }
   return out;
 }
 
 /**
- * How many records name each one, across every reference facet.
+ * How many notes name each one, across every reference facet.
  *
- * This is what makes a record a *node* rather than a plain card: things hang off
+ * This is what makes a note a *node* rather than a plain card: things hang off
  * it. Counted across all reference facets at once, because being named by
- * `parent` and being named by `project` make a record a node equally.
+ * `parent` and being named by `project` make a note a node equally.
  *
- * A count rather than a set, because the record mark needs both: `○` is drawn
+ * A count rather than a set, because the note mark needs both: `○` is drawn
  * from whether the number is non-zero, and the mark's own tooltip says what the
  * number is. Deriving `nodesIn` from this rather than computing it separately is
  * what stops the two disagreeing — which is exactly how the collapsed rail came
  * to report four nodes on a vault that drew one.
  */
-export function inboundCounts(records: Map<string, Rec>, facets: Facets): Map<string, number> {
+export function inboundCounts(notes: Map<string, Note>, facets: Facets): Map<string, number> {
   const counts = new Map<string, number>();
   for (const [facet, def] of Object.entries(facets)) {
     if (!isRef(def)) continue;
-    for (const { dst } of refsOf(facet, records)) counts.set(dst, (counts.get(dst) ?? 0) + 1);
+    for (const { dst } of refsOf(facet, notes)) counts.set(dst, (counts.get(dst) ?? 0) + 1);
   }
   return counts;
 }
 
-/** Every record that some other record names through a reference facet. */
-export function nodesIn(records: Map<string, Rec>, facets: Facets): Set<string> {
-  return new Set(inboundCounts(records, facets).keys());
+/** Every note that some other note names through a reference facet. */
+export function nodesIn(notes: Map<string, Note>, facets: Facets): Set<string> {
+  return new Set(inboundCounts(notes, facets).keys());
 }
 
 
@@ -76,7 +76,7 @@ export interface Adjacency {
  * what that *means* — container, blocker, membership — is the relation's
  * business rather than the engine's.
  */
-export function adjacency(via: string, records: Map<string, Rec>): Adjacency {
+export function adjacency(via: string, notes: Map<string, Note>): Adjacency {
   const outward = new Map<string, string[]>();
   const inward = new Map<string, string[]>();
   const add = (m: Map<string, string[]>, k: string, v: string) => {
@@ -84,7 +84,7 @@ export function adjacency(via: string, records: Map<string, Rec>): Adjacency {
     if (list) list.push(v);
     else m.set(k, [v]);
   };
-  for (const { src, dst } of refsOf(via, records)) {
+  for (const { src, dst } of refsOf(via, notes)) {
     add(outward, src, dst);
     add(inward, dst, src);
   }

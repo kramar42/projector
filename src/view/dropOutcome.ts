@@ -214,8 +214,8 @@ export function connectOutcome(input: {
   /** The relation the canvas lays out by, as sent in the payload. */
   layout: string | null;
   /**
-   * What a record already says for this relation. A lookup rather than an array,
-   * because which record *owns* the edge is decided below — a hierarchy flips it.
+   * What a note already says for this relation. A lookup rather than an array,
+   * because which note *owns* the edge is decided below — a hierarchy flips it.
    */
   valuesOf: (id: string) => readonly string[];
 }): DropIntent {
@@ -234,7 +234,7 @@ export function connectOutcome(input: {
 
   // A single-valued relation *moves*: the value it already holds is the `from`, so
   // `nextValues` takes it off and puts the new one on. A multi-valued one adds,
-  // keeping whatever the record already says.
+  // keeping whatever the note already says.
   return single
     ? { kind: 'facet', ids: [owner], moves: [{ facet: relation, from: current[0] ?? '', to }], mode: 'replace' }
     : { kind: 'facet', ids: [owner], moves: [{ facet: relation, from: '', to }], mode: 'add' };

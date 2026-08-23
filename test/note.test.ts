@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, patchKey, serialize, split } from '../src/schema/frontmatter.ts';
-import { parseCard, renderCard } from '../src/schema/card.ts';
+import { parseNote, renderNote } from '../src/schema/note.ts';
 import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
 import { LINK_KINDS, fallbackHref, parseLink } from '../src/schema/links.ts';
 import { validate } from '../src/schema/validate.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
-import type { Rec } from '../src/schema/types.ts';
+import type { Note } from '../src/schema/types.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -36,10 +36,10 @@ test('join and split round-trip any body without adding or eating a newline', ()
 
 test('render preserves the body byte-for-byte, including no leading blank line', () => {
   const original = 'Tight body, no blank line after the fence.\n';
-  const res = parseCard('/f.md', `---\nid: x\nkind: card\ntitle: T\n---\n${original}`);
+  const res = parseNote('/f.md', `---\nid: x\nkind: card\ntitle: T\n---\n${original}`);
   assert.ok(res.ok);
   assert.equal(res.rec.body, original);
-  assert.equal(split(renderCard(res.rec)).body, original);
+  assert.equal(split(renderNote(res.rec)).body, original);
 });
 
 test('a file with no frontmatter is left alone', () => {
@@ -64,7 +64,7 @@ test('patchKey restores canonical key order for a newly added key', () => {
 });
 
 test('a facet the vocabulary does not know is preserved, not dropped', () => {
-  const res = parseCard('/f.md', '---\nid: x\ntitle: T\nfacets: { invented: [a] }\n---\n');
+  const res = parseNote('/f.md', '---\nid: x\ntitle: T\nfacets: { invented: [a] }\n---\n');
   assert.ok(res.ok);
   assert.deepEqual(res.rec.facets.invented, ['a']);
 });
@@ -89,14 +89,14 @@ Body.
 `;
 
 test('a scalar facet value is lifted to an array', () => {
-  const res = parseCard('/f.md', CARD);
+  const res = parseNote('/f.md', CARD);
   assert.ok(res.ok);
   assert.deepEqual(res.rec.facets.status, ['active']);
   assert.deepEqual(res.rec.facets.priority, ['now']);
 });
 
 test('links are parsed into kind and ref', () => {
-  const res = parseCard('/f.md', CARD);
+  const res = parseNote('/f.md', CARD);
   assert.ok(res.ok);
   assert.deepEqual(
     res.rec.links.map((l) => l.kind),
@@ -105,15 +105,15 @@ test('links are parsed into kind and ref', () => {
 });
 
 test('a bad id is reported, not thrown', () => {
-  const res = parseCard('/f.md', '---\nid: Not A Slug\nkind: card\ntitle: T\n---\n');
+  const res = parseNote('/f.md', '---\nid: Not A Slug\nkind: card\ntitle: T\n---\n');
   assert.equal(res.ok, false);
   if (!res.ok) assert.match(res.errors.join(' '), /slug/);
 });
 
 test('render then parse round-trips', () => {
-  const res = parseCard('/f.md', CARD);
+  const res = parseNote('/f.md', CARD);
   assert.ok(res.ok);
-  const again = parseCard('/f.md', renderCard({ ...res.rec }));
+  const again = parseNote('/f.md', renderNote({ ...res.rec }));
   assert.ok(again.ok);
   assert.equal(again.rec.title, 'Demo');
   // A relation survives the round trip as what it is: a facet value.
@@ -206,23 +206,23 @@ test('uniqueId suffixes collisions', () => {
 
 // ---------------------------------------------------------------- kind and due
 
-test('a record declares no class of thing; only id and title are required', () => {
-  const bare = parseCard('/c.md', '---\nid: c\ntitle: C\n---\n');
+test('a note declares no class of thing; only id and title are required', () => {
+  const bare = parseNote('/c.md', '---\nid: c\ntitle: C\n---\n');
   assert.ok(bare.ok);
   assert.deepEqual(bare.rec.facets, {});
   // `kind` used to live here, asserting card-vs-node. What it gated is read off
-  // the record now: no `status` keeps it off a status-filtered board, and being
+  // the note now: no `status` keeps it off a status-filtered board, and being
   // named as a `parent` is what makes it a container.
   assert.equal('kind' in bare.rec.facets, false);
 });
 
 test('a yaml date in a facet round-trips as a date, not a timestamp', () => {
-  const res = parseCard('/d.md', '---\nid: d\ntitle: D\nfacets: { due: [2026-09-01] }\n---\n');
+  const res = parseNote('/d.md', '---\nid: d\ntitle: D\nfacets: { due: [2026-09-01] }\n---\n');
   assert.ok(res.ok);
   // Storage is uniform — the file holds a string and the *type* governs what it
   // means — so a YAML date must not arrive as an ISO timestamp.
   assert.deepEqual(res.rec.facets.due, ['2026-09-01']);
-  assert.match(renderCard({ ...res.rec }), /due: \[2026-09-01\]/);
+  assert.match(renderNote({ ...res.rec }), /due: \[2026-09-01\]/);
 });
 
 // ---------------------------------------------------------------- validation
@@ -234,8 +234,8 @@ function facetsFile(body: string): string {
   return f;
 }
 
-function recordOf(text: string): Rec {
-  const res = parseCard('/x.md', text);
+function recordOf(text: string): Note {
+  const res = parseNote('/x.md', text);
   assert.ok(res.ok);
   return res.rec;
 }

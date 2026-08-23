@@ -5,7 +5,7 @@ import { paths, resolveCliVault, resolvePath } from '../config.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { declaredFacets, loadFacets } from '../schema/facets.ts';
-import { listCardFiles } from '../schema/card.ts';
+import { listNoteFiles } from '../schema/note.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
 import { validateViews, validateVocabulary } from '../view/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
@@ -16,7 +16,7 @@ import { queryPayload } from '../view/payload.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
-import { cardContext, renderContext } from '../agent/context.ts';
+import { noteContext, renderContext } from '../agent/context.ts';
 import {
   advance,
   candidateCount,
@@ -34,7 +34,7 @@ import { resetWatermark } from '../intake/db.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
-import { createCard, deleteCard, patchCard, patchFields } from '../server/mutate.ts';
+import { createNote, deleteNote, patchNote, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
 /**
@@ -98,11 +98,11 @@ const HELP = `pj — projector CLI${vaultNote}
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
      --dir out|in|both --depth n] [--shape s]
      [--show f,f]
-     [--json]                                      list records, grouped
+     [--json]                                      list notes, grouped
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--facet f=v ...]
          [--link ref ...] [--fingerprint fp]
-         [--body text]                                 create a record
+         [--body text]                                 create a note
   pj link <id> <ref> [...] [--remove]
          [--session [id]] [--cwd dir]                       add or remove links; --session names the
                                                        live Claude session working here
@@ -192,7 +192,7 @@ function argFlags(
 }
 
 function ensureData(): void {
-  mkdirSync(p.cards, { recursive: true });
+  mkdirSync(p.notes, { recursive: true });
   mkdirSync(p.assets, { recursive: true });
   mkdirSync(p.views, { recursive: true });
 }
@@ -216,7 +216,7 @@ function pad(s: string, n: number): string {
  * `untriaged`, `search` — and each new verb was a second implementation to drift.
  * Two of those are saved views now, which is what they always were.
  *
- * No `--limit`: at 191 records nothing needs truncating, and a cap that has no
+ * No `--limit`: at 191 notes nothing needs truncating, and a cap that has no
  * users is a cap whose interaction with grouping nobody is checking.
  */
 function cmdLs(argv: string[]): void {
@@ -224,7 +224,7 @@ function cmdLs(argv: string[]): void {
     ...SPEC_PARAMS, 'filter', 'json',
   ], ['json']);
   const facets = loadFacets(p.facets);
-  const { db, records } = reindex(root);
+  const { db, notes } = reindex(root);
 
   const params: Record<string, string> = {};
   const named = flags.get('view')?.[0];
@@ -256,24 +256,24 @@ function cmdLs(argv: string[]): void {
   // The same assembly the web app receives, from the same module (C9). A second
   // shape for the CLI is how the two surfaces would start disagreeing about the
   // answer, having been made unable to disagree about the question.
-  const payload = queryPayload({ facets, db, records, views: loadViews(root) }, spec, saved);
+  const payload = queryPayload({ facets, db, notes, views: loadViews(root) }, spec, saved);
 
   if (flags.has('json')) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
 
-  const title = (id: string) => payload.cards[id]?.title ?? '';
+  const title = (id: string) => payload.notes[id]?.title ?? '';
   const mark = (id: string) => {
-    const card = payload.cards[id];
-    // A container is a record something points at, not a kind it declares.
-    return card?.isProject ? 'P' : (card?.refCount ?? 0) > 0 ? '+' : ' ';
+    const note = payload.notes[id];
+    // A container is a note something points at, not a kind it declares.
+    return note?.isProject ? 'P' : (note?.refCount ?? 0) > 0 ? '+' : ' ';
   };
   const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${title(id)}`;
 
   if (!payload.groups) {
     for (const id of payload.ids) console.log(`${pad(id, 34)} ${title(id)}`);
-    console.log(`\n${payload.total} record(s) of ${payload.universe}`);
+    console.log(`\n${payload.total} note(s) of ${payload.universe}`);
     return;
   }
 
@@ -286,7 +286,7 @@ function cmdLs(argv: string[]): void {
   }
   const extra = payload.placements - payload.total;
   console.log(
-    `${payload.total} record(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
+    `${payload.total} note(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
       (extra > 0 ? ` — ${extra} appear in more than one group` : ''),
   );
 }
@@ -305,7 +305,7 @@ function cmdAdd(argv: string[]): void {
     if (f && v) facets[f] = v.split(',').map((s) => s.trim()).filter(Boolean);
   }
   const fingerprint = flags.get('fingerprint')?.[0];
-  const res = createCard(root, {
+  const res = createNote(root, {
     title,
     id: flags.get('id')?.[0],
     facets,
@@ -329,7 +329,7 @@ function cmdAdd(argv: string[]): void {
  * rather than the argument list — which makes `--session` a way of *naming* a
  * ref, not a separate operation.
  *
- * It writes through `patchCard`, which is the other half of collapsing them.
+ * It writes through `patchNote`, which is the other half of collapsing them.
  * `link` and `unlink` wrote frontmatter directly and so never bumped `updated`,
  * while `link-session` went through the gate and did: attaching a Jira issue left
  * a card reading as untouched since 2020, and README is explicit that `updated`
@@ -381,9 +381,9 @@ function cmdLink(argv: string[]): void {
   }
   if (!refs.length) fail('pj link <id> <ref>... — nothing to add or remove');
 
-  const { records } = readAll(p.cards);
-  const rec = records.get(id);
-  if (!rec) fail(`no record with id "${id}"`);
+  const { notes } = readAll(p.notes);
+  const rec = notes.get(id);
+  if (!rec) fail(`no note with id "${id}"`);
   const existing = rec.links.map((l) => l.raw);
 
   if (flags.has('remove')) {
@@ -392,7 +392,7 @@ function cmdLink(argv: string[]): void {
       fail(`${id} does not link ${missing.join(', ')}.\nIt links: ${existing.join(', ') || '(nothing)'}`);
     }
     const kept = existing.filter((l) => !refs.includes(l));
-    patchCard(root, id, { links: kept });
+    patchNote(root, id, { links: kept });
     console.log(`${id}: removed ${refs.length}, ${kept.length} link(s) left`);
     return;
   }
@@ -404,19 +404,19 @@ function cmdLink(argv: string[]): void {
     console.log(`${id} already links ${already.join(', ')}`);
     return;
   }
-  patchCard(root, id, { links: merged });
+  patchNote(root, id, { links: merged });
   console.log(`${id}: ${merged.length} link(s)` + (already.length ? ` (${already.length} already there)` : ''));
 }
 
 function cmdCheck(): void {
   const facets = loadFacets(p.facets);
-  const { records, unreadable, duplicates } = readAll(p.cards);
+  const { notes, unreadable, duplicates } = readAll(p.notes);
   const issues = [
-    // Before the records, because a facet wearing a reserved name is a fault in
+    // Before the notes, because a facet wearing a reserved name is a fault in
     // the vocabulary itself — every card checked against it is checked against
     // an axis that will not answer.
     ...validateVocabulary(declaredFacets(p.facets), p.facets),
-    ...validate(records, facets, root, { unreadable, duplicates }),
+    ...validate(notes, facets, root, { unreadable, duplicates }),
     // A view is checked against the same vocabulary its cards are. Until it was,
     // a filter naming a deleted facet matched nothing and reported success.
     ...validateViews(loadViewFiles(root), facets),
@@ -439,22 +439,22 @@ function cmdCheck(): void {
 function cmdReindex(): void {
   const { db, unreadable } = reindex(root);
   const c = counts(db, loadFacets(p.facets));
-  console.log(`indexed ${c.records} record(s)`);
+  console.log(`indexed ${c.notes} note(s)`);
   for (const [k, v] of Object.entries(c)) {
-    if (k === 'records') continue;
+    if (k === 'notes') continue;
     console.log(`  ${pad(k, 14)} ${v}`);
   }
-  console.log(`  ${pad('files', 14)} ${listCardFiles(p.cards).length}`);
+  console.log(`  ${pad('files', 14)} ${listNoteFiles(p.notes).length}`);
   if (unreadable.length) console.log(`${unreadable.length} file(s) could not be parsed — run pj check`);
 }
 
 /**
  * Ranked full-text search.
  *
- * `pj ls --q` answers the same "which records match this text" and answers it the
- * same way now — same sanitiser, same records. What it cannot do is order by
- * relevance: the comparator ranks a record by its own facet values, and a match
- * score belongs to the result set rather than to any record in it. So this stays,
+ * `pj ls --q` answers the same "which notes match this text" and answers it the
+ * same way now — same sanitiser, same notes. What it cannot do is order by
+ * relevance: the comparator ranks a note by its own facet values, and a match
+ * score belongs to the result set rather than to any note in it. So this stays,
  * as the ranked spelling, and pj-work resolving "which card did they mean" gets
  * the best match first rather than the most recently touched.
  *
@@ -526,7 +526,7 @@ try {
           break;
         }
         for (const v of vaults) {
-          const state = v.exists ? `${v.cards} card(s)` : 'MISSING';
+          const state = v.exists ? `${v.notes} note(s)` : 'MISSING';
           console.log(`${pad(v.name, 20)} ${pad(state, 14)} ${v.path}`);
         }
         break;
@@ -555,11 +555,11 @@ try {
     }
     case 'enrich': {
       const { flags, rest } = argFlags(argv, ['all', 'force'], ['all', 'force']);
-      const { records } = readAll(p.cards);
+      const { notes } = readAll(p.notes);
       const refs = rest.length
         ? rest
         : flags.has('all')
-          ? [...new Set([...records.values()].flatMap((r) => r.links.map((l) => l.raw)))]
+          ? [...new Set([...notes.values()].flatMap((r) => r.links.map((l) => l.raw)))]
           : [];
       if (!refs.length) {
         console.error('pj enrich <ref>... | pj enrich --all');
@@ -571,7 +571,7 @@ try {
         const d = item.data;
         const badges = (d?.badges ?? []).map((b) => b.label).join(' ');
         console.log(
-          `${pad(item.state, 12)} ${pad(d?.label ?? '—', 22)} ${(d?.title ?? item.error ?? item.note ?? '').slice(0, 62)}` +
+          `${pad(item.state, 12)} ${pad(d?.label ?? '—', 22)} ${(d?.title ?? item.error ?? item.reason ?? '').slice(0, 62)}` +
             (badges ? `  [${badges}]` : ''),
         );
       }
@@ -676,9 +676,9 @@ try {
 
     case 'context': {
       const { flags, rest } = argFlags(argv, ['json'], ['json']);
-      const ctx = cardContext(rest[0] ?? '', root);
+      const ctx = noteContext(rest[0] ?? '', root);
       if (!ctx) {
-        console.error(`no record with id "${rest[0] ?? ''}"`);
+        console.error(`no note with id "${rest[0] ?? ''}"`);
         process.exit(1);
       }
       console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
@@ -694,8 +694,8 @@ try {
         );
         process.exit(1);
       }
-      const { records } = readAll(p.cards);
-      for (const id of rest) if (!records.has(id)) fail(`no record with id "${id}"`);
+      const { notes } = readAll(p.notes);
+      for (const id of rest) if (!notes.has(id)) fail(`no note with id "${id}"`);
 
       const split = (spec: string): [string, string[]] => {
         const i = spec.indexOf('=');
@@ -713,7 +713,7 @@ try {
       // Every id gets the same edit, so a bulk move is one invocation rather
       // than one process per card re-reading the whole vault.
       for (const id of rest) {
-        const rec = records.get(id)!;
+        const rec = notes.get(id)!;
         const facets: Record<string, string[]> = { ...rec.facets };
         for (const spec of flags.get('facet') ?? []) {
           const [f, v] = split(spec);
@@ -733,14 +733,14 @@ try {
         const title = flags.get('title')?.[0];
         const touchesFacets = flags.has('facet') || flags.has('add') || flags.has('remove');
         if (title || touchesFacets) {
-          patchCard(root, id, {
+          patchNote(root, id, {
             ...(title ? { title } : {}),
             ...(touchesFacets ? { facets } : {}),
           });
         }
         if (Object.keys(sets).length) patchFields(root, id, sets);
 
-        const after = cardContext(id, root)!;
+        const after = noteContext(id, root)!;
         console.log(
           `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}`,
         );
@@ -754,11 +754,11 @@ try {
         console.error('pj rm <id>...');
         process.exit(1);
       }
-      // Through `deleteCard`, which drops every reference pointing at the record.
+      // Through `deleteNote`, which drops every reference pointing at the note.
       // Removing the file by hand leaves them dangling, which `pj check` then
       // reports — the reason this command exists.
       for (const id of rest) {
-        const { removedEdges } = deleteCard(root, id);
+        const { removedEdges } = deleteNote(root, id);
         console.log(`removed ${id}${removedEdges ? ` and ${removedEdges} reference(s) to it` : ''}`);
       }
       break;
@@ -767,7 +767,7 @@ try {
     case 'work': {
       const { flags, rest } = argFlags(argv, ['dry-run', 'no-open'], ['dry-run', 'no-open']);
       const id = rest[0];
-      const ctx = id ? cardContext(id, root) : null;
+      const ctx = id ? noteContext(id, root) : null;
       if (!ctx) {
         console.error('pj work <id>');
         process.exit(1);
@@ -792,7 +792,7 @@ try {
       if (!repos.length) {
         console.error(
           `"${ctx.id}" has no repos: its project declares none, or it has no project.\n` +
-            `Add repos to the project record's frontmatter, then try again.`,
+            `Add repos to the project note's frontmatter, then try again.`,
         );
         process.exit(1);
       }

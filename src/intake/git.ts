@@ -139,7 +139,7 @@ export const gitChannel: Channel = {
         cursor: ctx.cursor,
         nextCursor: null,
         fetched: true,
-        note: 'no project record declares any repos, so there is nothing to sweep',
+        reason: 'no project note declares any repos, so there is nothing to sweep',
         candidates,
         skipped,
       };
@@ -252,7 +252,7 @@ export const gitChannel: Channel = {
       nextCursor: examinedTo,
       fetched: true,
       truncated,
-      note: missing.length ? `skipped ${missing.length} repo(s): ${missing.join(', ')}` : undefined,
+      reason: missing.length ? `skipped ${missing.length} repo(s): ${missing.join(', ')}` : undefined,
       candidates,
       skipped,
     };

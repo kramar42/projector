@@ -8,8 +8,8 @@ import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { renderBody } from '../../view/markdown.ts';
-import type { CardWriter } from './usePanelWriter.ts';
-import type { CardDTO, CardDetail, Meta } from '../types.ts';
+import type { NoteWriter } from './usePanelWriter.ts';
+import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
 
 /**
  * The panel's blocks.
@@ -119,7 +119,7 @@ function AddAxis({
 }
 
 /**
- * A list of records this card did not choose: what blocks it, what is part of it.
+ * A list of notes this card did not choose: what blocks it, what is part of it.
  *
  * Capped, because it is unbounded and it is not why the panel was opened. A
  * project with sixteen children drew all sixteen — 569px, forty per cent of the
@@ -127,23 +127,23 @@ function AddAxis({
  * own, rather than a scroll inside a scroll.
  *
  * It draws as a row of the same grid the editable axes use, because it is the
- * same kind of fact: a label, and the records under it. What it does not get is
+ * same kind of fact: a label, and the notes under it. What it does not get is
  * an add control, because the edit lives on the other card — which the `ƒ` says.
  */
 function InboundRow({
   label,
   means,
-  records,
+  notes,
   onOpen,
 }: {
   label: string;
   means: string;
-  records: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
+  notes: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
   onOpen: (id: string) => void;
 }) {
   const [all, setAll] = useState(false);
-  if (!records.length) return null;
-  const shown = all ? records : records.slice(0, INBOUND_CUTOFF);
+  if (!notes.length) return null;
+  const shown = all ? notes : notes.slice(0, INBOUND_CUTOFF);
 
   return (
     <div className="facetrow is-computed">
@@ -156,25 +156,25 @@ function InboundRow({
         <span className="computed" title={means}>
           ƒ
         </span>
-        {records.length > 1 && <span className="quietcount">{records.length}</span>}
+        {notes.length > 1 && <span className="quietcount">{notes.length}</span>}
       </span>
       <div className="facetrow-values">
-        {/* Finished says `ok`; unfinished says nothing. Only a record in *your*
+        {/* Finished says `ok`; unfinished says nothing. Only a note in *your*
             way earns `bad`, which is what the outbound `blocked by` row draws —
-            a record at this end is one you are holding up, and striping six of
+            a note at this end is one you are holding up, and striping six of
             them red says a project with work left in it is broken. */}
         {shown.map((r) => (
           <button className={`reflink ${r.done ? 'is-done' : ''}`} key={r.id} onClick={() => onOpen(r.id)}>
-            {/* A record carries its mark wherever you meet it. The `' ✓'` that
+            {/* A note carries its mark wherever you meet it. The `' ✓'` that
                 used to sit here is gone: `.reflink.is-done` already draws that
                 state as an `ok` left edge, so the tick was the same fact twice. */}
             <RecordMark card={r} />
             {r.title}
           </button>
         ))}
-        {records.length > INBOUND_CUTOFF && (
+        {notes.length > INBOUND_CUTOFF && (
           <button className="facet-more" onClick={() => setAll((v) => !v)}>
-            {all ? 'less' : `${records.length - INBOUND_CUTOFF} more`}
+            {all ? 'less' : `${notes.length - INBOUND_CUTOFF} more`}
           </button>
         )}
       </div>
@@ -187,9 +187,9 @@ function InboundRow({
  *
  * The reference facets are not here — they moved to `Refs` below, with the two
  * derived lists that are their other ends. That split is by `type`, not by name,
- * so it is the vocabulary's own answer to which axes point at records; and what
+ * so it is the vocabulary's own answer to which axes point at notes; and what
  * it leaves behind is homogeneous, which is what lets this be a grid at all.
- * A row of wrapping chips and a row holding a record picker do not share a
+ * A row of wrapping chips and a row holding a note picker do not share a
  * baseline.
  */
 export function Facets({
@@ -198,8 +198,8 @@ export function Facets({
   write,
 }: {
   defs: Meta['facets'];
-  values: CardDTO['facets'];
-  write: Pick<CardWriter, 'facet'>;
+  values: NoteDTO['facets'];
+  write: Pick<NoteWriter, 'facet'>;
 }) {
   const props = Object.keys(defs).filter((n) => defs[n]!.type !== 'ref');
   const { show, hidden, reveal } = useRevealed(props, (n) => (values[n] ?? []).length > 0);
@@ -238,7 +238,7 @@ export function Facets({
 }
 
 /**
- * Every axis that points at a record, and every record that points back.
+ * Every axis that points at a note, and every note that points back.
  *
  * One section, because `parent`, `project` and `blocks` are one kind of thing —
  * reference facets — and because the two ends of a relation belong next to each
@@ -255,9 +255,9 @@ export function Refs({
   onOpen,
 }: {
   defs: Meta['facets'];
-  card: CardDTO;
-  data: CardDetail;
-  write: Pick<CardWriter, 'facet'>;
+  card: NoteDTO;
+  data: NoteDetail;
+  write: Pick<NoteWriter, 'facet'>;
   onOpen: (id: string) => void;
 }) {
   const rels = Object.keys(defs).filter((n) => defs[n]!.type === 'ref');
@@ -290,8 +290,8 @@ export function Refs({
               <InboundRow
                 key={`${name}:inverse`}
                 label={def.inverse}
-                means={`records naming this one through "${def.label}", not stored on this one`}
-                records={naming}
+                means={`notes naming this one through "${def.label}", not stored on this one`}
+                notes={naming}
                 onOpen={onOpen}
               />
             ) : null,
@@ -309,7 +309,7 @@ export function Refs({
   );
 }
 
-export function Links({ card, write }: { card: CardDTO; write: Pick<CardWriter, 'links'> }) {
+export function Links({ card, write }: { card: NoteDTO; write: Pick<NoteWriter, 'links'> }) {
   const { refresh } = useEnrichment();
   useRequestEnrichment(card.links.map((l) => l.raw));
 
@@ -344,7 +344,7 @@ export function Frontmatter({
 }: {
   cardId: string;
   yaml: string;
-  write: Pick<CardWriter, 'frontmatter'>;
+  write: Pick<NoteWriter, 'frontmatter'>;
   onDirtyChange: (dirty: boolean) => void;
   /**
    * The readout this control sits above — the file, when it changed, and what the
@@ -402,8 +402,8 @@ export function Body({
   write,
   onDirtyChange,
 }: {
-  card: CardDTO;
-  write: Pick<CardWriter, 'body'>;
+  card: NoteDTO;
+  write: Pick<NoteWriter, 'body'>;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);

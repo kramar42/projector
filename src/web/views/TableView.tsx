@@ -4,7 +4,7 @@ import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { groupsFor, labelFor } from './groups.ts';
-import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
+import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
 
 /**
  * The third shape.
@@ -34,10 +34,10 @@ export function TableView({
   const [problem, setProblem] = useState<string | null>(null);
   // A project row earns the roll-up columns; a table of ordinary cards has
   // nothing to put in them.
-  const projects = data.ids.some((id) => data.cards[id]?.isProject);
+  const projects = data.ids.some((id) => data.notes[id]?.isProject);
 
   useRequestEnrichment([
-    ...new Set(data.ids.flatMap((id) => data.cards[id]?.links.map((l) => l.raw) ?? [])),
+    ...new Set(data.ids.flatMap((id) => data.notes[id]?.links.map((l) => l.raw) ?? [])),
   ]);
 
   // A table drops an empty declared section, following the canvas rather than the
@@ -106,7 +106,7 @@ export function TableView({
               </tr>
             )}
             {section.ids.map((id, i) => {
-              const card = data.cards[id];
+              const card = data.notes[id];
               if (!card) return null;
               // The index into `rows`, not into this section: the two agree only
               // on a table with one section, which is the mistake a board's
@@ -130,7 +130,7 @@ export function TableView({
           </tbody>
         ))}
       </table>
-      {!data.ids.length && <div className="emptystate table-empty">no records match</div>}
+      {!data.ids.length && <div className="emptystate table-empty">no notes match</div>}
       </div>
 
       {acting.length > 0 && (
@@ -160,7 +160,7 @@ function Row({
   onSelect,
   onExtend,
 }: {
-  card: CardDTO;
+  card: NoteDTO;
   chips: string[];
   rollup: Rollup | undefined;
   projects: boolean;

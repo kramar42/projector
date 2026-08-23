@@ -17,11 +17,11 @@ import { fromWorkspacePath, slugBranch } from '../agent/workspaceName.ts';
  * its history somewhere nobody will look for it.
  */
 
-/** Every repo any project record declares, with the project it came from. */
+/** Every repo any project note declares, with the project it came from. */
 export function repoIndex(ctx: IntakeContext): { path: string; name: string; project: string }[] {
   const out: { path: string; name: string; project: string }[] = [];
   const seen = new Set<string>();
-  for (const rec of ctx.records.values()) {
+  for (const rec of ctx.notes.values()) {
     for (const r of rec.project?.repos ?? []) {
       const path = resolve(resolvePath(r.path, ctx.root));
       const key = `${rec.id}\0${path}`;
@@ -34,11 +34,11 @@ export function repoIndex(ctx: IntakeContext): { path: string; name: string; pro
 }
 
 function titleOf(ctx: IntakeContext, id: string): string {
-  return ctx.records.get(id)?.title ?? id;
+  return ctx.notes.get(id)?.title ?? id;
 }
 
 function push(into: Match[], ctx: IntakeContext, id: string, why: string): void {
-  if (!ctx.records.has(id)) return;
+  if (!ctx.notes.has(id)) return;
   if (into.some((m) => m.id === id)) return;
   into.push({ id, title: titleOf(ctx, id), why });
 }
@@ -56,7 +56,7 @@ export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
     push(out, ctx, ws.project, 'worktree');
     // The branch half names the card in the common case, since `branchFor`
     // falls back to the card id.
-    for (const rec of ctx.records.values()) {
+    for (const rec of ctx.notes.values()) {
       if (slugBranch(rec.id) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
     }
   }
@@ -76,7 +76,7 @@ export function matchBranch(ctx: IntakeContext, branch: string | undefined): Mat
   const out: Match[] = [];
   const segments = branch.split('/');
 
-  for (const rec of ctx.records.values()) {
+  for (const rec of ctx.notes.values()) {
     if (rec.id === branch || segments.includes(rec.id)) push(out, ctx, rec.id, 'branch');
   }
   for (const key of branch.toUpperCase().match(JIRA_KEY) ?? []) {

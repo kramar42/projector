@@ -26,10 +26,10 @@ delete process.env.PROJECTOR_VAULTS;
  */
 function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-arr-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   mkdirSync(join(root, 'views'), { recursive: true });
   for (const id of cards) {
-    writeFileSync(join(root, 'cards', `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
+    writeFileSync(join(root, 'notes', `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
   }
   for (const [name, body] of Object.entries(views)) {
     writeFileSync(join(root, 'views', `${name}.yaml`), body, 'utf8');
@@ -153,7 +153,7 @@ test('the CLI finds a vault from the working directory, without a registry', () 
   try {
     // Standing inside one, or anywhere below it — the way git finds a repo.
     assert.equal(vaultAbove(root), root);
-    assert.equal(vaultAbove(join(root, 'cards')), root);
+    assert.equal(vaultAbove(join(root, 'notes')), root);
     assert.equal(vaultAbove(join(root, 'views')), root);
     // A folder that is not a vault and has none above it.
     assert.equal(vaultAbove(tmpdir()), null);
@@ -163,7 +163,7 @@ test('the CLI finds a vault from the working directory, without a registry', () 
     // is one.
     const cwd = process.cwd();
     try {
-      process.chdir(join(root, 'cards'));
+      process.chdir(join(root, 'notes'));
       assert.deepEqual(resolveCliVault([], []), { root: realpathSync(root) });
     } finally {
       process.chdir(cwd);

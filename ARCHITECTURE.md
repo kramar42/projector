@@ -12,15 +12,15 @@ number.
 |---|---|---|
 | C1 | Markdown files are the source of truth | any index is derived and disposable |
 | C2 | Everything external is read-only | no code path writes to Jira, GitHub, Trello or Slack |
-| C3 | Cards stay agent-editable | an agent edits them with plain file writes — no API, no app running |
+| C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
 | C5 | Every shape is equally first-class | all three are editable, not just viewable |
 | C6 | The card body is free-form | description, links, files, images — no template |
-| C7 | No freehand drawing | the canvas is records and their references. This is what settles the canvas library |
+| C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
 | C9 | A view is a query, not a place | `view = filter × search × focus × group × sort × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
-| C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?card=` |
+| C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?note=` |
 
 ## The shape of it
 
@@ -28,7 +28,7 @@ number.
 flowchart TB
   subgraph vault["The vault — your files, git-tracked, the source of truth (C1)"]
     direction LR
-    cards["cards/*.md<br/>facets · links · body"]
+    notes["notes/*.md<br/>facets · links · body"]
     fac["facets.yaml<br/>type · values · single · buckets"]
     vw["views/*.yaml<br/>saved query + arrangement"]
   end
@@ -38,7 +38,7 @@ flowchart TB
 
   subgraph surfaces["Two surfaces — peers, not a stack"]
     direction LR
-    ui["Web UI<br/>board · canvas · table · card panel"]
+    ui["Web UI<br/>board · canvas · table · note panel"]
     pj["pj<br/>one command per question"]
   end
 
@@ -67,8 +67,8 @@ flowchart TB
   q --> refs
   refs --> proj
 
-  surfaces -.->|"writes: validated, atomic,<br/>409 on a concurrent edit"| cards
-  agent -.->|"or plain file writes — no API, no app running (C3)"| cards
+  surfaces -.->|"writes: validated, atomic,<br/>409 on a concurrent edit"| notes
+  agent -.->|"or plain file writes — no API, no app running (C3)"| notes
 
   idx <-->|"links, resolved lazily and cached with a TTL"| outside
   proj -->|"pj work — a worktree per repo, plus a briefing"| outside
@@ -77,7 +77,7 @@ flowchart TB
 
 Three things are worth reading off it.
 
-**The vault is three kinds of file, and only three.** Cards are content, `facets.yaml` is the
+**The vault is three kinds of file, and only three.** Notes are content, `facets.yaml` is the
 vocabulary that constrains them, and a view is a saved query plus the arrangement that has nowhere
 else to live. Everything below the vault box is derived: delete both caches and `pj reindex` is
 always correct.
@@ -89,22 +89,22 @@ the browser are the same query by construction rather than by discipline.
 **The file format is a public API.** The app writes through a gate that validates against the
 vocabulary, writes a temp file and renames, and refuses a write whose file changed since it was read.
 An agent writes the same bytes with Write/Edit and no gate at all (C3) — which is why the gate exists:
-the two are expected to be editing the same card at the same time.
+the two are expected to be editing the same note at the same time.
 
 ## Layout
 
 | | |
 |---|---|
-| `src/schema/` | card and facet types, frontmatter read/write, validation |
+| `src/schema/` | note and facet types, frontmatter read/write, validation |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, and `dropOutcome.ts`, what a drag means |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
-| `src/web/` | React: sidebar, three shapes, card panel |
+| `src/web/` | React: sidebar, three shapes, note panel |
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
 | `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
-| `src/agent/` | card context assembly, worktree workspaces, briefings, git history |
+| `src/agent/` | note context assembly, worktree workspaces, briefings, git history |
 
 ## The query compiler
 
@@ -115,15 +115,15 @@ not drift while the response half was assembled inside a hono handler the CLI co
 `pj ls --view unblocked` and opening that view in the browser go through the same code, and now return
 the same thing.
 
-**Filtering runs in memory** over the record map rather than in SQL. Not a performance trade — at this
-scale both are free — it is what lets a pseudo-facet be indistinguishable from a real one. In SQL,
+**Filtering runs in memory** over the note map rather than in SQL. Not a performance trade — at this
+scale both are free — it is what lets a computed axis be indistinguishable from a real one. In SQL,
 `blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
 the one job it is genuinely better at: full text (FTS5), which `search()` reads out of the `fts` table
-joined to `records`. `src/index/queries.ts` holds only that, plus `counts` — which reads which facets
+joined to `notes`. `src/index/queries.ts` holds only that, plus `counts` — which reads which facets
 are relations off the vocabulary, having once named three of them in the SQL. The blocking closure came
 in-memory too — `unblocks()` in `src/index/blocking.ts` walks the adjacency `refs.ts` builds, because
-the SQL version was depth-capped at 10 and kept self-references the record map drops. It used to also carry a general `listRecords`/`filterClause` pair — a
+the SQL version was depth-capped at 10 and kept self-references the note map drops. It used to also carry a general `listRecords`/`filterClause` pair — a
 second filtering engine, which is what this whole section says should not exist — and that is exactly
 where `pj next` went on filtering by `kind` for two days after P7 deleted it. It then spent a while as
 one `runQuery` call in `cmdNext` — right engine, wrong place, since a query written in TypeScript is a
@@ -132,13 +132,13 @@ already means "no unfinished blocker and nobody waited on". `pj check` validates
 names, so the `kind` failure cannot recur in its new home: a filter naming an axis the vocabulary lost
 is an error, not an empty answer.
 
-**Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field. Moving it
-into `facets.yaml` showed it asserted two things the record already said — carrying a `status` is what
+**Every computed axis computes.** `kind` used to sit in `COMPUTED` and return a stored field. Moving it
+into `facets.yaml` showed it asserted two things the note already said — carrying a `status` is what
 makes it work, being named by **any** reference facet is what makes it a container — so it is gone
 entirely (C11).
 `type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
 their place — and `type` also reads the reference graph, since its third value `node` is "some other
-record names this one, through any reference facet". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
+note names this one, through any reference facet". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
 
 **Focus and filter are the same operation at two levels, deliberately.** A focus is a filter clause
 whose test is transitive rather than one level deep, so in principle
@@ -169,7 +169,7 @@ selected value always stays listed or it could never be unselected.
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
 are. Rebuilding costs tens of milliseconds at this vault's size; checking the stamp costs a fraction of
 one. The ratio is the point — two orders of magnitude — and it is what makes the memo worth having
-rather than the absolute numbers, which move with the machine and the card count.
+rather than the absolute numbers, which move with the machine and the note count.
 
 Before the query became interactive the index was rebuilt on every request, which was right while a
 request meant a click. A live search box makes that several rebuilds a second. The stamp is not a TTL
@@ -190,7 +190,7 @@ Things that look like details and are not. Each of these was a bug at some point
 
 **Arrangement merges, never replaces.** The client sends only the nodes it currently renders, and that
 is a filtered subset — replacing the `nodes` map would silently discard the position of everything the
-filter happened to hide. Same for `order`, per column. An entry is dropped only when its card is
+filter happened to hide. Same for `order`, per column. An entry is dropped only when its note is
 actually gone, and the live-id set is built at most once per save.
 
 **Saving a view keeps its arrangement.** *Save current as…* over an existing name replaces the query
@@ -211,19 +211,19 @@ but which is which is a property of the view, not of the relation: `parent` firs
 decomposition tree with dependencies drawn over it, `project` first gives the portfolio. Laying a
 membership canvas out by `parent` puts every node in one column with the hierarchy invisible.
 
-**One edge per pair of records,** whatever the relation. `parent` and `project` agreeing is the expected
-shape for a record inside a project, so drawing both put two identical lines on top of each other. Collapsed, a
+**One edge per pair of notes,** whatever the relation. `parent` and `project` agreeing is the expected
+shape for a note inside a project, so drawing both put two identical lines on top of each other. Collapsed, a
 pair that agrees reads as one relationship and a pair that *disagrees* still shows as two edges pointing
-at different records — the case worth seeing. Edge labels need an explicit neutral fill, because a label
+at different notes — the case worth seeing. Edge labels need an explicit neutral fill, because a label
 inherits the stroke colour otherwise.
 
-**Every relation is a reference facet.** `type: ref` says a facet's values are record ids; the seeded
+**Every relation is a reference facet.** `type: ref` says a facet's values are note ids; the seeded
 vault declares `parent` and `blocked_by`, `project` is built in, and a vault declares whatever else it
 needs. There is no `edges:` block and no `edges` table: `src/index/refs.ts` is the one reader, and
 focus, the canvas, the roll-ups, config inheritance and cycle refusal all walk the `src names dst`
 pairs it returns.
 
-**Every reference is stored on the record that depends**, pointing at what it depends on. That is a
+**Every reference is stored on the note that depends**, pointing at what it depends on. That is a
 modelling convention rather than a declaration, and it replaced one: while `blocks` was stored on the
 blocker it pointed *away* from the root of its own dependency tree, so which relations to flip when
 drawing had to be declared, shipped in the payload as `hierarchies` and threaded through four layout
@@ -238,26 +238,26 @@ facets means `f.parent=project-a`, `groupBy: [parent]`, `parent=(none)` and drag
 exist, none of which did before — and they work because a hierarchy concentrates: 26 distinct parents
 over 134 references, 7 used once.
 
-A project's key is its record **id** — there is no separate `key` field, because a second name for one
+A project's key is its note **id** — there is no separate `key` field, because a second name for one
 thing is a second thing to keep in step, and it would let a reference point at something that is not a
-record id.
+note id.
 
-**Direction is mechanical, not spatial.** `out` follows a record's own references; `in` finds the
-records naming it. `up`/`down` only reads correctly for containment — on `blocked_by`, "up" would mean
+**Direction is mechanical, not spatial.** `out` follows a note's own references; `in` finds the
+notes naming it. `up`/`down` only reads correctly for containment — on `blocked_by`, "up" would mean
 toward the blocker, which is the same arrow as `parent`'s "down" — so the words would have meant
 opposite tree-directions depending on the relation.
 
 **A reference facet declares no vocabulary.** `values` on a `ref`, `date` or `number` facet is always a mistake — the vocabulary is
 the vault — so `loadFacets` drops it rather than half-honouring it, and `open` is implied. A value
-naming a record that does not exist is a **warning**, not an error: an agent may write a card before
+naming a note that does not exist is a **warning**, not an error: an agent may write a note before
 the one it points at, and refusing that would make the order of two file writes matter.
 
-**A relation carries no data of its own.** A reference facet value is a bare record id, so there is
+**A relation carries no data of its own.** A reference facet value is a bare note id, so there is
 nowhere to hang a label, a weight or a reason on a relationship. `Edge` was `{type, to}` and nothing
 used more, and a reason for a blocker belongs in the body — accepted knowingly, since it is the one
 thing the collapse gave up.
 
-**Three SQLite files, three lifecycles.** `.index.db` is derived from the card files and rebuilt from
+**Three SQLite files, three lifecycles.** `.index.db` is derived from the note files and rebuilt from
 scratch whenever they change — C1 means it can never be the authority, so it needs no migration.
 `.enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of data that took a second
 to fetch. `.intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
@@ -268,7 +268,7 @@ discarded on every reindex, and watermarks in the enrichment cache would be disc
 `clearEnrichment`.
 
 **A watermark is not load-bearing, and that is what makes it safe to keep at all.** It is the one piece
-of state projector holds that is not derived from the card files. Correctness does not rest on it:
+of state projector holds that is not derived from the note files. Correctness does not rest on it:
 `source_fingerprint` is what stops a duplicate, and it stops one whether or not a cursor knows the
 item exists. So the watermark only decides how far back to *look* — losing it degrades a sweep to a
 default window, which is noisier and never wrong. Nothing about the work has two answers, so C1 is
@@ -299,7 +299,7 @@ prose paragraph for the card face, and `reindex` puts it in FTS5 — but no head
 changes how the app behaves.
 
 **Cycles are refused on every reference facet**, through the one `wouldCycle` that also guards `parent`
-edges. It takes the outward neighbours as a function rather than a record map, so the check is about
+edges. It takes the outward neighbours as a function rather than a note map, so the check is about
 the shape of the graph rather than where it is stored. Before P7 a membership cycle was accepted and
 `resolveProject` silently truncated the config chain.
 
@@ -320,7 +320,7 @@ not, and therefore why `blocked_by` is an ordinary facet while `project` is buil
 **A single-valued facet is a vocabulary constraint, not a storage one.** Every facet is a `string[]`
 and the whole engine reads it that way; `single: true` says the *vocabulary* admits one value at a
 time, which is why it lives in `facets.yaml` beside `open` and `values`. Without it the model cannot
-reject `status: [planning, done]` — a record in no coherent state, which `buildCtx` reads as done while
+reject `status: [planning, done]` — a note in no coherent state, which `buildCtx` reads as done while
 a board draws it in planning. That matters because the primary writer is an agent making plain file
 writes (C3): a model that cannot refuse an incoherent state accumulates them.
 
@@ -340,10 +340,10 @@ which put `later` first.
 
 **`created` and `updated` stay fields.** A facet is *user-declared vocabulary*; those two are written
 by the app on every save and belong in no filter panel. That line is why `due` could move out of the
-frontmatter root and they cannot, and it is what leaves `staleness` a pseudo-facet: it computes over
-`updated`, which is not vocabulary. Computing over app-written metadata is `PSEUDO`'s residual role.
+frontmatter root and they cannot, and it is what leaves `staleness` a computed axis: it computes over
+`updated`, which is not vocabulary. Computing over app-written metadata is `COMPUTED`'s residual role.
 
-**One face, for every record**, and one list saying what it shows. `chips` and `edges.show` asked the
+**One face, for every note**, and one list saying what it shows. `chips` and `edges.show` asked the
 same question — *which facets does this view surface* — and how each is drawn follows from what it is:
 a label is a chip and a column, a reference is those *and* a line, and the first reference in `show`
 lays the canvas out. Two keys meant "why does my canvas draw nothing" was answered by the one you
@@ -356,26 +356,26 @@ stops a canvas laying out along one hierarchy and pulling context from another. 
 single answer to *which relation*, computed server-side and sent as `layout`, so the client never
 recomputes it.
 
-**Conflicts are refused, not merged.** A card read into the panel carries its file mtime; a write sends
+**Conflicts are refused, not merged.** A note read into the panel carries its file mtime; a write sends
 it back and a mismatch is a 409. This matters because an agent may be editing the same file in another
 window (C3).
 
 **Grouping is one function called twice.** A second axis is a position in `groupBy`, not a separate
 `swimlanes` concept, which is why a matrix needed no new code path. Every value the query *admits* gets
 a group, empty or not — a board missing an admitted column reads as though it did not exist, and an
-empty admitted column is somewhere to drag a card to.
+empty admitted column is somewhere to drag a note to.
 
 **A filter on the axis you group by decides which columns exist, not just what lands in them.** It read
 every declared value whatever the filter said, so `due` — grouped by `due`, filtered to three of its
-four buckets — drew a `later` column no card could reach, and `triage` drew `complete` the same way. It
+four buckets — drew a `later` column no note could reach, and `triage` drew `complete` the same way. It
 also dropped every *undeclared* value, so whether an excluded value survived came down to whether
 somebody had written it in `facets.yaml`. `admitted` answers for both: the axis is the vocabulary
 narrowed to the selection. Two consequences worth stating. A selection by *range* (`f.due=>2026-09-01`)
 narrows nothing, because its tokens are expressions rather than value names — and because the property
-that makes narrowing safe is that a card matching a name selection must carry one of those names, so it
+that makes narrowing safe is that a note matching a name selection must carry one of those names, so it
 always keeps a column; a range match need not. And on a multi-valued axis the narrowing drops
-*placements*: filtering `tech` to `k8s` stops drawing the `aws` column those same cards also sit in.
-That is the point rather than a cost — a column headed `aws` in a view that holds only `k8s` cards
+*placements*: filtering `tech` to `k8s` stops drawing the `aws` column those same notes also sit in.
+That is the point rather than a cost — a column headed `aws` in a view that holds only `k8s` notes
 invites the wrong reading — but it is why `placements` can now fall below what the vocabulary would
 have shown.
 
@@ -385,13 +385,13 @@ table offers nothing to drag. It used to render a header with a `0` under it, wh
 rather than a decision — all three now go through one `groupsFor`, which takes the policy as an
 argument precisely because it differs on purpose.
 
-A canvas draws groups as **bands**. It cannot honour a multi-valued placement, because a record has one
-position, so it draws the card in the first group the axis declares and the footer reports the count
+A canvas draws groups as **bands**. It cannot honour a multi-valued placement, because a note has one
+position, so it draws the note in the first group the axis declares and the footer reports the count
 rather than letting the two shapes disagree silently. An empty declared value gets no band: an empty
 column is somewhere to *drag to*, and a canvas drag moves a position without changing a facet, so an
-empty band would be decoration with no affordance. The bands are plain nodes behind the records rather
+empty band would be decoration with no affordance. The bands are plain nodes behind the notes rather
 than React Flow parents — a parent makes member positions relative, and a saved arrangement stores
-absolute ones. Boxes are measured from where members finally are, so a dragged card grows its band and
+absolute ones. Boxes are measured from where members finally are, so a dragged note grows its band and
 clustering needs no agreement with the arrangement.
 
 ## What it writes
@@ -400,23 +400,23 @@ C2 says everything external is read-only. Concretely, every operation that write
 
 | Operation | Writes | Never |
 |---|---|---|
-| `pj add` / `POST /api/card` | one new card file | never overwrites an existing file |
+| `pj add` / `POST /api/note` | one new note file | never overwrites an existing file |
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
-| `pj link`, `pj set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
+| `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
-| `POST /api/bulk` ops `facet`, `move`, `parent` | many cards' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed, `parent` is `bulkFacet` under the name the bulk bar uses | one write per card whatever the op; the `delete` op is the row below |
-| `PUT /api/card/:id/frontmatter` | one card's whole frontmatter block | never touches the body |
-| `pj rm`, `DELETE /api/card/:id`, `POST /api/bulk` | card files, and every reference that pointed at them | nothing outside `cards/` |
+| `POST /api/bulk` ops `facet`, `move`, `parent` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed, `parent` is `bulkFacet` under the name the bulk bar uses | one write per note whatever the op; the `delete` op is the row below |
+| `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block | never touches the body |
+| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside `notes/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
-| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id, plus `layout: manual` whenever positions are sent | never drops an entry whose card still exists |
-| `DELETE /api/view/:name` | one view file | never touches the cards it selected |
-| `POST /api/card/:id/asset` | one file under `cards/assets/<id>/` | never overwrites: the name is a content hash |
+| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id, plus `layout: manual` whenever positions are sent | never drops an entry whose note still exists |
+| `DELETE /api/view/:name` | one view file | never touches the notes it selected |
+| `POST /api/note/:id/asset` | one file under `notes/assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
-| `pj intake` | `.index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no card and moves no cursor |
-| `pj intake commit` | one row in `.intake.db` | never a card, and never on its own initiative |
+| `pj intake` | `.index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
+| `pj intake commit` | one row in `.intake.db` | never a note, and never on its own initiative |
 | `pj work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
-| everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a card file |
+| everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a note file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
 mutation functions, so there is no code path to write back.
@@ -433,14 +433,14 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 
 | Path | What | When |
 |---|---|---|
-| `<vault>/cards/**` | card files, and assets under `cards/assets/<id>/` | you create or edit a card |
+| `<vault>/notes/**` | note files, and assets under `notes/assets/<id>/` | you create or edit a note |
 | `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
 | `<vault>/.intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
-| `$PROJECTOR_WORKSPACES/<card>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
+| `$PROJECTOR_WORKSPACES/<note>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
 
-Every card write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
+Every note write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
 sees half a file. The registry is written the same way.
 
 **Reads outside a vault:**
@@ -505,13 +505,13 @@ nothing else.
 
 ## Vault seeding
 
-`initVault` writes `cards/`, `cards/assets/`, `views/`, `facets.yaml`, five starter views — `home`,
+`initVault` writes `notes/`, `notes/assets/`, `views/`, `facets.yaml`, five starter views — `home`,
 `due`, `projects`, `unblocked`, `everything` — and a `.gitignore`. **No prose.**
 
-It used to also write `cards/README.md`, a per-vault conventions document from `SEED_README`. That was
-a near-verbatim copy of the `projector` skill, and its only audience — an agent editing card files
-directly — already loads the skill. Two documents stating the card format is one document to drift, so
-the format is now written down in exactly two places that cannot disagree: `src/schema/card.ts`, which
+It used to also write `notes/README.md`, a per-vault conventions document from `SEED_README`. That was
+a near-verbatim copy of the `projector` skill, and its only audience — an agent editing note files
+directly — already loads the skill. Two documents stating the note format is one document to drift, so
+the format is now written down in exactly two places that cannot disagree: `src/schema/note.ts`, which
 parses it, and the skill, which explains it.
 
 `listCardFiles` and `countCards` still exclude `README.md` by name. That guard stays because a folder
@@ -548,28 +548,28 @@ full of markdown attracts a README, not because the app puts one there.
 | | |
 |---|---|
 | `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs |
-| `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |
-| `canvas.test.ts` | nested `--set` and its validation against the result, deleting a record's inbound references, clusters, bands, and the layout following only the relation shown |
-| `card.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
+| `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
+| `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, and the layout following only the relation shown |
+| `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
 | `cli.test.ts` | every command refusing an unknown flag, `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
-| `mutate.test.ts` | the write gate: per-card moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
+| `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging |
-| `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
+| `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
 | `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, and seeding a fresh vault not being the same act as adopting one |
 | `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy |
-| `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with records, views and an empty `facets.yaml` loads, validates and answers a query |
+| `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
-and not whatever the cards happen to say today. `tsconfig` runs with `noUnusedLocals` and
+and not whatever the notes happen to say today. `tsconfig` runs with `noUnusedLocals` and
 `noUnusedParameters`: a function that outlives the field it read is a compile error rather than
 something a later reader has to notice.

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { parseCard } from '../schema/card.ts';
-import type { Rec } from '../schema/types.ts';
+import { parseNote } from '../schema/note.ts';
+import type { Note } from '../schema/types.ts';
 
 /**
  * What happened to the cards recently, read out of git.
@@ -158,14 +158,14 @@ function readBlobs(root: string, shas: Set<string>): Map<string, string> {
 }
 
 /** Parse a blob as a card, or null when it is absent or unreadable. */
-function recordOf(text: string | undefined, path: string): Rec | null {
+function recordOf(text: string | undefined, path: string): Note | null {
   if (text === undefined) return null;
-  const res = parseCard(path, text);
+  const res = parseNote(path, text);
   return res.ok ? res.rec : null;
 }
 
 /** One axis's values as the log prints them, or null when it carries none. */
-function valueOf(rec: Rec | null, facet: string): string | null {
+function valueOf(rec: Note | null, facet: string): string | null {
   return rec?.facets[facet]?.join(', ') ?? null;
 }
 
@@ -180,7 +180,7 @@ export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
   const watched = Object.entries(facets)
     .filter(([, def]) => def.single)
     .map(([name]) => name);
-  const cards = paths(dataRoot).cards.replace(dataRoot + '/', '');
+  const cards = paths(dataRoot).notes.replace(dataRoot + '/', '');
   const raw = parseLog(
     git(dataRoot, [
       'log',

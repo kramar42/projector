@@ -5,14 +5,14 @@ import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
-import { CardPanel } from './panel/CardPanel.tsx';
+import { NotePanel } from './panel/NotePanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { VocabularyProvider } from './vocabulary.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
 import {
-  CARD_PARAM,
+  NOTE_PARAM,
   apiSearch,
   patchSearch,
   selectionOf,
@@ -45,7 +45,7 @@ export function App() {
   const [location, navigate] = useLocation();
   const search = useSearch();
 
-  const openCard = new URLSearchParams(search).get(CARD_PARAM);
+  const openNote = new URLSearchParams(search).get(NOTE_PARAM);
   // Memoised on the search string, so the set's identity only changes when the
   // selection does — a canvas effect keys off it.
   const selectedIds = useMemo(() => selectionOf(search), [search]);
@@ -123,12 +123,12 @@ export function App() {
    * Escape clears the selection — the counterpart to the bulk bar's button, and
    * the only way out that does not involve aiming at anything.
    *
-   * Not while the panel is open: `CardPanel` listens for the same key on the same
+   * Not while the panel is open: `NotePanel` listens for the same key on the same
    * window to close itself, and one keystroke should mean one thing. Not while
    * something is being typed into either, where Escape belongs to the field.
    */
   useEffect(() => {
-    if (!selectedIds.size || openCard) return;
+    if (!selectedIds.size || openNote) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const el = e.target as HTMLElement | null;
@@ -137,13 +137,13 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds, openCard, commitSelection]);
+  }, [selectedIds, openNote, commitSelection]);
 
-  const setOpenCard = useCallback((id: string | null) => {
+  const setOpenNote = useCallback((id: string | null) => {
     const { search: s, location: loc, navigate: go } = nav.current;
     const params = new URLSearchParams(s);
-    if (id) params.set(CARD_PARAM, id);
-    else params.delete(CARD_PARAM);
+    if (id) params.set(NOTE_PARAM, id);
+    else params.delete(NOTE_PARAM);
     const q = params.toString();
     go(`${loc}${q ? `?${q}` : ''}`, { replace: !id });
   }, []);
@@ -174,7 +174,7 @@ export function App() {
       setCurrentVault(path);
       setMeta(null);
       setGate(null);
-      // The query may name a view or a focus record from the *old* vault.
+      // The query may name a view or a focus note from the *old* vault.
       navigate('/', { replace: true });
       loadMeta();
     },
@@ -218,7 +218,7 @@ export function App() {
         <CanvasView
           meta={meta}
           data={data}
-          onOpen={setOpenCard}
+          onOpen={setOpenNote}
           selection={selection}
           reload={reload}
           wire={wire}
@@ -226,9 +226,9 @@ export function App() {
         />
       );
     if (shape === 'table')
-      return <TableView data={data} onOpen={setOpenCard} selection={selection} reload={reload} />;
-    return <BoardView data={data} onOpen={setOpenCard} selection={selection} reload={reload} />;
-  }, [data, meta, queryError, shape, setOpenCard, selection, reload, patch, wire]);
+      return <TableView data={data} onOpen={setOpenNote} selection={selection} reload={reload} />;
+    return <BoardView data={data} onOpen={setOpenNote} selection={selection} reload={reload} />;
+  }, [data, meta, queryError, shape, setOpenNote, selection, reload, patch, wire]);
 
   if (gate) {
     return (
@@ -269,21 +269,21 @@ export function App() {
           edit={edit}
           onSwitchVault={switchVault}
           onAddVault={() => setAddingVault(true)}
-          onOpenCard={setOpenCard}
+          onOpenNote={setOpenNote}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
         <main className="main">{content}</main>
-        {openCard && (
-          <CardPanel
-            // Keyed on the card, so switching records remounts the panel and
+        {openNote && (
+          <NotePanel
+            // Keyed on the card, so switching notes remounts the panel and
             // every block in it. That is the reset: there is no list of state to
             // keep in step, and so no list that can fall behind.
-            key={openCard}
-            id={openCard}
+            key={openNote}
+            id={openNote}
             meta={meta}
-            onClose={() => setOpenCard(null)}
-            onOpen={setOpenCard}
+            onClose={() => setOpenNote(null)}
+            onOpen={setOpenNote}
           />
         )}
       </div>

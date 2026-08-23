@@ -31,7 +31,7 @@ import {
   treeLayout,
 } from './layout.ts';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import type { CardDTO, QueryResponse, Meta } from '../types.ts';
+import type { NoteDTO, QueryResponse, Meta } from '../types.ts';
 import { Button } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
@@ -49,7 +49,7 @@ import { edgeColour } from '../hue.ts';
  */
 function RecordNode({ data }: NodeProps) {
   const { card, show, context, onOpen } = data as unknown as {
-    card: CardDTO;
+    card: NoteDTO;
     show: string[];
     context: boolean;
     onOpen: (id: string) => void;
@@ -81,7 +81,7 @@ function ClusterNode({ data }: NodeProps) {
   );
 }
 
-const nodeTypes = { record: RecordNode, cluster: ClusterNode };
+const nodeTypes = { note: RecordNode, cluster: ClusterNode };
 
 /**
  * Turn the decided edges into React Flow's shape. The decisions — pairing,
@@ -152,13 +152,13 @@ export function CanvasView({
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
   reload: () => void;
-  /** The query half of the page URL — what a save records. */
+  /** The query half of the page URL — what a save notes. */
   wire: string;
   onSaved: (name: string) => void;
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   // Which built array `nodes` was seeded from. State and not a ref: a render that
-  // React throws away must not leave behind the record that it happened.
+  // React throws away must not leave behind the note that it happened.
   const [seed, setSeed] = useState<Node[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // The vault's first relation, not a name written here — a vault that has no
@@ -169,12 +169,12 @@ export function CanvasView({
   const [naming, setNaming] = useState(false);
 
   useRequestEnrichment([
-    ...new Set(Object.values(data.cards).flatMap((c) => c.links.map((l) => l.raw))),
+    ...new Set(Object.values(data.notes).flatMap((c) => c.links.map((l) => l.raw))),
   ]);
 
   const built = useMemo(() => {
     const context = new Set(data.context);
-    const shown = [...data.ids, ...data.context].map((id) => data.cards[id]).filter(Boolean) as CardDTO[];
+    const shown = [...data.ids, ...data.context].map((id) => data.notes[id]).filter(Boolean) as NoteDTO[];
     const stored = data.spec.nodes ?? {};
     // Stored positions only ever come from a saved view. An ad-hoc query has no
     // file to hold arrangement, so it is auto-laid-out — naming a view is what
@@ -186,7 +186,7 @@ export function CanvasView({
     // It used to answer a second question too, "which relations point at their
     // container", which is a property of the *relation* rather than the view. So
     // a canvas laid out by `blocks` flipped every blocks edge and dagre put the
-    // blocker on the right, while a record inside a project drew two lines
+    // blocker on the right, while a note inside a project drew two lines
     // instead of one. Every reference points at what it depends on now, so
     // nothing has to say which do.
     const layoutBy = data.layout ? [data.layout] : [];
@@ -208,7 +208,7 @@ export function CanvasView({
       const p = placed.get(card.id)!;
       return {
         id: card.id,
-        type: 'record',
+        type: 'note',
         position: { x: p.x, y: p.y },
         // Declared explicitly: the minimap reads dimensions from the user node
         // rather than the measured internals, and dagre has already laid the
@@ -217,7 +217,7 @@ export function CanvasView({
         height: p.h,
         style: { width: p.w, height: p.h },
         // An unmatched ancestor is drawn to keep the graph connected, and is not
-        // a match. Selecting one and running a bulk action would edit a record
+        // a match. Selecting one and running a bulk action would edit a note
         // the query never returned — the same widening the `context` split exists
         // to prevent. A band was already unselectable for its own reason.
         selectable: !context.has(card.id),
@@ -245,7 +245,7 @@ export function CanvasView({
         }))
       : [];
 
-    // Bands first, so a record is always drawn over its own background.
+    // Bands first, so a note is always drawn over its own background.
     return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, meta.facets, data.layout) };
   }, [data, onOpen]);
 
@@ -256,7 +256,7 @@ export function CanvasView({
    * "adjust state when the input changes" and here is the difference between a new
    * query arriving in one paint and arriving in two. `edges` below is handed to
    * React Flow straight out of `built`, so the commit that paints the new edges
-   * against the previous render's nodes draws every line to a record that is not
+   * against the previous render's nodes draws every line to a note that is not
    * on the canvas yet — and an effect runs *after* that paint, which makes that
    * frame one you would see.
    *
@@ -268,7 +268,7 @@ export function CanvasView({
     setSeed(built.nodes);
     setNodes(
       built.nodes.map((n) =>
-        n.type === 'record' ? { ...n, selected: selection.ids.has(n.id) } : n,
+        n.type === 'note' ? { ...n, selected: selection.ids.has(n.id) } : n,
       ),
     );
     setDirty(false);
@@ -320,7 +320,7 @@ export function CanvasView({
     setNodes((cur) => {
       let moved = false;
       const next = cur.map((n) => {
-        if (n.type !== 'record') return n;
+        if (n.type !== 'note') return n;
         const want = selection.ids.has(n.id);
         if (Boolean(n.selected) === want) return n;
         moved = true;
@@ -371,7 +371,7 @@ export function CanvasView({
    *
    * A relation is a reference facet, so this is an ordinary facet write — the
    * same call the card panel and the bulk bar make. A hierarchy is drawn
-   * container → member, so the value lands on the *target* record and points
+   * container → member, so the value lands on the *target* note and points
    * back at the source; `single: true` on the facet is what makes a second
    * parent replace the first rather than stack on it.
    */
@@ -386,12 +386,12 @@ export function CanvasView({
         // The server's answer to "which relation is the hierarchy", which is why it
         // is in the payload at all. This used to re-derive it from `single`.
         layout: data.layout,
-        valuesOf: (id) => data.cards[id]?.facets[newRelation] ?? [],
+        valuesOf: (id) => data.notes[id]?.facets[newRelation] ?? [],
       });
       if (intent.kind !== 'facet') return;
       setProblem(null);
       // The same targeted write the board uses: only this facet, and the values
-      // computed per record. The old call spread the whole facet map from a
+      // computed per note. The old call spread the whole facet map from a
       // possibly-stale payload, so an unrelated change could be reverted.
       api
         .bulk({
@@ -403,16 +403,16 @@ export function CanvasView({
         .then(() => reload())
         .catch((e: ApiError) => setProblem(e.message));
     },
-    [data.cards, data.layout, meta.facets, newRelation, reload],
+    [data.notes, data.layout, meta.facets, newRelation, reload],
   );
 
   const addRecord = async () => {
-    const title = prompt('New record. Title:');
+    const title = prompt('New note. Title:');
     if (!title?.trim()) return;
     try {
-      // No facets: a record with no status is not on any status-filtered board,
+      // No facets: a note with no status is not on any status-filtered board,
       // which is what "just a node" ever meant.
-      await api.createCard({ title: title.trim() });
+      await api.createNote({ title: title.trim() });
       reload();
     } catch (err) {
       setProblem((err as ApiError).message);
@@ -442,7 +442,7 @@ export function CanvasView({
            * that had silently failed, when nothing had been asked of the server
            * at all.
            *
-           * Deleting a record is `bulkDelete` behind a confirm, because the files
+           * Deleting a note is `bulkDelete` behind a confirm, because the files
            * are the vault. A keystroke that bypasses both is not a shortcut for
            * it, so the key is turned off rather than rebound.
            */
@@ -488,7 +488,7 @@ export function CanvasView({
 
         {/*
           What floats here is what only a canvas can do *and* only while a canvas
-          is open: creating a relation by dragging, adding a record, saving a
+          is open: creating a relation by dragging, adding a note, saving a
           layout. Which facets are drawn is `show`, which every shape has, so it
           lives in the rail — and keeping context is now a property of the shape
           rather than a control, since nothing but a canvas ever honoured it.
@@ -506,7 +506,7 @@ export function CanvasView({
           </label>
 
           <Button size="small" onClick={() => void addRecord()}>
-            + record
+            + note
           </Button>
           {dirty && !naming && (
             <Button

@@ -41,7 +41,7 @@ export interface Resolved {
   needsSetup?: boolean;
   fetchedAt?: number;
   /** Why a kind has no fetcher, when that is the situation. */
-  note?: string;
+  reason?: string;
 }
 
 /**
@@ -129,7 +129,7 @@ export function readCached(dataRoot: string, refs: string[]): Resolved[] {
         ref: raw,
         kind: link.kind,
         state: 'unsupported',
-        note: NOT_ENRICHED[link.kind] ?? `no fetcher for "${link.kind}"`,
+        reason: NOT_ENRICHED[link.kind] ?? `no fetcher for "${link.kind}"`,
       });
       continue;
     }

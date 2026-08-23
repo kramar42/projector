@@ -17,7 +17,7 @@ import type { FacetDef } from './types.ts';
  * `facets.ts`, whose one job that needs `node:fs` is loading the file.
  */
 
-/** A reference facet holds record ids: it is a relation, and it can be walked. */
+/** A reference facet holds note ids: it is a relation, and it can be walked. */
 export function isRef(def: FacetDef | undefined): boolean {
   return def?.type === 'ref';
 }
@@ -31,7 +31,7 @@ export function isOrdered(def: FacetDef | undefined): boolean {
  * There is no list of which relations point at their container, because they all
  * do.
  *
- * A reference facet is stored on the record that *depends* — `parent` on the
+ * A reference facet is stored on the note that *depends* — `parent` on the
  * child, `project` on the member, `blocked_by` on the card that is stuck — and
  * points at what it depends on. So a canvas flips every reference edge to draw
  * it, and dagre gets every one the same way round, roots on the left.
@@ -65,7 +65,7 @@ export const HUES: readonly string[] = ['orange', 'green', 'purple', 'blue', 'pi
  * The absence refinement, as it travels.
  *
  * `(none)` rather than a bare `none`, so a facet that one day carries a literal
- * value `none` cannot collide with "this record has no value for this axis".
+ * value `none` cannot collide with "this note has no value for this axis".
  */
 export const NONE = '(none)';
 

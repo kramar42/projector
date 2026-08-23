@@ -80,7 +80,7 @@ const GLYPH = {
    * own advance and at 14px matches `✕` for ink (28.8 against 29.7 lit px, both
    * in an 8×8 box) — but on the pixel grid its arrowhead survives as about two
    * pixels, so it reads as a broken ring and collides with `○`, the container
-   * record mark.
+   * note mark.
    *
    * So: 270° of arc at r5 with the gap in the north-east quadrant, and the
    * arrowhead *filled*. A stroked chevron was tried first — 1.2 units renders

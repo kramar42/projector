@@ -5,9 +5,9 @@ import type { FacetDef } from './types.ts';
  *
  * It was two: `useHue` in `vocabulary.tsx` chose a chip class, `CanvasView` built
  * a `var(--hue-*)` for an edge, and each had its own idea of what an undeclared
- * axis or a reference meant. Two ideas of one thing is how a record came to read
+ * axis or a reference meant. Two ideas of one thing is how a note came to read
  * as a purple `parent` chip on a board and as plain text in the editor, and how
- * the built-in axis ended up drawn in *purple* by the record picker while
+ * the built-in axis ended up drawn in *purple* by the note picker while
  * declaring `blue` in its own definition.
  *
  * The four registers, in the order they are decided:
@@ -15,8 +15,8 @@ import type { FacetDef } from './types.ts';
  *  1. **app** — the axis the app itself defines (`builtin`). It draws in
  *     `--accent`, because the app's own axis is the app speaking. Nothing else in
  *     the vocabulary may claim the accent.
- *  2. **record** — every other reference axis. A reference value is not a value,
- *     it is another record, so it draws in the neutral register a record is drawn
+ *  2. **note** — every other reference axis. A reference value is not a value,
+ *     it is another note, so it draws in the neutral register a note is drawn
  *     in everywhere: mark, title, no family. A `hue:` on a reference is a *line*
  *     colour — the canvas edge — and never a chip's.
  *  3. **family** — a label, date or number axis with a `hue:`, or a bucket with
@@ -27,15 +27,15 @@ import type { FacetDef } from './types.ts';
  */
 export type Register =
   | { kind: 'app' }
-  | { kind: 'record' }
+  | { kind: 'note' }
   | { kind: 'family'; hue: string; filled: boolean }
   | { kind: 'muted' };
 
 export function registerOf(def: FacetDef | undefined, bucket?: string): Register {
   // A reference is decided by what it *is*, before any hue it declares: the
   // declaration still does something — it colours the relation's edge — but a
-  // record at the end of that edge is drawn as a record.
-  if (def?.type === 'ref') return def.builtin ? { kind: 'app' } : { kind: 'record' };
+  // note at the end of that edge is drawn as a note.
+  if (def?.type === 'ref') return def.builtin ? { kind: 'app' } : { kind: 'note' };
   if (def?.builtin) return { kind: 'app' };
 
   const fromBucket = bucket ? def?.buckets?.find((b) => b.name === bucket)?.hue : undefined;
@@ -64,7 +64,7 @@ export function chipClass(def: FacetDef | undefined, bucket?: string): string {
   switch (reg.kind) {
     case 'app':
       return 'facet-app';
-    case 'record':
+    case 'note':
       return 'facet-ref';
     case 'muted':
       return 'facet-muted';

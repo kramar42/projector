@@ -138,7 +138,7 @@ function seedFile(): string {
 // ---------------------------------------------------------------- the bare vault
 
 /**
- * A vault with records and views and **no vocabulary at all**.
+ * A vault with notes and views and **no vocabulary at all**.
  *
  * The other direction of the same constraint. The grep above proves no facet is
  * named; this proves the absence of every facet is a state the app can be in —
@@ -168,18 +168,18 @@ function bareVault(): { root: string; cleanup: () => void } {
 
   const card = (id: string, body: string) =>
     writeFileSync(
-      join(root, 'cards', `${id}.md`),
+      join(root, 'notes', `${id}.md`),
       `---\nid: ${id}\ntitle: ${id}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\n${body}\n`,
       'utf8',
     );
-  card('plain', 'A record with no facets, which is now every record.');
+  card('plain', 'A note with no facets, which is now every note.');
   writeFileSync(
-    join(root, 'cards', 'linked.md'),
+    join(root, 'notes', 'linked.md'),
     '---\nid: linked\ntitle: linked\nlinks: [jira:PROJ-1]\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA link, so the `linked` axis has something.\n',
     'utf8',
   );
   writeFileSync(
-    join(root, 'cards', 'owner.md'),
+    join(root, 'notes', 'owner.md'),
     '---\nid: owner\ntitle: owner\nproject: {}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA project block, which is not a facet.\n',
     'utf8',
   );
@@ -187,21 +187,21 @@ function bareVault(): { root: string; cleanup: () => void } {
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-test('a vault with records, views and no vocabulary is a working vault', () => {
+test('a vault with notes, views and no vocabulary is a working vault', () => {
   const { root, cleanup } = bareVault();
   try {
     const facets = loadFacets(join(root, 'facets.yaml'));
     // The built-ins, and nothing else. This is the whole vocabulary.
     assert.deepEqual(Object.keys(facets), Object.keys(BUILTIN_FACETS));
 
-    const { db, records, unreadable, duplicates } = reindex(root);
-    assert.equal(records.size, 3);
+    const { db, notes, unreadable, duplicates } = reindex(root);
+    assert.equal(notes.size, 3);
 
     // `pj check` is silent. It used to warn once per card about a missing
     // project, in a vault that has no notion of projects.
     const issues = [
       ...validateVocabulary(declaredFacets(join(root, 'facets.yaml')), 'facets.yaml'),
-      ...validate(records, facets, root, { unreadable, duplicates }),
+      ...validate(notes, facets, root, { unreadable, duplicates }),
       ...validateViews(
         viewFiles(root).map(({ name, file }) => ({
           spec: loadViews(root).find((v) => v.name === name)!,
@@ -214,12 +214,12 @@ test('a vault with records, views and no vocabulary is a working vault', () => {
 
     // And it answers a query, with the computed axes and no stored ones.
     const payload = queryPayload(
-      { facets, db, records, views: loadViews(root), today: '2026-08-20' },
+      { facets, db, notes, views: loadViews(root), today: '2026-08-20' },
       parseSpec({}),
     );
     assert.equal(payload.total, 3);
     // The computed axes and no stored one. `blocked` is still offered and holds
-    // one value: nothing declares blocking, so every record is `clear`. An axis
+    // one value: nothing declares blocking, so every note is `clear`. An axis
     // that cannot divide anything is arguably not worth a rail row, but that is
     // true of `type` in some vaults too and is a separate question from this one.
     assert.deepEqual(

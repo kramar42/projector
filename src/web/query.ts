@@ -13,14 +13,14 @@ import type { Meta, Shape, ViewSpec } from './types.ts';
  * for the same reason.
  */
 
-export const CARD_PARAM = 'card';
+export const NOTE_PARAM = 'note';
 
 /**
- * Which records are picked out.
+ * Which notes are picked out.
  *
  * The app's, not the query's — what you have singled out rather than what you
  * asked for — and keeping it out of `isQueryParam` is load-bearing twice. A saved
- * view must not record a selection, and a click must not re-ask the server: the
+ * view must not note a selection, and a click must not re-ask the server: the
  * result set cannot have changed, so a selection inside the query would spend a
  * round trip per pick to be told the same answer. It used to cost more than that —
  * `useLive` blanked its payload before refetching, so every click flashed the
@@ -28,7 +28,7 @@ export const CARD_PARAM = 'card';
  * reason that outlived the flash.
  *
  * It lives in the URL rather than in a component so that it survives a change of
- * shape — the same records are the same records whether you are looking at a
+ * shape — the same notes are the same notes whether you are looking at a
  * board, a table or a canvas — and a reload.
  */
 export const SEL_PARAM = 'sel';
@@ -49,7 +49,7 @@ function isQueryParam(key: string): boolean {
  * it is which library you opened rather than what you are looking at.
  */
 function isOwnParam(key: string): boolean {
-  return key === CARD_PARAM || key === SEL_PARAM || isQueryParam(key);
+  return key === NOTE_PARAM || key === SEL_PARAM || isQueryParam(key);
 }
 
 /**
@@ -159,7 +159,7 @@ export function relations(meta: Meta): string[] {
 
 /** A one-line reading of the query, for the sidebar footer and the page title. */
 export function describe(spec: ViewSpec, total: number): string {
-  const bits: string[] = [`${total} ${spec.shape === 'canvas' ? 'records' : 'cards'}`];
+  const bits: string[] = [`${total} ${spec.shape === 'canvas' ? 'notes' : 'cards'}`];
   const q = spec.query;
   const filters = Object.entries(q.filter ?? {}).filter(([, v]) => v.length);
   if (filters.length) bits.push(filters.map(([f, v]) => `${f}=${v.join('|')}`).join(' '));

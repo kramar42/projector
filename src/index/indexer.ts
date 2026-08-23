@@ -1,13 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { listCardFiles, loadCard } from '../schema/card.ts';
-import type { Rec } from '../schema/types.ts';
+import { listNoteFiles, loadNote } from '../schema/note.ts';
+import type { Note } from '../schema/types.ts';
 import { isProject } from './project.ts';
 import { openDb } from './db.ts';
 import { paths } from '../config.ts';
 
 export interface IndexResult {
   db: DatabaseSync;
-  records: Map<string, Rec>;
+  notes: Map<string, Note>;
   /** Files that could not be parsed at all; `pj check` reports them. */
   unreadable: { file: string; errors: string[] }[];
   duplicates: { id: string; files: string[] }[];
@@ -15,16 +15,16 @@ export interface IndexResult {
 
 /** Read every card file. Parse failures are collected, never thrown. */
 export function readAll(cardsDir: string): {
-  records: Map<string, Rec>;
+  notes: Map<string, Note>;
   unreadable: { file: string; errors: string[] }[];
   duplicates: { id: string; files: string[] }[];
 } {
-  const records = new Map<string, Rec>();
+  const notes = new Map<string, Note>();
   const unreadable: { file: string; errors: string[] }[] = [];
   const seen = new Map<string, string[]>();
 
-  for (const file of listCardFiles(cardsDir)) {
-    const res = loadCard(file);
+  for (const file of listNoteFiles(cardsDir)) {
+    const res = loadNote(file);
     if (!res.ok) {
       unreadable.push({ file: res.file, errors: res.errors });
       continue;
@@ -33,24 +33,24 @@ export function readAll(cardsDir: string): {
     const files = seen.get(rec.id) ?? [];
     files.push(file);
     seen.set(rec.id, files);
-    if (!records.has(rec.id)) records.set(rec.id, rec);
+    if (!notes.has(rec.id)) notes.set(rec.id, rec);
   }
 
   const duplicates = [...seen.entries()]
     .filter(([, files]) => files.length > 1)
     .map(([id, files]) => ({ id, files }));
 
-  return { records, unreadable, duplicates };
+  return { notes, unreadable, duplicates };
 }
 
 /** Rebuild the whole index from the card files. */
 export function reindex(dataRoot: string): IndexResult {
   const p = paths(dataRoot);
-  const { records, unreadable, duplicates } = readAll(p.cards);
+  const { notes, unreadable, duplicates } = readAll(p.notes);
   const db = openDb(p.db, { fresh: true });
 
   const insRec = db.prepare(
-    `INSERT INTO records (id, title, file, body, created, updated, is_project, fingerprint)
+    `INSERT INTO notes (id, title, file, body, created, updated, is_project, fingerprint)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insFacet = db.prepare('INSERT OR IGNORE INTO facets (record_id, facet, value) VALUES (?, ?, ?)');
@@ -58,7 +58,7 @@ export function reindex(dataRoot: string): IndexResult {
   const insFts = db.prepare('INSERT INTO fts (id, title, body) VALUES (?, ?, ?)');
 
   db.exec('BEGIN');
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     insRec.run(
       rec.id,
       rec.title,
@@ -77,5 +77,5 @@ export function reindex(dataRoot: string): IndexResult {
   }
   db.exec('COMMIT');
 
-  return { db, records, unreadable, duplicates };
+  return { db, notes, unreadable, duplicates };
 }

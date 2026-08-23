@@ -100,7 +100,7 @@ test('worktree prune runs even when the folder already exists', () => {
 
 test('the briefing names failed repos as out of scope and stops before building', () => {
   const ctx = {
-    id: 'c1', title: 'T', isProject: false, file: 'cards/c1.md',
+    id: 'c1', title: 'T', isProject: false, file: 'notes/c1.md',
     facets: {}, body: '', project: null, blockedBy: [],
     refs: {}, inbound: {}, links: [], siblings: [],
   };
@@ -125,7 +125,7 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
   try {
-    mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+    mkdirSync(pathJoin(root, 'notes'), { recursive: true });
     // The vocabulary decides what is watched and what "finished" means. Nothing
     // in the log names a facet or a value any more.
     writeFileSync(
@@ -139,7 +139,7 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
     git('config', 'user.email', 't@t');
     git('config', 'user.name', 'T');
 
-    const card = pathJoin(root, 'cards', 'ship.md');
+    const card = pathJoin(root, 'notes', 'ship.md');
     writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [planning] }\n---\n', 'utf8');
     git('add', '-A');
     git('commit', '-qm', 'add ship');

@@ -10,7 +10,7 @@ import { Button } from './Button.tsx';
  * component is one of them free to drift.
  *
  * Deliberately not generalised past those two. `BoardView`'s new-card input and
- * `CardPanel`'s title edit share the Enter-commits convention but not the shape —
+ * `NotePanel`'s title edit share the Enter-commits convention but not the shape —
  * one also commits on blur, one is a multi-line textarea — and covering all four
  * would take three boolean props, which is the shape of a component that does not
  * know what it is.

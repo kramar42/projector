@@ -1,12 +1,12 @@
 # projector
 
-A personal work-management app. One card database in markdown files, projected as a **board**, a
+A personal work-management app. One note database in markdown files, projected as a **board**, a
 **mind-map canvas** or a **table** — whichever the current query asks for — with read-only inline views
 of Jira issues, GitHub PRs, Claude sessions and local docs.
 
 It is a single-user app that runs on your own machine against a folder of your own files. Three
 promises shape everything else: **your markdown files are the source of truth**, **nothing is ever
-written back** to Jira, GitHub, Trello or Slack, and **the vocabulary is yours** — the axes a card can
+written back** to Jira, GitHub, Trello or Slack, and **the vocabulary is yours** — the axes a note can
 carry, and what each one means, are declared in your vault rather than built into the app.
 
 ## Running
@@ -31,8 +31,8 @@ hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
 
 ## Facets, not lists
 
-A card does not live in a column. It carries **facets**, and **every facet value is an array**,
-uniformly. Group by any facet to get columns; group by a multi-valued one and a card appears in every
+A note does not live in a column. It carries **facets**, and **every facet value is an array**,
+uniformly. Group by any facet to get columns; group by a multi-valued one and a note appears in every
 column it belongs to, by construction.
 
 **Every facet is your vault's.** `facets.yaml` is the whole vocabulary — the axes, their values, their
@@ -41,15 +41,15 @@ with a working set (`priority`, `status`, `due`, `domain`, `energy`, `owner`, `w
 `tech`, and the relations `parent` and `blocked_by`), and every one of those is an ordinary
 declaration you can rename, retype or delete. An empty `facets.yaml` is a working vault.
 
-That includes the behaviour, not just the labels. A deadline is loud when it passes, a card is blocked
+That includes the behaviour, not just the labels. A deadline is loud when it passes, a note is blocked
 while something it waits on is unfinished, an axis draws in orange, a relation has a name for its other
 end — these are things a vault *says*, in five keys beside `type`:
 
 | | |
 |---|---|
 | `closed:` | which values mean *no further work expected* — what makes a blocker stop blocking |
-| `blocking:` | while this axis is unsatisfied the card cannot proceed |
-| `expected:` | a well-filed card carries this; the triage axis is built from it |
+| `blocking:` | while this axis is unsatisfied the note cannot proceed |
+| `expected:` | a well-filed note carries this; the triage axis is built from it |
 | `inverse:` | what the other end of a relation is called |
 | `hue:` | which family this axis draws in |
 
@@ -60,7 +60,7 @@ gets the same colouring, filtering and sorting. Neither is a special case in the
 
 Storage is uniform; the **vocabulary** is where the constraints live. `open: false` refuses a value the
 list does not declare, and `single: true` refuses a second value at all — because `status: [planning,
-done]` is not a card in two columns, it is a card in no coherent state, and the thing writing most of
+done]` is not a note in two columns, it is a note in no coherent state, and the thing writing most of
 these files is an agent.
 
 There is one built-in facet, `project`, described [below](#the-one-built-in). Everything else,
@@ -72,14 +72,14 @@ A facet also declares a **type**, which says what its values *are*:
 | | | |
 |---|---|---|
 | `label` | a member of the declared `values` list | sorts in declared order |
-| `ref` | a record id in this vault | also traversable — see below |
+| `ref` | a note id in this vault | also traversable — see below |
 | `date` | `YYYY-MM-DD` | sorts chronologically |
 | `number` | | sorts numerically, not as text |
 
 The file still holds strings and memory still holds `string[]`; the type governs *interpretation*. That
 is what makes it cheap — the engine reads a facet in exactly two places.
 
-## Pseudo-facets
+## Computed axes
 
 Five axes are computed rather than stored, and appear in the filter panel alongside the real facets,
 marked `ƒ` for computed:
@@ -89,11 +89,11 @@ marked `ƒ` for computed:
 | `type` | `project`, `node`, `plain` | a `project:` block · being named through any reference facet |
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
 | `triage` | one `needs-<facet>` per `expected:` facet, then `complete` | absence of those facets |
-| `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a record carries |
+| `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a note carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
-absence, a record's links, or the app-written `updated` field. Each is a count, a date comparison or
+absence, a note's links, or the app-written `updated` field. Each is a count, a date comparison or
 the presence of a reference — never a judgement. `type=project` *is* the projects view, and `triage`
 turns the untriaged pile into something you can drag out of. The three `type` values are exclusive — a
 project that something is part of stays a `project` — so the counts always add up.
@@ -105,7 +105,7 @@ gives it a value on the filter, the grouping and the sort, and a vault that decl
 
 **Every one of them computes.** Nothing derivable is also storable, which is why there is no
 `status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
-`waiting_on` — `status` is lifecycle alone. A record with no `due` has no value on that axis rather
+`waiting_on` — `status` is lifecycle alone. A note with no `due` has no value on that axis rather
 than an `undated` bucket of its own, so "no deadline" is the same `(none)` refinement every other
 facet already has.
 
@@ -137,39 +137,39 @@ declare them, so an `effort` axis in points buckets exactly as `due` does in day
 `updated` are *not* facets and never will be: a facet is vocabulary you declare, and those two are
 written by the app.
 
-## There is only a record
+## There is only a note
 
 A canvas and a board sit at different altitudes: most leaves of a mind-map are scaffolding, not work.
-There is no field saying which a record is, because two questions the record already answers cover it:
+There is no field saying which a note is, because two questions the note already answers cover it:
 
-- **Is it work?** Whether it carries a lifecycle facet. That is what keeps a grouping record off a
+- **Is it work?** Whether it carries a lifecycle facet. That is what keeps a grouping note off a
   status-filtered board — it has no status, so the filter does not select it.
 - **Does anything point at it?** Whether any reference facet names it.
 
-Only `id` and `title` are required, and a record becomes work by acquiring a lifecycle rather than by
+Only `id` and `title` are required, and a note becomes work by acquiring a lifecycle rather than by
 being reclassified.
 
-Every record carries a mark before its title saying which it is. The number is drawn only in a table,
+Every note carries a mark before its title saying which it is. The number is drawn only in a table,
 after the title; a card face carries the same fact as the `○` glyph itself, with the number in the
 mark's tooltip:
 
 | | |
 |---|---|
-| `•` | a card — work |
-| `○` | a node — some other record names it, through any reference facet |
+| `•` | a note — work |
+| `○` | a node — some other note names it, through any reference facet |
 | `▣` | a project — it owns configuration that its members inherit |
-| `12` | how many records name this one, across every reference facet |
+| `12` | how many notes name this one, across every reference facet |
 
 ## Relations are facets
 
-A facet declared **`type: ref`** holds record ids rather than labels. That one word is the whole
+A facet declared **`type: ref`** holds note ids rather than labels. That one word is the whole
 relation model — there is no separate notion of an edge, and no limit on how many relations a vault
 declares. The seeded ones:
 
 | | Meaning | Powers |
 |---|---|---|
-| `parent` | decomposition — this record is *part of* that one | the mind-map tree, roll-up progress |
-| `blocked_by` | this card cannot move until that one is finished | the `blocked` axis, "what does finishing this unblock" |
+| `parent` | decomposition — this note is *part of* that one | the mind-map tree, roll-up progress |
+| `blocked_by` | this note cannot move until that one is finished | the `blocked` axis, "what does finishing this unblock" |
 | `project` | membership *(built in)* | config inheritance, the portfolio, transitive roll-up |
 
 There is no `edges:` block, because a relation was never a different kind of thing. Being a facet means
@@ -177,11 +177,11 @@ a relation **filters, groups a board, reaches `(none)`, bulk-edits and drags** �
 could do. Being a reference means it also **lays out a canvas, walks under `focus`, and refuses a
 cycle** — everything an edge could do. One mechanism, strictly more capable than either half.
 
-**Every reference is stored on the record that depends**, pointing at what it depends on — the child
-names its parent, the member its project, the blocked card its blocker. That is one rule rather than
+**Every reference is stored on the note that depends**, pointing at what it depends on — the child
+names its parent, the member its project, the blocked note its blocker. That is one rule rather than
 three facts, and it is why a canvas can flip every edge to draw it without being told which. It also
-puts the edit where the motivation is: you open a card *because it is stuck*, and what it is stuck on
-is recorded there rather than on the other card.
+puts the edit where the motivation is: you open a note *because it is stuck*, and what it is stuck on
+is recorded there rather than on the other note.
 
 `blocked_by` is the relation neither Trello nor Jira gives usefully. Its transitive closure is what
 "unblocked now" is built from. It is the one relation not worth grouping a board by, because the
@@ -194,9 +194,9 @@ a link, and "these are similar" is a label facet.
 
 ## Projects
 
-Projects **nest**, and a card can belong to several at once. No separate entity is needed for this:
-**`project:` is an optional frontmatter block on any record**, and a record carrying it is a project.
-Any record can carry one, so a deliverable is both tracked work and a container for the cards
+Projects **nest**, and a note can belong to several at once. No separate entity is needed for this:
+**`project:` is an optional frontmatter block on any note**, and a note carrying it is a project.
+Any note can carry one, so a deliverable is both tracked work and a container for the notes
 implementing it.
 
 ```yaml
@@ -205,34 +205,34 @@ project:
     - { path: ../services,   base: main }
     - { path: ~/code/infra,  base: dev }
   jira: PROJ                          # default project for new jira: links
-  branch: "plat/{card}"               # branch template
+  branch: "plat/{note}"               # branch template
   instructions: |                     # how work here is done
     - Never change a realm in eu-prod without a ticket and a rollback plan.
 ```
 
-A project's key is its record **id**. There is no separate `key`: a second name for one thing is a
+A project's key is its note **id**. There is no separate `key`: a second name for one thing is a
 second thing to keep in step, and it would let a `project` facet value point at something that is not
-a record id.
+a note id.
 
 Repos are declared inline by path — no registry to populate first. Relative paths resolve against the
 vault.
 
-**Membership is the `project` facet and nothing else.** A card carries `project: [platform, mapping]`,
+**Membership is the `project` facet and nothing else.** A note carries `project: [platform, mapping]`,
 an ordinary multi-valued facet stored exactly like `priority` — it drags, bulk-edits and groups through
 the same code path, and its vocabulary comes from the data, so a project is offerable the moment it
 exists.
 
-**Inheritance is what makes "define once" work.** A card's effective config walks its `project` facet
-outward — each value's record, then whatever *that* record belongs to. `repos` accumulate as a union
+**Inheritance is what makes "define once" work.** A note's effective config walks its `project` facet
+outward — each value's note, then whatever *that* note belongs to. `repos` accumulate as a union
 (a nested project needs its parent's plus its own), `instructions` concatenate outermost-first so the
 most specific advice reads last, and everything else takes the nearest value.
 
 **Instructions are configuration**, so they live in the block with the rest of it rather than under a
 heading in the body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a
-progress bar, the first prose paragraph becomes the card-face excerpt, and the whole of it goes into
+progress bar, the first prose paragraph becomes the note-face excerpt, and the whole of it goes into
 FTS — but no heading or marker in it changes how the app behaves.
 
-`parent` is a separate relation: it means decomposition and carries no config. A card may have a
+`parent` is a separate relation: it means decomposition and carries no config. A note may have a
 project, a parent, both or neither.
 
 ---
@@ -249,7 +249,7 @@ view = filter × focus × shape × show
 That is also the sidebar, top to bottom. No top bar, and only the filter panel scrolls:
 
 ```
-[ vault ▾ ]                                       ( 191 records · 16 projects )
+[ vault ▾ ]                                       ( 191 notes · 16 projects )
 [ saved view ▾ ]  modified · save · revert
 ──────────────────────────────────────────
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
@@ -257,7 +257,7 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
                      sort     [ priority ▾ ] [ ↑ ]
 [ show: project +1 ▾ ]
 ──────────────────────────────────────────
-[ focus ]    record · via · direction · depth
+[ focus ]    note · via · direction · depth
 [ filter ]   the facet panel
 ──────────────────────────────────────────
 ( 121 shown · 38 filtered out · 6 for context · clear )
@@ -268,26 +268,26 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 canvas is what only a canvas can do *and* only while one is open:
 
 ```
-[ drag creates: parent ▾ ] [ + record ] [ Save layout ]
+[ drag creates: parent ▾ ] [ + note ] [ Save layout ]
 ```
 
 The bulk-selection bar floats over whichever shape has a selection, for the same reason: it exists
 only while one does.
-The footer always says how many records are shown, how many the filter is hiding and how many are
-context, with a one-click *clear* — so a card that is missing is never a mystery.
+The footer always says how many notes are shown, how many the filter is hiding and how many are
+context, with a one-click *clear* — so a note that is missing is never a mystery.
 
 ## filter
 
-Multi-select over every facet and pseudo-facet, plus **`(none)`** for absence — "cards with no project"
+Multi-select over every facet and computed axis, plus **`(none)`** for absence — "notes with no project"
 is a click, not a search. Values within a facet are ORed; facets are ANDed.
 
-Counts are **disjunctive**: an unselected value tells you how many cards adding it would bring in,
+Counts are **disjunctive**: an unselected value tells you how many notes adding it would bring in,
 rather than reading 0 — so a selection can always be widened, not just narrowed. Refining one facet
 never removes another from the panel, and a facet nothing in view carries is not offered at all.
 
 ## focus
 
-A record plus a traversal. **Not a filter**: a facet filter tests membership one level deep over
+A note plus a traversal. **Not a filter**: a facet filter tests membership one level deep over
 values, while focus walks *edges*, transitively.
 
 ```
@@ -295,12 +295,12 @@ focus = { id, via: <any relation>, dir: out | in | both, depth: n | ∞ }
 ```
 
 The difference matters most with nested projects. If `platform` contains `identity`, which contains the
-cards doing the work, then `filter: project=platform` finds only what names `platform` directly — while
+notes doing the work, then `filter: project=platform` finds only what names `platform` directly — while
 `focus=platform via=project dir=in` finds the whole portfolio. Otherwise you have to tick every
 sub-project by hand, and remember again when a new one appears.
 
-`dir` is mechanical rather than spatial: **`out`** follows a record's own references and **`in`** finds
-the records naming it. `up`/`down` would read correctly only for containment — on `blocked_by`, "up" means
+`dir` is mechanical rather than spatial: **`out`** follows a note's own references and **`in`** finds
+the notes naming it. `up`/`down` would read correctly only for containment — on `blocked_by`, "up" means
 toward the blocker, which is the same arrow as `parent`'s "down".
 
 It applies to every shape: `via=blocked_by dir=in` is "what does finishing this unblock", and
@@ -316,7 +316,7 @@ drawn follows from what it is:
 | | label facet | reference facet |
 |---|---|---|
 | board / canvas face | a chip | a chip that opens the target |
-| canvas | — | a line between records, and the **first** one lays the graph out |
+| canvas | — | a line between notes, and the **first** one lays the graph out |
 | table | a column | a column of links |
 
 ## grouping
@@ -325,24 +325,24 @@ drawn follows from what it is:
 sub-sections. Its options are shared, because they describe grouping rather than any one shape: `sort`
 orders within a column, a section or a canvas rank. Every value the query *admits* gets a group — the facet's
 declared order narrowed to the current selection, so a filter makes an axis smaller rather than empty.
-A board keeps a group nothing is in, because an empty column is somewhere to drag a card to; a table
+A board keeps a group nothing is in, because an empty column is somewhere to drag a note to; a table
 and a canvas drop it, because neither offers anything to drag.
 
 The no-value group always comes last, and appears only when something is in it. To leave the
 uncategorised out entirely, select the values you want — excluding them is what a filter is for.
 
-Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
+Grouping by a **reference** facet gives a column per note — one board per parent, or per project.
 That works because a hierarchy concentrates: 26 distinct parents across 134 references here, only 7 of
 them used once.
 
 `sort: [priority:asc]` ranks by the order declared in `facets.yaml`, not alphabetically — so `now`
 comes before `month`.
 
-A canvas draws them as **bands**, stacked in the order the facet declares. A record has one position,
-so a card whose grouped facet holds several values is drawn in the *first* group it belongs to — and
+A canvas draws them as **bands**, stacked in the order the facet declares. A note has one position,
+so a note whose grouped facet holds several values is drawn in the *first* group it belongs to — and
 the footer says how many that applies to, rather than letting the canvas quietly disagree with the
-board. Records kept for context matched no group, so they get a band of their own. An empty declared
-value gets no band: an empty board column is somewhere to drag a card *to*, and dragging on a canvas
+board. Notes kept for context matched no group, so they get a band of their own. An empty declared
+value gets no band: an empty board column is somewhere to drag a note *to*, and dragging on a canvas
 moves a position without changing any facet.
 
 ## search
@@ -357,9 +357,9 @@ Change a control while one is open and the sidebar says *modified*, with **save*
 named view stays what you left it. *Save current as…* writes the query you are looking at; saving over
 an existing name replaces its query and keeps its arrangement.
 
-**Arrangement only exists in a saved view.** Node positions and manual card order live in the view file,
-never on a card — the same card can sit at a different place on each canvas and in a different order in
-each column. Cards own identity and content; views own arrangement. So an ad-hoc query is auto-laid-out
+**Arrangement only exists in a saved view.** Node positions and manual note order live in the view file,
+never on a note — the same note can sit at a different place on each canvas and in a different order in
+each column. Notes own identity and content; views own arrangement. So an ad-hoc query is auto-laid-out
 and auto-ordered, and *Save layout* on one asks for a name first: naming a query is what creates
 somewhere for its layout to live.
 
@@ -388,21 +388,21 @@ or retired key parses exactly like one that works and then does nothing.
 # The shapes
 
 **Board.** Columns from the primary grouping axis, lanes as rows when a second axis is set. Create a
-card inline in a column and it inherits that column's value. ⌘/⇧-click builds a selection for the bulk
+note inline in a column and it inherits that column's value. ⌘/⇧-click builds a selection for the bulk
 bar.
 
 | Gesture | Effect |
 |---|---|
 | drag `now` → `month` | **replace** — remove `now`, add `month` |
-| ⌥ + drop | **add** — the card now appears in both columns |
+| ⌥ + drop | **add** — the note now appears in both columns |
 | ⇧ + drag out | **remove** just that value |
-| drop into `(none)` | remove the value dragged from — so a card with one value on that axis lands in `(none)`, and a card with several stays in its other columns |
+| drop into `(none)` | remove the value dragged from — so a note with one value on that axis lands in `(none)`, and a note with several stays in its other columns |
 | drag within a column | **reorder** — needs a saved view, since order is arrangement |
 
-So "card in two columns" is always a gesture, never an accident.
+So "note in two columns" is always a gesture, never an accident.
 
 **Canvas.** A tree laid out from its roots, plus free positioning once saved — and bands when the query
-is grouped. Every record draws the same face — how much of a record to show is a property of the view, which is what `show` is, so a card
+is grouped. Every note draws the same face — how much of a note to show is a property of the view, which is what `show` is, so a note
 never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw first — decomposition (`parent`) or membership (`project`).
@@ -413,39 +413,39 @@ walked along the relation the canvas is *laid out by*, so a portfolio canvas nev
 from the decomposition tree.
 
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
-list a board draws as chips. A project row adds roll-ups — **direct / total** card counts, blocked,
+list a board draws as chips. A project row adds roll-ups — **direct / total** note counts, blocked,
 untriaged, last activity — where total follows the `project` chain, so a project with one direct
 member and six nested ones reads `1 / 7`.
 
 ## Editing
 
 **Structure is edited by gesture; content is edited in the panel.** Facets — relations included — are
-written by drag, the bulk bar and canvas handles, the same writes for one card or fifty. Title, body,
-links and the `project:` block go through the card panel only. Creating a card inline in a column is
+written by drag, the bulk bar and canvas handles, the same writes for one note or fifty. Title, body,
+links and the `project:` block go through the note panel only. Creating a note inline in a column is
 the one exception.
 
-Since a relation is a facet, dragging between columns of a `parent` board re-parents a card through
+Since a relation is a facet, dragging between columns of a `parent` board re-parents a note through
 exactly the code path that changes its priority.
 
 | Where | What |
 |---|---|
-| Card panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
+| Note panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
-| Canvas | drag records and **Save layout**, handle-to-handle to add a reference, `+ record`, ⌘-click or marquee to select, bulk bar |
+| Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
 
-**Bulk actions** make a few hundred cards tractable: ⌘-click a selection, then set a parent, set or
+**Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set a parent, set or
 clear one facet, or delete, across all of it.
 
 **Conflicts are refused, not merged.** If a file changed since the panel read it the write is refused
 and the panel says so, rather than one of you silently losing an edit — which matters when an agent may
-be working on the same card in another window.
+be working on the same note in another window.
 
 ---
 
 # Links and enrichment
 
-A link is a typed string on a card, resolved lazily and cached. It renders as its parsed label, and
+A link is a typed string on a note, resolved lazily and cached. It renders as its parsed label, and
 enrichment replaces that with something richer if and when it arrives — nothing waits on it.
 
 **A kind exists when something resolves it.** Anything that only ever renders its own text is a `url`
@@ -496,7 +496,7 @@ turn count, working directory, branch, and either a `claude://` deep link into t
 `claude --resume` command to pick it back up.
 
 ```bash
-pj enrich --all              # resolve every link on every card and print it
+pj enrich --all              # resolve every link on every note and print it
 pj enrich <ref> --force
 ```
 
@@ -520,11 +520,11 @@ channel and a cursor and answers *which refs nobody has filed*. Same Jira token,
 pj intake                    # every channel, each from where it last got to
 pj intake claude git --json
 pj intake status
-pj intake known claude:abc-123          # which cards already carry this
+pj intake known claude:abc-123          # which notes already carry this
 pj intake commit --advance --captured 2 # promote what that sweep recorded
 ```
 
-**`pj intake` creates no card and moves no cursor.** `pj add`/`pj link` do the first after a human
+**`pj intake` creates no note and moves no cursor.** `pj add`/`pj link` do the first after a human
 agrees, and `pj intake commit` does the second once the proposal is resolved. A run that fetched is not
 a run that was resolved, and an abandoned sweep must not swallow what it listed.
 
@@ -533,7 +533,7 @@ examined. `--advance` promotes them. A pending proposal is inert until then, and
 spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
 between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
 
-**A watermark is not what makes this correct.** `source_fingerprint` on the cards is — it stops a
+**A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
 so deleting `.intake.db` degrades a sweep to a default window: noisier, never wrong. That is also why
 it is its own file rather than a table in `.enrich.db`, which is a cache and is meant to be
@@ -543,11 +543,11 @@ Channels work **oldest-first from the cursor**, and a run truncated by `--limit`
 cursor is one value, so it may only advance to a boundary with nothing unexamined behind it.
 
 **What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
-card, a fingerprint already captured, a session too short to be work. Everything else arrives as
+note, a fingerprint already captured, a session too short to be work. Everything else arrives as
 `evidence`, and each match carries the mechanical reason it matched: `cwd`, `worktree`, `branch`,
 `mentions PROJ-303`, `text`. There is no score and no verdict, because the failure that would make this
-useless is a confident wrong one — a session linked to the wrong card puts its history where nobody will
-look. Choosing between card, link and neither is `/pj-capture`'s job, out loud.
+useless is a confident wrong one — a session linked to the wrong note puts its history where nobody will
+look. Choosing between note, link and neither is `/pj-capture`'s job, out loud.
 
 Two channels have no fetcher here at all. Slack and Gmail are read by an agent through MCP — a second
 token in a second place to rotate buys nothing — but `pj` still keeps their cursors, because a
@@ -557,25 +557,25 @@ watermark is a property of where the sweep got to, not of who fetched.
 
 # Agents
 
-Cards are plain files, so an agent can create and edit them directly with no API and no app running.
+Notes are plain files, so an agent can create and edit them directly with no API and no app running.
 Three commands make that reliable:
 
-**`pj context <id>`** assembles everything known about a card in one pass — the project chain, the
+**`pj context <id>`** assembles everything known about a note in one pass — the project chain, the
 inherited repos and instructions, relations, and cached link enrichment — so an agent never
 re-derives it from the filesystem.
 
-**`pj log`** answers "what did I actually do last week", which nothing stored on a card can: `updated`
+**`pj log`** answers "what did I actually do last week", which nothing stored on a note can: `updated`
 is one overwritten date and only ever says that *something* changed. The vault is a git repository, so
-the answer was already on disk — this reads the two versions of every changed file through the card
+the answer was already on disk — this reads the two versions of every changed file through the note
 parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
 **`pj work <id>`** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
-with the card's full context embedded, and a terminal running a Claude session in it. Reopening is
+with the note's full context embedded, and a terminal running a Claude session in it. Reopening is
 idempotent, and one repo failing does not stop the others. **`PROJECTOR_WORKSPACES` is required** —
 worktrees are real directories on disk, so where they go is told, never guessed.
 
-The briefing's key step: read the card, the linked issues and every repo's docs — then **stop and ask**
-before planning or writing code. Its last step links the session back to the card, so a card
+The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
+before planning or writing code. Its last step links the session back to the note, so a note
 accumulates its own history.
 
 ## Skills
@@ -584,33 +584,33 @@ accumulates its own history.
 
 | | |
 |---|---|
-| `/projector` | the model and the `pj` surface — read by the others, and on its own for ad-hoc card work |
-| `/pj-capture` | sweep the five intake channels; each candidate becomes a card, a link on an existing card, or nothing |
-| `/pj-triage` | give incomplete cards a project, priority and status |
-| `/pj-work` | start work on a card |
+| `/projector` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
+| `/pj-capture` | sweep the five intake channels; each candidate becomes a note, a link on an existing note, or nothing |
+| `/pj-triage` | give incomplete notes a project, priority and status |
+| `/pj-work` | start work on a note |
 
 `/pj-capture` and `/pj-triage` both **propose and stop**: they present a table and apply nothing until it is
-approved. A wrong project assignment hides a card in a column nobody will look in, which is worse than
+approved. A wrong project assignment hides a note in a column nobody will look in, which is worse than
 leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
-is why a rejected card gets `status: archived` rather than being deleted: deleting it destroys the
+is why a rejected note gets `status: archived` rather than being deleted: deleting it destroys the
 fingerprint with it, and the next sweep creates it again.
 
 `/pj-capture` reads its candidates from `pj intake` rather than deciding what is new itself, and it makes
-one decision per candidate that `pj` deliberately does not: **card, link, or neither.** A Claude session
+one decision per candidate that `pj` deliberately does not: **note, link, or neither.** A Claude session
 is usually not new work — it is more of something already tracked, or a question that was answered — and
-only "already on a card" is a fact. The rest is a judgement, made on evidence it has to quote.
+only "already on a note" is a fact. The rest is a judgement, made on evidence it has to quote.
 
 ---
 
 # Vaults
 
-A **vault** is a folder holding `cards/`, `facets.yaml` and `views/`, opened the way Obsidian opens
+A **vault** is a folder holding `notes/`, `facets.yaml` and `views/`, opened the way Obsidian opens
 one. The app has no built-in location and assumes no directory name: on first run it asks for a folder
 and remembers the choice, and the switcher at the top of the sidebar opens or adds others.
 
-Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, five
+Pointing at an empty or non-existent folder sets one up: a note directory, a facet vocabulary, five
 starter views, and a `.gitignore` for the index, the cache and the intake cursors. A non-empty folder that is not a
-vault is refused. No prose document is written into a vault — there is no seeded README, and the card format is
+vault is refused. No prose document is written into a vault — there is no seeded README, and the note format is
 explained in the `projector` skill.
 
 The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
@@ -634,27 +634,27 @@ one.
 
 | | |
 |---|---|
-| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
+| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--json]` | list notes. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
-| `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a record |
+| `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
-| `pj context <id> [--json]` | everything known about a card, assembled |
+| `pj context <id> [--json]` | everything known about a note, assembled |
 | `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
-| `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
+| `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
-| `pj check` | validate every card file, and every saved view against the same vocabulary |
+| `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
-`pj search` and `pj ls --q` match the same records through the same sanitiser and differ only in order:
-search ranks by relevance, which belongs to a result set rather than to any record in it, so it cannot
-be a sort key. `pj context` is the only way to read one card — `show` and `project` printed subsets of
+`pj search` and `pj ls --q` match the same notes through the same sanitiser and differ only in order:
+search ranks by relevance, which belongs to a result set rather than to any note in it, so it cannot
+be a sort key. `pj context` is the only way to read one note — `show` and `project` printed subsets of
 what it already assembles.
 
-A saved view's curated card order is applied in the payload, so `pj ls`, a board column and a table
+A saved view's curated note order is applied in the payload, so `pj ls`, a board column and a table
 section of the same view agree about it.
 
 The CLI and the app share one query compiler *and* one payload builder, so `pj ls --view unblocked` and
@@ -669,8 +669,8 @@ by `pj check` like anything else.
 
 ```
 <vault>/
-  cards/
-    fix-deploy.md                # a card
+  notes/
+    fix-deploy.md                # a note
     eventing.md                  # a node, may carry a project: block
     assets/fix-deploy/error.png
   facets.yaml                    # facet vocabulary, order, constraints
@@ -679,7 +679,7 @@ by `pj check` like anything else.
   .index.db  .enrich.db  .intake.db  # derived · cache · cursors — all gitignored
 ```
 
-## Card
+## Note
 
 ```markdown
 ---
@@ -689,7 +689,7 @@ facets:
   priority: [now]
   status: [active]
   due: [2026-09-01]               # a date facet: compared, not matched
-  parent: [eventing]              # reference facets: values are record ids
+  parent: [eventing]              # reference facets: values are note ids
   blocked_by: [kpow-deployment]
   project: [platform]
 links:
@@ -715,7 +715,7 @@ vocabulary does not know is preserved rather than dropped.
 Both are facets — the type is what tells the engine one is matched and the other compared.
 
 The format is documented once, in the `projector` skill — the audience for it is an agent editing files
-directly, and an agent already loads that. `pj check` validates every card and reports every problem at
+directly, and an agent already loads that. `pj check` validates every note and reports every problem at
 once, rather than stopping at the first.
 
 ## Facet vocabulary
@@ -732,14 +732,14 @@ status:
   hue: green                               # which family its chips draw in
 parent:
   label: Part of
-  type: ref                                # values are record ids, so it is
+  type: ref                                # values are note ids, so it is
   single: true                             # traversable as well as filterable
   inverse: Children                        # what the panel calls the other end
   hue: purple
 blocked_by:
   label: blocked by
   type: ref
-  blocking: true                           # an unfinished target stops this card
+  blocking: true                           # an unfinished target stops this note
   inverse: Blocks
   hue: red
 due:

@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import type { CardDTO } from '../types.ts';
+import type { NoteDTO } from '../types.ts';
 
 export interface Placed {
   id: string;
@@ -10,22 +10,22 @@ export interface Placed {
 }
 
 /**
- * One face, for every record.
+ * One face, for every note.
  *
  * There used to be a smaller `chip` face for plain nodes, on the reasoning that
  * a node has no facets to draw. It does not hold: a node carries facets like
- * anything else, and how much of a record to draw is a property of the *view* —
- * that is what `chips` is — not of the record. Two faces meant the same card
+ * anything else, and how much of a note to draw is a property of the *view* —
+ * that is what `chips` is — not of the note. Two faces meant the same card
  * changed shape depending on a stored field, which is the tell.
  *
  * There is deliberately no count-based rule either. Shrinking cards once a
  * canvas gets busy would mean the same card looked different depending on how
- * many neighbours it happened to have, and past a hundred records nothing is
+ * many neighbours it happened to have, and past a hundred notes nothing is
  * legible at fit-zoom in any size — you zoom in, or you narrow the query.
  */
 const FACE = { w: 268, h: 116 } as const;
 
-export function dims(_card: CardDTO): { w: number; h: number } {
+export function dims(_card: NoteDTO): { w: number; h: number } {
   return FACE;
 }
 
@@ -34,7 +34,7 @@ export function dims(_card: CardDTO): { w: number; h: number } {
  * original mind-map.
  */
 export function treeLayout(
-  nodes: CardDTO[],
+  nodes: NoteDTO[],
   edges: { src: string; dst: string; type: string }[],
   direction: 'LR' | 'TB' = 'LR',
   layoutBy: string[],
@@ -57,7 +57,7 @@ export function treeLayout(
   const feeds = new Set(layoutBy);
   for (const e of edges) {
     if (!feeds.has(e.type) || !ids.has(e.src) || !ids.has(e.dst)) continue;
-    // Always the other way round. A reference is stored on the record that
+    // Always the other way round. A reference is stored on the note that
     // depends and points at what it depends on; dagre wants container → member,
     // so the roots sit on the left and the tree opens outward.
     //
@@ -91,7 +91,7 @@ export function treeLayout(
  * hold arrangement, so naming a view is what buys manual positioning (C9).
  */
 export function manualLayout(
-  nodes: CardDTO[],
+  nodes: NoteDTO[],
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
   layoutBy: string[],
@@ -113,7 +113,7 @@ export function manualLayout(
 
 // ---------------------------------------------------------------- clusters
 
-/** Where the records that matched nothing on the grouping axis are drawn. */
+/** Where the notes that matched nothing on the grouping axis are drawn. */
 export const CONTEXT_BAND = '(context)';
 
 export interface Cluster {
@@ -136,19 +136,19 @@ const LABEL = 24;
 const BAND = PAD * 2 + LABEL + 20;
 
 /**
- * Which cluster each record is drawn in.
+ * Which cluster each note is drawn in.
  *
- * A record with several values on the grouping axis belongs to several groups —
+ * A note with several values on the grouping axis belongs to several groups —
  * that is the model working, and a board draws it in each. A canvas cannot: a
  * node has one position. So it is drawn in the **first** group the axis declares,
- * and the sidebar says how many records that applies to rather than letting the
+ * and the sidebar says how many notes that applies to rather than letting the
  * count quietly disagree with the board.
  *
- * Records kept for context matched no group at all, so they get a band of their
+ * Notes kept for context matched no group at all, so they get a band of their
  * own instead of being scattered through the others.
  */
 export function assignClusters(
-  nodes: CardDTO[],
+  nodes: NoteDTO[],
   groups: { value: string; ids: string[] }[],
 ): Map<string, string> {
   const out = new Map<string, string>();
@@ -174,7 +174,7 @@ function bands(assign: Map<string, string>, groups: { value: string }[]): string
  * band apart.
  */
 export function clusteredLayout(
-  nodes: CardDTO[],
+  nodes: NoteDTO[],
   edges: { src: string; dst: string; type: string }[],
   layoutBy: string[],
   groups: { value: string; ids: string[] }[],

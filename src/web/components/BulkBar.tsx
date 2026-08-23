@@ -28,7 +28,7 @@ export function BulkBar({
   onProblem: (m: string) => void;
 }) {
   /**
-   * Pointing a selection at one record: the vault's first *single-valued*
+   * Pointing a selection at one note: the vault's first *single-valued*
    * relation, which is what "put all of these under one thing" means.
    *
    * The button said "Set parent…" and posted a bulk op named `parent`, which was
@@ -77,7 +77,7 @@ export function BulkBar({
                 // The axis's own family, from the same vocabulary the card face
                 // and the panel read. These chips name values of the facet
                 // chosen in the select beside them, so they are properties of
-                // records exactly as the panel's are — a hueless chip here would
+                // notes exactly as the panel's are — a hueless chip here would
                 // put the same value in two colours on one screen, which is the
                 // drift one source is shared to prevent.
                 className={`togglechip ${hue}`}

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Rec } from '../src/schema/types.ts';
-import { parseCard } from '../src/schema/card.ts';
+import type { Note } from '../src/schema/types.ts';
+import { parseNote } from '../src/schema/note.ts';
 import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { blockedBy, blockedSet, unblocks } from '../src/index/blocking.ts';
@@ -31,10 +31,10 @@ function facetsFile(body: string): string {
 function rec(
   id: string,
   parents: string[],
-  project?: Rec['project'],
+  project?: Note['project'],
   body = '',
   belongsTo: string[] = [],
-): Rec {
+): Note {
   return {
     id,
     title: id,
@@ -49,14 +49,14 @@ function rec(
   };
 }
 
-function graph(...recs: Rec[]): Map<string, Rec> {
+function graph(...recs: Note[]): Map<string, Note> {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
 
 /** Parse a card from its text, failing the test rather than returning a result. */
-function recordOf(text: string): Rec {
-  const res = parseCard('/x.md', text);
+function recordOf(text: string): Note {
+  const res = parseNote('/x.md', text);
   assert.ok(res.ok);
   return res.rec;
 }
@@ -109,7 +109,7 @@ test('instructions concatenate outermost first', () => {
   assert.match(p.instructions[1]!, /leaf rule/);
 });
 
-test('a record naming no project resolves to null', () => {
+test('a note naming no project resolves to null', () => {
   const g = graph(rec('a', []), rec('b', ['a']));
   assert.equal(resolveProject('b', g, '/data'), null);
 });
@@ -123,7 +123,7 @@ test('a parent edge grants no project — membership is only the facet', () => {
   assert.deepEqual(projectsOf(g.get('child')!), []);
 });
 
-test('a project record is its own innermost context', () => {
+test('a project note is its own innermost context', () => {
   const g = graph(
     rec('project-b', [], { jira: 'SUPPORT' }),
     rec('keycloak', [], { branch: 'kc/{card}' }, '', ['project-b']),
@@ -169,7 +169,7 @@ test('one cycle check serves an edge and a reference facet alike', () => {
   assert.equal(wouldCycle('a', 'c', outOf), false);
   // b reaches c, so c pointing back at a would close the loop through both.
   assert.equal(wouldCycle('c', 'a', outOf), true);
-  // A record pointing at itself is the degenerate case, caught the same way.
+  // A note pointing at itself is the degenerate case, caught the same way.
   assert.equal(wouldCycle('a', 'a', outOf), true);
 });
 
@@ -200,7 +200,7 @@ test('a self-reference and a dangling one are dropped by every blocking answer',
     facetsFile('status: { values: [planning, done], closed: [done] }\nblocked_by: { type: ref, blocking: true }\n'),
   );
   // Stored on the card that is stuck: `target` names both of its blockers.
-  const records = new Map(
+  const notes = new Map(
     [
       recordOf('---\nid: loop\ntitle: Loops\nfacets: { blocked_by: [loop], status: [planning] }\n---\n'),
       recordOf('---\nid: ghost\ntitle: Ghost\nfacets: { blocked_by: [nowhere], status: [planning] }\n---\n'),
@@ -210,26 +210,26 @@ test('a self-reference and a dangling one are dropped by every blocking answer',
     ].map((r) => [r.id, r]),
   );
 
-  assert.deepEqual(unblocks('loop', records, facets), [], 'a self-loop unblocks nothing, and terminates');
-  assert.deepEqual(blockedBy('loop', records, facets), [], 'and is blocked by nothing');
-  assert.deepEqual(unblocks('ghost', records, facets), [], 'a value naming no record is not a target');
-  assert.deepEqual(unblocks('real', records, facets), ['target']);
+  assert.deepEqual(unblocks('loop', notes, facets), [], 'a self-loop unblocks nothing, and terminates');
+  assert.deepEqual(blockedBy('loop', notes, facets), [], 'and is blocked by nothing');
+  assert.deepEqual(unblocks('ghost', notes, facets), [], 'a value naming no note is not a target');
+  assert.deepEqual(unblocks('real', notes, facets), ['target']);
 
   // A finished blocker stops blocking; an unfinished one does not.
   assert.deepEqual(
-    blockedBy('target', records, facets).map((b) => [b.id, b.done]).sort(),
+    blockedBy('target', notes, facets).map((b) => [b.id, b.done]).sort(),
     [['fin', true], ['real', false]],
   );
   // The axis names the facet that is failing, so a vault with several can say
   // which. `loop` names only itself, and a self-reference is dropped.
-  assert.deepEqual(blockedSet(records, facets).get('target'), ['blocked_by']);
-  assert.equal(blockedSet(records, facets).get('loop'), undefined, 'a self-reference is not one');
+  assert.deepEqual(blockedSet(notes, facets).get('target'), ['blocked_by']);
+  assert.equal(blockedSet(notes, facets).get('loop'), undefined, 'a self-reference is not one');
 
-  // And a vault that declares no `closed` value has no finished records: the
+  // And a vault that declares no `closed` value has no finished notes: the
   // rule is the vocabulary's, not a literal in the engine.
   const noRule = loadFacets(facetsFile('status: { values: [planning, done] }\nblocked_by: { type: ref, blocking: true }\n'));
   assert.deepEqual(
-    blockedBy('target', records, noRule).map((b) => b.done),
+    blockedBy('target', notes, noRule).map((b) => b.done),
     [false, false],
   );
 });

@@ -7,17 +7,17 @@ import { clearFocus, setFocus } from '../../view/intents.ts';
 import { relations } from '../query.ts';
 import type { Dir, Edit, Meta, QueryResponse } from '../types.ts';
 
-/** `out` follows a record's own references; `in` finds the records naming it. */
+/** `out` follows a note's own references; `in` finds the notes naming it. */
 const DIR_MEANS: Record<string, string> = {
-  out: 'follows — what this record points at',
-  in: 'referenced by — what points at this record',
+  out: 'follows — what this note points at',
+  in: 'referenced by — what points at this note',
   both: 'both directions, as two separate walks',
 };
 
 // ---------------------------------------------------------------- focus
 
 /**
- * Focus is a traversal, not a facet — pick a record and walk edges from it. The
+ * Focus is a traversal, not a facet — pick a note and walk edges from it. The
  * computed axes (`type`, `blocked`, `triage`, `linked`, `staleness`) are the
  * facet-like things that aren't facets, and they live in the filter panel,
  * indistinguishable from the real ones.
@@ -26,24 +26,24 @@ export function FocusSection({
   meta,
   data,
   edit,
-  onOpenCard,
+  onOpenNote,
 }: {
   meta: Meta;
   data: QueryResponse | null;
   edit: Edit;
-  onOpenCard: (id: string) => void;
+  onOpenNote: (id: string) => void;
 }) {
   const focus = data?.spec.query.focus;
   /**
-   * The focused record, if the current query happens to contain it.
+   * The focused note, if the current query happens to contain it.
    *
-   * A focus can point at a record the query then filters out, so this is a
+   * A focus can point at a note the query then filters out, so this is a
    * lookup that may miss — which is why the pill falls back to the raw id, and
-   * why the mark falls back to a leaf: drawing `○` for a record we cannot see
+   * why the mark falls back to a leaf: drawing `○` for a note we cannot see
    * would be asserting something unmeasured.
    */
-  const card = focus ? data?.cards[focus.id] : undefined;
-  const title = focus ? (card?.title ?? focus.id) : null;
+  const note = focus ? data?.notes[focus.id] : undefined;
+  const title = focus ? (note?.title ?? focus.id) : null;
 
   return (
     <>
@@ -51,11 +51,11 @@ export function FocusSection({
         <label className="rail-label">Focus</label>
         {focus ? (
           <>
-            {/* The other place a record appeared with no mark. It is a record you
+            {/* The other place a note appeared with no mark. It is a note you
                 click through to, so it wears one — same as a card face, a table
                 row, a reference chip and a picker row. */}
-            <button className="rail-focus" title={focus.id} onClick={() => onOpenCard(focus.id)}>
-              <RecordMark card={card ?? { isProject: false, refCount: 0 }} />
+            <button className="rail-focus" title={focus.id} onClick={() => onOpenNote(focus.id)}>
+              <RecordMark card={note ?? { isProject: false, refCount: 0 }} />
               <span className="truncate">{title ?? focus.id}</span>
             </button>
             <IconButton

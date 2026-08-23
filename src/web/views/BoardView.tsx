@@ -3,7 +3,7 @@ import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import type { CardDTO, Group, QueryResponse } from '../types.ts';
+import type { NoteDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE } from '../../schema/vocabulary.ts';
 import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
@@ -42,7 +42,7 @@ export function BoardView({
   // The second axis is a facet like the first, so a drag across a swimlane is a
   // write like any other. It used to be a row label and nothing else.
   const laneBy = data.spec.query.groupBy?.[1] ?? '';
-  const cards = data.cards;
+  const cards = data.notes;
   // Only a named view can hold card order — arrangement lives in a file or
   // nowhere (C9). An ad-hoc query stays in the query's sort order.
   const viewName = data.spec.name;
@@ -277,7 +277,7 @@ function Column({
   lane: string | undefined;
   /** The column's stored order, across lanes — what a reorder rewrites. */
   order: string[];
-  cards: Record<string, CardDTO>;
+  cards: Record<string, NoteDTO>;
   chips: string[];
   selected: ReadonlySet<string>;
   dragging: string | null;
@@ -322,7 +322,7 @@ function Column({
     // facet. Creating is not editing, so this is the one write outside the panel
     // that is not a gesture (C10).
     api
-      .createCard({ title: t, facets: value && value !== NONE ? { [groupBy]: [value] } : {} })
+      .createNote({ title: t, facets: value && value !== NONE ? { [groupBy]: [value] } : {} })
       .then(onCreated)
       .catch((e: ApiError) => onProblem(e.message));
   };
@@ -399,7 +399,7 @@ function CardTile({
   onSelect,
   onOpen,
 }: {
-  card: CardDTO;
+  card: NoteDTO;
   column: string;
   lane: string | undefined;
   index: number;

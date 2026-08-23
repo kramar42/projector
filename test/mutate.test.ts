@@ -11,7 +11,7 @@ import {
   bulkMove,
   checkFacets,
   mtimeOf,
-  patchCard,
+  patchNote,
   putFrontmatter,
   saveAsset,
 } from '../src/server/mutate.ts';
@@ -32,7 +32,7 @@ import { readAll } from '../src/index/indexer.ts';
 
 function vault(cards: Record<string, string> = {}): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'pj-mutate-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   writeFileSync(
     join(root, 'facets.yaml'),
     'priority: { label: Priority, values: [now, month, backlog], open: false }\n' +
@@ -42,7 +42,7 @@ function vault(cards: Record<string, string> = {}): { root: string; cleanup: () 
     'utf8',
   );
   for (const [id, body] of Object.entries(cards)) {
-    writeFileSync(join(root, 'cards', `${id}.md`), body, 'utf8');
+    writeFileSync(join(root, 'notes', `${id}.md`), body, 'utf8');
   }
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -51,7 +51,7 @@ const card = (id: string, facets: string) =>
   `---\nid: ${id}\ntitle: ${id.toUpperCase()}\nfacets: { ${facets} }\n---\nbody of ${id}\n`;
 
 const facetsOf = (root: string, id: string) =>
-  readAll(join(root, 'cards')).records.get(id)?.facets ?? {};
+  readAll(join(root, 'notes')).notes.get(id)?.facets ?? {};
 
 // ---------------------------------------------------------------- bulkMove
 
@@ -113,10 +113,10 @@ test('a move writes only the facet it names', () => {
 test('a move that changes nothing writes nothing', () => {
   const v = vault({ a: card('a', 'priority: [month]') });
   try {
-    const before = mtimeOf(join(v.root, 'cards', 'a.md'));
+    const before = mtimeOf(join(v.root, 'notes', 'a.md'));
     const move = [{ facet: 'priority', from: 'now', to: 'month' }];
     assert.equal(bulkMove(v.root, ['a'], move, 'add').changed, 0);
-    assert.equal(mtimeOf(join(v.root, 'cards', 'a.md')), before, 'the file was not touched');
+    assert.equal(mtimeOf(join(v.root, 'notes', 'a.md')), before, 'the file was not touched');
   } finally {
     v.cleanup();
   }
@@ -210,7 +210,7 @@ test('a bulk facet write is uniform, and set / add / remove each mean one thing'
   }
 });
 
-test('a bulk write skips an id that is not a record rather than failing the batch', () => {
+test('a bulk write skips an id that is not a note rather than failing the batch', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
     assert.equal(bulkFacet(v.root, ['a', 'ghost'], 'priority', ['month'], 'set').changed, 1);
@@ -240,17 +240,17 @@ test('a narrow write touches one axis and leaves an agent’s concurrent edit al
   const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
   try {
     // What the browser read, and what it still believes the map to be.
-    const base = mtimeOf(join(v.root, 'cards', 'a.md'));
+    const base = mtimeOf(join(v.root, 'notes', 'a.md'));
 
     // An agent edits another axis. Within the guard's tolerance, so no conflict:
     // this is the race that has no 409 to catch it.
     writeFileSync(
-      join(v.root, 'cards', 'a.md'),
+      join(v.root, 'notes', 'a.md'),
       card('a', 'priority: [now], tech: [kafka, quarkus]'),
       'utf8',
     );
 
-    patchCard(v.root, 'a', { facet: { name: 'status', values: ['done'] }, baseMtime: base });
+    patchNote(v.root, 'a', { facet: { name: 'status', values: ['done'] }, baseMtime: base });
 
     const after = facetsOf(v.root, 'a');
     assert.deepEqual(after.status, ['done'], 'the named axis is written');
@@ -264,12 +264,12 @@ test('a narrow write touches one axis and leaves an agent’s concurrent edit al
 test('a narrow write clears an axis by naming it empty, and validates the values it names', () => {
   const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
   try {
-    patchCard(v.root, 'a', { facet: { name: 'tech', values: [] } });
+    patchNote(v.root, 'a', { facet: { name: 'tech', values: [] } });
     assert.equal(facetsOf(v.root, 'a').tech, undefined, 'an emptied axis is dropped, not stored as []');
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['now']);
 
     assert.throws(
-      () => patchCard(v.root, 'a', { facet: { name: 'priority', values: ['nonsuch'] } }),
+      () => patchNote(v.root, 'a', { facet: { name: 'priority', values: ['nonsuch'] } }),
       /priority/,
       'the narrow form is not a way past the vocabulary',
     );
@@ -290,14 +290,14 @@ test('a narrow write clears an axis by naming it empty, and validates the values
 test('a toggle removes the value it names without reverting one added beside it', () => {
   const v = vault({ a: card('a', 'tech: [kafka]') });
   try {
-    const base = mtimeOf(join(v.root, 'cards', 'a.md'));
+    const base = mtimeOf(join(v.root, 'notes', 'a.md'));
 
     // The user's panel rendered with tech: [kafka]. An agent then adds one.
-    writeFileSync(join(v.root, 'cards', 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
+    writeFileSync(join(v.root, 'notes', 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
 
     // The user clicks `kafka` off. Under `set` this would send [] and take
     // `quarkus` with it.
-    patchCard(v.root, 'a', {
+    patchNote(v.root, 'a', {
       facet: { name: 'tech', values: ['kafka'], mode: 'remove' },
       baseMtime: base,
     });
@@ -311,16 +311,16 @@ test('a toggle removes the value it names without reverting one added beside it'
 test('add is a union and remove is a difference, both against the file', () => {
   const v = vault({ a: card('a', 'tech: [kafka]') });
   try {
-    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['kafka'], mode: 'add' } });
+    patchNote(v.root, 'a', { facet: { name: 'tech', values: ['kafka'], mode: 'add' } });
     assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka'], 'adding what is there is not a duplicate');
 
-    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['quarkus'], mode: 'add' } });
+    patchNote(v.root, 'a', { facet: { name: 'tech', values: ['quarkus'], mode: 'add' } });
     assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka', 'quarkus']);
 
-    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['nonsuch'], mode: 'remove' } });
+    patchNote(v.root, 'a', { facet: { name: 'tech', values: ['nonsuch'], mode: 'remove' } });
     assert.deepEqual(facetsOf(v.root, 'a').tech, ['kafka', 'quarkus'], 'removing an absent value is a no-op');
 
-    patchCard(v.root, 'a', { facet: { name: 'tech', values: ['kafka', 'quarkus'], mode: 'remove' } });
+    patchNote(v.root, 'a', { facet: { name: 'tech', values: ['kafka', 'quarkus'], mode: 'remove' } });
     assert.equal(facetsOf(v.root, 'a').tech, undefined, 'emptying the axis drops it');
   } finally {
     v.cleanup();
@@ -336,11 +336,11 @@ test('add is a union and remove is a difference, both against the file', () => {
 test('a single-valued axis refuses to accumulate, whatever mode asks', () => {
   const v = vault({ a: card('a', 'status: [planning]') });
   try {
-    patchCard(v.root, 'a', { facet: { name: 'status', values: ['done'], mode: 'set' } });
+    patchNote(v.root, 'a', { facet: { name: 'status', values: ['done'], mode: 'set' } });
     assert.deepEqual(facetsOf(v.root, 'a').status, ['done']);
 
     assert.throws(
-      () => patchCard(v.root, 'a', { facet: { name: 'status', values: ['planning'], mode: 'add' } }),
+      () => patchNote(v.root, 'a', { facet: { name: 'status', values: ['planning'], mode: 'add' } }),
       /status/,
     );
   } finally {
@@ -349,14 +349,14 @@ test('a single-valued axis refuses to accumulate, whatever mode asks', () => {
 });
 
 /**
- * The guard against fixing the two forms into one. `pj set` reads the record,
+ * The guard against fixing the two forms into one. `pj set` reads the note,
  * mutates a copy of the map and sends it whole; if `facets` ever started merging,
  * every removal it expresses would become a no-op — with no compile error.
  */
 test('the whole-map form still replaces, so `pj set` can express a removal', () => {
   const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
   try {
-    patchCard(v.root, 'a', { facets: { priority: ['month'] } });
+    patchNote(v.root, 'a', { facets: { priority: ['month'] } });
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['month']);
     assert.equal(facetsOf(v.root, 'a').tech, undefined, 'an omitted key is a removal');
   } finally {
@@ -383,26 +383,26 @@ test('the vocabulary is enforced: unknown facets, closed values, single-valued a
 });
 
 /**
- * The graph checks only run when the record map is supplied — `isRef(def) &&
- * records`. Worth pinning, because a caller that omits it gets validation minus
+ * The graph checks only run when the note map is supplied — `isRef(def) &&
+ * notes`. Worth pinning, because a caller that omits it gets validation minus
  * the cycle rule and no indication that it did.
  */
-test('a reference facet refuses a cycle, and self-reference, given the records', () => {
+test('a reference facet refuses a cycle, and self-reference, given the notes', () => {
   const v = vault({
     top: card('top', 'parent: [mid]'),
     mid: card('mid', 'status: [planning]'),
   });
   try {
-    const records = readAll(join(v.root, 'cards')).records;
+    const notes = readAll(join(v.root, 'notes')).notes;
 
     // `top` already points at `mid`; pointing `mid` back closes a loop.
     assert.throws(
-      () => checkFacets(v.root, 'mid', { parent: ['top'] }, records),
+      () => checkFacets(v.root, 'mid', { parent: ['top'] }, notes),
       (e: Error) => e instanceof Invalid && /cycle/i.test(e.message),
     );
     assert.throws(
-      () => checkFacets(v.root, 'mid', { parent: ['mid'] }, records),
-      (e: Error) => e instanceof Invalid && /own record/i.test(e.message),
+      () => checkFacets(v.root, 'mid', { parent: ['mid'] }, notes),
+      (e: Error) => e instanceof Invalid && /own note/i.test(e.message),
     );
 
     // Without the map the vocabulary is still checked, the graph is not.
@@ -417,7 +417,7 @@ test('a reference facet refuses a cycle, and self-reference, given the records',
 test('frontmatter is written whole, and a stale mtime is a conflict', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
-    const file = join(v.root, 'cards', 'a.md');
+    const file = join(v.root, 'notes', 'a.md');
     const res = putFrontmatter(v.root, 'a', 'id: a\ntitle: Renamed\nfacets: { priority: [month] }\n');
     assert.ok(typeof res.mtime === 'number');
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['month']);
@@ -440,7 +440,7 @@ test('an asset is stored by content hash under its card, and its type is checked
     // The path returned is relative to `cards/`, since that is where a card body
     // resolves it from.
     assert.match(first.path, /^assets\/a\/[0-9a-f]{12}\.png$/, first.path);
-    assert.ok(existsSync(join(v.root, 'cards', first.path)), 'stored under cards/');
+    assert.ok(existsSync(join(v.root, 'notes', first.path)), 'stored under cards/');
 
     // The same bytes hash to the same name rather than accumulating copies.
     assert.equal(saveAsset(v.root, 'a', 'image/png', png).path, first.path);
@@ -457,8 +457,8 @@ test('a bulk delete removes the files and reports how many', () => {
   const v = vault({ a: card('a', 'priority: [now]'), b: card('b', 'priority: [now]') });
   try {
     assert.equal(bulkDelete(v.root, ['a', 'ghost']).deleted, 1, 'a missing id is not a failure');
-    assert.ok(!existsSync(join(v.root, 'cards', 'a.md')));
-    assert.ok(existsSync(join(v.root, 'cards', 'b.md')));
+    assert.ok(!existsSync(join(v.root, 'notes', 'a.md')));
+    assert.ok(existsSync(join(v.root, 'notes', 'b.md')));
   } finally {
     v.cleanup();
   }
@@ -467,23 +467,23 @@ test('a bulk delete removes the files and reports how many', () => {
 test('linking bumps updated, and unlinking an absent ref refuses', () => {
   const root = mkdtempSync(join(tmpdir(), 'projector-link-'));
   try {
-    mkdirSync(join(root, 'cards'), { recursive: true });
+    mkdirSync(join(root, 'notes'), { recursive: true });
     writeFileSync(
-      join(root, 'cards', 'a.md'),
+      join(root, 'notes', 'a.md'),
       '---\nid: a\ntitle: Card A\nupdated: 2020-01-01\n---\nbody\n',
       'utf8',
     );
     writeFileSync(join(root, 'facets.yaml'), 'status: { values: [planning, done] }\n', 'utf8');
 
-    patchCard(root, 'a', { links: ['jira:FOO-1'] });
-    const after = readFileSync(join(root, 'cards', 'a.md'), 'utf8');
+    patchNote(root, 'a', { links: ['jira:FOO-1'] });
+    const after = readFileSync(join(root, 'notes', 'a.md'), 'utf8');
     assert.match(after, /links: \[jira:FOO-1\]/);
     assert.doesNotMatch(after, /updated: 2020-01-01/, 'a write that leaves `updated` alone is the bug');
     assert.match(after, /updated: \d{4}-\d{2}-\d{2}/);
 
     // Emptying the array drops the key rather than storing `links: []`.
-    patchCard(root, 'a', { links: [] });
-    assert.doesNotMatch(readFileSync(join(root, 'cards', 'a.md'), 'utf8'), /links:/);
+    patchNote(root, 'a', { links: [] });
+    assert.doesNotMatch(readFileSync(join(root, 'notes', 'a.md'), 'utf8'), /links:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

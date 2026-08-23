@@ -20,8 +20,8 @@ export function resolvePath(p: string, base: string): string {
  */
 export const paths = (root: string) => ({
   root,
-  cards: join(root, 'cards'),
-  assets: join(root, 'cards', 'assets'),
+  notes: join(root, 'notes'),
+  assets: join(root, 'notes', 'assets'),
   facets: join(root, 'facets.yaml'),
   views: join(root, 'views'),
   db: join(root, '.index.db'),
@@ -43,7 +43,7 @@ export const paths = (root: string) => ({
  */
 export function looksLikeVault(path: string): boolean {
   const p = paths(path);
-  return existsSync(p.cards) || existsSync(p.facets);
+  return existsSync(p.notes) || existsSync(p.facets);
 }
 
 /** A vault at or above `from`, found the way git finds a repository. */

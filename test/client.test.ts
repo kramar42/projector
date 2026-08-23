@@ -63,7 +63,7 @@ test('a relative asset path is rewritten to the server route', () => {
 // ---------------------------------------------------------------- canvas edges
 
 /**
- * `parent` and `project` agreeing is the expected shape for a record inside a
+ * `parent` and `project` agreeing is the expected shape for a note inside a
  * project, so drawing both put two identical lines on top of each other. The
  * collapse is what makes a pair that *disagrees* the visible case.
  */
@@ -81,7 +81,7 @@ test('agreeing relations collapse to one edge, and the structural type leads', (
 });
 
 test('every edge points the way the graph opens', () => {
-  // A reference is stored on the record that depends and points at what it
+  // A reference is stored on the note that depends and points at what it
   // depends on, so drawing it means turning it round — all of them, with nothing
   // to consult. This took a list of which relations to flip while `blocks` was
   // stored backwards from the other two.
@@ -109,8 +109,8 @@ test('a blocking edge reads from the blocker outward, whatever the canvas lays o
 });
 
 /**
- * A record inside a project carries `parent` and `project` naming the same
- * record, and both point at their container — so both flip, land on one pair, and
+ * A note inside a project carries `parent` and `project` naming the same
+ * note, and both point at their container — so both flip, land on one pair, and
  * collapse. This is the case the module's docstring calls the *expected* shape.
  *
  * It used to draw two lines. The flip list held only the layout relation, so the
@@ -119,7 +119,7 @@ test('a blocking edge reads from the blocker outward, whatever the canvas lays o
  * that outcome and said in its own comment that it was surprising rather than
  * obviously right, which is where this bug was visible all along.
  */
-test('parent and project naming the same record collapse to one edge', () => {
+test('parent and project naming the same note collapse to one edge', () => {
   const edges = edgesFor(
     [
       { src: 'child', dst: 'p', type: 'parent' },
@@ -183,7 +183,7 @@ test('clearing drops the fixed keys and every facet override, from either source
   assert.equal(fromSpec.group, null, 'a fixed key is cleared even when unset');
 
   // A filter present only as a URL override, for an axis the spec no longer carries.
-  const fromUrl = blankQuery(null, '?f.tech=kafka&card=x');
+  const fromUrl = blankQuery(null, '?f.tech=kafka&note=x');
   assert.equal(fromUrl['f.tech'], null);
   assert.equal(fromUrl.card, undefined, 'where you are looking is not part of the query');
 
@@ -203,13 +203,13 @@ test('clearing drops the fixed keys and every facet override, from either source
  * on `URLSearchParams`'s own re-encoding.
  */
 test('a parameter the app does not own is dropped from the URL', () => {
-  assert.equal(strippedOfStrays('?view=home&f.status=planning&card=x'), null);
+  assert.equal(strippedOfStrays('?view=home&f.status=planning&note=x'), null);
   assert.equal(strippedOfStrays(''), null, 'no params is nothing to rewrite');
   assert.equal(strippedOfStrays('?filterstyle=chip&view=home'), '?view=home');
   assert.equal(strippedOfStrays('?filterstyle=chip'), '', 'a search that was only a stray');
   assert.equal(
-    strippedOfStrays('?card=x&filterstyle=chip'),
-    '?card=x',
+    strippedOfStrays('?note=x&filterstyle=chip'),
+    '?note=x',
     'which panel is open is the app\'s, and survives',
   );
   // And so is what you have picked out. Left off the owned list it would be
@@ -246,7 +246,7 @@ test('a selection survives the URL, and an empty one leaves no trace', () => {
 test('only query parameters reach the server, and the rest survive a patch', () => {
   assert.equal(apiSearch('?view=home&card=abc&f.status=planning'), '?view=home&f.status=planning');
   // The selection is the app's, not the query's. Both halves matter: a saved view
-  // must not record one, and `useLive` blanks its data before refetching — so a
+  // must not note one, and `useLive` blanks its data before refetching — so a
   // `sel` that counted as a query param would flash the pane on every click.
   assert.equal(apiSearch('?view=home&sel=a,b&f.status=planning'), '?view=home&f.status=planning');
   assert.equal(paramsOf('?a=1').get('a'), '1');
@@ -254,8 +254,8 @@ test('only query parameters reach the server, and the rest survive a patch', () 
 
   // `null` removes, `''` keeps the key present and empty — the difference the
   // saved-view override rests on.
-  assert.equal(patchSearch('?f.status=planning&card=x', { 'f.status': null }), '?card=x');
-  assert.equal(patchSearch('?card=x', { 'f.status': '' }), '?card=x&f.status=');
+  assert.equal(patchSearch('?f.status=planning&note=x', { 'f.status': null }), '?note=x');
+  assert.equal(patchSearch('?note=x', { 'f.status': '' }), '?note=x&f.status=');
   assert.equal(patchSearch('?f.status=planning', { 'f.status': 'active' }), '?f.status=active');
 });
 
@@ -271,11 +271,11 @@ const axis = (d: Partial<FacetDef>): FacetDef =>
  * The bug this replaces was two implementations: a chip class built in
  * `vocabulary.tsx` and an edge colour built in `CanvasView`, each with its own
  * idea of what a reference and an undeclared axis meant. That is how the same
- * record came to read as a purple `parent` chip on a board and as plain text in
- * the editor, and how the built-in axis was drawn in purple by the record picker
+ * note came to read as a purple `parent` chip on a board and as plain text in
+ * the editor, and how the built-in axis was drawn in purple by the note picker
  * while declaring `blue` in its own definition.
  */
-test("a reference draws as a record, and the app's own axis in the app's colour", () => {
+test("a reference draws as a note, and the app's own axis in the app's colour", () => {
   // A label axis: its family, and a bucket that declares one wins and fills.
   assert.equal(chipClass(axis({ hue: 'green' })), 'facet-hue-green');
   assert.equal(
@@ -286,7 +286,7 @@ test("a reference draws as a record, and the app's own axis in the app's colour"
   assert.equal(chipClass(axis({})), 'facet-muted');
   assert.equal(chipClass(undefined), 'facet-muted', 'an axis the vocabulary does not have');
 
-  // A reference draws as a record however it is declared — a `hue:` on one is a
+  // A reference draws as a note however it is declared — a `hue:` on one is a
   // line colour, which is the assertion below about the edge.
   assert.equal(chipClass(axis({ type: 'ref' })), 'facet-ref');
   assert.equal(chipClass(axis({ type: 'ref', hue: 'purple' })), 'facet-ref');

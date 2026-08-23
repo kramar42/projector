@@ -4,13 +4,13 @@
  * Three decisions, none of them about appearance:
  *
  * **One edge per pair, whatever the types.** `parent` and `project` agreeing is
- * the *expected* shape for a record inside a project, so drawing both put two
+ * the *expected* shape for a note inside a project, so drawing both put two
  * identical lines on top of each other with no way to tell there were two.
  * Collapsing means a pair that agrees reads as one relationship, and a pair that
- * *disagrees* still shows as two edges pointing at different records — the case
+ * *disagrees* still shows as two edges pointing at different notes — the case
  * worth seeing.
  *
- * **Every edge flips.** A reference facet is stored on the record that depends —
+ * **Every edge flips.** A reference facet is stored on the note that depends —
  * child, member, the card that is stuck — and points at what it depends on; drawn
  * the other way, so the arrow points the way the graph opens. This was once a
  * per-relation question answered by the server, because `blocks` was stored

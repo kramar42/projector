@@ -31,14 +31,14 @@ export interface VaultInfo {
   addedAt: number;
   lastOpenedAt?: number;
   exists: boolean;
-  cards: number | null;
+  notes: number | null;
 }
 
 export interface Inspection {
   path: string;
   exists: boolean;
   isVault: boolean;
-  cards: number;
+  notes: number;
   empty: boolean;
   suggestedName: string;
   registered: boolean;

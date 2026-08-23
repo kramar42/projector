@@ -103,19 +103,19 @@ waiting_on: { label: Waiting on, values: [], open: true, blocking: true }
 
 function vault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-query-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   for (const [id, text] of Object.entries(CARDS)) {
-    writeFileSync(join(root, 'cards', `${id}.md`), text, 'utf8');
+    writeFileSync(join(root, 'notes', `${id}.md`), text, 'utf8');
   }
   writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 function open(root: string) {
-  const { db, records } = reindex(root);
+  const { db, notes } = reindex(root);
   const facets = loadFacets(join(root, 'facets.yaml'));
   return (query: Query, connect?: string) =>
-    runQuery(db, records, facets, query, { today: '2026-08-20', connect });
+    runQuery(db, notes, facets, query, { today: '2026-08-20', connect });
 }
 
 function ids(root: string, query: Query): string[] {
@@ -183,7 +183,7 @@ test('computed axes filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     // A card missing two axes lands in both buckets. `project-b` and `project-a` are project
-    // records and appear here too: the engine no longer exempts them, the triage
+    // notes and appear here too: the engine no longer exempts them, the triage
     // view does.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
       'blocker',
@@ -219,7 +219,7 @@ test('triage asks for the facets the vault says it expects, and nothing else', (
       'complete',
     ]);
 
-    // No exemptions live here any more. `project-b` and `project-a` are project records with
+    // No exemptions live here any more. `project-b` and `project-a` are project notes with
     // no priority, and the axis says so — `views/triage.yaml` narrows to
     // `type: [plain]`, which is where that judgement is now visible and arguable.
     assert.ok(ids(root, { filter: { triage: ['needs-priority'] } }).includes('project-b'));
@@ -240,7 +240,7 @@ test('a done blocker stops blocking', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'cards', 'blocker.md'),
+      join(root, 'notes', 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -253,8 +253,8 @@ test('a done blocker stops blocking', () => {
 test('focus walks references transitively, in the direction asked for', () => {
   const { root, cleanup } = vault();
   try {
-    const { records } = reindex(root);
-    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, records)].sort();
+    const { notes } = reindex(root);
+    const set = (f: Parameters<typeof focused>[0]) => [...focused(f, notes)].sort();
 
     // Includes the focus itself: "this subtree" contains its own root.
     assert.deepEqual(set({ id: 'project-a', via: 'parent', dir: 'in' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
@@ -275,10 +275,10 @@ test('focus walks references transitively, in the direction asked for', () => {
 test('dir=both is two walks unioned, not one walk over a symmetric graph', () => {
   const { root, cleanup } = vault();
   try {
-    const { records } = reindex(root);
+    const { notes } = reindex(root);
     // From the middle of the chain: its own container and its own member, and
     // not `project-a` — which a walk over undirected edges would reach through project-b.
-    assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, records)].sort(), [
+    assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, notes)].sort(), [
       'project-b',
       'kc-realms',
       'keycloak',
@@ -291,16 +291,16 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
 test('membership is read from the facet, never stored as a relation of its own', () => {
   const { root, cleanup } = vault();
   try {
-    const { records } = reindex(root);
+    const { notes } = reindex(root);
     assert.deepEqual(
-      refsOf('project', records)
+      refsOf('project', notes)
         .map((e) => `${e.src}->${e.dst}`)
         .sort(),
       ['blocked-card->project-a', 'kafka-schema->project-a', 'kc-realms->keycloak', 'keycloak->project-b'],
     );
-    // There is no relation storage to check against: a record has facets and
+    // There is no relation storage to check against: a note has facets and
     // links, and that is all. `edges` is not a field any more.
-    for (const rec of records.values()) {
+    for (const rec of notes.values()) {
       assert.ok(!('edges' in rec));
     }
   } finally {
@@ -326,7 +326,7 @@ test('grouping puts a multi-valued card in every matching column', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'cards', 'kc-realms.md'),
+      join(root, 'notes', 'kc-realms.md'),
       CARDS['kc-realms']!.replace('priority: [month]', 'priority: [now, month]'),
       'utf8',
     );
@@ -338,7 +338,7 @@ test('grouping puts a multi-valued card in every matching column', () => {
     );
     assert.ok(res.groups![0]!.ids.includes('kc-realms'));
     assert.ok(res.groups![1]!.ids.includes('kc-realms'));
-    // One record, two placements — the model, not a duplicate.
+    // One note, two placements — the model, not a duplicate.
     assert.equal(res.total, Object.keys(CARDS).length);
     assert.equal(res.placements, res.total + 1);
   } finally {
@@ -408,7 +408,7 @@ test('sort by a facet uses its declared order, not the alphabet', () => {
   }
 });
 
-test('records missing the sort facet go last, whichever direction', () => {
+test('notes missing the sort facet go last, whichever direction', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
@@ -550,7 +550,7 @@ test('a second grouping axis makes a matrix, not a new concept', () => {
       res.groups!.filter((g) => g.lane !== 'done').map((g) => `${g.lane}/${g.value}:${g.ids.length}`),
       ['planning/now:2', 'planning/month:1', 'active/now:2', 'active/month:0'],
     );
-    // Each record lands in exactly one cell here, so nothing is double-counted.
+    // Each note lands in exactly one cell here, so nothing is double-counted.
     assert.equal(res.placements, res.total);
   } finally {
     cleanup();
@@ -742,7 +742,7 @@ test('universe is what the filter is hiding, exactly', () => {
 // ---------------------------------------------------------------- deadlines
 
 /**
- * A second vault, because these axes need records the others must not see —
+ * A second vault, because these axes need notes the others must not see —
  * adding a card to the shared fixture would move every count asserted above.
  */
 const DATED: Record<string, string> = {
@@ -778,9 +778,9 @@ updated: 2026-08-19
 
 function datedVault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-dated-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   for (const [name, text] of Object.entries(DATED)) {
-    writeFileSync(join(root, 'cards', `${name}.md`), text, 'utf8');
+    writeFileSync(join(root, 'notes', `${name}.md`), text, 'utf8');
   }
   writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
@@ -792,7 +792,7 @@ test('an ordered facet presents buckets and compares raw', () => {
     // today is 2026-08-20 in this harness.
     assert.deepEqual(ids(root, { filter: { due: ['overdue'] } }), ['ship-it']);
     assert.deepEqual(ids(root, { filter: { due: ['week'] } }), ['ask-person-a']);
-    // No `undated` bucket: a record with no deadline has no value for the axis,
+    // No `undated` bucket: a note with no deadline has no value for the axis,
     // so it is reached the same way every other absence is.
     assert.deepEqual(ids(root, { filter: { due: [NONE] } }), ['gate', 'someday']);
     assert.ok(!ids(root, { filter: { due: [NONE] } }).includes('ship-it'));
@@ -839,8 +839,8 @@ test('there is no kind axis, stored or computed', () => {
   try {
     const offered = open(root)({}).counts.map((c) => c.facet);
     assert.ok(!offered.includes('kind'));
-    // What it used to gate: a record with no status is off a status-filtered
-    // board, and a record something is part of is a container.
+    // What it used to gate: a note with no status is off a status-filtered
+    // board, and a note something is part of is a container.
     const noStatus = ids(root, { filter: { status: [NONE] } });
     assert.ok(noStatus.includes('project-a-eventing'));
     assert.ok(!ids(root, { filter: { status: ['active', 'planning'] } }).includes('project-a-eventing'));
@@ -855,11 +855,11 @@ test('there is no kind axis, stored or computed', () => {
 test('every relation is read the same way, so nothing knows which is which', () => {
   const { root, cleanup } = vault();
   try {
-    const { records } = reindex(root);
+    const { notes } = reindex(root);
     // One reader, so `parent` and `project` are indistinguishable to everything
     // downstream — focus, the canvas, the roll-ups, config inheritance.
-    const project = adjacency('project', records);
-    const parent = adjacency('parent', records);
+    const project = adjacency('project', notes);
+    const parent = adjacency('parent', notes);
     assert.deepEqual(project.out.get('keycloak'), ['project-b']);
     assert.deepEqual(parent.out.get('project-a-eventing'), ['project-a']);
     assert.deepEqual(project.in.get('project-b'), ['keycloak']);
@@ -869,19 +869,19 @@ test('every relation is read the same way, so nothing knows which is which', () 
   }
 });
 
-test('a value naming a record that does not exist is not a reference', () => {
+test('a value naming a note that does not exist is not a reference', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'cards', 'orphan.md'),
+      join(root, 'notes', 'orphan.md'),
       '---\nid: orphan\ntitle: Orphan\nfacets: { project: [gone] }\n---\n',
       'utf8',
     );
-    const { records } = reindex(root);
+    const { notes } = reindex(root);
     // It stays a facet value — it filters and groups — it simply has nothing to
     // walk to. `pj check` is what reports it.
-    assert.deepEqual(records.get('orphan')!.facets.project, ['gone']);
-    assert.equal(adjacency('project', records).out.get('orphan'), undefined);
+    assert.deepEqual(notes.get('orphan')!.facets.project, ['gone']);
+    assert.equal(adjacency('project', notes).out.get('orphan'), undefined);
     assert.deepEqual(ids(root, { filter: { project: ['gone'] } }), ['orphan']);
   } finally {
     cleanup();
@@ -925,7 +925,7 @@ test('the blocked axis names the facet that is failing, and closed stops blockin
   try {
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     writeFileSync(
-      join(root, 'cards', 'blocker.md'),
+      join(root, 'notes', 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -973,7 +973,7 @@ test('the unblocked view parses to exactly the actionable query', () => {
   const spec = specFromFile('unblocked', parse(seeded.body) as Record<string, unknown>);
 
   assert.deepEqual(spec.query.filter, { status: ['planning', 'active'], blocked: ['clear'] });
-  // A deadline outranks an intention, so `due` leads and undated records fall last.
+  // A deadline outranks an intention, so `due` leads and undated notes fall last.
   assert.deepEqual(spec.query.sort, ['due:asc', 'priority:asc', 'updated:desc']);
   assert.equal(spec.query.groupBy, undefined, 'a flat worklist, as `pj next` printed');
 });
@@ -981,13 +981,13 @@ test('the unblocked view parses to exactly the actionable query', () => {
 test('the linked axis makes external references askable', () => {
   const { root, cleanup } = vault();
   try {
-    // Every axis on a card was askable except this one, across the records that
+    // Every axis on a card was askable except this one, across the notes that
     // carry a link — most of the real vault.
     assert.deepEqual(ids(root, { filter: { linked: ['jira'] } }), ['keycloak']);
     assert.deepEqual(ids(root, { filter: { linked: ['doc'] } }), ['kc-realms']);
-    // A record with no links has no value, so absence is the ordinary (none).
+    // A note with no links has no value, so absence is the ordinary (none).
     assert.ok(ids(root, { filter: { linked: [NONE] } }).includes('project-a'));
-    // One record, two kinds: it lands in every bucket it carries.
+    // One note, two kinds: it lands in every bucket it carries.
     assert.deepEqual(ids(root, { filter: { linked: ['url'] } }), ['keycloak']);
     const axis = open(root)({}).counts.find((c) => c.facet === 'linked');
     assert.ok(axis);
@@ -1000,7 +1000,7 @@ test('the linked axis makes external references askable', () => {
 /**
  * Clearing a filter must leave the control that set it.
  *
- * `due` is declared with buckets and carried by no record — the state the real
+ * `due` is declared with buckets and carried by no note — the state the real
  * vault is in, and `views/due.yaml` selects three of its buckets. The panel listed
  * a value only if the data held it or the query had selected it, so on that view
  * the three buckets were on screen *because they were selected*: unticking them

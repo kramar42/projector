@@ -129,7 +129,7 @@ export function watermarks(dataRoot: string): Watermark[] {
     ranAt: r.ran_at,
     seen: r.seen,
     captured: r.captured,
-    // `pending_at` is what makes a pending record exist: a truncated run records
+    // `pending_at` is what makes a pending note exist: a truncated run notes
     // a null cursor on purpose, and that is not the same as never having swept.
     ...(r.pending_at
       ? { pending: { cursor: r.pending_cursor, seen: r.pending_seen ?? 0, at: r.pending_at } }
@@ -138,7 +138,7 @@ export function watermarks(dataRoot: string): Watermark[] {
 }
 
 /**
- * Record what a sweep would advance this channel to, without advancing it.
+ * Note what a sweep would advance this channel to, without advancing it.
  *
  * The sweep used to write nothing at all, which is why resolving one meant
  * copying an opaque Slack `ts` from one process into the next by hand. It still
@@ -174,7 +174,7 @@ export function watermarkFor(dataRoot: string, channel: string): Watermark | nul
  * Called **after** a proposal has been resolved, never after fetching: a sweep
  * abandoned halfway must not swallow what it had already listed. The consequence
  * is deliberate — once committed, an item declined as "not a card" does not come
- * back, and the cursor is the only record that it was ever considered. A
+ * back, and the cursor is the only note that it was ever considered. A
  * rejection worth keeping belongs on a card with `status: archived`, which keeps
  * its fingerprint.
  */
@@ -191,7 +191,7 @@ export function commitWatermark(
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(channel) DO UPDATE SET
          -- A null cursor means "leave it where it was": a run that fetched
-         -- nothing has no new boundary to record, and overwriting with null
+         -- nothing has no new boundary to note, and overwriting with null
          -- would reopen the whole window on the next sweep.
          cursor   = COALESCE(excluded.cursor, watermark.cursor),
          ran_at   = excluded.ran_at,

@@ -98,7 +98,7 @@ test('a view naming an unknown axis is an error, in every position it can appear
  *
  * Three commands used to write that array. `link` and `unlink` patched
  * frontmatter directly and so never bumped `updated`, while `link-session` went
- * through `patchCard` and did — so attaching a Jira issue left a card reading as
+ * through `patchNote` and did — so attaching a Jira issue left a card reading as
  * untouched, on a field README says "only ever says that *something* changed".
  */
 
@@ -160,7 +160,7 @@ test('a facet may not take a reserved name, and the sort keys prove why', () => 
   const named = issues.map((i) => i.field).sort();
 
   // `blocked` is a computed axis and would be silently shadowed; `updated` is a
-  // sortable record field; `project` is built-in and this one sets its *shape*.
+  // sortable note field; `project` is built-in and this one sets its *shape*.
   // `layer` is an ordinary axis and must survive.
   assert.deepEqual(named, ['blocked', 'project', 'updated']);
 
@@ -177,7 +177,7 @@ test('a facet may not take a reserved name, and the sort keys prove why', () => 
   assert.match(issues[0]!.message, /reserved/);
 });
 
-test('a record field outranks a facet wearing its name, whatever the facet type', () => {
+test('a note field outranks a facet wearing its name, whatever the facet type', () => {
   // Reserved names make this unreachable in a tended vault. It decides the
   // resting view of every board in one that ignored the error: `updated:desc` is
   // the default sort, and the vocabulary used to win it for a `date` facet and
@@ -187,14 +187,14 @@ test('a record field outranks a facet wearing its name, whatever the facet type'
 
   for (const decl of ['updated: { type: date }', 'updated: { values: [a, b] }']) {
     const root = mkdtempSync(join(tmpdir(), 'projector-shadow-'));
-    mkdirSync(join(root, 'cards'), { recursive: true });
-    writeFileSync(join(root, 'cards', 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
-    writeFileSync(join(root, 'cards', 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
+    mkdirSync(join(root, 'notes'), { recursive: true });
+    writeFileSync(join(root, 'notes', 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
+    writeFileSync(join(root, 'notes', 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
     writeFileSync(join(root, 'facets.yaml'), decl + '\n', 'utf8');
 
-    const { db, records } = reindex(root);
-    const out = runQuery(db, records, loadFacets(join(root, 'facets.yaml')), { sort: ['updated:asc'] });
-    assert.deepEqual(out.ids, ['older', 'newer'], `${decl}: the record field must decide`);
+    const { db, notes } = reindex(root);
+    const out = runQuery(db, notes, loadFacets(join(root, 'facets.yaml')), { sort: ['updated:asc'] });
+    assert.deepEqual(out.ids, ['older', 'newer'], `${decl}: the note field must decide`);
     rmSync(root, { recursive: true, force: true });
   }
 });

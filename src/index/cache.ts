@@ -60,7 +60,7 @@ export function stampOf(root: string): string {
     if (st.mtimeMs > newest) newest = st.mtimeMs;
   };
 
-  visit(p.cards);
+  visit(p.notes);
   visit(p.views);
   if (existsSync(p.facets)) visit(p.facets);
 

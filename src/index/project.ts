@@ -1,9 +1,9 @@
-import type { ProjectRepo, Rec, ResolvedProject } from '../schema/types.ts';
+import type { ProjectRepo, Note, ResolvedProject } from '../schema/types.ts';
 import { resolvePath } from '../config.ts';
 import { adjacency, chains } from './refs.ts';
 
 
-export function isProject(rec: Rec): boolean {
+export function isProject(rec: Note): boolean {
   return rec.project !== undefined;
 }
 
@@ -21,41 +21,41 @@ function mergeRepos(inherited: ProjectRepo[], own: ProjectRepo[], base: string):
   return out;
 }
 
-/** The project keys a record belongs to. Membership is the facet, nothing else. */
-export function projectsOf(rec: Rec): string[] {
+/** The project keys a note belongs to. Membership is the facet, nothing else. */
+export function projectsOf(rec: Note): string[] {
   return rec.facets.project ?? [];
 }
 
 /**
- * Resolve a record's effective project config from its `project` facet.
+ * Resolve a note's effective project config from its `project` facet.
  *
  * Membership is the facet and only the facet — parent edges are decomposition and
- * carry no config. A record may belong to several projects, so the chain is
+ * carry no config. A note may belong to several projects, so the chain is
  * walked for each and the results merged with the same rules that already apply
  * within one chain: `repos` union, `instructions` concatenate outermost-first so
  * the most specific advice reads last, and other keys take the nearest value.
  *
- * Returns null when the record names no project that exists.
+ * Returns null when the note names no project that exists.
  */
 export function resolveProject(
   id: string,
-  byId: Map<string, Rec>,
+  byId: Map<string, Note>,
   dataRoot: string,
 ): ResolvedProject | null {
   const rec = byId.get(id);
   if (!rec) return null;
 
-  // The membership chains this record sits on, walked through the same
+  // The membership chains this note sits on, walked through the same
   // adjacency the focus control uses — so the config chain and the portfolio
   // canvas can never disagree about who belongs to whom.
   const adj = adjacency('project', byId);
-  // A project record is its own innermost context, so it starts from itself;
+  // A project note is its own innermost context, so it starts from itself;
   // anything else starts from the projects it names.
   const starts = rec.project ? [rec.id] : (rec.facets.project ?? []).filter((k) => byId.has(k));
 
   // Outermost-first, so instructions read general → specific and repos
   // accumulate the same way. A chain arrives nearest-first, hence the reverse.
-  const order: Rec[] = [];
+  const order: Note[] = [];
   const seen = new Set<string>();
   for (const start of starts) {
     for (const chain of chains(start, adj)) {

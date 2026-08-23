@@ -3,7 +3,7 @@ import { join as pathJoin } from 'node:path';
 import { z } from 'zod';
 import { KEY_ORDER, join, parseDoc, serialize, split } from './frontmatter.ts';
 import { parseLink } from './links.ts';
-import type { ProjectBlock, Rec } from './types.ts';
+import type { ProjectBlock, Note } from './types.ts';
 
 /**
  * The fixed skeleton only. Facet *values* are dynamic — they come from
@@ -34,7 +34,7 @@ export const frontmatterSchema = z.object({
 });
 
 export type ParseResult =
-  | { ok: true; rec: Rec }
+  | { ok: true; rec: Note }
   | { ok: false; file: string; errors: string[] };
 
 /**
@@ -63,7 +63,7 @@ function asDate(v: unknown): string | undefined {
   return String(v).slice(0, 10);
 }
 
-export function parseCard(file: string, text: string): ParseResult {
+export function parseNote(file: string, text: string): ParseResult {
   const { yaml, body } = split(text);
   if (yaml === null) return { ok: false, file, errors: ['no frontmatter block'] };
 
@@ -100,12 +100,12 @@ export function parseCard(file: string, text: string): ParseResult {
   };
 }
 
-export function loadCard(file: string): ParseResult {
-  return parseCard(file, readFileSync(file, 'utf8'));
+export function loadNote(file: string): ParseResult {
+  return parseNote(file, readFileSync(file, 'utf8'));
 }
 
 /** Every `.md` under cards/, excluding assets/ and README.md. */
-export function listCardFiles(cardsDir: string): string[] {
+export function listNoteFiles(cardsDir: string): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
     let entries: string[];
@@ -125,7 +125,7 @@ export function listCardFiles(cardsDir: string): string[] {
   return out.sort();
 }
 
-export function renderCard(rec: Omit<Rec, 'file'>): string {
+export function renderNote(rec: Omit<Note, 'file'>): string {
   const fm: Record<string, unknown> = {
     id: rec.id,
     title: rec.title,
@@ -148,7 +148,7 @@ export function renderCard(rec: Omit<Rec, 'file'>): string {
 }
 
 /** Write atomically: temp file then rename, so a reader never sees a half file. */
-export function writeCardFile(file: string, text: string): void {
+export function writeNoteFile(file: string, text: string): void {
   const tmp = `${file}.tmp-${process.pid}`;
   writeFileSync(tmp, text, 'utf8');
   renameSync(tmp, file);

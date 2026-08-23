@@ -9,7 +9,7 @@ import { firstLine } from './run.ts';
  *
  * The durable identifier is the transcript uuid — the filename under
  * `~/.claude/projects/<slug>/<uuid>.jsonl`, which is also the `sessionId` a
- * running session records. Ids of the form `local_<uuid>` name a chat in the
+ * running session notes. Ids of the form `local_<uuid>` name a chat in the
  * desktop app's own store instead — a different id space, read here only to map
  * a transcript to the chat that drives it (`desktopSessionFor`).
  *
@@ -185,7 +185,7 @@ function parseHead(head: string): DesktopSession | null {
 export interface Turn {
   /** Whose move it is. `model` is the only state that means work is happening. */
   waitingOn: 'model' | 'human';
-  /** When the record that decided it was written. */
+  /** When the note that decided it was written. */
   at?: string;
 }
 
@@ -196,7 +196,7 @@ export interface Turn {
  * chat, so `alive` says a session exists and nothing about whether it is doing
  * anything — which is why a screen full of sessions all read as running.
  *
- * The last conversation record does say. The model owes the next record after a
+ * The last conversation note does say. The model owes the next note after a
  * prompt, after a tool result, and while a tool it asked for is still running
  * (an assistant turn that stopped at `tool_use` is not a finished turn); the
  * human owes it once a turn ends, and an interrupt is the human taking the move
@@ -205,8 +205,8 @@ export interface Turn {
  * happening, so it is skipped rather than read as activity.
  *
  * Only the tail is read: transcripts reach tens of megabytes and the answer is
- * always in the last few records. Sidechains are skipped too — a subagent's
- * records say what it is doing, not what the session is waiting on.
+ * always in the last few notes. Sidechains are skipped too — a subagent's
+ * notes say what it is doing, not what the session is waiting on.
  */
 export function lastTurn(file: string, tailBytes = 256 * 1024): Turn | null {
   let fd;
@@ -217,7 +217,7 @@ export function lastTurn(file: string, tailBytes = 256 * 1024): Turn | null {
     const buf = Buffer.alloc(size - from);
     readSync(fd, buf, 0, buf.length, from);
     const lines = buf.toString('utf8').split('\n');
-    // Reading from an offset lands mid-record, and half a record parses as none.
+    // Reading from an offset lands mid-note, and half a note parses as none.
     if (from > 0) lines.shift();
     for (let i = lines.length - 1; i >= 0; i--) {
       const turn = readTurn(lines[i] ?? '');
@@ -267,7 +267,7 @@ export type SessionState = 'working' | 'stalled' | 'waiting' | 'closed';
 /**
  * What a session is doing, which is a different question from whether a process
  * exists — all `alive` answers, and not much, since the desktop app keeps one
- * per open chat. Working is the model owing the next record and the file saying
+ * per open chat. Working is the model owing the next note and the file saying
  * so recently; waiting is a finished turn, where the move is the human's.
  *
  * The word, not a badge: the board draws it with a glyph and a colour and a

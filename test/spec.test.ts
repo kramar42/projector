@@ -204,7 +204,7 @@ test('an edit leaves the open card and the named view alone', () => {
 test('a canvas lays out by the first reference facet in show', () => {
   const def = (type: 'label' | 'ref') => ({ label: type, type, values: [], open: true, single: false });
   const facets = { priority: def('label'), parent: def('ref'), project: def('ref') };
-  // Labels are skipped: they name no records to lay out. Order in `show` is the
+  // Labels are skipped: they name no notes to lay out. Order in `show` is the
   // control — `parent` first is a decomposition tree, `project` first the
   // portfolio — and the same answer decides what `connect` walks for context.
   assert.equal(layoutRelation(['priority', 'parent', 'project'], facets), 'parent');

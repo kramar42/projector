@@ -1,14 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { bucketOf, compareValues, daysBetween, facetRank, isOrdered, orderValues } from '../schema/facets.ts';
 import { LINK_KINDS } from '../schema/links.ts';
-import type { Facets, Rec } from '../schema/types.ts';
+import type { Facets, Note } from '../schema/types.ts';
 import { adjacency, nodesIn, walk } from './refs.ts';
 import { blockedSet, blockingFacets } from './blocking.ts';
 
 /**
  * One query compiler, for the server and the CLI.
  *
- * Filtering runs in memory over the record map rather than in SQL. That is not a
+ * Filtering runs in memory over the note map rather than in SQL. That is not a
  * performance trade — at this scale both are free — it is what lets a computed axis
  * be indistinguishable from a real one. `blocked` and `triage` have no row
  * in the `facets` table, so in SQL each would need its own expression in the
@@ -98,7 +98,7 @@ export interface QueryResult {
   counts: AxisCount[];
   total: number;
   /**
-   * Records left by focus and search, before the facet filter — so
+   * Notes left by focus and search, before the facet filter — so
    * `universe - total` is exactly how many the filter is hiding. The sidebar says
    * that number out loud: the worst failure mode of global filtering is "the card
    * isn't there and I don't know why".
@@ -111,9 +111,9 @@ export interface QueryResult {
 // ---------------------------------------------------------------- computed axes
 
 interface Ctx {
-  /** Records named by another record through any declared reference facet. */
+  /** Notes named by another note through any declared reference facet. */
   nodes: Set<string>;
-  /** Per record, the blocking facets it is failing — empty for one that is not. */
+  /** Per note, the blocking facets it is failing — empty for one that is not. */
   blocked: Map<string, string[]>;
   facets: Facets;
   today: string;
@@ -130,7 +130,7 @@ interface Computed {
    * all hold a `Ctx` already, so nothing needed threading to make it askable.
    */
   values: (facets: Facets) => string[];
-  of: (rec: Rec, ctx: Ctx) => string[];
+  of: (rec: Note, ctx: Ctx) => string[];
 }
 
 
@@ -147,10 +147,10 @@ export function expectedFacets(facets: Facets): string[] {
 }
 
 /**
- * The expected facets a record is missing.
+ * The expected facets a note is missing.
  *
  * It named `project`, `priority` and `status` in code, and carried two
- * exemptions with them: a project record needed neither a project nor a
+ * exemptions with them: a project note needed neither a project nor a
  * priority, and a node needed no status. Both were *policy* — which is to say
  * they belonged in the view that asks the question, not in the engine that
  * answers it. `views/triage.yaml` filters `type` for exactly this, and a filter
@@ -159,7 +159,7 @@ export function expectedFacets(facets: Facets): string[] {
  * What is left is one sentence with no facet in it, and a vault choosing which
  * axes it means. The one definition of "needs triage", behind the `triage` axis.
  */
-export function triageGaps(rec: Rec, facets: Facets): string[] {
+export function triageGaps(rec: Note, facets: Facets): string[] {
   return expectedFacets(facets)
     .filter((name) => !rec.facets[name]?.length)
     .map((name) => `needs-${name}`);
@@ -179,13 +179,13 @@ export const COMPUTED: Record<string, Computed> = {
   type: {
     label: 'Type',
     values: () => ['project', 'node', 'plain'],
-    // A project owns configuration, a node is named by another record, and the
+    // A project owns configuration, a node is named by another note, and the
     // rest are plain. The values are deliberately exclusive: a project that is
     // also linked remains a project, so the three counts always add up.
     of: (rec, ctx) => [rec.project ? 'project' : ctx.nodes.has(rec.id) ? 'node' : 'plain'],
   },
   /**
-   * Why a record cannot proceed, if it cannot — one value per blocking facet.
+   * Why a note cannot proceed, if it cannot — one value per blocking facet.
    *
    * Derived, which is why none of these is a `status` value: storing a reason
    * alongside the thing it is computed from gives two answers to one question,
@@ -218,11 +218,11 @@ export const COMPUTED: Record<string, Computed> = {
     },
   },
   /**
-   * Which kinds of external reference a record carries.
+   * Which kinds of external reference a note carries.
    *
-   * Every axis on a card was askable except this one: most records here hold a
+   * Every axis on a card was askable except this one: most notes here hold a
    * link (110 of 191 at the time of writing) and there was no way to ask which. A
-   * record with none yields no value, so "nothing linked" is the ordinary
+   * note with none yields no value, so "nothing linked" is the ordinary
    * `(none)` refinement.
    */
   linked: {
@@ -233,14 +233,14 @@ export const COMPUTED: Record<string, Computed> = {
 };
 
 /**
- * Every record's values for one axis, as the axis presents them.
+ * Every note's values for one axis, as the axis presents them.
  *
  * An **ordered facet presents buckets and compares raw**: a date has as many
  * values as there are days, so filtering and grouping see `overdue · today ·
  * week · later` while sorting and range filters see the date itself. That is the
  * one place the two representations differ, and `rankOf` is the other side of it.
  */
-function valuesOf(rec: Rec, facet: string, ctx: Ctx): string[] {
+function valuesOf(rec: Note, facet: string, ctx: Ctx): string[] {
   const computed = COMPUTED[facet];
   if (computed) return computed.of(rec, ctx);
   const raw = rec.facets[facet] ?? [];
@@ -250,12 +250,12 @@ function valuesOf(rec: Rec, facet: string, ctx: Ctx): string[] {
 }
 
 /** The stored values, unbucketed — what sorting and range filters compare. */
-function rawOf(rec: Rec, facet: string): string[] {
+function rawOf(rec: Note, facet: string): string[] {
   return rec.facets[facet] ?? [];
 }
 
-function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx {
-  return { nodes: nodesIn(records, facets), blocked: blockedSet(records, facets), facets, today };
+function buildCtx(notes: Map<string, Note>, facets: Facets, today: string): Ctx {
+  return { nodes: nodesIn(notes, facets), blocked: blockedSet(notes, facets), facets, today };
 }
 
 // ---------------------------------------------------------------- traversal
@@ -271,13 +271,13 @@ export function firstRef(facets: Facets): string | undefined {
 }
 
 /**
- * The records a focus selects, including the focus itself.
+ * The notes a focus selects, including the focus itself.
  *
  * `both` is the union of two separate walks, not one walk over both directions —
  * the latter would drag in every sibling's subtree and stop being a focus.
  */
-export function focused(focus: Focus & { via: string }, records: Map<string, Rec>): Set<string> {
-  const adj = adjacency(focus.via, records);
+export function focused(focus: Focus & { via: string }, notes: Map<string, Note>): Set<string> {
+  const adj = adjacency(focus.via, notes);
   if (focus.dir === 'out') return walk(focus.id, adj.out, focus.depth);
   if (focus.dir === 'in') return walk(focus.id, adj.in, focus.depth);
   const both = walk(focus.id, adj.out, focus.depth);
@@ -321,7 +321,7 @@ function ftsIds(db: DatabaseSync, input: string): Set<string> | null {
 
 // ---------------------------------------------------------------- sort
 
-type Comparator = (a: Rec, b: Rec) => number;
+type Comparator = (a: Note, b: Note) => number;
 
 function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
   const keys = (sort?.length ? sort : ['updated:desc']).map((s) => {
@@ -329,7 +329,7 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
     return { name: name ?? '', sign: dirRaw === 'desc' ? -1 : 1 };
   });
 
-  const rankOf = (rec: Rec, name: string): number => {
+  const rankOf = (rec: Note, name: string): number => {
     const def = ctx.facets[name];
     const values = valuesOf(rec, name, ctx);
     if (!values.length) return Number.MAX_SAFE_INTEGER;
@@ -343,10 +343,10 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
   /**
    * An ordered facet sorts by its raw value, not its bucket.
    *
-   * A record carrying none sorts last in *both* directions: "no deadline" is not
+   * A note carrying none sorts last in *both* directions: "no deadline" is not
    * the earliest one, and reversing the sort must not make it the most urgent.
    */
-  const ordered = (a: Rec, b: Rec, name: string, sign: number): number => {
+  const ordered = (a: Note, b: Note, name: string, sign: number): number => {
     const def = ctx.facets[name];
     const av = rawOf(a, name);
     const bv = rawOf(b, name);
@@ -360,7 +360,7 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
   return (a, b) => {
     for (const { name, sign } of keys) {
       let cmp = 0;
-      // Record fields first, and unconditionally.
+      // Note fields first, and unconditionally.
       //
       // These three names are reserved, so in a valid vault no facet can wear
       // one and the order here decides nothing. It decides everything in a vault
@@ -399,7 +399,7 @@ const RANGE = /^(<=|>=|<|>)(.+)$/;
  * Only an ordered facet can be compared, and it is compared *raw* — the bucket
  * is what the panel offers, the value is what a range means.
  */
-function inRange(rec: Rec, facet: string, op: string, bound: string, ctx: Ctx): boolean {
+function inRange(rec: Note, facet: string, op: string, bound: string, ctx: Ctx): boolean {
   const def = ctx.facets[facet];
   if (!isOrdered(def)) return false;
   return rawOf(rec, facet).some((v) => {
@@ -408,7 +408,7 @@ function inRange(rec: Rec, facet: string, op: string, bound: string, ctx: Ctx): 
   });
 }
 
-function matches(rec: Rec, filter: Record<string, string[]>, ctx: Ctx): boolean {
+function matches(rec: Note, filter: Record<string, string[]>, ctx: Ctx): boolean {
   for (const [facet, wanted] of Object.entries(filter)) {
     if (!wanted.length) continue;
     const have = valuesOf(rec, facet, ctx);
@@ -469,7 +469,7 @@ function admitted(selection: string[] | undefined): Set<string> | null {
  * other one. Count against the fully filtered set instead and every unselected
  * value reads 0, so a selection could be narrowed but never widened.
  */
-function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): AxisCount[] {
+function histogram(base: Note[], filter: Record<string, string[]>, ctx: Ctx): AxisCount[] {
   const names = [...Object.keys(ctx.facets), ...Object.keys(COMPUTED)];
   const out: AxisCount[] = [];
 
@@ -540,7 +540,7 @@ export interface RunOpts {
   /** Overridable so a test does not depend on the day it runs. */
   today?: string;
   /**
-   * Keep ancestors of matched records along this relation, even when they do not
+   * Keep ancestors of matched notes along this relation, even when they do not
    * match, so a graph stays a graph. They come back as `context`, never as
    * matches — a filter that quietly widens its own result set is one you stop
    * trusting.
@@ -555,22 +555,22 @@ export interface RunOpts {
 
 export function runQuery(
   db: DatabaseSync,
-  records: Map<string, Rec>,
+  notes: Map<string, Note>,
   facets: Facets,
   query: Query,
   opts: RunOpts = {},
 ): QueryResult {
-  const ctx = buildCtx(records, facets, opts.today ?? new Date().toISOString().slice(0, 10));
+  const ctx = buildCtx(notes, facets, opts.today ?? new Date().toISOString().slice(0, 10));
   const filter = query.filter ?? {};
 
   // Focus and full text bound the universe; the facet filter refines inside it.
   // Both are outside the histogram's disjunction on purpose — lifting them per
   // facet would make counts describe a set nobody asked for.
-  const scope = query.focus ? focused({ ...query.focus, via: viaOf(query.focus, facets) }, records) : null;
+  const scope = query.focus ? focused({ ...query.focus, via: viaOf(query.focus, facets) }, notes) : null;
   const text = query.q ? ftsIds(db, query.q) : null;
 
-  const universe: Rec[] = [];
-  for (const rec of records.values()) {
+  const universe: Note[] = [];
+  for (const rec of notes.values()) {
     if (scope && !scope.has(rec.id)) continue;
     if (text && !text.has(rec.id)) continue;
     universe.push(rec);
@@ -582,7 +582,7 @@ export function runQuery(
 
   const context: string[] = [];
   if (opts.connect) {
-    const { out: up } = adjacency(opts.connect, records);
+    const { out: up } = adjacency(opts.connect, notes);
     const have = new Set(ids);
     for (const id of ids) {
       // Ancestors only, and drawn as context: a filtered graph that renders as
@@ -603,7 +603,7 @@ export function runQuery(
   let placements = ids.length;
 
   if (grouping.length) {
-    // The axis values, and which records fall on each — one function, so a
+    // The axis values, and which notes fall on each — one function, so a
     // second grouping axis is the same code as the first.
     const spread = (facet: string) => {
       const buckets = new Map<string, string[]>();
@@ -646,7 +646,7 @@ export function runQuery(
       // appear. Where `hide` was live it was a broken duplicate of a filter: it
       // dropped the cards from the groups but left them in `ids`, so the count
       // over-reported and a canvas — which draws its nodes from `ids` — went on
-      // drawing them, in the band meant for context records.
+      // drawing them, in the band meant for context notes.
       if (none.length) {
         order.push(NONE);
         buckets.set(NONE, none);
@@ -708,7 +708,7 @@ export interface Rollup {
 }
 
 /**
- * Roll-ups for every project record — the numbers the projects table exists for.
+ * Roll-ups for every project note — the numbers the projects table exists for.
  *
  * `direct` and `total` are both reported because the difference is the answer to
  * a real question: `project-b` has one direct member and seven transitive ones, so a
@@ -717,7 +717,7 @@ export interface Rollup {
  * focus control uses — not a second notion of hierarchy.
  */
 export function projectRollups(
-  records: Map<string, Rec>,
+  notes: Map<string, Note>,
   facets: Facets,
 ): Record<string, Rollup> {
   // The one graph aggregate directly, rather than a whole `Ctx`. Building one
@@ -725,18 +725,18 @@ export function projectRollups(
   // because it is welded to the vocabulary and the aggregates in one struct,
   // which is the argument for splitting `Ctx` made by the code rather than by a
   // reviewer. The node set left with the triage exemption that needed it.
-  const waitedOn = blockedSet(records, facets);
+  const waitedOn = blockedSet(notes, facets);
   const out: Record<string, Rollup> = {};
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     if (!rec.project) continue;
-    const reach = focused({ id: rec.id, via: 'project', dir: 'in' }, records);
+    const reach = focused({ id: rec.id, via: 'project', dir: 'in' }, notes);
     reach.delete(rec.id); // a project is not a member of itself
 
     let blocked = 0;
     let untriaged = 0;
     let touched: string | null = null;
     for (const id of reach) {
-      const member = records.get(id);
+      const member = notes.get(id);
       if (!member) continue;
       if (waitedOn.has(id)) blocked++;
       // `triageGaps` directly: reaching through the computed axis needed a `Ctx`,
@@ -746,7 +746,7 @@ export function projectRollups(
     }
 
     out[rec.id] = {
-      direct: [...records.values()].filter((r) => r.facets.project?.includes(rec.id)).length,
+      direct: [...notes.values()].filter((r) => r.facets.project?.includes(rec.id)).length,
       total: reach.size,
       blocked,
       untriaged,

@@ -25,25 +25,25 @@ import type { IntakeContext } from '../src/intake/types.ts';
 
 function vault(cards: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'pj-intake-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   for (const [name, body] of Object.entries(cards)) {
-    writeFileSync(join(root, 'cards', `${name}.md`), body, 'utf8');
+    writeFileSync(join(root, 'notes', `${name}.md`), body, 'utf8');
   }
   return root;
 }
 
 function context(root: string, over: Partial<IntakeContext> = {}): IntakeContext {
-  const { db, records } = reindex(root);
+  const { db, notes } = reindex(root);
   const fingerprints = new Map<string, string[]>();
   const links = new Map<string, string[]>();
-  for (const rec of records.values()) {
+  for (const rec of notes.values()) {
     if (rec.source_fingerprint) fingerprints.set(rec.source_fingerprint, [rec.id]);
     for (const l of rec.links) links.set(l.raw, [...(links.get(l.raw) ?? []), rec.id]);
   }
   return {
     root,
     db,
-    records,
+    notes,
     fingerprints,
     links,
     since: new Date(0),
@@ -71,7 +71,7 @@ test('a commit with no cursor leaves the old one where it was', () => {
   const root = vault({ a: card('a') });
   try {
     commitWatermark(root, 'slack', '1755700000.1');
-    // A run that fetched nothing has no new boundary to record. Overwriting with
+    // A run that fetched nothing has no new boundary to note. Overwriting with
     // null would reopen the whole window on the next sweep.
     commitWatermark(root, 'slack', null, { seen: 4 });
     const w = watermarkFor(root, 'slack');
@@ -114,11 +114,11 @@ test('resetting a cursor falls back to the default window, not to the beginning 
 test('a sweep writes no cards and moves no cursor', async () => {
   const root = vault({ a: card('a') });
   try {
-    const before = reindex(root).records.size;
+    const before = reindex(root).notes.size;
     await sweep(root, { only: ['claude', 'git'], limit: 3 });
-    assert.equal(reindex(root).records.size, before);
+    assert.equal(reindex(root).notes.size, before);
 
-    // Proposing is not resolving. A sweep now *records* where it would go, so the
+    // Proposing is not resolving. A sweep now *notes* where it would go, so the
     // rows exist — but every cursor is still unset, and only `pj intake commit`
     // promotes a proposal. Asserting the table is empty would be asserting the
     // storage rather than the invariant.
@@ -126,7 +126,7 @@ test('a sweep writes no cards and moves no cursor', async () => {
     assert.deepEqual(after.map((w) => w.channel).sort(), ['claude', 'git']);
     for (const w of after) {
       assert.equal(w.cursor, null, `${w.channel}: a sweep must not move the cursor`);
-      assert.ok(w.pending, `${w.channel}: a sweep records what it would advance to`);
+      assert.ok(w.pending, `${w.channel}: a sweep notes what it would advance to`);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -155,7 +155,7 @@ test('a channel pj cannot reach still reports its cursor', async () => {
     const slack = s.reports.find((r) => r.channel === 'slack')!;
     assert.equal(slack.fetched, false);
     assert.equal(slack.cursor, '1755700000.1');
-    assert.match(slack.note ?? '', /MCP/);
+    assert.match(slack.reason ?? '', /MCP/);
     // Not fetching is not an error, and it never advances anything.
     assert.equal(slack.nextCursor, null);
   } finally {
@@ -338,12 +338,12 @@ test('a sweep says out loud that it captured nothing', async () => {
  * A session's state is read from the tail of its transcript, because the thing
  * that is easy to read — a live process — is not the thing worth knowing. The
  * desktop app keeps a process per open chat, so `alive` marks every chat as
- * running; only the last conversation record says whether work is happening.
+ * running; only the last conversation note says whether work is happening.
  */
-function transcript(...records: unknown[]): string {
+function transcript(...notes: unknown[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'pj-turn-'));
   const file = join(dir, 'session.jsonl');
-  writeFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+  writeFileSync(file, notes.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
   return file;
 }
 
@@ -380,15 +380,15 @@ test('bookkeeping the session rewrites while idle is not activity', () => {
   assert.equal(lastTurn(t)?.waitingOn, 'human');
 });
 
-test("a subagent's records say what it is doing, not what the session waits on", () => {
+test("a subagent's notes say what it is doing, not what the session waits on", () => {
   const t = transcript(user('go'), assistant('tool_use'), { ...assistant('end_turn'), isSidechain: true });
   assert.equal(lastTurn(t)?.waitingOn, 'model');
 });
 
-test('a tail read that lands mid-record drops the half it cannot parse', () => {
+test('a tail read that lands mid-note drops the half it cannot parse', () => {
   const big = user('x'.repeat(4096));
   const t = transcript(big, big, big, assistant('end_turn'));
-  // The read ends at EOF, so the last record is whole and the leading half goes.
+  // The read ends at EOF, so the last note is whole and the leading half goes.
   assert.equal(lastTurn(t, 512)?.waitingOn, 'human');
   // A window too small to hold even that says nothing rather than something wrong.
   assert.equal(lastTurn(t, 40), null);
@@ -431,7 +431,7 @@ test('every channel reports a status, and the text is rendered from it', () => {
     assert.equal(after.cursor, 'abc123');
     assert.equal(after.seen, 4);
     assert.equal(after.captured, 1);
-    assert.ok(after.ranAt, 'a committed channel records when it ran');
+    assert.ok(after.ranAt, 'a committed channel notes when it ran');
 
     // The table is a view of the same rows, not a second query.
     const text = renderStatus(root);
@@ -443,7 +443,7 @@ test('every channel reports a status, and the text is rendered from it', () => {
 });
 
 /**
- * The sweep records where it would go; `advance` promotes it.
+ * The sweep notes where it would go; `advance` promotes it.
  *
  * Resolving a sweep used to mean copying an opaque cursor — a Slack `ts`, a Gmail
  * date — out of one process and typing it into the next, once per channel, with

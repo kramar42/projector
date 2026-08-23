@@ -3,14 +3,14 @@
  *
  * The work vault is real work, so it only exercises the states real work
  * happens to produce. That is how `.chip.is-overdue` shipped with its text the
- * same colour as its background: no record carries a `due` date, so the rule had
+ * same colour as its background: no note carries a `due` date, so the rule had
  * never rendered once. A mechanism with no data behind it is not tested by
  * looking at the app — it is invisible there.
  *
  * So this writes the opposite of a real vault: every declared facet value, both
  * ends of every bucket, a blocking chain and a chain whose blocker is finished,
  * a link of every kind including two that cannot resolve, a project that owns
- * nothing, and a record carrying nothing but the two required fields.
+ * nothing, and a note carrying nothing but the two required fields.
  *
  * Dates are computed from today, so the bucket columns are never empty and the
  * fixture cannot go stale. That is also why the vault is generated rather than
@@ -59,8 +59,8 @@ const UPDATED = { fresh: iso(-1), week: iso(-4), month: iso(-20), older: iso(-40
  * state nothing renders, which is the class of bug this vault exists to catch.
  */
 const FACETS = `# Fixture vocabulary — a copy of the work vault's, so this vault stands alone.
-# Every value declared here is carried by at least one card in cards/. If you add
-# a value and no card takes it, the fixture has stopped doing its job.
+# Every value declared here is carried by at least one note in notes/. If you add
+# a value and no note takes it, the fixture has stopped doing its job.
 
 status:
   label: Status
@@ -68,7 +68,7 @@ status:
   open: false
   single: true
   # No further work expected, whatever the outcome — abandonment counts,
-  # on-hold does not. A closed record stops blocking whatever waits on it.
+  # on-hold does not. A closed note stops blocking whatever waits on it.
   closed: [done, archived]
   expected: true
   hue: green
@@ -143,14 +143,14 @@ blocked_by:
   inverse: Blocks
 `;
 
-// ---------------------------------------------------------------- cards
+// ---------------------------------------------------------------- notes
 
 /**
  * Each entry names the state it exists to render, and the body says so on screen
  * — so the fixture explains itself when you open the panel rather than needing a
  * second document to read alongside it.
  */
-const CARDS = [
+const NOTES = [
   // -------------------------------------------------- projects and roll-ups
   {
     id: 'platform',
@@ -160,7 +160,7 @@ const CARDS = [
     project: {
       repos: [{ path: '../services', base: 'main' }, { path: '~/code/infra', base: 'dev' }],
       jira: 'PROJ',
-      branch: 'plat/{card}',
+      branch: 'plat/{note}',
       instructions:
         '- Never change a realm in eu-prod without a ticket and a rollback plan.\n' +
         '- This is the outermost project, so this line should read *first* in an inherited chain.\n',
@@ -202,7 +202,7 @@ const CARDS = [
       'after you create it, and the one nothing in a real vault stays in.\n',
   },
 
-  // -------------------------------------------------- record marks
+  // -------------------------------------------------- note marks
   {
     id: 'ideas',
     title: 'Ideas worth keeping',
@@ -232,7 +232,7 @@ const CARDS = [
     body:
       'Renders: the filled `is-overdue` chip. This is the rule that shipped with\n' +
       '`color: var(--ink)` on `background: var(--bad)` — 1.92:1 in light, 1.94:1 in dark —\n' +
-      'and went unseen for as long as it did because no record in the work vault carries a\n' +
+      'and went unseen for as long as it did because no note in the work vault carries a\n' +
       '`due` date. The chip shows the date and *wears* the bucket.\n',
   },
   {
@@ -289,7 +289,7 @@ const CARDS = [
       blocked_by: ['blocked-once'],
     },
     updated: UPDATED.week,
-    body: 'Renders: the far end of a chain. Directly blocked by one record, transitively by two.\n',
+    body: 'Renders: the far end of a chain. Directly blocked by one note, transitively by two.\n',
   },
   {
     id: 'blocker-done',
@@ -326,7 +326,7 @@ const CARDS = [
   // -------------------------------------------------- chip density
   {
     id: 'every-facet',
-    title: 'A card carrying every axis at once',
+    title: 'A note carrying every axis at once',
     facets: {
       priority: ['now'],
       status: ['active'],
@@ -344,10 +344,10 @@ const CARDS = [
     updated: UPDATED.fresh,
     body:
       'Renders: fourteen chips in one row — the `--chip-tint` dilution test. Light mode\n' +
-      'mixes each fill 42% toward the surface precisely so this card is legible; at full\n' +
+      'mixes each fill 42% toward the surface precisely so this note is legible; at full\n' +
       "strength xoria's light shades stack into noise. If light mode looks loud here, the\n" +
       'tint has been bypassed somewhere.\n\n' +
-      'Also the only card carrying `owner`, which is declared in the vocabulary and used\n' +
+      'Also the only note carrying `owner`, which is declared in the vocabulary and used\n' +
       'nowhere in the real vault.\n',
   },
   {
@@ -359,7 +359,7 @@ const CARDS = [
     body:
       'Renders: `energy` italic and `source` muted — both transparent, both `--ink-3`, no\n' +
       'hue. A facet that is a hint rather than an identity is supposed to recede, and this\n' +
-      'is the card that shows whether it does.\n',
+      'is the note that shows whether it does.\n',
   },
 
   // -------------------------------------------------- links
@@ -374,8 +374,8 @@ const CARDS = [
       'gh:branch:Acme/platform@main',
       'gh:commit:Acme/platform@0000000000000000000000000000000000000000',
       'claude:00000000-0000-4000-8000-000000000000',
-      'doc:notes/resolves.md',
-      'doc:notes/absent.md',
+      'doc:docs/resolves.md',
+      'doc:docs/absent.md',
       // A permalink, because that is the only shape a slack *link* takes in the
       // real vault — all nineteen of them. The `channel/ts` pair appears there
       // fifteen times and every one is a `source_fingerprint`, which is a dedup
@@ -385,8 +385,8 @@ const CARDS = [
       'https://example.com/a/very/long/path/that/should/be/ellipsised/well/before/here',
     ],
     body:
-      'Renders: every `linked` pseudo-facet value, and the two failure paths that matter —\n' +
-      '`doc:notes/absent.md` points at nothing, and the `jira`, `gh` and `claude` refs\n' +
+      'Renders: every `linked` computed axis value, and the two failure paths that matter —\n' +
+      '`doc:docs/absent.md` points at nothing, and the `jira`, `gh` and `claude` refs\n' +
       'cannot resolve without credentials. Each should say why *once* and stay cached,\n' +
       'not retry on every render. The bare URL is long on purpose: the label ellipsises\n' +
       'at 130px.\n\n' +
@@ -412,11 +412,11 @@ const CARDS = [
   },
   {
     id: 'unicode-title',
-    title: 'Ünïcode, 日本語, and an emoji 🚀 beside the record mark',
+    title: 'Ünïcode, 日本語, and an emoji 🚀 beside the note mark',
     facets: { status: ['planning'], priority: ['someday'], domain: ['master-data'] },
     updated: UPDATED.month,
     body:
-      'Renders: the record mark next to text whose ink sits nowhere near where lowercase\n' +
+      'Renders: the note mark next to text whose ink sits nowhere near where lowercase\n' +
       'latin sits. The mark is baseline-aligned at `0.8em` with a per-glyph nudge measured\n' +
       'against lowercase latin, so this is where that correction is least flattered.\n',
   },
@@ -429,7 +429,7 @@ const CARDS = [
       'Renders: the progress bar — 44px track, `--ok` fill, tabular number. The app counts\n' +
       'these and never rewrites them.\n\n' +
       '- [x] Declare the vocabulary\n' +
-      '- [x] Write the cards\n' +
+      '- [x] Write the notes\n' +
       '- [x] Compute the dates from today\n' +
       '- [ ] Screenshot both themes\n' +
       '- [ ] Fix whatever that shows\n',
@@ -458,7 +458,7 @@ const CARDS = [
     facets: { priority: ['someday'], project: ['platform'], parent: ['ideas'] },
     updated: UPDATED.month,
     body:
-      'Renders: `triage: needs-status` — and, because a record is work only by carrying a\n' +
+      'Renders: `triage: needs-status` — and, because a note is work only by carrying a\n' +
       'status, this one is filtered off every status-filtered board while still being a\n' +
       'member of a project.\n',
   },
@@ -478,7 +478,7 @@ const CARDS = [
     updated: UPDATED.older,
     source_fingerprint: 'claude:00000000-0000-4000-8000-000000000000',
     body:
-      'Renders: `status: archived`, the fifth lifecycle value, and a card carrying a\n' +
+      'Renders: `status: archived`, the fifth lifecycle value, and a note carrying a\n' +
       '`source_fingerprint` — which is why a rejected candidate is archived instead of\n' +
       'deleted. Deleting it destroys the fingerprint and the next sweep recreates it.\n',
   },
@@ -502,11 +502,11 @@ const PARENTS = {
 
 /**
  * One view per shape, plus one per state that only a particular query reveals.
- * A state nothing puts on screen is not covered, however carefully its card was
+ * A state nothing puts on screen is not covered, however carefully its note was
  * written.
  */
 const VIEWS = {
-  home: `# Board by priority — reaches the dashed \`(none)\` column, since two cards carry no priority.
+  home: `# Board by priority — reaches the dashed \`(none)\` column, since two notes carry no priority.
 shape: board
 title: Home
 groupBy: [priority]
@@ -520,7 +520,7 @@ groupBy: [due]
 sort: [due:asc]
 show: [priority, status, due]
 `,
-  blocked: `# The derived axis: blocked · waiting · clear, including the card whose blocker is done.
+  blocked: `# The derived axis: blocked · waiting · clear, including the note whose blocker is done.
 shape: board
 title: Blocked
 groupBy: [blocked]
@@ -541,14 +541,14 @@ groupBy: [priority, status]
 sort: [title:asc]
 show: [project, due]
 `,
-  linked: `# Grouped by which kinds of link a record carries — one card carries all of them.
+  linked: `# Grouped by which kinds of link a note carries — one note carries all of them.
 shape: board
 title: Linked
 groupBy: [linked]
 sort: [title:asc]
 show: [status, project]
 `,
-  staleness: `# week · month · older, and the undated record that has no value on the axis at all.
+  staleness: `# week · month · older, and the undated note that has no value on the axis at all.
 shape: board
 title: Staleness
 groupBy: [staleness]
@@ -593,7 +593,7 @@ filter:
 sort: [title:asc]
 show: [status, priority, due]
 `,
-  table: `# Every record as columns of values, which is the only place a facet reads as a column.
+  table: `# Every note as columns of values, which is the only place a facet reads as a column.
 shape: table
 title: Table
 sort: [title:asc]
@@ -611,53 +611,53 @@ show: [project]
 `,
 };
 
-const NOTES = {
+const DOCS = {
   'resolves.md': `# A doc link that resolves
 
-\`doc:\` paths are relative to the vault root, so \`doc:notes/resolves.md\` finds this file and
-renders its first heading as the label. Its sibling \`doc:notes/absent.md\` deliberately does not
-exist, so the two failure paths sit side by side on one card.
+\`doc:\` paths are relative to the vault root, so \`doc:docs/resolves.md\` finds this file and
+renders its first heading as the label. Its sibling \`doc:docs/absent.md\` deliberately does not
+exist, so the two failure paths sit side by side on one note.
 `,
 };
 
 // ---------------------------------------------------------------- write
 
-function frontmatter(card) {
-  const lines = [`id: ${card.id}`, `title: ${JSON.stringify(card.title)}`];
-  const facets = { ...card.facets };
-  if (PARENTS[card.id]) facets.parent = [PARENTS[card.id]];
+function frontmatter(note) {
+  const lines = [`id: ${note.id}`, `title: ${JSON.stringify(note.title)}`];
+  const facets = { ...note.facets };
+  if (PARENTS[note.id]) facets.parent = [PARENTS[note.id]];
   const keys = Object.keys(facets);
   if (keys.length) {
     lines.push('facets:');
     for (const k of keys) lines.push(`  ${k}: [${facets[k].map((v) => JSON.stringify(v)).join(', ')}]`);
   }
-  if (card.links?.length) {
+  if (note.links?.length) {
     lines.push('links:');
-    for (const l of card.links) lines.push(`  - ${JSON.stringify(l)}`);
+    for (const l of note.links) lines.push(`  - ${JSON.stringify(l)}`);
   }
-  if (card.project) {
+  if (note.project) {
     lines.push('project:');
-    if (card.project.repos) {
+    if (note.project.repos) {
       lines.push('  repos:');
-      for (const r of card.project.repos) {
+      for (const r of note.project.repos) {
         lines.push(`    - { path: ${JSON.stringify(r.path)}${r.base ? `, base: ${JSON.stringify(r.base)}` : ''} }`);
       }
     }
-    if (card.project.jira) lines.push(`  jira: ${card.project.jira}`);
-    if (card.project.branch) lines.push(`  branch: ${JSON.stringify(card.project.branch)}`);
-    if (card.project.instructions) {
+    if (note.project.jira) lines.push(`  jira: ${note.project.jira}`);
+    if (note.project.branch) lines.push(`  branch: ${JSON.stringify(note.project.branch)}`);
+    if (note.project.instructions) {
       lines.push('  instructions: |');
-      for (const l of card.project.instructions.replace(/\n$/, '').split('\n')) lines.push(`    ${l}`);
+      for (const l of note.project.instructions.replace(/\n$/, '').split('\n')) lines.push(`    ${l}`);
     }
   }
-  if (card.source_fingerprint) lines.push(`source_fingerprint: ${JSON.stringify(card.source_fingerprint)}`);
-  lines.push(`created: ${card.created ?? UPDATED.older}`);
-  if (card.updated) lines.push(`updated: ${card.updated}`);
+  if (note.source_fingerprint) lines.push(`source_fingerprint: ${JSON.stringify(note.source_fingerprint)}`);
+  lines.push(`created: ${note.created ?? UPDATED.older}`);
+  if (note.updated) lines.push(`updated: ${note.updated}`);
   return lines.join('\n');
 }
 
 rmSync(root, { recursive: true, force: true });
-for (const dir of ['cards', 'views', 'notes']) mkdirSync(join(root, dir), { recursive: true });
+for (const dir of ['notes', 'views', 'docs']) mkdirSync(join(root, dir), { recursive: true });
 
 writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
 writeFileSync(
@@ -666,21 +666,21 @@ writeFileSync(
   'utf8',
 );
 
-for (const card of CARDS) {
-  writeFileSync(join(root, 'cards', `${card.id}.md`), `---\n${frontmatter(card)}\n---\n\n${card.body}`, 'utf8');
+for (const note of NOTES) {
+  writeFileSync(join(root, 'notes', `${note.id}.md`), `---\n${frontmatter(note)}\n---\n\n${note.body}`, 'utf8');
 }
 for (const [name, body] of Object.entries(VIEWS)) {
   writeFileSync(join(root, 'views', `${name}.yaml`), body, 'utf8');
 }
-for (const [name, body] of Object.entries(NOTES)) {
-  writeFileSync(join(root, 'notes', name), body, 'utf8');
+for (const [name, body] of Object.entries(DOCS)) {
+  writeFileSync(join(root, 'docs', name), body, 'utf8');
 }
 
 const declared = new Set();
-for (const card of CARDS) for (const vals of Object.values(card.facets)) for (const v of vals) declared.add(v);
+for (const note of NOTES) for (const vals of Object.values(note.facets)) for (const v of vals) declared.add(v);
 
 console.log(`${root}
-  ${CARDS.length} cards, ${Object.keys(VIEWS).length} views, ${declared.size} distinct facet values
+  ${NOTES.length} notes, ${Object.keys(VIEWS).length} views, ${declared.size} distinct facet values
   due buckets: overdue ${DUE.overdue} · today ${DUE.today} · week ${DUE.week} · later ${DUE.later}
 
   node src/cli/pj.ts vaults add ${root} --name states

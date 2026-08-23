@@ -24,7 +24,7 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * `COMPUTED[facet]` first — so a facet named `type` or `blocked` would store
  * values, validate writes, draw a row in the panel, and then be ignored by every
  * query: writes succeeding while reads lie. And `title`, `updated` and `created`
- * are sortable record fields, so a facet wearing one of those names is either
+ * are sortable note fields, so a facet wearing one of those names is either
  * unsortable or shadows the default sort.
  *
  * The rest of `KEY_ORDER` cannot collide — frontmatter namespaces facets under
@@ -46,7 +46,7 @@ export const RESERVED: readonly string[] = [...KEY_ORDER, 'body', ...Object.keys
 /**
  * Check the vocabulary's own names, and what a declaration of a built-in sets.
  *
- * Separate from `validate`, which checks *records* against the vocabulary: this
+ * Separate from `validate`, which checks *notes* against the vocabulary: this
  * asks whether the vocabulary is sayable at all. Errors rather than warnings,
  * because both failures are silent — the axis works everywhere except where it
  * matters.
@@ -186,7 +186,7 @@ export function validateViews(
 
     for (const key of spec.query.sort ?? []) {
       const name = key.split(':')[0] ?? '';
-      // `updated`, `created` and `title` are record fields rather than facets,
+      // `updated`, `created` and `title` are note fields rather than facets,
       // and the comparator sorts by them directly.
       if (name === 'updated' || name === 'created' || name === 'title') continue;
       axis(name, 'sort');

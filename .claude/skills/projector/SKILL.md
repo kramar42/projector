@@ -1,19 +1,19 @@
 ---
 name: projector
-description: How to read and write everything in a projector vault — the markdown cards, the facet vocabulary in facets.yaml, and the saved views. Use whenever a request involves cards, projects, facets, views, the board, the canvas, the table, or the `pj` CLI: creating a card, changing its facets or project, adding or changing a facet axis, writing or fixing a saved view, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Read this before hand-editing any file in a vault — it is the only place the card format is written down.
+description: How to read and write everything in a projector vault — the markdown notes, the facet vocabulary in facets.yaml, and the saved views. Use whenever a request involves notes, projects, facets, views, the board, the canvas, the table, or the `pj` CLI: creating a note, changing its facets or project, adding or changing a facet axis, writing or fixing a saved view, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Read this before hand-editing any file in a vault — it is the only place the note format is written down.
 ---
 
 # Projector
 
-A personal work-management app. One markdown card database, projected as a board, a mind-map canvas or
+A personal work-management app. One markdown note database, projected as a board, a mind-map canvas or
 a table — whichever the current query asks for. The project's `README.md` describes the app; **this file is
-where the card format itself is written down**, so nothing in a vault restates it.
+where the note format itself is written down**, so nothing in a vault restates it.
 
 **A vault holds three editable things**, and this skill covers all three:
 
 | | | |
 |---|---|---|
-| `cards/*.md` | the records | mostly `pj` |
+| `notes/*.md` | the notes | mostly `pj` |
 | `facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
 | `views/*.yaml` | saved queries and their arrangement | hand-edit |
 
@@ -27,10 +27,10 @@ pj --help                    # its header names the vault this invocation would 
 ```
 
 If several are registered and the request does not say which, **ask the user** — `pj` itself refuses to
-guess here, and so should you: acting on the wrong vault writes real records into the wrong database.
+guess here, and so should you: acting on the wrong vault writes real notes into the wrong database.
 
 Everything is plain files: create and edit them with Write/Edit, no API and no running app. Prefer `pj`
-for cards, because it validates and keeps formatting consistent. Run `pj check` after any batch.
+for notes, because it validates and keeps formatting consistent. Run `pj check` after any batch.
 
 ```bash
 alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
@@ -39,28 +39,28 @@ alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
 ## The model, in six facts
 
 1. **Facets are arrays, and some hold one value.** Every value is an array, even when there is one. A
-   card with two values for a grouped facet appears in two board columns — that is the model working.
+   note with two values for a grouped facet appears in two board columns — that is the model working.
    A facet declared `single: true` refuses a second value instead: `priority`, `status`, `energy`,
    `owner`, `parent` and `due` are single, because holding two at once is incoherent rather than
    expressive.
-2. **`project` is a reference facet** — `type: ref`, so its values are record **ids**.
-   `project: [project-d, mapping]` means the card belongs to both and inherits the repos and instructions
+2. **`project` is a reference facet** — `type: ref`, so its values are note **ids**.
+   `project: [project-d, mapping]` means the note belongs to both and inherits the repos and instructions
    of both. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
    under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
-3. **`parent` is a reference facet too** — "this card is part of that one". Single-valued, drawn by the
+3. **`parent` is a reference facet too** — "this note is part of that one". Single-valued, drawn by the
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
-   are independent, so a card may have either, both or neither. Set it with `--facet parent=X`; there
+   are independent, so a note may have either, both or neither. Set it with `--facet parent=X`; there
    is no `--parent` flag any more, because no relation gets a flag of its own. `blocked_by` is the
    third, and powers the `unblocked` view.
-4. **There is no `kind`.** A record is not a class of thing. Whether it is work is whether it carries a
-   `status` — which is what keeps a grouping record off a status-filtered board — and whether it
+4. **There is no `kind`.** A note is not a class of thing. Whether it is work is whether it carries a
+   `status` — which is what keeps a grouping note off a status-filtered board — and whether it
    contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
 5. **Nothing derivable is stored.** The `blocked` axis names one value per facet declared
    `blocking:` — `blocked_by` when something it names is not `closed`, `waiting_on` when it holds any
    value at all. Neither is a status; `status` is lifecycle only.
-   **`blocked_by` is stored on the card that is stuck**, pointing at what it is stuck on — the same
-   direction as `parent` and `project`. Every reference in this model points at what the record
-   depends on, so you record a blocker on the blocked card rather than on the blocker.
+   **`blocked_by` is stored on the note that is stuck**, pointing at what it is stuck on — the same
+   direction as `parent` and `project`. Every reference in this model points at what the note
+   depends on, so you note a blocker on the blocked note rather than on the blocker.
 6. **A facet declares a `type`** — `label` (the default), `ref`, `date` or `number`. `due` is a date
    facet: `pj set <id> --facet due=2026-09-01`, cleared with `--facet due=`. An ordered facet presents
    **buckets** on an axis and compares raw values, so `--filter due=overdue` and
@@ -75,17 +75,17 @@ pj ls --group project        # or any facet
 pj ls --focus project-a --via project --dir in    # the whole portfolio, transitively
 pj ls --focus project-a --via parent --dir in     # everything decomposed under it
 pj ls --group parent                        # or filter parent=X, or parent=(none)
-pj ls --filter linked=jira                  # which records carry a Jira link
+pj ls --filter linked=jira                  # which notes carry a Jira link
                                             # out = follows references, in = referenced by
 pj ls --filter status=active,planning
 pj ls --view unblocked       # actionable now: open, nobody waited on, no unfinished blocker
-pj ls --view triage --json   # cards missing project/priority/status, grouped by what is missing
+pj ls --view triage --json   # notes missing project/priority/status, grouped by what is missing
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
 pj enrich <ref> --force      # resolve a link's live state
 ```
 
-`pj context` is the right first move for almost any question about a card. It already resolves the
+`pj context` is the right first move for almost any question about a note. It already resolves the
 project chain, the inherited repos and instructions, and the cached link enrichment — do not
 re-derive those by reading files.
 
@@ -95,7 +95,7 @@ re-derive those by reading files.
 pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]
 pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
-pj set <id> --set 'project={}'      # this is how a record becomes a project
+pj set <id> --set 'project={}'      # this is how a note becomes a project
 pj rm <id>...                       # deletes, dropping every reference pointing at it
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory
@@ -113,22 +113,22 @@ refilling the inbox.
   `planning|active|on-hold|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
   `<vault>/facets.yaml` before inventing a value; `pj set` will refuse anyway.
 - **Never write `status: blocked` or `status: waiting`.** They are not values. If something is blocked
-  by another card, set `blocked_by` **on the blocked card** naming the blocker; if it is waiting on a
+  by another note, set `blocked_by` **on the blocked note** naming the blocker; if it is waiting on a
   person, set `waiting_on`. Both surface on the `blocked` axis, under their own facet names, without
   being stored twice.
-- **`archived` is how you retire a captured card**, not deletion. Deleting it destroys the
+- **`archived` is how you retire a captured note**, not deletion. Deleting it destroys the
   `source_fingerprint` too, so the next `/pj-capture` sweep creates it again.
-- **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a card
+- **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a note
   outside Project A.
-- **Never set a `project` value with no matching project record.** Either use an existing id or
-  propose creating the record — do not invent membership that resolves to nothing.
-- **Positions are never on a card.** Canvas `x/y` lives in `<vault>/views/canvas/*.yaml`.
-- **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a card
+- **Never set a `project` value with no matching project note.** Either use an existing id or
+  propose creating the note — do not invent membership that resolves to nothing.
+- **Positions are never on a note.** Canvas `x/y` lives in `<vault>/views/canvas/*.yaml`.
+- **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a note
   operation. Links are references, not copies.
 
 ## The vocabulary — `facets.yaml`
 
-Three things live in a vault, and cards are only one. **`facets.yaml` is the vocabulary**: which axes
+Three things live in a vault, and notes are only one. **`facets.yaml` is the vocabulary**: which axes
 exist, what order their values come in, and what a value is allowed to be. It is the single place
 column order lives — what list-order does in Trello, made explicit and shared by every view. Editing
 it is how you add an axis; there is no CLI for it, so write the YAML.
@@ -152,7 +152,7 @@ due:
 
 **Four rules, each of which the loader enforces rather than trusts:**
 
-- **`type` decides everything else.** `label` is a member of the declared list; `ref` is a record id,
+- **`type` decides everything else.** `label` is a member of the declared list; `ref` is a note id,
   which makes the facet traversable — it lays out a canvas, walks under `focus`, refuses a cycle;
   `date` is `YYYY-MM-DD`; `number` sorts numerically. An unrecognised `type` silently becomes `label`.
 - **Only a `label` declares `values`.** A `ref`'s vocabulary is the vault and an ordered facet's is
@@ -166,13 +166,13 @@ due:
   everything else.
 
 Adding an axis is two steps and no code: declare it here, then set it with `pj set <id> --facet f=v`.
-Removing one leaves the values on the cards — `pj check` then reports them as unknown rather than
+Removing one leaves the values on the notes — `pj check` then reports them as unknown rather than
 dropping them, which is the behaviour you want when a rename is half-done.
 
 **Five axes are computed and are *not* in this file** — `type`, `blocked`, `triage`, `staleness`,
 `linked`. Each reads something a facet cannot describe: a `project:` block, the reference graph, an
-absence, a record's links, the app-written `updated`. They filter and group exactly like declared
-facets. Never try to write one onto a card.
+absence, a note's links, the app-written `updated`. They filter and group exactly like declared
+facets. Never try to write one onto a note.
 
 ## Views — `views/*.yaml`
 
@@ -192,7 +192,7 @@ show: [project, tech]         # which facets this view surfaces, in order
 ```
 
 **The two halves are not the same kind of thing.** Everything above is *derivable*, so it is also a
-live control in the UI. `nodes` (canvas x/y) and `order` (card order within a column) are hand-curated
+live control in the UI. `nodes` (canvas x/y) and `order` (note order within a column) are hand-curated
 **arrangement**, and exist only in a saved file — which is why an ad-hoc query cannot hold a layout.
 
 - **`show` is one list and its order matters.** How each facet is drawn follows from what it is: a
@@ -201,7 +201,7 @@ live control in the UI. `nodes` (canvas x/y) and `order` (card order within a co
   decomposition tree with blockers drawn across it; `show: [project]` is the portfolio. Get this wrong
   and the canvas puts every node in one column with the hierarchy invisible.
 - **Never hand-edit `nodes` or `order`.** The app merges them by id on save, so it never drops the
-  position of a card the current filter happens to hide. A wholesale rewrite loses exactly that.
+  position of a note the current filter happens to hide. A wholesale rewrite loses exactly that.
 - **An absent key means "inherit".** The server merges a saved view *under* the URL's parameters, so
   clearing something needs an explicit empty value — deleting the key lets the saved one back.
 - **`(none)` is written as `(none)`**, never as a bare `none`, so a facet that one day has a literal
@@ -215,7 +215,7 @@ create the file, and confirm it by opening it: `pj ls --view <name>`.
 `jira:PROJ-303` · `gh:pr:ORG/repo#412` · `gh:branch:ORG/repo@name` · `gh:commit:ORG/repo@sha` ·
 `claude:<transcript-uuid>` · `doc:relative/path.md` · `slack:<permalink>` · a bare `https://…`
 
-A kind exists when something resolves it. Everything else — a Trello card, a calendar entry, a Grafana
+A kind exists when something resolves it. Everything else — a Trello note, a calendar entry, a Grafana
 dashboard — is a bare URL, with provenance in the `source` facet where it matters.
 
 A `claude:` link takes the **transcript uuid** — the filename under `~/.claude/projects/<slug>/`.

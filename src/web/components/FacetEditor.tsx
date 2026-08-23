@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { RecordPicker } from './RecordPicker.tsx';
 import { PopoverButton } from './Popover.tsx';
-import type { CardDetail, FacetDef } from '../types.ts';
+import type { NoteDetail, FacetDef } from '../types.ts';
 import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
 import { RecordMark } from './CardBody.tsx';
@@ -16,7 +16,7 @@ import { isAppAxis } from '../hue.ts';
  * accumulating, so `status` cannot end up holding `planning` and `done` at once.
  *
  * The **type** picks the control, so no facet is named here: a reference holds
- * record ids and gets a record picker, a date gets a date input, and everything
+ * note ids and gets a note picker, a date gets a date input, and everything
  * else gets the toggle list. `due` needed a bespoke field in the panel before it
  * was typed; now a date facet declared tomorrow gets the same editor for free.
  *
@@ -56,14 +56,14 @@ export function FacetEditor({
    * It was not passed before, and could not be: `FacetDef` carries the label and
    * the vocabulary but not its own name, so the editor knew every fact about an
    * axis except which one it was — and drew every lit value in the accent as a
-   * result. The accent is the app speaking; a value of a record is drawn in that
-   * record's axis's family.
+   * result. The accent is the app speaking; a value of a note is drawn in that
+   * note's axis's family.
    */
   name: string;
   def: FacetDef;
   values: string[];
   /** Titles for reference values. Absent for a label or date axis. */
-  refs?: CardDetail['refs'];
+  refs?: NoteDetail['refs'];
   /** The card being edited, so it cannot be made its own reference. */
   selfId?: string;
   onChange: (next: string[], mode: FacetMode) => void;
@@ -112,13 +112,13 @@ export function FacetEditor({
       return (
         <>
           {values.map((v) => (
-            // A reference is a record, so it reads as one: the title, and a
+            // A reference is a note, so it reads as one: the title, and a
             // click that goes there. Removing is its own mark — the row used
             // to remove on click and say so only in a hover title, which put
             // "go to this card" and "unlink this card" on the same gesture.
             <span key={v} className={`refchip ${app ? 'is-app' : ''}`}>
               {/* The mark sits inside the button, because it is part of the
-                  record's identity rather than a control beside it — the same
+                  note's identity rather than a control beside it — the same
                   order a card face and the panel title lead with, and the
                   arrangement the per-glyph optical nudges were measured for. */}
               <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
@@ -140,14 +140,14 @@ export function FacetEditor({
               floated this same picker in a popover, and `.popover .picker-list`
               exists precisely so the popover does the scrolling. Floating it here
               also makes the three add-controls in this panel — `+ facet`,
-              `+ ref`, `+ record` — one gesture with one dismissal.
+              `+ ref`, `+ note` — one gesture with one dismissal.
           */}
           <PopoverButton
             className="addbtn"
             minWidth={320}
             fitContent
-            label="+ record"
-            title={`add a record to ${def.label.toLowerCase()}`}
+            label="+ note"
+            title={`add a note to ${def.label.toLowerCase()}`}
             render={(close) => (
               <RecordPicker
                 exclude={selfId ? [...values, selfId] : values}

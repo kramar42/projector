@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from 'yaml';
 import { SEED_FACETS, SEED_VIEWS } from '../src/server/seed.ts';
-import { countCards, initVault, looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
+import { countNotes, initVault, looksLikeVault, normalise, resolveDoc, suggestName } from '../src/vault.ts';
 import { resolveCliVault } from '../src/config.ts';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
@@ -37,7 +37,7 @@ test('the suggested name is the folder name, and nothing cleverer', () => {
 
 test('doc refs resolve against the vault, and absolutely when absolute', () => {
   const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-'));
-  mkdirSync(pathJoin(dir, 'cards'), { recursive: true });
+  mkdirSync(pathJoin(dir, 'notes'), { recursive: true });
   writeFileSync(pathJoin(dir, 'inside.md'), '# in');
   const outside = pathJoin(dir, '..', `pj-outside-${process.pid}.md`);
   writeFileSync(outside, '# out');
@@ -59,7 +59,7 @@ test('doc refs resolve against the vault, and absolutely when absolute', () => {
 test('a directory is a vault when it holds what a vault is made of', () => {
   const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-'));
   assert.equal(looksLikeVault(dir), false);
-  mkdirSync(pathJoin(dir, 'cards'));
+  mkdirSync(pathJoin(dir, 'notes'));
   assert.equal(looksLikeVault(dir), true);
   rmSync(dir, { recursive: true, force: true });
 });
@@ -118,16 +118,16 @@ test('a new vault is seeded with a vocabulary and views, and no prose', () => {
   try {
     initVault(root, SEED_FACETS, SEED_VIEWS);
     assert.ok(existsSync(pathJoin(root, 'facets.yaml')));
-    assert.ok(existsSync(pathJoin(root, 'cards')));
+    assert.ok(existsSync(pathJoin(root, 'notes')));
     assert.ok(existsSync(pathJoin(root, 'views')));
     // No card-conventions README. That text was a copy of the `projector` skill,
     // which an agent already has — and two places stating the format is one
     // place to drift out of date.
-    assert.equal(existsSync(pathJoin(root, 'cards', 'README.md')), false);
+    assert.equal(existsSync(pathJoin(root, 'notes', 'README.md')), false);
     // A seeded vault is a vault, and an empty one: the README used to be the
     // only file in cards/, so this is what "no cards yet" now looks like.
     assert.ok(looksLikeVault(root));
-    assert.equal(countCards(root), 0);
+    assert.equal(countNotes(root), 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

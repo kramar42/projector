@@ -29,7 +29,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #            something it names is not closed; anything else blocks while it
 #            holds a value at all
 #   type:    label  → a member of the declared values list (the default)
-#            ref    → a record id, so the facet is also traversable: it lays out
+#            ref    → a note id, so the facet is also traversable: it lays out
 #                     a canvas, walks under focus, and refuses a cycle
 #            date   → YYYY-MM-DD, compared rather than matched
 #            number → sorts numerically rather than as text
@@ -49,7 +49,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #
 # Every facet is stored and written identically, the relations included. There is
 # deliberately no kind of facet the app writes through some other mechanism — and
-# no facet saying what class of thing a record is: that is read off the record,
+# no facet saying what class of thing a note is: that is read off the note,
 # never declared on it.
 #
 # Everything below is a starting point, not a schema. Delete what your domain has
@@ -66,7 +66,7 @@ status:
   open: false
   single: true
   # No further work expected, whatever the outcome — so abandonment counts and
-  # on-hold does not. A closed record stops blocking whatever waits on it.
+  # on-hold does not. A closed note stops blocking whatever waits on it.
   closed: [done, archived]
   expected: true
   hue: green
@@ -129,7 +129,7 @@ owner:
   open: true
   single: true
 
-# What a record is part of. A reference facet, so it is both classification and
+# What a note is part of. A reference facet, so it is both classification and
 # structure: it filters and groups a board like any facet, and it lays out the
 # canvas and walks under focus like an edge used to. Single, because one
 # container is the shape every gesture already assumed.
@@ -142,7 +142,7 @@ parent:
 
 # What must finish before this card can move. Stored on the card that is stuck,
 # pointing at what it is stuck on — the same direction as parent and project, and
-# the card you open when you are stuck is the card you record it on. The inverse,
+# the card you open when you are stuck is the card you note it on. The inverse,
 # what this card holds up, is derived and drawn beside it.
 #
 # Its transitive closure is what the blocked axis and views/unblocked.yaml are
@@ -213,7 +213,7 @@ show: [project, priority]
   },
   {
     path: 'everything.yaml',
-    body: `# Every record as a graph, laid out from the roots.
+    body: `# Every note as a graph, laid out from the roots.
 shape: canvas
 title: Everything
 show: [parent, blocked_by]

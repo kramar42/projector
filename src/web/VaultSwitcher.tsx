@@ -8,7 +8,7 @@ import { IconButton } from './components/Button.tsx';
  * The vault this window is looking at, and a way to change it.
  *
  * The button draws the name alone. It used to prefix it with `▣`, which is the
- * Record Mark vocabulary's project glyph worn by a thing that is not a record —
+ * Note Mark vocabulary's project glyph worn by a thing that is not a note —
  * a pun that only worked while nothing in the rail said what the control was.
  * The row's `Vault` label says it now, and the glyph means one thing again.
  *
@@ -99,7 +99,7 @@ function VaultMenu({
             title={v.path}
           >
             <span className="truncate pop-pick-name">{v.name}</span>
-            <span className="pop-annotation">{v.exists ? `${v.cards ?? 0}` : 'missing'}</span>
+            <span className="pop-annotation">{v.exists ? `${v.notes ?? 0}` : 'missing'}</span>
           </button>
           {v.path !== meta.vault && (
             <IconButton

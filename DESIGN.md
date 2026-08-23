@@ -162,7 +162,7 @@ components:
     typography: "{typography.chip}"
     rounded: "{rounded.sm}"
     padding: "1.5px 6px"
-  card-face:
+  note-face:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.lg}"
@@ -207,7 +207,7 @@ what is not a hue is named as a departure: the derived light neutrals, the five 
 and the scrim, the two minimap masks, and the `color-mix` tints and washes. The scheme is dark-first
 and has no light neutrals, so **the dark theme *is* xoria and the light theme is derived** from it —
 the same seven hue families, using the dark shades as ink where the light shades would disappear on
-white. The frontmatter above records the dark values
+white. The frontmatter above notes the dark values
 because they are the source; the light assignments are in `.impeccable/design.json`.
 
 Two things make this a drawing rather than a dashboard. First, **colour is notation.** Each facet axis
@@ -221,7 +221,7 @@ changing size — and there are no keyframes. A
 surface that sits open on a second monitor all day is a readout, and a readout that moves is a
 distraction.
 
-The precision is literal, not atmospheric. The record mark beside every title carries two
+The precision is literal, not atmospheric. The note mark beside every title carries two
 `translateY` constants — `0.054em` and `-0.058em` — derived from where each glyph's ink actually centres
 against lowercase text. They are measurements, not taste. That is the register: everything is sized to
 the thing next to it, and the reason is written down.
@@ -244,22 +244,22 @@ where saturation is reserved for notation and every neutral is a literal step in
 
 ### Primary
 
-- **Type Purple** (`accent`): the app's one voice. Focus rings, the selected card's ring, the drop
+- **Type Purple** (`accent`): the app's one voice. Focus rings, the selected note's ring, the drop
   target, the active filter head, the focus pill, badge counts, a panel link's clickable label, the
-  primary button, and the Record Mark — the one thing in this list that is not live state, and it is
-  here because a mark is *derived*: nothing writes it, so it is the app talking about a record rather
-  than a value the record carries. See the Don't list.
+  primary button, and the Note Mark — the one thing in this list that is not live state, and it is
+  here because a mark is *derived*: nothing writes it, so it is the app talking about a note rather
+  than a value the note carries. See the Don't list.
 
   This list is meant to stay short, and it has been pruned three times on that ground: a link kind's
   prefix took it for all eight kinds and now takes its kind's family, `unblocks` took it for a count
-  that is a property of a record, and a project's left border took it before both. A voice used
+  that is a property of a note, and a project's left border took it before both. A voice used
   everywhere is not a voice.
 
   It gained one in exchange, and only one: **the app's own axis**. `project` is `BUILTIN_FACETS`'
   rather than a vault's — the config chain walks it, its shape cannot be redeclared — so it draws in
   the app's colour where a vault's axes draw in the families a vault claims. That is `.facet-app` on
   a face, in a table and in the bulk bar, `.refchip.is-app` in the panel, `.picker-proj` in the
-  record picker, and the accent for its canvas edges. It used to declare `blue` and be drawn in
+  note picker, and the accent for its canvas edges. It used to declare `blue` and be drawn in
   *purple* by the two surfaces that drew it at all, neither of them from the declaration. In light mode the accent is the family's
   dark shade so it reads as ink; in dark it is the
   light shade so it reads as light. The unsaved-view mark is the one live-state signal that is not the
@@ -273,7 +273,7 @@ where saturation is reserved for notation and every neutral is a literal step in
 A canvas edge has no palette of its own. It draws in the leading relation's `hue` — the family the
 relation itself declares — so the graph says which relation it draws without a legend and without a
 second set of colours to keep in step. It is now the *only* place a reference axis's family shows: the
-values draw as records, in `facet-ref`, so the line is coloured and the chip at either end is not. There were three, `rel-parent`, `rel-blocks` and `rel-project`, keyed by facet
+values draw as notes, in `facet-ref`, so the line is coloured and the chip at either end is not. There were three, `rel-parent`, `rel-blocks` and `rel-project`, keyed by facet
 name; a renamed relation silently lost its colour, and the same axis could be one colour as a chip and
 another as a line.
 
@@ -333,7 +333,7 @@ separate them already — seven families do not survive spending three on one ho
 - **Darker / BG / Shadow-Step** (`ground`, `surface`, `surface-2`, `surface-3`): the four-surface
   stack, in that order, outermost to innermost.
 - **Rule / Grey3** (`rule`, `rule-2`): the hairline and its emphasised form. `rule` separates regions;
-  `rule-2` marks an interactive edge — an input, a popover, a hovered card. Three users are not that:
+  `rule-2` marks an interactive edge — an input, a popover, a hovered note. Three users are not that:
   the canvas band, which is never interactive and says so in its own comment; the scrollbar thumb,
   which takes it as a fill; and `.linkchip.is-live`, which takes it as a data state.
 - **Shadow** (`dot`): the canvas dot grid, and nothing else.
@@ -342,7 +342,7 @@ separate them already — seven families do not survive spending three on one ho
 
 - **PreProc Green** (`ok`): a finished reference, a filled progress bar.
 - **Yellow** (`warn`): unsaved state, a deadline landing today.
-- **Special Red** (`bad`): a failure, a blocked card's left border, an open reference, an overdue
+- **Special Red** (`bad`): a failure, a blocked note's left border, an open reference, an overdue
   deadline.
 
 ### Named Rules
@@ -354,7 +354,7 @@ its text is.
 
 A **link kind** is not an axis and does not claim: the eight kinds borrow families to colour two or
 three mono characters, never a fill — see The Link Kind Vocabulary. A **reference** axis claims one
-and spends it on its canvas edge alone, because its values draw as records rather than as values. The
+and spends it on its canvas edge alone, because its values draw as notes rather than as values. The
 **app's own axis** claims none at all: `project` draws in the accent, which no family may take and no
 vault axis may ask for.
 
@@ -377,18 +377,18 @@ needs no help. Any new tinted surface goes through `--chip-tint`, not a hand-pic
 **The App Voice Rule.** The accent marks live state and the app speaking — focus, selection, a drop
 target, an active filter, a count the app computed — with the unsaved view as the one exception, which
 takes `warn`. It never marks data structure.
-A property of a record is drawn in that facet's own hue.
+A property of a note is drawn in that facet's own hue.
 
 Two things sit inside "the app speaking" rather than beside it, and both are load-bearing:
 
-- **The Record Mark.** Derived, never written — `markOf` reads it off what names the record — so the
-  glyph is the app's reading of a record rather than a value the record carries.
+- **The Note Mark.** Derived, never written — `markOf` reads it off what names the note — so the
+  glyph is the app's reading of a note rather than a value the note carries.
 - **The app's own axis.** `project` is defined by `BUILTIN_FACETS`, not by a vault, so its colour is
   the app's to spend. Every *vault* axis draws in a family it claims, and a vault cannot ask for the
   accent.
 
-Anything else that is a property of a record and reaches for the accent is the rule being broken, and
-three did: the project card's left border, every link kind's prefix, and the `unblocks` count.
+Anything else that is a property of a note and reaches for the accent is the rule being broken, and
+three did: the project note's left border, every link kind's prefix, and the `unblocks` count.
 
 ## Typography
 
@@ -408,9 +408,9 @@ between the two.
 
 - **Display** (650, 22px, `-0.02em`): the vault gate's heading. The only full-page title in the app,
   and the only place type is allowed to be large.
-- **Headline** (650, 16px, 1.3, `-0.015em`): the open record's title in the card panel. The largest
+- **Headline** (650, 16px, 1.3, `-0.015em`): the open note's title in the note panel. The largest
   type in normal use.
-- **Title** (500, 13px, 1.35): a record's title on a face, in a column or on the canvas. Clamped to two
+- **Title** (500, 13px, 1.35): a note's title on a face, in a column or on the canvas. Clamped to two
   lines on a canvas node, unclamped in a column.
 - **Body** (400, 12.5px, 1.45): the working size — buttons, inputs, selects, table cells, reference
   rows, panel prose. `body` carries 14px as an inheritance root; almost nothing renders at it.
@@ -430,7 +430,7 @@ between the two.
 **The Mono Label Rule.** If a human typed it, it is sans; if the app is naming, counting or annotating
 something, it is mono. A facet's label is the first case, not the second: `label: Part of` is a string
 in the vault's own `facets.yaml`, written by whoever keeps the vocabulary, so the filter rail and the
-card panel both render it sans. The app names the *axis slot* — `SHAPE`, `GROUP BY`, `FACETS` — and
+note panel both render it sans. The app names the *axis slot* — `SHAPE`, `GROUP BY`, `FACETS` — and
 those are mono. Titles, excerpts and body copy are sans. Every label, key, count, chip, meta
 line, column name, table header and glyph is mono. There is no third case, and the division is what
 makes a screen with fourteen type sizes read as two voices rather than fourteen.
@@ -452,7 +452,7 @@ rather than counted in prose. The test also guards the mechanism that removed it
 shorthand resets every sub-property it does not name, so a counter that acquires one has to
 re-declare the guard, and two of them do.
 
-**The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The record marks
+**The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The note marks
 sit at `0.8em` with `line-height: 1`, baseline-aligned, plus a per-glyph `translateY` derived from
 where its ink actually centres: `•` centres at `0.3716em` of its own size, `○` and `▣` at `0.2598em`,
 and lowercase text at `0.254em` of *its* size, which is where `0.054em` and `-0.058em` come from.
@@ -462,7 +462,7 @@ dot's ink measures 1.85 × 2.23px against `○`'s 8.94 × 9.02, nearly five time
 dimension, which reads as a speck rather than as the quietest of three marks. The bullet is 4.35 ×
 4.34 — legible, and still half the circle.
 
-The panel header is the one place the mark is also a **control**: a record is a project by carrying a
+The panel header is the one place the mark is also a **control**: a note is a project by carrying a
 `project:` block, so clicking the glyph adds or removes it. It takes `--text-lg` there rather than a
 second relative size, and therefore its own pair of measured constants — same formula, different size
 pair, written down beside them.
@@ -489,7 +489,7 @@ the same axis, with one known exception: from three lanes up the board scrolls v
 column bodies inside it still scroll vertically too.
 
 **The board** is a flex row of fixed 292px columns with a 12px gutter, `align-items: flex-start` so a
-short column does not stretch. Cards stack 7px apart in an 8px-padded body. A single-lane board lets
+short column does not stretch. Notes stack 7px apart in an 8px-padded body. A single-lane board lets
 its columns take the full available height; a laned board shares that height between its lanes,
 `flex: 1 1 0` so they stay equal, floored at the `44vh` a column was capped at plus the head and gap
 around it — so three lanes or more overflow and the board scrolls rather than every band becoming a
@@ -506,7 +506,7 @@ twice the vertical. Uniform 10px is `.rail-block`'s own number, and it makes the
 tiers exactly the interval to the edge — 6px between a section's parts, 5px between the rows of a
 facet grid, 10px and a hairline between tiers.
 
-**Density is the point.** At 1080p a column shows about ten cards, and a couple of hundred records are
+**Density is the point.** At 1080p a column shows about ten notes, and a couple of hundred notes are
 four columns and one scroll. Every measurement in the system is hand-tuned to a 1px granularity rather
 than snapped to a 4- or 8-point grid: `1.5px 6px` on a chip, `3.5px 8px` on a small button, `9px 10px`
 on a card face. The nine named steps are `1 · 4 · 6 · 7 · 8 · 12 · 14 · 18 · 20`, and each exists
@@ -537,11 +537,11 @@ interchangeable: the offset points away from the edge the element is attached to
 
 ### Shadow Vocabulary
 
-- **Panel** (`box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18)`): the card panel, thrown leftward from
+- **Panel** (`box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18)`): the note panel, thrown leftward from
   the right edge it is docked to.
 - **Popover** (`box-shadow: 0 12px 32px rgba(20, 15, 35, 0.18)`): portalled menus, which sit furthest
   from the plane and so cast furthest.
-- **Picker** (`box-shadow: 0 8px 28px rgba(8, 6, 12, 0.22)`): the record picker — smaller throw,
+- **Picker** (`box-shadow: 0 8px 28px rgba(8, 6, 12, 0.22)`): the note picker — smaller throw,
   higher opacity, because it is a modal over a scrim.
 - **Floating Bar** (`box-shadow: 0 6px 20px rgba(20, 15, 35, 0.16)`): the bulk bar, which exists only
   while a selection does.
@@ -551,15 +551,15 @@ interchangeable: the offset points away from the edge the element is attached to
 ### Named Rules
 
 **The Flat Plane Rule.** Anything that lives in the layout is flat: a fill, a hairline, and no shadow.
-A shadow is permission to leave the plane, and only five elements have it. A card, a column, a chip, a
+A shadow is permission to leave the plane, and only five elements have it. A note, a column, a chip, a
 button, a table row and an input never do.
 
 **The Stroke-As-Shadow Rule.** Three `box-shadow` idioms — five declarations in all — are not shadows
-and must not be read as elevation: `0 0 0 1px var(--accent)` is the selected card's ring,
-`0 ±2px 0 0 var(--accent)` is the reorder drop line above or below a card, and
+and must not be read as elevation: `0 0 0 1px var(--accent)` is the selected note's ring,
+`0 ±2px 0 0 var(--accent)` is the reorder drop line above or below a note, and
 `inset 2px 0 0 0 var(--accent)` marks a selected table row. All three use the shadow property to draw
 a stroke where the border is already spoken for; the ring and the drop line are each written twice — a
-card is selected in a column and on the canvas, and a card can be dropped above or below — which is
+note is selected in a column and on the canvas, and a note can be dropped above or below — which is
 where the five come from. The
 table row's is inset and on one side because a row cannot take a border — `outline` on a `<tr>` is
 drawn per cell and a border shifts the column grid — so it is the same 3px-left-edge idea reaching a
@@ -581,22 +581,22 @@ row's kind badge. Nothing is a full pill and nothing is square.
 Borders carry three distinct meanings, and the difference between them is the form language doing real
 work:
 
-- **1px solid `rule`** — a boundary. Between regions, around a card, under a table row.
+- **1px solid `rule`** — a boundary. Between regions, around a note, under a table row.
 - **1px dashed** — *not a real value.* Six rules draw it: the `(none)` column and a context-only
   canvas band, both also at reduced opacity; a toggle chip for a value the axis's vocabulary does not
   list; the panel's new-value field while it is empty; a link chip whose fetch returned nothing; and a
   vault row whose directory is gone. In each case the container exists but the value does not.
-- **3px solid, left edge only** — state. A blocked card (`bad`), an open reference (`bad`), a
-  finished one (`ok`, at 0.7 opacity). A project used to take a fourth in `hue-purple`; the Record
-  Mark says that in every place a record appears, so the face said it twice and one of the two was
-  the shape of the card itself. Every card face is now the same rectangle until something blocks it.
+- **3px solid, left edge only** — state. A blocked note (`bad`), an open reference (`bad`), a
+  finished one (`ok`, at 0.7 opacity). A project used to take a fourth in `hue-purple`; the Note
+  Mark says that in every place a note appears, so the face said it twice and one of the two was
+  the shape of the note itself. Every card face is now the same rectangle until something blocks it.
 
 ### Named Rules
 
 **The Load-Bearing Left Border Rule.** The 3px left border is the only place a card face changes shape,
 and it always encodes state. It is not available for decoration, for grouping, or for a fourth meaning
 without retiring one of the three. Retiring one is what happened to the project's edge: a property a
-glyph already states in every place a record appears was not paying for the only shape change a face
+glyph already states in every place a note appears was not paying for the only shape change a face
 has.
 
 **The Dashed Means Absent Rule.** Dashed is reserved for a container whose value does not exist. It
@@ -640,26 +640,26 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   `accent-soft` *is* the diluted shade already (it is `hue-purple-bg` exactly, in dark), and tinting
   a tint is how a chip turns into its own background.
 - **Reference:** `facet-ref`, and it outranks a declared family. A reference value is not a value, it is
-  another record, so it draws in the panel's `.refchip` register wherever it appears — `surface-2`
+  another note, so it draws in the panel's `.refchip` register wherever it appears — `surface-2`
   box, `rule` edge, `ink-2` text, no family. A card face and a table row used to draw one as a hued
-  chip, so the same record read as a purple `parent` pill on a board and as plain text in the editor.
+  chip, so the same note read as a purple `parent` pill on a board and as plain text in the editor.
   `ink-2` rather than `facet-muted`'s `ink-3` is the whole difference between the two rules: a hint
-  recedes, a record does not. A reference axis's own `hue:` is not dead — the canvas draws its
+  recedes, a note does not. A reference axis's own `hue:` is not dead — the canvas draws its
   **edges** in it, which is the one place the relation is what is being coloured rather than the
-  record at the end of it.
+  note at the end of it.
 - **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket, and a
   bucket that declares its own `hue` wins — drawn **filled** rather than tinted, because that is the
   point of declaring one: `overdue` loud on an axis that is otherwise quiet. A filled chip takes
   `--ground`, not `--ink`, for the same contrast reason `.btn.primary` does. This replaced
   `.chip.is-overdue` and `.chip.is-today`, the last two *value* names in the stylesheet. A table cell
-  does not draw the bucket — `TableView` renders `FacetChip` without it, though `card.buckets` is on
+  does not draw the bucket — `TableView` renders `FacetChip` without it, though `note.buckets` is on
   the DTO the row already reads.
-- **Toggle chip:** the interactive variant, in the card panel and the bulk bar, with `is-on`,
+- **Toggle chip:** the interactive variant, in the note panel and the bulk bar, with `is-on`,
   `is-extra` and `is-clear` states. It carries its **axis's own family**, off as the hue in text on the
   plain surface and on as the hue in fill with `ground` text — the same two states the bucket chips
-  use. It took the *accent* in both until the card editor became the one surface where a facet value
+  use. It took the *accent* in both until the note editor became the one surface where a facet value
   did not say which axis it was, in the one place all the axes are on screen together: The App Voice
-  Rule gives the accent to live state and the app speaking, never to a property of a record.
+  Rule gives the accent to live state and the app speaking, never to a property of a note.
   The hue arrives as `--tone`, declared once per family beside that family's fill, because the
   `.facet-*` rules are declared above `.togglechip` at equal specificity — a tone class appended to the
   chip's className loses the cascade and changes nothing. The rail is not a home: its filter value is a
@@ -670,15 +670,15 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   Vocabulary — the prefix was `accent` for every kind, which spent the app's one voice on eight
   things that are not the app speaking and said nothing the letters did not.
 
-### Cards / Containers
+### Notes / Containers
 
 - **Card face:** `surface` fill, 1px `rule` border, `6px` radius, `9px 10px` padding, `6px` between
   its rows. Hover moves the border to `rule-2` and nothing else — no lift, no shadow, no scale.
   Selection adds a 1px `accent` ring; dragging drops it to `0.4` opacity.
-- **Structure:** a head row (record mark + title, baseline-aligned), an optional two-line clamped
+- **Structure:** a head row (note mark + title, baseline-aligned), an optional two-line clamped
   excerpt, a chip row, and a mono meta line. The same face renders in a column and on the canvas — how
-  much of it appears is a property of the view, never of the record. A table row is not the face: it
-  builds the same parts (record mark, title, chips) into a single-line flex cell — see **Accepted
+  much of it appears is a property of the view, never of the note. A table row is not the face: it
+  builds the same parts (note mark, title, chips) into a single-line flex cell — see **Accepted
   Exceptions**.
 - **Column:** `surface-2` fill, 1px `rule`, `8px` radius, fixed 292px. A head row with the axis value
   in mono 12.5px/600 and a pill count in `surface-3`, a hairline under it, then a scrolling body. The
@@ -709,7 +709,7 @@ The sidebar is the navigation, and it has no links. It is a stack of `rail-block
 hairlines, each a row of a 62px mono uppercase 9.5px label and a control — every row, with no
 exceptions: `Vault` and `View` were the two a reader had to identify from their value alone, and a
 folder name beside a view name is two unlabelled words in the one place that says where you are
-looking. Two groups sit above the filter: **which vault**, with its record and project counts, and
+looking. Two groups sit above the filter: **which vault**, with its note and project counts, and
 then **the whole query** — the saved view it starts from, then shape, grouping, sort, faces and
 focus, which are the overrides on top of it and what a save writes back. The query used to be spread
 across three groups — the saved view sat with the vault, and focus had a hairline of its own — and
@@ -718,27 +718,27 @@ choosing a vault, and that a traversal is a different kind of control from the a
 
 The filter panel below them is the only scrolling region: a facet head that turns `accent` and weight
 600 when active, a caret, a count badge, and an indented list of values at 12px. A computed axis
-carries an italic mono glyph so you know nothing is written on the card, right-aligned against the
+carries an italic mono glyph so you know nothing is written on the note, right-aligned against the
 label column's inner edge.
 
-The card panel reads the rail's grammar rather than sharing its components. It takes the absence rule —
+The note panel reads the rail's grammar rather than sharing its components. It takes the absence rule —
 an axis carrying nothing is not drawn — the `ƒ` and its right alignment, and the 10px block padding;
 it does **not** take the disclosure, because once an empty axis is absent there is nothing left to
 disclose. Where the rail collapses, the panel omits and offers a door: `+ facet` and `+ ref` open a
-popover of the axes this card carries nothing on.
+popover of the axes this note carries nothing on.
 
-### The Record Mark
+### The Note Mark
 
 The signature component, and the one nothing else can substitute for. A mono glyph before every title
-saying what the record is — `•` a card, `○` a node, `▣` a project. The mark draws the glyph alone: how
-many records name it is spelled out in its tooltip, and printed beside it only on a table row. It
+saying what the note is — `•` a note, `○` a node, `▣` a project. The mark draws the glyph alone: how
+many notes name it is spelled out in its tooltip, and printed beside it only on a table row. It
 draws in `accent` — one colour in all of them, so the glyph is one vocabulary rather than whatever
 each surface paints; it was `ink-3` everywhere except a project's mark in the panel, which was
 `hue-purple`, so the signature component was the colour of a label with one invisible exception. `○`
 means named by **any** reference facet, which is what `nodesIn` has always meant
-by a node: being named by `parent` and being named by `project` make a record a node equally. It read
+by a node: being named by `parent` and being named by `project` make a note a node equally. It read
 the `parent` facet alone until this was settled, which is how the mark and the `type` axis came to
-disagree about the same record. It sits at `0.8em` of whatever type it precedes, so one rule serves
+disagree about the same note. It sits at `0.8em` of whatever type it precedes, so one rule serves
 the 12.5px table row, reference row and picker row, the 12px reference chip and focus pill, and the
 13px card face — and that `em` resolves against the type it sits beside, not against whatever its row
 inherited. The panel header is the one place it does not: there the mark is a control and names
@@ -766,13 +766,13 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Do** measure a glyph you place in a text run, and write the measurement down in a comment beside
   the constant.
 - **Do** clamp overlays with `min(px, vw)` when a window might be narrow.
-- **Do** let motion exist exactly where a gesture would feel broken without it — dragging a card,
+- **Do** let motion exist exactly where a gesture would feel broken without it — dragging a note,
   panning or zooming the canvas, collapsing the rail, and the panel's new-value field widening as it
   takes focus. Regrouping, re-sorting and filtering are instant.
 
 ### Don't:
 
-- **Don't** animate a card, chip, column, panel or table. There are no keyframes in this system and no
+- **Don't** animate a note, chip, column, panel or table. There are no keyframes in this system and no
   transition longer than 140ms, and both existing ones animate a width. A surface that sits open all
   day must be still.
 - **Don't** drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii,
@@ -785,8 +785,8 @@ Used for a project's roll-up. It is the only bar in the system.
   no ASCII borders, scanlines, CRT glow, blinking cursors or fixed 80-column measures.
 - **Don't** use the accent for data structure. It marks live state and the app speaking, and nothing
   else. A *value* is data: a chip takes its axis's own family, never the accent, and a hue family
-  belongs to one axis — which is why the Record Mark is not the exception it looks like. Nothing
-  writes a mark; `markOf` derives it from what names the record, so it is the app speaking, and
+  belongs to one axis — which is why the Note Mark is not the exception it looks like. Nothing
+  writes a mark; `markOf` derives it from what names the note, so it is the app speaking, and
   `hue-purple` would have claimed an axis's family for something that is not an axis — `parent`'s, in
   the seeded vocabulary, which would have put a purple chip and a purple mark on one card face meaning
   two different things. The two tokens hold the same value in both themes, so this is which word is
@@ -825,7 +825,7 @@ is the only signal a filter is on.
 
 It stays because this document commits it in five places — the `components.column-count`
 frontmatter, `surface-3 (a count badge, a button on hover)` under Elevation, `--radius-pill 10px
-on a count badge and a canvas band` under Shapes, `a pill count in surface-3` under Cards, and
+on a count badge and a canvas band` under Shapes, `a pill count in surface-3` under Notes, and
 the token comment beside `--radius-pill` in the stylesheet — and because it is the only count in
 the app that sits *between* two other things: a flexing column name on its left and a 20px add
 button on its right. The fill is what separates it from both.
@@ -839,7 +839,7 @@ user (the canvas band).
 inherit family, size, tracking and case from the heading they annotate.
 
 Each has exactly one call site now — a board lane head and a table section head. This entry used to
-name a second for `.section-count`, the card panel's inbound heading, and note that the class arrived
+name a second for `.section-count`, the note panel's inbound heading, and note that the class arrived
 there beside `.quietcount` so the inheritance did not apply. That was true and is not: the panel's
 inbound lists are rows of a facet grid rather than sections with headings, and their count is a plain
 `.quietcount`. A one-site class is still the right shape here — the mechanism is the inheritance, not
@@ -851,7 +851,7 @@ than as a badge beside it. Giving either one a step from the scale would break i
 ### The number that is not a count
 
 `.count` on a table row looks like the count family and is not — it is the second half of the
-Record Mark, the reference count DESIGN.md's Record Mark section describes. It appears in the table
+Note Mark, the reference count DESIGN.md's Note Mark section describes. It appears in the table
 and not on a card face because a table's title cell is a single-line flex row with a stable end,
 where a face's title is unclamped in a column and clamped to two lines on a canvas node. The face
 carries the same fact as the `○` glyph itself, with the number in the mark's tooltip.
@@ -873,12 +873,12 @@ lane at the Label step, canvas band at `--text-xs`, table section at the Label s
 outer level (the lane) is smaller than the inner one it contains.
 
 Both ends are committed independently above: the Label step names lane heads among its users, and
-Cards / Containers names the column head as *"the axis value in mono 12.5px/600"*. The lane's
+Notes / Containers names the column head as *"the axis value in mono 12.5px/600"*. The lane's
 prominence is carried by uppercase and `0.1em` tracking rather than by size, and its job is a
 sticky marker surviving horizontal scroll, not a page heading.
 
 Unifying them would also flatten a real distinction: the column head is the only one of the four
-whose value is a **write target** — a drag lands there and an inline-created card inherits it,
+whose value is a **write target** — a drag lands there and an inline-created note inherits it,
 which is why a board keeps an empty declared column and a table and canvas do not. The canvas
 label additionally inherits its band's `0.55` (or `0.35`) opacity, so giving it the column's type
 would not make it read like the column's type, and compensating with a hand-picked colour is
@@ -911,11 +911,11 @@ because inheritance is a default everywhere except the four elements where it is
 
 ### The reference chip and the reference row
 
-`.refchip` and `.reflink` both show a record you can click, in a `surface-2` fill with a `rule`
+`.refchip` and `.reflink` both show a note you can click, in a `surface-2` fill with a `rule`
 border and the same hover, and they are not one component.
 
 They differ five documented ways: the radius pair is prescribed by name in Shapes (`3px` on a
-chip, `5px` on a reference row); the type step differs, which rescales the record mark's own
+chip, `5px` on a reference row); the type step differs, which rescales the note mark's own
 `0.8em` from 10px to 9.6px — the compounding failure the mark's own comment warns about; only the
 inbound form carries the 3px left-edge state border, which is two of the three meanings The
 Load-Bearing Left Border Rule permits; the DOM differs, one `<button>` against a span holding a
@@ -928,9 +928,9 @@ to stand beside it is gone: `blockedBy` and `children` once shipped as `{ id, ti
 inbound row a mark meant a server DTO change. They now carry `isProject` and `refCount`, counted by
 `inboundCounts()` in `src/index/refs.ts` — inside `src/index/`, so no boundary is crossed.
 
-Settled since: `.reflink` and the focus pill were the two places a record appeared with no mark at
-all. Both draw one now — there are six `<RecordMark>` call sites — so the Record Reference Rule holds
-everywhere a record appears.
+Settled since: `.reflink` and the focus pill were the two places a note appeared with no mark at
+all. Both draw one now — there are six `<RecordMark>` call sites — so the Note Reference Rule holds
+everywhere a note appears.
 
 ### The badge that takes `surface`, not `ground`
 
@@ -949,7 +949,7 @@ Low confidence, and the cheapest of these to revisit.
 
 ### The mode switch that is gone
 
-`.tab` and `.tab.is-on` are retired, and this entry is kept as the record of why rather than deleted.
+`.tab` and `.tab.is-on` are retired, and this entry is kept as the note of why rather than deleted.
 
 They were the panel's Body `read` / `edit` pair — the last two `.tab` uses in the app — and the entry
 here defended their `text-transform: none` and `letter-spacing: 0` as the one place a rule cancels an
@@ -964,7 +964,7 @@ plain buttons reading `read` and `edit` had announced nothing at all.
 
 ### The canvas that says nothing when it is empty
 
-Six surfaces state their own emptiness — the board, the table, the filter rail, the record picker, the
+Six surfaces state their own emptiness — the board, the table, the filter rail, the note picker, the
 vault gate's folder browser and the panel's body — through `.emptystate`. The canvas does not: a query
 matching nothing leaves
 an empty dot grid.
@@ -977,25 +977,25 @@ be the only fixed element it ever draws.
 To change it: it would want the same `.emptystate` register the other six use, not an illustration
 — see the Don't list.
 
-### The three left edges outside the record vocabulary
+### The three left edges outside the note vocabulary
 
 The Load-Bearing Left Border Rule enumerates three meanings for the 3px left edge and closes by
 saying a fourth is not available without retiring one of the three. Six rules draw one. The three
-enumerated are the *record* vocabulary — `.cardface.is-blocked`, `.reflink.is-open`,
+enumerated are the *note* vocabulary — `.cardface.is-blocked`, `.reflink.is-open`,
 `.reflink.is-done`. Three more sit outside it deliberately:
 
 - **`.banner.is-bad` and `.banner.is-conflict`** are two branches of one typed decision —
   `bannerFor` returns `tone: 'conflict' | 'bad'` — on an element that *is* a message about state
-  rather than a record carrying one. They are washed as well as striped, which no record edge is.
+  rather than a note carrying one. They are washed as well as striped, which no note edge is.
   `--warn` on a left edge appears nowhere else in this document; it is what separates "refused"
   from "saved, with warnings" where both render in one stack.
 - **`.linkrow.state-error`** is `bad` meaning "a failure", which is this token's own first job. It
   is the documented survivor of a pruning from four link-row stripes to one, and the row it marks
-  is not a record — it is a link on one.
+  is not a note — it is a link on one.
 
-So the rule governs the vocabulary a *record* is drawn in, and the count is three there — it was four
+So the rule governs the vocabulary a *note* is drawn in, and the count is three there — it was four
 until the project's edge was retired, which is the rule being spent down on purpose rather than drifting
-up. To change it: retire another, or restate the rule as being about records specifically.
+up. To change it: retire another, or restate the rule as being about notes specifically.
 
 Not consolidated into a shared `.stripe` rule, and this is the interesting part. Two reasons killed
 it: the rule count would go up rather than down, because both banners
@@ -1029,18 +1029,18 @@ the rail's own search, which is the field the rationale was written for.
 
 ### The project that is named but not chipped
 
-A record's project is a chip everywhere you meet it — a card face, a canvas node, a table cell —
-and bare text in the record picker: `.picker-proj` is mono `--text-label` in `accent`, with no
+A note's project is a chip everywhere you meet it — a card face, a canvas node, a table cell —
+and bare text in the note picker: `.picker-proj` is mono `--text-label` in `accent`, with no
 fill, no border, no radius and no padding. (It said `hue-purple` until the built-in axis got a colour
-of its own, and gave the reason as "never the accent for a property of a record" — the right rule read
+of its own, and gave the reason as "never the accent for a property of a note" — the right rule read
 one axis too widely, on an axis that was declaring `blue` at the time.)
 
 It keeps the axis's colour, which is the part that carries meaning, and drops the chip because the
 container is the case The Dilution Rule was written for: *"full strength is fine on one chip and
 loud on eight stacked down a column"*, which is why the light theme already mixes the fill to 42%.
-A picker lists every record in the vault — thirteen project labels on the fixture, and 27 rows —
+A picker lists every note in the vault — thirteen project labels on the fixture, and 27 rows —
 so the chips would arrive not eight to a column but one per row for the length of the list. The
-row is also already carrying a record mark and a title competing for the same eye; a filled chip
+row is also already carrying a note mark and a title competing for the same eye; a filled chip
 would be the third thing on it asking to be read first.
 
 Measured side by side in one viewport: 13 bare labels in the popover against 14 filled chips on
@@ -1053,9 +1053,9 @@ is a near-white wash rather than a dark shade, so a filled chip is nearly all bo
 ### The vault glyph in the folder browser
 
 `.browse-item` marks a directory that looks like a vault with `▣`, against `›` for a plain folder —
-the Record Mark vocabulary's project glyph worn by something that is not a record.
+the Note Mark vocabulary's project glyph worn by something that is not a note.
 
-It stays because the vault gate is a file browser: no record appears anywhere on that surface, so
+It stays because the vault gate is a file browser: no note appears anywhere on that surface, so
 there is nothing for the glyph to be confused with, and the pair it belongs to is `▣` against `›`
 rather than `▣` against `○` and `•`.
 

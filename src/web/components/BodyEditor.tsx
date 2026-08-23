@@ -82,7 +82,7 @@ export function BodyEditor({
    * Both go through a ref, and that is the whole of the bug they fix. The exit
    * report used to be `useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])`
    * — an unmount cleanup keyed on a callback whose identity a caller has no
-   * reason to keep stable. `CardPanel`'s blocks build theirs inline, so every
+   * reason to keep stable. `NotePanel`'s blocks build theirs inline, so every
    * render produced a new one, the cleanup fired on every render rather than on
    * unmount, and the two effects drove each other: the first reported `true`, the
    * re-render that caused made a new callback, the cleanup reported `false`, and

@@ -24,7 +24,7 @@ import type { Fetcher } from '../src/enrich/types.ts';
  */
 function vault(docs: Record<string, string> = {}): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'pj-enrich-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   mkdirSync(join(root, 'notes'), { recursive: true });
   for (const [name, body] of Object.entries(docs)) writeFileSync(join(root, 'notes', name), body, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };

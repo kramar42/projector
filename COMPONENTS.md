@@ -1,6 +1,6 @@
 # Components
 
-**Status: record.** Written as the input to a whole-app `extract` pass; this is what that
+**Status: note.** Written as the input to a whole-app `extract` pass; this is what that
 pass established. Where the draft was wrong, the correction is kept alongside it, because a
 document that quietly fixes itself teaches nothing about how it went wrong.
 
@@ -15,14 +15,14 @@ counted six ways of drawing a count; there were eleven classes and fourteen numb
 interesting defect was not the sprawl but that **seven of them lacked `tabular-nums`** against a
 rule `DESIGN.md` states unconditionally — including the roll-up columns that rule names by name.
 
-It is also why a six-pass refinement of the card panel produced *more* of the problem: every pass
+It is also why a six-pass refinement of the note panel produced *more* of the problem: every pass
 was scoped to one surface, so a component invented for that surface was invisible to it. The unit
 of work here was therefore a cross-surface comparison, never a single surface — and the two
 findings worth the whole pass came from comparing things nobody had thought to compare:
 
 - the collapsed rail **counted a different trichotomy than the app drew**. Its three numbers came
-  from the `type` pseudo-facet, whose `node` means "named by any reference facet", while every `○` on
-  screen came from a count of the `parent` facet alone. On the 27-card fixture the rail reported
+  from the `type` computed axis, whose `node` means "named by any reference facet", while every `○` on
+  screen came from a count of the `parent` facet alone. On the 27-note fixture the rail reported
   3 / 4 / 20 beside `▣ ○ •` while the app drew 3 / 1 / 23. Both halves have since moved — see
   **Settled during the pass**.
 - the `ƒ` that marks a computed value **was two different letters**. `ƒ` is U+0192 and
@@ -42,18 +42,18 @@ load-bearing after all, it is recorded in `DESIGN.md`'s **Accepted Exceptions**,
 
 **`✕` unlinks. The trash destroys. A `danger` word destroys many.**
 
-- **`✕` (`glyph="close"`)** — severs an association. A reference chip stops naming that record; a
-  link leaves the card; a focus is cleared; a vault stops being tracked. No file is destroyed and
+- **`✕` (`glyph="close"`)** — severs an association. A reference chip stops naming that note; a
+  link leaves the note; a focus is cleared; a vault stops being tracked. No file is destroyed and
   nothing is confirmed. The first three are lost only until a second click; the fourth is a
   persisted write — `vaultApi.forget` drops the folder from the tracked list, so undoing it means
   re-entering the path through the vault picker, which is why it is the one `✕` the code grew a
   failure banner for.
-- **The trash (`glyph="trash"`)** — destroys one record. Always confirmed, always says the file is
+- **The trash (`glyph="trash"`)** — destroys one note. Always confirmed, always says the file is
   in git.
 - **A `danger`-toned word** — destroys many. The bulk bar, in all three shapes, where the object is
   a selection rather than a thing on screen and a glyph would have nothing to sit beside.
 
-Audited twice now; nothing crosses these lines. The rule is a record of a distinction that already
+Audited twice now; nothing crosses these lines. The rule is a note of a distinction that already
 holds.
 
 The adjacent distinction it is easy to break: **a disabled button takes `cursor: default`, a
@@ -89,7 +89,7 @@ link row's field keys were a second, at the *Micro* step and recorded nowhere; t
 **What a number means picks its treatment, and there are five treatments. A count is quiet unless it
 is the only thing saying a filter is on. Every counter is mono, because a count is the app speaking.**
 
-A whole-app pass over every number this interface draws — the rail, the board, the table, the card
+A whole-app pass over every number this interface draws — the rail, the board, the table, the note
 face, the panel, the bulk bar, the pickers — found the families below. They were already there; what
 was missing was anyone having written down which was which, so the differences between them read as
 drift and two real defects hid among them.
@@ -121,7 +121,7 @@ And a sixth group that is **not** counting at all, which is what dissolves most 
 `.pop-annotation`, `.popbtn`'s label, `.facet-more`, the table's `Updated` column, a numeric facet
 value in a table cell. The discriminator is **position, not content** — a slot defined by where it
 sits, which sometimes holds digits. `.pop-annotation` is the right-hand slot on a popover row, so it
-renders a card count at one site and the word `board` at another; `.facet-more` and `.popbtn` are
+renders a note count at one site and the word `board` at another; `.facet-more` and `.popbtn` are
 control labels, which is why they are sans and why that is not a Mono Label Rule violation.
 
 Two defects came out of the pass, and both were invisible because they were about a guard rather than
@@ -138,7 +138,7 @@ the set that changes by deciding is in the test.
 **Nothing on screen is drawn by the browser.**
 
 Now actually true. The audit below found three checkboxes and two stray selects and missed a sixth
-case entirely: the project's instruction blocks in the card panel were a native
+case entirely: the project's instruction blocks in the note panel were a native
 `<details>`/`<summary>`, the only browser-drawn disclosure left in an app that draws its own caret in
 two other places. It is a `.facet-more` button now — the control the panel and the rail already use
 for "there is more of this list", which is the same sentence.
@@ -168,14 +168,14 @@ padding plus border — a hidden input needs `padding: 0; border: 0` as well. An
 shorthand resets every sub-property it does not name, `font-variant-numeric` included, which is how
 a hoisted tabular rule can be silently undone by a rule further down the file.
 
-### The Record Reference Rule
+### The Note Reference Rule
 
-**A record carries its mark wherever you meet it, the mark's size resolves against the type it
-precedes, and a reference to it is drawn as a record rather than as a value.**
+**A note carries its mark wherever you meet it, the mark's size resolves against the type it
+precedes, and a reference to it is drawn as a note rather than as a value.**
 
 The picker row now carries the real `RecordMark` rather than a bare span holding `markOf(r).glyph`
 — the size had coincided, but it carried neither the per-glyph optical nudge nor the `means` string,
-in the one place a reader is choosing between records.
+in the one place a reader is choosing between notes.
 
 The second clause is new, and is a measurement. `DESIGN.md` says the mark sits at "`0.8em` of
 whatever type it precedes… the 13px card face". On a face it did not: the mark is a flex *sibling*
@@ -186,25 +186,25 @@ its own step and the ratio is 0.8 exactly. Sub-pixel and invisible — but a mea
 against the wrong size is not a measurement.
 
 The third clause is the same rule reaching colour. A reference facet's value was a *value* on two
-surfaces and a *record* on a third: a card face and a table cell drew `parent` as a purple chip and
+surfaces and a *note* on a third: a card face and a table cell drew `parent` as a purple chip and
 `project` as a blue-declared-but-purple-drawn one, while the panel drew both as `.refchip` — a neutral
 box holding a mark and a title, with a comment claiming a face already did the same. `src/web/hue.ts`
 is now the one place that decides, and it answers for the chip *and* for the canvas edge, which were
 two implementations with two different ideas of what an undeclared axis meant. Four registers: the
 app's own axis (`project`, the accent), a reference (neutral), a declared family, and hueless. What a
 reference axis's `hue:` still colours is its edge — the line, where the relation is the subject rather
-than the record at the end of it.
+than the note at the end of it.
 
 `theme.test.ts` holds both seams shut now: every register the client can ask for has a rule behind it,
 and every link kind names a family the palette defines. Neither was checked before, and both are the
 kind of miss that renders as *almost* right — an unstyled chip is a transparent box with body text in
 it, and a mistyped hue is a prefix that quietly inherits its container's colour.
 
-**Finished since:** `.reflink` (the panel's inbound lists) and the focus pill drew a record with no
+**Finished since:** `.reflink` (the panel's inbound lists) and the focus pill drew a note with no
 mark at all, and the reason looked structural — `blockedBy` and `children` shipped as
 `{ id, title }`, and the child count sat on the wrong side of an import boundary. Moving the inbound
 count into `src/index/refs.ts` for the `○` change dissolved it: `blockedBy` and `children` now ship
-`isProject` and `refCount`, and there are six `RecordMark` call sites for the six places a record
+`isProject` and `refCount`, and there are six `RecordMark` call sites for the six places a note
 appears. See **Still open**.
 
 ### The Word-or-Glyph Rule
@@ -223,7 +223,7 @@ differently on another machine. Two more (`↺`, `↷`) are exact mirrors of `�
 refresh must not be confused with. `↻` is on the family's own advance and at 14px matches `✕` for
 ink — 28.8 against 29.7 lit pixels in an identical 8×8 box — but on the pixel grid its arrowhead
 survives as about two pixels, so it reads as a broken ring and collides with `○`, the container
-record mark.
+note mark.
 
 So `refresh` is a drawn path, on the precedent `trash` already sets, at 15px: an ink box of 11×12
 identical to `trash`, so the two drawn glyphs are the same size as each other, and 30.1 lit pixels,
@@ -293,11 +293,11 @@ proposed consolidations were dropped rather than built.
 | **Count** | 6 treatments, 7 declarations | 11 classes, 14 numbers. `.quietcount` extracted from 4; `tabular-nums` consolidated from 7 scattered declarations to one rule over 13 selectors; 6 exclusions recorded |
 | **Casing** | 1 defect (the panel) | 1 defect, confirmed — plus the lane head corrected onto its own documented step. Three uppercase sites are legitimate |
 | **Computed marker** | 2 classes, an accidental duplicate | 2 classes, a *deliberate* duplicate — and the panel's was painting a different letter. One class now, with `text-transform: none` as its load-bearing line |
-| **Quiet text** | 6 impls, 3 sizes, 2 jobs mixed | 9 classes, 4 steps. One real defect: the table said "no records match" in the app's *mono* voice through the loading class. `.emptystate` extracted from 5; the annotation half is below threshold and stays split |
+| **Quiet text** | 6 impls, 3 sizes, 2 jobs mixed | 9 classes, 4 steps. One real defect: the table said "no notes match" in the app's *mono* voice through the loading class. `.emptystate` extracted from 5; the annotation half is below threshold and stays split |
 | **Drawn control** | 2 native checkboxes | 3 checkboxes and 2 selects. All drawn; the select treatment moved onto the element |
-| **Record mark** | 3 impls, 2 hardcoded sites | The picker's second implementation removed; the ribbon's hardcoded glyphs removed along with the trichotomy bug; the face's `0.8em` corrected to resolve against its title |
-| **Record reference** | 5 renderings, 4 classes | Merge rejected: five documented differences over two call sites. The DTO change it needed has since landed, and all six sites carry a mark |
-| **Disclosure** | 2 impls sharing only a caret | Merge rejected: four load-bearing differences, including that the rail's active state is the accent (a filter the user turned on) and the panel's is not (a property of the record). **Moot since:** the panel's disclosure is gone rather than merged. Once an axis carrying nothing is not drawn at all, a collapsed row has nothing to collapse — so there is one implementation, in the rail, and the panel takes the absence rule instead of the widget |
+| **Note mark** | 3 impls, 2 hardcoded sites | The picker's second implementation removed; the ribbon's hardcoded glyphs removed along with the trichotomy bug; the face's `0.8em` corrected to resolve against its title |
+| **Note reference** | 5 renderings, 4 classes | Merge rejected: five documented differences over two call sites. The DTO change it needed has since landed, and all six sites carry a mark |
+| **Disclosure** | 2 impls sharing only a caret | Merge rejected: four load-bearing differences, including that the rail's active state is the accent (a filter the user turned on) and the panel's is not (a property of the note). **Moot since:** the panel's disclosure is gone rather than merged. Once an axis carrying nothing is not drawn at all, a collapsed row has nothing to collapse — so there is one implementation, in the rail, and the panel takes the absence rule instead of the widget |
 | **Clickable row** | 5 impls, incidental differences | Merge rejected: the shared hover is `DESIGN.md`'s Ghost-hover token obeyed, the radii come off the documented ladder, and no reader can ever see two of them at once |
 | **Truncation** | *not in the draft* | 10 sites, one idiom, five different constraints. `.truncate` extracted |
 | **Section-head control** | *not in the draft* | Two float mechanisms for one corner slot, and every control 2.5–3.5px below its label's optical centre. One flex row, one slot |
@@ -318,18 +318,18 @@ is what a filter rail is for. The two losers and the URL parameter are gone.
 appearing in the address bar, because `patchSearch` preserves keys it does not recognise — correctly,
 since it writes what it is told — and nothing else ever looked. If the URL is the view, a key nothing
 reads is not part of it: `strippedOfStrays` in `src/web/query.ts` names what the app owns (the query,
-`f.<facet>`, and `card`) and the App replaces the location once on load when the URL carries anything
+`f.<facet>`, and `note`) and the App replaces the location once on load when the URL carries anything
 else. It returns `null` for "nothing to rewrite" rather than an unchanged string, because
 `URLSearchParams` re-encodes as it serialises and a round-trip is not a fixed point — comparing the
 output would have made the normalisation loop.
 
-**`○` means "some other record names this one, through any reference facet".** It meant "something
-names it as `parent`", which is why the mark and the `type` pseudo-facet disagreed: `type` has
+**`○` means "some other note names this one, through any reference facet".** It meant "something
+names it as `parent`", which is why the mark and the `type` computed axis disagreed: `type` has
 always counted a node as named-by-any-reference-facet. Both halves moved — the mark now reads a
 `refCount` built from `inboundCounts`, and the collapsed rail tallies through `markOf` instead of
 reading a facet. On the fixture the glyphs, their tally and the `type` axis now all report 3 / 4 /
 20, where the rail said 3 / 4 / 20 and the marks drew 3 / 1 / 23. `countChildren` is retired, and
-the payload builds one map for the whole query rather than walking every record once per card.
+the payload builds one map for the whole query rather than walking every note once per note.
 
 ## Settled in the second pass
 
@@ -345,9 +345,9 @@ already spoken for, and two are conditionally empty). The chip-row merge (its he
 vanished when the `chip` filter variant was deleted; the three survivors sit at one gap, and the
 one carrying a written reason needs `align-items: center` for genuinely mixed-height children).
 The panel's focus-ring exception (DESIGN.md sanctions one suppressor, and the "three" the item
-cited is the stylesheet's own record of deliberate ones).
+cited is the stylesheet's own note of deliberate ones).
 
-**Migrated.** Two nested Y scrollers, both live rather than latent — the record picker's list
+**Migrated.** Two nested Y scrollers, both live rather than latent — the note picker's list
 inside a popover that already bounds and scrolls itself, measured at 340px through 286 with 737px
 through 290 inside it; and the vault gate's browse listing, which engaged from about the
 twenty-second subfolder. Neither took a row cap: the picker's `CAP = 40` is safe only beside a
@@ -362,7 +362,7 @@ had always committed and the code had implemented nowhere.
 
 **The best find was not on the list.** A hovered or selected card face *lost its state stripe*:
 `border-color` sets all four sides, and the hover and selection rules out-specified
-`.cardface.is-blocked` by one class, so a blocked card's `bad` edge went `rule-2` under the cursor
+`.cardface.is-blocked` by one class, so a blocked note's `bad` edge went `rule-2` under the cursor
 and `accent` when picked — The Load-Bearing Left Border Rule's one element silently losing the one
 thing the rule protects, on the surface where hover is continuous. `:where()` on the state half of
 those selectors fixes it without naming the variants: an unstriped face still follows the ring on

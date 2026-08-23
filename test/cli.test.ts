@@ -29,7 +29,7 @@ interface Run {
 
 function vault(): { root: string; registry: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'pj-cli-'));
-  mkdirSync(join(root, 'cards'), { recursive: true });
+  mkdirSync(join(root, 'notes'), { recursive: true });
   writeFileSync(
     join(root, 'facets.yaml'),
     'status: { label: Status, values: [planning, active, done], open: false, single: true }\n' +
@@ -38,7 +38,7 @@ function vault(): { root: string; registry: string; cleanup: () => void } {
     'utf8',
   );
   const card = (id: string, body: string) =>
-    writeFileSync(join(root, 'cards', `${id}.md`), body, 'utf8');
+    writeFileSync(join(root, 'notes', `${id}.md`), body, 'utf8');
   card('alpha', '---\nid: alpha\ntitle: Alpha\nfacets: { status: [planning], priority: [now] }\n---\nfirst\n');
   card('beta', '---\nid: beta\ntitle: Beta\nfacets: { status: [active] }\n---\nsecond\n');
   // The registry is redirected so `pj vaults` cannot touch the real one.
@@ -85,7 +85,7 @@ test('reindex reports real numbers, never the word undefined', () => {
     const r = run(['--vault', v.root, 'reindex']);
     assert.equal(r.code, 0);
     assert.doesNotMatch(r.out, /undefined/, r.out);
-    assert.match(r.out, /indexed 2 record\(s\)/);
+    assert.match(r.out, /indexed 2 note\(s\)/);
     // Every line after the first is a name and a number.
     for (const line of r.out.trim().split('\n').slice(1)) {
       assert.match(line, /^\s{2}\S+\s+\d+$/, `"${line}" should be a label and a count`);
@@ -99,14 +99,14 @@ test('ls prints what it found, and --json is the payload the app receives', () =
   const v = vault();
   try {
     const plain = run(['--vault', v.root, 'ls']);
-    assert.match(plain.out, /2 record\(s\) of 2/);
+    assert.match(plain.out, /2 note\(s\) of 2/);
     assert.match(plain.out, /alpha/);
 
     const json = JSON.parse(run(['--vault', v.root, 'ls', '--json']).out);
     assert.deepEqual(json.ids.sort(), ['alpha', 'beta']);
-    assert.equal(json.cards.alpha.title, 'Alpha');
+    assert.equal(json.notes.alpha.title, 'Alpha');
     // The keys the web client depends on.
-    for (const key of ['spec', 'savedSpec', 'cards', 'ids', 'groups', 'counts', 'total', 'rollups']) {
+    for (const key of ['spec', 'savedSpec', 'notes', 'ids', 'groups', 'counts', 'total', 'rollups']) {
       assert.ok(key in json, `--json must carry ${key}`);
     }
   } finally {
@@ -177,7 +177,7 @@ test('help prints without a vault, and says which one it would use', () => {
   try {
     // Two registered and none named: resolution is ambiguous, help must still print.
     const two = join(v.root, 'other');
-    mkdirSync(join(two, 'cards'), { recursive: true });
+    mkdirSync(join(two, 'notes'), { recursive: true });
     writeFileSync(join(two, 'facets.yaml'), 'status: { values: [planning] }\n', 'utf8');
     run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: v.registry });
     run(['vaults', 'add', two], { PROJECTOR_VAULTS: v.registry });
@@ -249,7 +249,7 @@ test('vaults add and forget round-trip through the registry', () => {
     run(['vaults', 'add', v.root, '--name', 'scratch'], env);
     const listed = run(['vaults'], env);
     assert.match(listed.out, /scratch/);
-    assert.match(listed.out, /2 card\(s\)/);
+    assert.match(listed.out, /2 note\(s\)/);
 
     assert.match(run(['vaults', 'forget', v.root], env).out, /forgot/);
     assert.match(run(['vaults'], env).out, /no vaults yet/);
@@ -264,7 +264,7 @@ test('a single registered vault is used without --vault', () => {
   try {
     const env = { PROJECTOR_VAULTS: v.registry };
     run(['vaults', 'add', v.root], env);
-    assert.match(run(['ls'], env).out, /2 record\(s\)/, 'unambiguous means no flag needed');
+    assert.match(run(['ls'], env).out, /2 note\(s\)/, 'unambiguous means no flag needed');
   } finally {
     v.cleanup();
   }
