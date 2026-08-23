@@ -98,8 +98,11 @@ test('every seeded file parses as what it claims to be', () => {
   for (const [name, def] of Object.entries(facets)) {
     assert.equal(typeof def, 'object', `${name} should be a mapping`);
   }
+  // `project` is built-in, so the seed must *not* declare it — a declaration
+  // would be inert, which is why the name is reserved.
+  assert.equal(facets.project, undefined, 'project is built-in, not seeded');
   // Reference facets declare no values, and every relation is one.
-  for (const name of ['parent', 'blocks', 'project']) {
+  for (const name of ['parent', 'blocks']) {
     assert.equal(facets[name]!.type, 'ref', `${name} should be a reference facet`);
     assert.equal(facets[name]!.values, undefined, `${name} should declare no values`);
   }

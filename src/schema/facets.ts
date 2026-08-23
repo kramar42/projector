@@ -5,7 +5,27 @@ export { isOrdered, isRef } from './vocabulary.ts';
 
 const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
 
-
+/**
+ * The vocabulary every vault has, whether or not it writes a file.
+ *
+ * `project` is here rather than in `facets.yaml` because a declaration you must
+ * validate as unchangeable is not a declaration — it invites editing and then
+ * refuses it. Retyping this to `label` would strand the config chain, which walks
+ * it as a relation, so the definition is not read from the file at all.
+ *
+ * It stays a *facet* nonetheless, injected into the map below. That is what keeps
+ * it cheap: the filter rail, the panel's row order, the group and sort pickers,
+ * drag-and-drop and the editor's choice of control are all loops over this map,
+ * and lifting `project` out of it would mean bolting it back into every one of
+ * them by hand. Being a facet is what stops it being a special case.
+ *
+ * They sort first, and permanently — the reserved-name check means a vault
+ * cannot redeclare one to move it. That is the right place for the axis every
+ * vault shares, and it stops a barely-used local facet pushing it off the rail.
+ */
+export const BUILTIN_FACETS: Facets = {
+  project: { label: 'Project', type: 'ref', values: [], open: true, single: false },
+};
 
 /**
  * Load the facet vocabulary. This file is the single place column order lives —
@@ -15,11 +35,14 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * accepted, `single` whether more than one may be held at once, and `type` what
  * the values *are* — a label from the declared list, a record id, a date or a
  * number.
+ *
+ * An absent or empty file is a valid vault: what comes back is the built-ins and
+ * nothing else.
  */
 export function loadFacets(file: string): Facets {
-  if (!existsSync(file)) return {};
+  if (!existsSync(file)) return { ...BUILTIN_FACETS };
   const raw = parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null;
-  if (!raw) return {};
+  if (!raw) return { ...BUILTIN_FACETS };
   const out: Facets = {};
   for (const [name, def] of Object.entries(raw)) {
     if (!def || typeof def !== 'object') continue;
@@ -48,7 +71,26 @@ export function loadFacets(file: string): Facets {
       ...(typeof d.overflow === 'string' ? { overflow: d.overflow } : {}),
     };
   }
-  return out;
+  // Built-ins lead the order, and win the definition. A file that declares one
+  // is an error `pj check` reports; here it simply does not take effect, so a
+  // vault someone has broken still loads and still opens.
+  const merged: Facets = { ...BUILTIN_FACETS, ...out };
+  for (const [name, def] of Object.entries(BUILTIN_FACETS)) merged[name] = def;
+  return merged;
+}
+
+/**
+ * The names the file itself declares, in file order.
+ *
+ * Distinct from `Object.keys(loadFacets(file))`, which includes the built-ins —
+ * so a validator asking "did somebody declare a name they may not" has to ask
+ * here. Reading the file twice is the cost of that question being answerable at
+ * all; it is asked once, by `pj check`.
+ */
+export function declaredNames(file: string): string[] {
+  if (!existsSync(file)) return [];
+  const raw = parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null;
+  return raw ? Object.keys(raw) : [];
 }
 
 /**

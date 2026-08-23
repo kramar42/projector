@@ -1,6 +1,7 @@
 import { PSEUDO } from '../index/query.ts';
 import { isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
+import { BUILTIN_FACETS } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
 import type { ViewSpec } from './spec.ts';
 
@@ -31,13 +32,14 @@ import type { ViewSpec } from './spec.ts';
  * anyway. A vocabulary is read far more often than it is written, and an axis
  * called `links` beside a card's links is a sentence you have to stop and parse.
  *
- * `project` is the one exception, and only for now: it names both a frontmatter
- * block and a facet every vault declares. It joins this list in the change that
- * makes the facet a built-in, which is the change that makes declaring it wrong.
+ * A built-in facet is reserved for the strongest reason of the three: its
+ * definition is not read from the file, so a declaration would be inert — and
+ * silently so, which is the failure this whole list exists to prevent.
  */
 export const RESERVED: readonly string[] = [
-  ...KEY_ORDER.filter((k) => k !== 'project'),
+  ...KEY_ORDER,
   'body',
+  ...Object.keys(BUILTIN_FACETS),
   ...Object.keys(PSEUDO),
 ];
 
@@ -48,9 +50,13 @@ export const RESERVED: readonly string[] = [
  * asks whether the vocabulary is sayable at all. An error rather than a warning,
  * because the failure it prevents is silent — the axis works everywhere except
  * where it matters.
+ *
+ * It takes the names the *file* declares rather than a loaded `Facets`, because
+ * a loaded one carries the built-ins too and would report every vault for a
+ * declaration nobody wrote.
  */
-export function validateVocabulary(facets: Facets, file: string): Issue[] {
-  return Object.keys(facets)
+export function validateVocabulary(declared: readonly string[], file: string): Issue[] {
+  return declared
     .filter((name) => RESERVED.includes(name))
     .map((name) => ({
       severity: 'error' as const,

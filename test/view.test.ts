@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
 import { validateViews, validateVocabulary } from '../src/view/validate.ts';
 import { specFromFile } from '../src/view/spec.ts';
-import { loadFacets, } from '../src/schema/facets.ts';
+import { declaredNames, loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { groupsFor, labelFor } from '../src/web/views/groups.ts';
 import { reindex } from '../src/index/indexer.ts';
@@ -154,17 +154,20 @@ test('the absence refinement has one wording', () => {
 
 
 test('a facet may not take a reserved name, and the sort keys prove why', () => {
-  const facets = loadFacets(
-    facetsFile(
-      'blocked: { values: [yes, no] }\nupdated: { type: date }\nlayer: { values: [a, b] }\n',
-    ),
+  const file = facetsFile(
+    'blocked: { values: [yes, no] }\nupdated: { type: date }\nlayer: { values: [a, b] }\n' +
+      'project: { type: ref }\n',
   );
-  const issues = validateVocabulary(facets, '/data/facets.yaml');
+  const issues = validateVocabulary(declaredNames(file), '/data/facets.yaml');
   const named = issues.map((i) => i.field).sort();
 
   // `blocked` is a pseudo-facet and would be silently shadowed; `updated` is a
-  // sortable record field. `layer` is an ordinary axis and must survive.
-  assert.deepEqual(named, ['blocked', 'updated']);
+  // sortable record field; `project` is built-in, so declaring it is inert.
+  // `layer` is an ordinary axis and must survive.
+  assert.deepEqual(named, ['blocked', 'project', 'updated']);
+
+  // And the built-in must not report *itself*: it is in every loaded map.
+  assert.deepEqual(validateVocabulary(declaredNames(facetsFile('layer: { values: [a] }\n')), 'f'), []);
   assert.ok(issues.every((i) => i.severity === 'error'));
   assert.match(issues[0]!.message, /reserved/);
 });

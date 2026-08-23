@@ -31,10 +31,15 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # derived lists that point back along it — so a reference facet's position
 # matters only relative to the other reference facets.
 #
-# Every facet is stored and written identically, project and the relations
-# included. There is deliberately no kind of facet the app writes through some
-# other mechanism — and no facet saying what class of thing a record is: that is
-# read off the record, never declared on it.
+# Every facet is stored and written identically, the relations included. There is
+# deliberately no kind of facet the app writes through some other mechanism — and
+# no facet saying what class of thing a record is: that is read off the record,
+# never declared on it.
+#
+# Everything below is a starting point, not a schema. Delete what your domain has
+# no use for; an empty file is a valid vault. The one facet you will not find here
+# is \`project\`, which is built in — its definition is not read from this file, so
+# declaring it does nothing and \`pj check\` says so.
 
 # Lifecycle only. "Blocked" and "waiting" are derived — from an unfinished blocks
 # edge and from a non-empty waiting_on — so they are not values here: storing
@@ -102,14 +107,6 @@ parent:
   label: Part of
   type: ref
   single: true
-
-# Which project(s) a card belongs to — an ordinary multi-valued facet, so a card
-# can be in two at once and inherits repos and instructions from both. Values are
-# the ids of records carrying a project: block. parent is a separate relation:
-# it means decomposition, and config is inherited through project alone.
-project:
-  label: Project
-  type: ref
 
 # What must finish before the target. Its transitive closure is what the blocked
 # axis and views/unblocked.yaml are built from. Not worth grouping a board by — the

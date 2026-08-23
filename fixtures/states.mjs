@@ -123,10 +123,6 @@ parent:
   type: ref
   single: true
 
-project:
-  label: Project
-  type: ref
-
 blocks:
   label: Blocks
   type: ref

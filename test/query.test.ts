@@ -98,7 +98,6 @@ priority:   { label: Priority, values: [now, month, backlog], open: false, singl
 status:     { label: Status,   values: [planning, active, done], open: false, single: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
 waiting_on: { label: Waiting on, values: [], open: true }
-project:    { label: Project,  type: ref }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
