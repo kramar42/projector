@@ -97,7 +97,15 @@ test('no facet a vault declares is named in the code that serves every vault', (
   }
   assert.ok(words.size > 15, 'the seeded vocabulary should be worth checking against');
 
-  const pattern = new RegExp(`['"\`](${[...words].join('|')})['"\`]`, 'g');
+  // Two spellings, because the first version of this test only knew one. A
+  // literal is `'parent'`; a property access is `rec.facets.parent`, which reads
+  // as ordinary field access and is exactly how `parentsOf` survived a sweep
+  // that had already been run by hand three times.
+  const alt = [...words].join('|');
+  const pattern = new RegExp(
+    `['"\`](${alt})['"\`]` + `|\\bfacets\\.(${alt})\\b` + `|\\bfacets\\[['"\`](${alt})['"\`]\\]`,
+    'g',
+  );
   const offences: string[] = [];
   for (const file of sourceFiles()) {
     const rel = file.slice(SRC.length + 1);
@@ -105,7 +113,7 @@ test('no facet a vault declares is named in the code that serves every vault', (
       .split('\n')
       .forEach((line, i) => {
         for (const m of line.matchAll(pattern)) {
-          const word = m[1]!;
+          const word = (m[1] ?? m[2] ?? m[3])!;
           if (ALLOWED.some((a) => a.file === rel && a.word === word)) continue;
           offences.push(`  src/${rel}:${i + 1}  "${word}"  ${line.trim().slice(0, 80)}`);
         }

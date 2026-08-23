@@ -3,11 +3,6 @@ import { resolvePath } from '../config.ts';
 import { adjacency, chains } from './refs.ts';
 
 
-/** What a record is part of. An ordinary reference facet, read by name. */
-export function parentsOf(rec: Pick<Rec, 'facets'>): string[] {
-  return rec.facets.parent ?? [];
-}
-
 export function isProject(rec: Rec): boolean {
   return rec.project !== undefined;
 }

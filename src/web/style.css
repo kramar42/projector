@@ -341,16 +341,6 @@ body {
   flex: none;
 }
 
-.sidebar-vault-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.sidebar-vault-row .vaultbtn {
-  flex: 1;
-}
-
 .sidebar-toggle {
   appearance: none;
   display: grid;
@@ -692,10 +682,6 @@ body {
 .vaultbtn {
   font-weight: 600;
   font-size: var(--text-title);
-}
-
-.vaultbtn-mark {
-  color: var(--accent);
 }
 
 .pop-head {
@@ -1196,10 +1182,11 @@ input:focus-visible + .checkbox {
  * one thing the rule protects, on the surface where hover is continuous.
  *
  * Zeroed, this ties with `.cardface`'s own border and wins on order, while the
- * two stripe rules at (0,2,0) keep the left edge. Narrowing to three sides would
+ * stripe rule at (0,2,0) keeps the left edge. Narrowing to three sides would
  * have worked too, but then an *unstriped* face would hover with three edges lit
  * and one not — and re-asserting the stripe per state per variant is four more
- * declarations naming the variants, which a third stripe would have to remember.
+ * declarations naming the variants, which a second stripe would have to
+ * remember.
  *
  * `.reflink` resolves the same collision the opposite way, and by accident: its
  * hover and its `.is-open` are both (0,2,0), so the stripe survives only because
@@ -1209,16 +1196,12 @@ input:focus-visible + .checkbox {
   border-color: var(--rule-2);
 }
 
-/* The left border is the one place a face changes shape, and it always says
-   something about the record. So it takes the *facet's* hue, never `--accent`:
-   the accent is reserved for live state and for the app speaking — focus,
-   selection, a drop target — and a record being a project is neither. The two
-   tokens happen to hold the same value in both themes, so this is the naming
-   being made honest rather than a change of colour. */
-.cardface.is-project {
-  border-left: 3px solid var(--hue-purple);
-}
-
+/* The one state a face draws in its shape, and it is the only one left. A project
+   took a second stripe in `hue-purple`, which said what the record mark says in
+   every place a record appears — so a face carried the fact twice and a board of
+   projects was a board of striped rectangles. Blocked stays, because nothing else
+   on the face says a card cannot move: the mark names what a record *is*, not
+   whether it is stuck. */
 .cardface.is-blocked {
   border-left: 3px solid var(--bad);
 }
@@ -1276,7 +1259,25 @@ input:focus-visible + .checkbox {
   font-family: var(--mono);
   font-size: 0.8em;
   line-height: 1;
-  color: var(--ink-3);
+  /*
+   * The one colour every mark draws in, on a face, in a table row, in the panel
+   * header, on a reference and in a picker — so the glyph is read as one
+   * vocabulary rather than as whatever the surface it landed on happened to
+   * paint. It was `ink-3`, the ground state of annotation, everywhere except the
+   * panel, where a project's mark alone went `hue-purple`: the app's signature
+   * component drawn in the colour of a label, with one exception nobody could see
+   * without opening two surfaces side by side.
+   *
+   * `accent` rather than `hue-purple`, and the two hold the same value in both
+   * themes, so this is a naming decision and not a colour one. A mark is not a
+   * facet value: nothing writes it, `markOf` derives it from what names the
+   * record, and a hue family belongs to an axis — `hue-purple` is `parent`'s in
+   * the seeded vault, which would put a purple chip and a purple mark on one face
+   * meaning two different things. The accent is the app's own voice, which is what
+   * a derived glyph is. The collapsed rail's tally has drawn these same three
+   * glyphs in `accent` all along.
+   */
+  color: var(--accent);
   flex: none;
   align-self: baseline;
 }
@@ -2317,7 +2318,6 @@ textarea { resize: vertical; font-family: inherit; }
   margin: -3px -2px -3px -5px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  color: var(--ink-3);
 }
 
 /*
@@ -2342,19 +2342,15 @@ textarea { resize: vertical; font-family: inherit; }
   transform: translateY(-0.011em);
 }
 
+/* The hover moves the fill and nothing else: the glyph is already `accent`, so a
+   second colour here would be a mark changing what it *says* under the cursor. */
 .panel-title .recordmark.is-toggle:hover {
   background: var(--surface-3);
-  color: var(--hue-purple);
 }
 
 .panel-title .recordmark.is-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-/* A project already draws in its axis's own family everywhere else. */
-.panel-title .recordmark.is-toggle.is-project {
-  color: var(--hue-purple);
 }
 
 /* The one control in the panel drawn in `bad`, so the corner cannot be mistaken
@@ -2602,9 +2598,9 @@ textarea { resize: vertical; font-family: inherit; }
 
 .refchip:hover { border-color: var(--rule-2); }
 
-/* Hueless on purpose. Three axes are references — `parent`, `blocks`, `project`
-   — and One Hue Per Axis means a family serves exactly one, so a shared chip
-   colour for all three would say "project" about two axes that are not it.
+/* Hueless on purpose. A vault has several reference axes, and One Hue Per Axis
+   means a family serves exactly one — so a shared chip colour across all of them
+   would say one axis's name about every other.
    What a reference *is* is carried by the record mark and the title, which is
    the same grammar a card face and a table row use.
 

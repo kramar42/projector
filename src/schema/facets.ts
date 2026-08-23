@@ -103,18 +103,33 @@ export function loadFacets(file: string): Facets {
   // Built-ins lead the order, and win their structural keys. A vault may still
   // set the rest — its label, whether a card is expected to carry one — so a
   // declaration merges *under* the built-in's shape rather than being discarded.
+  //
+  // Only the keys the file actually *wrote*. A normalised definition carries a
+  // value for everything, including a `label` defaulted to the facet's own name —
+  // so merging the whole of it made `project: {expected: true}` silently rename
+  // the axis to lowercase `project`. What a vault did not say is not a setting.
   const merged: Facets = { ...BUILTIN_FACETS, ...out };
   for (const [name, builtin] of Object.entries(BUILTIN_FACETS)) {
     const declared = out[name];
-    merged[name] = declared
-      ? { ...builtin, ...declared, ...pick(builtin, STRUCTURAL) }
-      : builtin;
+    if (!declared) {
+      merged[name] = builtin;
+      continue;
+    }
+    const wrote = Object.keys((raw[name] ?? {}) as Record<string, unknown>).filter(
+      (k) => !STRUCTURAL.includes(k),
+    );
+    merged[name] = { ...builtin, ...pick(declared, wrote) };
   }
   return merged;
 }
 
 function pick(def: FacetDef, keys: readonly string[]): Partial<FacetDef> {
-  return Object.fromEntries(keys.map((k) => [k, def[k as keyof FacetDef]]));
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    const v = def[k as keyof FacetDef];
+    if (v !== undefined) out[k] = v;
+  }
+  return out as Partial<FacetDef>;
 }
 
 /**

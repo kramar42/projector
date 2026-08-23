@@ -107,7 +107,13 @@ export function Sidebar({
   return (
     <nav className="sidebar">
       <div className="rail-block">
-        <div className="sidebar-vault-row">
+        {/* Labelled like every other rail row, and for the same reason: the two
+            controls that name *where you are looking* were the only ones a reader
+            had to identify from their value alone — and a vault called `work`
+            beside a view called `Ad-hoc query` is two unlabelled words. The
+            collapse toggle rides in this row rather than in one of its own. */}
+        <div className="rail-row">
+          <label className="rail-label">Vault</label>
           <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
           <button
             className="sidebar-toggle"
@@ -133,12 +139,13 @@ export function Sidebar({
         />
       </div>
 
+      {/* One group, because these are one job: everything that decides what the
+          query is and how it is drawn. Focus sat behind a hairline of its own,
+          which said it was a different kind of control — it is not, it is the
+          traversal half of the same query. */}
       <div className="rail-block">
         <ShapeSection data={data} edit={edit} />
         <FacetsSection meta={meta} data={data} edit={edit} />
-      </div>
-
-      <div className="rail-block">
         <FocusSection meta={meta} data={data} edit={edit} onOpenCard={onOpenCard} />
       </div>
 

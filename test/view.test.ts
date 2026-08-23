@@ -200,3 +200,26 @@ test('a record field outranks a facet wearing its name, whatever the facet type'
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('a declaration that cannot take effect is an error, not a shrug', () => {
+  // The same failure the reserved-name check exists for, one level in: a key
+  // that does not apply is dropped at load, so by the time anything could notice
+  // there is nothing left to notice. Each of these looks exactly like a setting
+  // that works.
+  const file = facetsFile(
+    [
+      'mood: { values: [good, bad], hue: teal, inverse: Moods, closed: [finished] }',
+      'when: { type: date, buckets: { late: {upTo: -1, hue: crimson} } }',
+      'fine: { values: [a, b], hue: green, closed: [b] }',
+      'rel:  { type: ref, inverse: Named by, hue: red }',
+    ].join('\n') + '\n',
+  );
+  const messages = validateVocabulary(declaredFacets(file), 'f').map((i) => i.message);
+
+  assert.equal(messages.filter((m) => /inverse/.test(m)).length, 1, 'only the label facet');
+  assert.equal(messages.filter((m) => /not a family/.test(m)).length, 2, 'the facet hue and the bucket one');
+  assert.equal(messages.filter((m) => /closed/.test(m)).length, 1, 'a closed value the vocabulary lacks');
+  // `fine` and `rel` declare the same keys correctly and must say nothing.
+  assert.deepEqual(messages.filter((m) => /"fine"|"rel"/.test(m)), []);
+});

@@ -101,8 +101,8 @@ test('worktree prune runs even when the folder already exists', () => {
 test('the briefing names failed repos as out of scope and stops before building', () => {
   const ctx = {
     id: 'c1', title: 'T', isProject: false, file: 'cards/c1.md',
-    facets: {}, body: '', project: null, parents: [], children: [], blockedBy: [],
-    blocks: [], links: [], siblings: [],
+    facets: {}, body: '', project: null, blockedBy: [],
+    refs: {}, inbound: {}, links: [], siblings: [],
   };
   const out = buildBriefing({
     ctx, workspace: '/wt/x', branch: 'b',

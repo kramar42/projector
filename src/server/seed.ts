@@ -20,7 +20,8 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #            derived one, which is right: nothing computes an inverse it has no
 #            word for
 #   hue:     which family this axis draws in — orange green purple blue pink red
-#            yellow, or omitted for no colour at all. A bucket may declare one
+#            yellow, or omitted for no colour at all. \`pj check\` rejects a family
+#            that is not one of those, rather than drawing it grey. A bucket may declare one
 #            too, and it wins for a chip in that bucket, drawn filled rather than
 #            tinted. The palette is the app's; the choice is yours
 #   blocking: true  → while this axis is unsatisfied the card cannot proceed, and

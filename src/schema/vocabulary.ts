@@ -49,6 +49,19 @@ export function isOrdered(def: FacetDef | undefined): boolean {
  */
 
 /**
+ * The hue families the stylesheet offers, which a facet's `hue:` picks from.
+ *
+ * The app owns the palette and the vault owns the choice — so this list is not a
+ * facet name and belongs in code, while which axis takes which does not. It is
+ * here rather than in `facets.ts` for the usual reason: the validator, the loader
+ * and the client all need it, and this module reads no file.
+ *
+ * `theme.test.ts` holds it against the stylesheet, so a family named here with no
+ * rule behind it is a build failure rather than a grey chip.
+ */
+export const HUES: readonly string[] = ['orange', 'green', 'purple', 'blue', 'pink', 'red', 'yellow'];
+
+/**
  * The absence refinement, as it travels.
  *
  * `(none)` rather than a bare `none`, so a facet that one day carries a literal

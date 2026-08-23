@@ -20,7 +20,7 @@ needs to be part of two things.
 
 - **The expression language.** Moving the five remaining pseudo-facets — `type`, `blocked`, `triage`,
   `staleness`, `linked` — into `facets.yaml` needs one, and its hardest case cannot be a per-record
-  expression at all: `blocked` requires the aggregate pass over every record's `blocks` references.
+  expression at all: `blocked` requires the aggregate pass over every record's blocking references.
   Since P8 the case is weaker anyway: each of the five computes over something a facet *cannot*
   describe — a `project:` block, the reference graph, an absence, a record's links, the app-written
   `updated` — so `PSEUDO` has a coherent residual job rather than being a holding pen.
@@ -100,11 +100,13 @@ model is presently known to be wrong, and the next useful work is likely to be *
 changing it — a handful of `pj check` warnings left, `energy` set on a few records, `owner` on one,
 no deadlines set anywhere.
 
-Two things the audit of 2026-08-21 turned up that belong here rather than in the model. **`blocks`
+Two things the audit of 2026-08-21 turned up that belong here rather than in the model. **`blocked_by`
 carries a single value across the whole vault**, and the `blocked` axis, the transitive closure, cycle
 refusal and the `unblocked` view are all built on it — the mechanism is finished and idle, the same
 way `due` and `owner` are. That is also how the since-removed `pj next` could filter on a deleted
-facet unnoticed for two days: with no blocker data, an empty answer looked plausible. And **some of
-the `pj check` warnings are structural** — `inbox`, `projects` and `jira-triage` are top-level
-containers that belong to no project by construction, so the count cannot reach zero until the check
-exempts records nothing names as a parent.
+facet unnoticed for two days: with no blocker data, an empty answer looked plausible.
+
+The second has since been fixed rather than filed: **some of the `pj check` warnings were
+structural** — top-level containers belong to no project by construction — and the answer turned out
+not to be an exemption in the checker. Triage is a *view* now, `views/triage.yaml` narrows to
+`type: [plain]`, and `pj check` stopped judging how a card is filed at all.

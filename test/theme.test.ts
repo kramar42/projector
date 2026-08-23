@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadFacets } from '../src/schema/facets.ts';
 import { SEED_FACETS } from '../src/server/seed.ts';
+import { HUES } from '../src/schema/vocabulary.ts';
 
 /** The seeded vocabulary, on disk, so the real loader parses it. */
 function seededFacetsFile(): string {
@@ -320,6 +321,12 @@ test('every hue a vocabulary names is a family the stylesheet defines', () => {
       .filter(Boolean) as string[],
   );
   assert.ok(defined.size >= 5, 'the stylesheet should offer a palette worth choosing from');
+
+  // `HUES` is what `pj check` offers a vault, so it and the stylesheet are two
+  // halves of one palette. A family in the list with no rule behind it is a grey
+  // chip the validator called fine; a rule the list omits is a colour nobody can
+  // ask for.
+  assert.deepEqual([...defined].sort(), [...HUES].sort(), 'the offered palette is the drawn one');
 
   const seeded = loadFacets(seededFacetsFile());
   const claimed = new Map<string, string[]>();

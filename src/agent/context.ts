@@ -1,8 +1,8 @@
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
-import { loadFacets } from '../schema/facets.ts';
+import { isRef, loadFacets } from '../schema/facets.ts';
 import { blockingEdges, isClosed } from '../index/blocking.ts';
-import { parentsOf, resolveProject } from '../index/project.ts';
+import { resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
 import type { Resolved } from '../server/enrich.ts';
@@ -23,15 +23,52 @@ export interface CardContext {
   facets: Record<string, string[]>;
   body: string;
   project: ResolvedProject | null;
-  parents: { id: string; title: string }[];
-  children: { id: string; title: string }[];
+  /**
+   * What this record points at and what points back, keyed by relation.
+   *
+   * They were four fields — `parents`, `children`, `blocks` and the outbound half
+   * of blocking — three of which named `parent` by reading `rec.facets.parent`.
+   * So an agent briefing described a vault's decomposition only if that vault
+   * happened to call it `parent`, and saw no other relation at all.
+   *
+   * `inbound` carries only the relations whose vocabulary named their other end,
+   * the same rule the panel draws by: nothing computes an inverse it has no word
+   * for.
+   */
+  refs: Record<string, Related>;
+  inbound: Record<string, Related>;
   /** Records that must finish before this one, and whether they have. */
   blockedBy: { id: string; title: string; done: boolean }[];
-  /** Records this one unblocks, directly. */
-  blocks: { id: string; title: string }[];
   /** Links with whatever enrichment is cached. Never fetches. */
   links: { raw: string; kind: string; ref: string; enrichment?: Resolved }[];
+  /**
+   * Records sharing a container with this one.
+   *
+   * "Container" is any single-valued reference — one value is what makes a
+   * sibling a sibling, and there is no second thing to be beside. It read
+   * `parent` by name, which is the same rule with one vault's word for it.
+   */
   siblings: { id: string; title: string }[];
+}
+
+/**
+ * Records along one relation, carrying the word for it.
+ *
+ * The label travels with the records so `renderContext` stays a function of the
+ * context alone — the context is the assembled picture, and the heading over a
+ * list is part of the picture rather than something a renderer looks up.
+ */
+export interface Related {
+  /** What this vault calls the relation, or its inverse for an inbound list. */
+  label: string;
+  /**
+   * `done` is present only on a **blocking** relation, where whether the other
+   * end is finished is the whole point of the list. There used to be a second
+   * `## Blocked by` section rendering exactly that, so a card drew its blockers
+   * twice — once under the facet's own label without their state, once under a
+   * hardcoded heading with it.
+   */
+  records: { id: string; title: string; done?: boolean }[];
 }
 
 const brief = (r: Rec) => ({ id: r.id, title: r.title });
@@ -43,7 +80,6 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
   const rec = records.get(id);
   if (!rec) return null;
 
-  const parentIds = parentsOf(rec);
   const links = rec.links.map((l) => ({ raw: l.raw, kind: l.kind, ref: l.ref }));
   const enriched = readCached(dataRoot, links.map((l) => l.raw));
   const byRef = new Map(enriched.map((e) => [e.ref, e]));
@@ -55,11 +91,33 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     (m.get(id) ?? []).map((n) => records.get(n)).filter((r): r is Rec => !!r);
   const blockers = along(adj.out);
 
-  const siblings = parentIds.length
-    ? [...records.values()].filter(
-        (r) => r.id !== id && parentsOf(r).some((pid) => parentIds.includes(pid)),
-      )
-    : [];
+  const relations = Object.entries(facets).filter(([, def]) => isRef(def));
+  const resolve = (ids: string[]) =>
+    ids.map((n) => records.get(n)).filter((r): r is Rec => !!r).map(brief);
+
+  const refs: Record<string, Related> = {};
+  const inbound: Record<string, Related> = {};
+  for (const [via, def] of relations) {
+    const out = resolve(rec.facets[via] ?? []).map((r) =>
+      def.blocking ? { ...r, done: isClosed(records.get(r.id), facets) } : r,
+    );
+    if (out.length) refs[via] = { label: def.label, records: out };
+    if (!def.inverse) continue;
+    const naming = [...records.values()].filter((r) => (r.facets[via] ?? []).includes(id));
+    if (naming.length) inbound[via] = { label: def.inverse, records: naming.map(brief) };
+  }
+
+  // Beside, not under: a sibling shares a container, and a container is what a
+  // single-valued reference names.
+  const beside = new Map<string, Rec>();
+  for (const [via, def] of relations) {
+    if (!def.single) continue;
+    const mine = rec.facets[via] ?? [];
+    if (!mine.length) continue;
+    for (const r of records.values()) {
+      if (r.id !== id && (r.facets[via] ?? []).some((v) => mine.includes(v))) beside.set(r.id, r);
+    }
+  }
 
   return {
     id: rec.id,
@@ -69,14 +127,11 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
     facets: rec.facets,
     body: rec.body,
     project: resolveProject(id, records, dataRoot),
-    parents: parentIds.map((pid) => records.get(pid)).filter((r): r is Rec => !!r).map(brief),
-    children: [...records.values()]
-      .filter((r) => parentsOf(r).includes(id))
-      .map((r) => ({ id: r.id, title: r.title })),
+    refs,
+    inbound,
     blockedBy: blockers.map((r) => ({ ...brief(r), done: isClosed(r, facets) })),
-    blocks: along(adj.in).map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
-    siblings: siblings.map(brief),
+    siblings: [...beside.values()].map(brief),
   };
 }
 
@@ -98,7 +153,7 @@ export function renderContext(ctx: CardContext): string {
 
   if (ctx.project) {
     L.push('');
-    L.push('## Project');
+    L.push('## Project config');
     L.push('');
     L.push(`- key: \`${ctx.project.key}\`  ·  chain: ${ctx.project.chain.join(' → ')}`);
     if (ctx.project.jira) L.push(`- jira project: \`${ctx.project.jira}\``);
@@ -119,22 +174,23 @@ export function renderContext(ctx: CardContext): string {
     L.push('> This card has no project, so it inherits no repos and no instructions.');
   }
 
-  const rel = (label: string, items: { id: string; title: string }[]) => {
+  const rel = (label: string, items: { id: string; title: string; done?: boolean }[]) => {
     if (!items.length) return;
     L.push('');
     L.push(`## ${label}`);
     L.push('');
-    for (const i of items) L.push(`- ${i.title}  \`${i.id}\``);
+    // A tick only where finishing is the question — which is what `done` being
+    // present means, and it is present only on a blocking relation.
+    for (const i of items) {
+      const mark = i.done === undefined ? '' : i.done ? '✓ ' : '✗ ';
+      L.push(`- ${mark}${i.title}  \`${i.id}\``);
+    }
   };
-  rel('Parent', ctx.parents);
-  rel('Children', ctx.children);
-  if (ctx.blockedBy.length) {
-    L.push('');
-    L.push('## Blocked by');
-    L.push('');
-    for (const b of ctx.blockedBy) L.push(`- ${b.done ? '✓' : '✗'} ${b.title}  \`${b.id}\``);
-  }
-  rel('Blocks', ctx.blocks);
+  // Headed by the vocabulary's own words, both ways round. It was four literal
+  // headings, two of which only ever appeared in a vault calling its relation
+  // `parent`.
+  for (const r of Object.values(ctx.refs)) rel(r.label, r.records);
+  for (const r of Object.values(ctx.inbound)) rel(r.label, r.records);
 
   if (ctx.links.length) {
     L.push('');

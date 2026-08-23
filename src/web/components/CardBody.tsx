@@ -335,12 +335,16 @@ export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => 
   );
 }
 
+/**
+ * A face says one thing about itself in its shape: whether it is stuck.
+ *
+ * It used to say two — a project took a `hue-purple` left edge beside the blocked
+ * card's `bad` one. That edge was the record mark's job stated twice, and the mark
+ * states it in every place a record appears rather than only on a face. So every
+ * card is now the same rectangle until something blocks it.
+ */
 function cls(card: CardDTO, base: string): string {
-  return [
-    base,
-    card.isProject ? 'is-project' : '',
-    card.blockedBy.some((b) => !b.done) ? 'is-blocked' : '',
-  ]
+  return [base, card.blockedBy.some((b) => !b.done) ? 'is-blocked' : '']
     .filter(Boolean)
     .join(' ');
 }

@@ -7,6 +7,11 @@ import { IconButton } from './components/Button.tsx';
 /**
  * The vault this window is looking at, and a way to change it.
  *
+ * The button draws the name alone. It used to prefix it with `▣`, which is the
+ * Record Mark vocabulary's project glyph worn by a thing that is not a record —
+ * a pun that only worked while nothing in the rail said what the control was.
+ * The row's `Vault` label says it now, and the glyph means one thing again.
+ *
  * The menu is portalled: this sits at the top of a rail with its own overflow, so
  * a panel positioned inside the sidebar was being clipped at the rail's edge.
  */
@@ -24,12 +29,7 @@ export function VaultSwitcher({
       className="vaultbtn"
       minWidth={280}
       title={meta.vault}
-      label={
-        <>
-          <span className="vaultbtn-mark">▣</span>
-          <span>{meta.vaultName}</span>
-        </>
-      }
+      label={meta.vaultName}
       render={(close) => <VaultMenu meta={meta} onSwitch={onSwitch} onAdd={onAdd} close={close} />}
     />
   );

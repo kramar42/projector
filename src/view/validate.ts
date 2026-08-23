@@ -1,5 +1,5 @@
 import { PSEUDO } from '../index/query.ts';
-import { isRef } from '../schema/vocabulary.ts';
+import { HUES, isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
 import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
@@ -62,6 +62,7 @@ export function validateVocabulary(
 ): Issue[] {
   const issues: Issue[] = [];
   for (const [name, def] of Object.entries(declared)) {
+    if (def && typeof def === 'object') issues.push(...inert(name, def as Record<string, unknown>, file));
     if (RESERVED.includes(name)) {
       issues.push({
         severity: 'error',
@@ -86,6 +87,49 @@ export function validateVocabulary(
     }
   }
   return issues;
+}
+
+/**
+ * Keys that are set and cannot take effect.
+ *
+ * The same failure this whole module exists for, one level in: a reserved *name*
+ * fails silently, and so does a *key* that does not apply. `inverse:` on a label
+ * facet draws no row, a `hue:` outside the palette falls through to grey, and a
+ * `closed:` value the vocabulary does not declare can never be held — each of
+ * them looks exactly like a setting that works.
+ *
+ * Read off the raw mapping rather than a loaded definition, because loading is
+ * where the key gets dropped: by then there is nothing left to report.
+ */
+function inert(name: string, def: Record<string, unknown>, file: string): Issue[] {
+  const out: Issue[] = [];
+  const at = (message: string) =>
+    out.push({ severity: 'error', file, field: name, message });
+
+  if (typeof def.inverse === 'string' && def.type !== 'ref') {
+    at(`"${name}" declares an inverse but is not a reference facet — nothing points back along it`);
+  }
+  for (const hue of [def.hue, ...bucketHues(def)]) {
+    if (typeof hue === 'string' && hue !== 'none' && !HUES.includes(hue)) {
+      at(`"${name}" asks for hue "${hue}", which is not a family — have ${HUES.join(', ')}`);
+    }
+  }
+  const values = Array.isArray(def.values) ? def.values.map(String) : null;
+  if (Array.isArray(def.closed) && values?.length) {
+    const missing = def.closed.map(String).filter((v) => !values.includes(v));
+    if (missing.length) {
+      at(`"${name}" calls ${missing.join(', ')} closed, but does not declare ${missing.length > 1 ? 'them' : 'it'} as a value`);
+    }
+  }
+  return out;
+}
+
+function bucketHues(def: Record<string, unknown>): unknown[] {
+  const raw = def.buckets;
+  if (!raw || typeof raw !== 'object') return [];
+  return Object.values(raw as Record<string, unknown>).map((b) =>
+    b && typeof b === 'object' ? (b as Record<string, unknown>).hue : undefined,
+  );
 }
 
 /**
