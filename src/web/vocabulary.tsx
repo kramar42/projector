@@ -21,6 +21,11 @@ export function VocabularyProvider({ facets, children }: { facets: Facets; child
   return <VocabularyContext.Provider value={facets}>{children}</VocabularyContext.Provider>;
 }
 
+/** The whole vocabulary, for a control that needs more than one axis's hue. */
+export function useVocabulary(): Facets {
+  return useContext(VocabularyContext);
+}
+
 /**
  * The class a value draws in: the bucket's hue if it declares one, else the
  * axis's, else none.

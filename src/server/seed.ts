@@ -15,6 +15,10 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   closed:  values meaning no further work is expected, whatever the outcome
 #   expected: true  → a well-filed card carries this; the triage axis is built
 #            from it
+#   inverse: what the other end of a relation is called — \`parent\` is answered by
+#            children. Omit it and the relation gets an editable row and no
+#            derived one, which is right: nothing computes an inverse it has no
+#            word for
 #   hue:     which family this axis draws in — orange green purple blue pink red
 #            yellow, or omitted for no colour at all. A bucket may declare one
 #            too, and it wins for a chip in that bucket, drawn filled rather than
@@ -133,6 +137,7 @@ parent:
   type: ref
   single: true
   hue: purple
+  inverse: Children
 
 # What must finish before this card can move. Stored on the card that is stuck,
 # pointing at what it is stuck on — the same direction as parent and project, and
@@ -146,6 +151,7 @@ blocked_by:
   type: ref
   blocking: true
   hue: red
+  inverse: Blocks
 `;
 
 export const SEED_VIEWS: { path: string; body: string }[] = [

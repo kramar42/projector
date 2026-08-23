@@ -37,7 +37,7 @@ export function treeLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   direction: 'LR' | 'TB' = 'LR',
-  layoutBy: string[] = ['parent'],
+  layoutBy: string[],
 ): Map<string, Placed> {
   const g = new dagre.graphlib.Graph();
   g.setGraph({
@@ -94,7 +94,7 @@ export function manualLayout(
   nodes: CardDTO[],
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
-  layoutBy: string[] = ['parent'],
+  layoutBy: string[],
   computed?: Map<string, Placed>,
 ): Map<string, Placed> {
   const fallback = computed ?? treeLayout(nodes, edges, 'LR', layoutBy);

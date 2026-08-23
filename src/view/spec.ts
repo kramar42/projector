@@ -82,12 +82,14 @@ function focusOf(params: Record<string, string>): Focus | undefined {
   const id = params.focus?.trim();
   if (!id) return undefined;
   const depth = Number(params.depth);
-  // `via` is a relation name — a reference facet, or an edge type while those
-  // still exist — so it is not validated against a list here. An unknown one
-  // simply finds no neighbours, which is what a stale bookmark should do.
+  // `via` is a relation name, so it is not validated against a list here: an
+  // unknown one simply finds no neighbours, which is what a stale bookmark
+  // should do. Absent it stays absent — the vocabulary supplies the default,
+  // and this module cannot read the vocabulary.
+  const via = params.via?.trim();
   return {
     id,
-    via: params.via?.trim() || 'parent',
+    ...(via ? { via } : {}),
     dir: one(params.dir, DIRS) ?? 'in',
     depth: Number.isInteger(depth) && depth > 0 ? depth : undefined,
   };
@@ -149,7 +151,7 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
   if (q.uncategorised) out.uncategorised = q.uncategorised;
   if (q.focus) {
     out.focus = q.focus.id;
-    out.via = q.focus.via;
+    if (q.focus.via) out.via = q.focus.via;
     out.dir = q.focus.dir;
     if (q.focus.depth !== undefined) out.depth = String(q.focus.depth);
   }
@@ -178,7 +180,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   const focus = raw.focus as { id?: string; via?: string; dir?: string; depth?: number } | undefined;
   if (focus?.id) {
     params.focus = String(focus.id);
-    params.via = String(focus.via ?? 'parent');
+    if (focus.via) params.via = focus.via;
     params.dir = String(focus.dir ?? 'in');
     if (focus.depth !== undefined) params.depth = String(focus.depth);
   }

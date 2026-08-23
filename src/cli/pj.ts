@@ -100,9 +100,9 @@ const HELP = `pj — projector CLI${vaultNote}
      [--show f,f] [--uncategorised end|start|hide]
      [--json]                                      list records, grouped
   pj log [--since "1 week ago"]                        what changed, from git history
-  pj add <title> [--id slug] [--parent id]
-         [--facet f=v ...] [--link ref ...]
-         [--fingerprint fp] [--body text]              create a record
+  pj add <title> [--id slug] [--facet f=v ...]
+         [--link ref ...] [--fingerprint fp]
+         [--body text]                                 create a record
   pj link <id> <ref> [...] [--remove]
          [--session [id]] [--cwd dir]                       add or remove links; --session names the
                                                        live Claude session working here
@@ -123,8 +123,7 @@ const HELP = `pj — projector CLI${vaultNote}
 
   pj context <id> [--json]                             everything known about a card, assembled
   pj set <id>... [--title t] [--facet f=v] [--add f=v]
-         [--remove f=v] [--parent id|none]
-         [--set path=yaml ...]                         scripted edits, for skills
+         [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
   pj rm <id>...                                        delete, dropping references to it
   pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
 
@@ -293,7 +292,7 @@ function cmdLs(argv: string[]): void {
 }
 
 function cmdAdd(argv: string[]): void {
-  const { flags, rest } = argFlags(argv, ['id', 'parent', 'facet', 'link', 'body', 'fingerprint']);
+  const { flags, rest } = argFlags(argv, ['id', 'facet', 'link', 'body', 'fingerprint']);
   const title = rest.join(' ').trim();
   if (!title) {
     console.error('pj add <title>');
@@ -309,7 +308,6 @@ function cmdAdd(argv: string[]): void {
   const res = createCard(root, {
     title,
     id: flags.get('id')?.[0],
-    parent: flags.get('parent')?.[0],
     facets,
     links: flags.get('link') ?? [],
     body: flags.get('body')?.[0],
@@ -691,11 +689,11 @@ try {
     }
 
     case 'set': {
-      const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'parent', 'set']);
+      const { flags, rest } = argFlags(argv, ['title', 'facet', 'add', 'remove', 'set']);
       if (!rest.length) {
         console.error(
           'pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]\n' +
-            '                [--parent id|none] [--set path=yaml]',
+            '                [--set path=yaml]',
         );
         process.exit(1);
       }
@@ -735,16 +733,8 @@ try {
           if (kept.length) facets[f] = kept;
           else delete facets[f];
         }
-        // `--parent` is `--facet parent=` spelled the way it reads.
-        const parent = flags.get('parent')?.[0];
-        if (parent !== undefined) {
-          if (parent === 'none') delete facets.parent;
-          else facets.parent = [parent];
-        }
-
         const title = flags.get('title')?.[0];
-        const touchesFacets =
-          flags.has('facet') || flags.has('add') || flags.has('remove') || flags.has('parent');
+        const touchesFacets = flags.has('facet') || flags.has('add') || flags.has('remove');
         if (title || touchesFacets) {
           patchCard(root, id, {
             ...(title ? { title } : {}),

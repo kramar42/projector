@@ -245,7 +245,6 @@ export function createCard(
     title: string;
     /** Overrides the slug derived from the title. Refused if already taken. */
     id?: string;
-    parent?: string;
     facets?: Record<string, string[]>;
     body?: string;
     links?: string[];
@@ -275,9 +274,10 @@ export function createCard(
     // about to reference this one by name.
     if (records.has(input.id)) throw new Invalid(`id "${input.id}" is already taken`);
   }
-  // `parent` is a reference facet, so a caller's `parent` is one more facet
-  // value rather than a separate structure.
-  const facets = { ...(input.facets ?? {}), ...(input.parent ? { parent: [input.parent] } : {}) };
+  // No relation gets a parameter of its own. `parent` had one, on both this and
+  // the CLI, and it was `--facet parent=` spelled twice — so a vault calling its
+  // containment relation anything else had a flag for a facet it does not have.
+  const facets = input.facets ?? {};
   if (Object.keys(facets).length) checkFacets(root, id, facets, records);
 
   const text = renderCard({

@@ -375,7 +375,8 @@ Nothing from the first two passes. The four items that were open are settled:
 What is *not* closed, though it is closing: `test/theme.test.ts` now enforces nine of these rules
 rather than three — the type scale, the radius ladder, the frontmatter's token references, the One
 Casing Rule's uppercase-via-the-Label-step, the Drawn Control Rule's `appearance`, stillness, the
-absence of breakpoints, one hue family per axis, and that every `className` resolves to a rule. A
+absence of breakpoints, every hue a vocabulary names being a family the stylesheet defines, and that
+every `className` resolves to a rule. A
 tenth was added with the panel rework, and it is the one worth naming here: **every `<button>` must
 carry a class that names a font family.** The Mono Label Rule is the most-cited rule in `DESIGN.md`
 and was the least enforced, and it failed in the direction prose cannot catch — a commit *correcting*

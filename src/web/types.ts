@@ -63,11 +63,12 @@ export interface CardDetail {
    */
   refs: Record<string, { title: string; isProject: boolean; refCount: number }>;
   /**
-   * The other end of the two relations that have a name for one: `children`
-   * inverts `parent`, `blocks` inverts `blocked_by`. Same shape, so the panel
-   * draws them with one component.
+   * The records naming this one, keyed by the relation they named it through —
+   * and only for the relations whose vocabulary gave the other end a word.
+   *
+   * It was two fields, `children` and `blocks`, which is the same map with its
+   * two keys written into the type.
    */
-  children: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
-  blocks: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
+  inbound: Record<string, { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[]>;
   project: ResolvedProject | null;
 }

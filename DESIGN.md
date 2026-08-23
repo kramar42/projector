@@ -17,9 +17,6 @@ colors:
   ok: "#afdf87"
   warn: "#dfdf87"
   bad: "#df8787"
-  rel-parent: "#a6a6e7"
-  rel-blocks: "#df8787"
-  rel-project: "#87afdf"
   hue-red: "#df8787"
   hue-orange: "#dfaf87"
   hue-yellow: "#dfdf87"
@@ -214,9 +211,11 @@ white. The frontmatter above records the dark values
 because they are the source; the light assignments are in `.impeccable/design.json`.
 
 Two things make this a drawing rather than a dashboard. First, **colour is notation.** Each facet axis
-owns one hue family, mapped from xoria's own syntax roles — priority is Number (orange), status is
-PreProc (green), project is Type (purple), tech is Statement (blue), layer is Identifier (pink) — so a
-chip's hue tells you which axis it is before you read the word. Second, **the surface is still.** Two
+owns one hue family — so a chip's hue tells you which axis it is before you read the word, and a canvas
+edge is the same colour as its chips. The app owns the palette, seven families taken from xoria's own
+syntax roles; the *vault* says which axis takes which, with `hue:` in `facets.yaml`. That was nine CSS
+rules named after nine facets, which meant the stylesheet decided that priority was orange and a vault's
+own vocabulary could only be grey. Second, **the surface is still.** Two
 CSS transitions exist in the whole stylesheet — one on a grid track, one on a width, both a box
 changing size — and there are no keyframes. A
 surface that sits open on a second monitor all day is a readout, and a readout that moves is a
@@ -232,7 +231,7 @@ the thing next to it, and the reason is written down.
 - Dark-first xoria256, taken literally; light derived from the same seven families
 - Monospace for everything the app says, sans for everything a human typed
 - A fourteen-step type scale in which the largest working size is 16px and the signature size is 9.5px
-- One hue family per facet axis; hueless chips for facets that are hints rather than identity
+- One hue family per facet axis, chosen by the vault from the app's seven; hueless chips for facets that are hints rather than identity
 - Four tonal surfaces and 1px hairlines — depth by layering, shadows only for what genuinely floats
 - Still at rest: instant regrouping, motion only where a mouse gesture would feel broken without it
 - Desktop-only by construction; no breakpoints, no responsive system, no top bar
@@ -256,15 +255,16 @@ where saturation is reserved for notation and every neutral is a literal step in
 
 ### Secondary
 
-The three relation colours, used exclusively on canvas edges so the graph says which relation it draws
-without a legend.
+A canvas edge has no palette of its own. It draws in the leading relation's `hue` — the same family its
+chips use — so the graph says which relation it draws without a legend and without a second set of
+colours to keep in step. There were three, `rel-parent`, `rel-blocks` and `rel-project`, keyed by facet
+name; a renamed relation silently lost its colour, and the same axis could be one colour as a chip and
+another as a line.
 
-- **Parent Purple** (`rel-parent`): decomposition edges. Shares the accent hue, because the parent tree
-  is the canvas's default spine.
-- **Blocks Red** (`rel-blocks`): blocking edges, and the only edge kind that carries a text label.
-  Light mode moves it off the palette to `#b06060` — a deliberate exception, because xoria's red1 is
-  illegible on white and red3 is too dark to read as an edge.
-- **Project Blue** (`rel-project`): membership edges.
+Two things about an edge are derived rather than declared. It is **solid** for the relation the canvas
+is laid out by and **dashed** for the rest — which is a property of the view, and what a dash should
+say. And it carries **text** unless it is that relation: the layout relation is the one you can read off
+the arrangement, so any other line is one you cannot. The words are the facet's own `label`.
 
 ### Tertiary
 
@@ -311,10 +311,16 @@ exactly one axis. Adding a facet means claiming a family, not picking a colour y
 one family destroys the property the whole palette exists for: that a chip's colour is legible before
 its text is.
 
+It is a rule the *seeded vault* keeps and the app cannot enforce, which is the honest position now that
+`hue:` is a vault's choice: there are seven families and a vault may have twenty axes, so anything past
+seven recedes, and a vault deliberately colouring two related axes alike is its own business. What the
+app does enforce, in `theme.test.ts`, is that every hue a vocabulary names is a family the stylesheet
+defines — the seam where the two halves can drift.
+
 **The Hints Are Hueless Rule.** A facet that is a hint rather than an identity gets no hue at all —
-transparent fill, `rule` border, `ink-3` text, italic for `energy`. `energy` and `source` are the
-existing cases. If a new facet does not deserve a hue family, it does not get a diluted one; it
-recedes.
+transparent fill, `rule` border, `ink-3` text. Omitting `hue:` is how a vault says so; `energy`,
+`source`, `owner` and `domain` are the seeded cases. If a new facet does not deserve a hue family, it
+does not get a diluted one; it recedes.
 
 **The Dilution Rule.** `--chip-tint` is `42%` in light and `100%` in dark. Xoria's light shades are
 saturated pastels: full strength is fine on one chip and loud on eight stacked down a column, so light
@@ -564,15 +570,17 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
 - **Style:** mono 10px, `1.5px 6px`, `3px` radius, 1px border. Three values from one hue family: the
   family's text colour, its background diluted by `--chip-tint`, and its border at 30–34%
   `color-mix` with transparent.
-- **Tones:** one class per facet axis (`facet-priority`, `facet-status`, `facet-project`, `facet-tech`,
-  `facet-layer`, `facet-waiting`, `facet-domain`), plus two hueless ones — `facet-energy` (italic) and
-  `facet-muted`.
-- **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket as a class,
-  so `is-overdue` and `is-today` colour themselves without anything knowing the facet by name. They
-  were the only two chips filled from a *facet* hue until the toggle chip joined them, and they remain
-  the only two that pick their fill from a **bucket** rather than an axis. A table cell does not draw
-  the bucket — `TableView` renders `FacetChip` without it, though `card.buckets` is on the DTO the row
-  already reads.
+- **Tones:** one class per hue *family* — `facet-hue-orange`, `-green`, `-purple`, `-blue`, `-pink`,
+  `-red`, `-yellow` — plus `facet-muted` for an axis that declares none. Which axis takes which is
+  `facets.yaml`'s to say; the chip looks it up through `useHue`. It was one class per facet *name*,
+  which is what made a vault's own vocabulary permanently grey.
+- **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket, and a
+  bucket that declares its own `hue` wins — drawn **filled** rather than tinted, because that is the
+  point of declaring one: `overdue` loud on an axis that is otherwise quiet. A filled chip takes
+  `--ground`, not `--ink`, for the same contrast reason `.btn.primary` does. This replaced
+  `.chip.is-overdue` and `.chip.is-today`, the last two *value* names in the stylesheet. A table cell
+  does not draw the bucket — `TableView` renders `FacetChip` without it, though `card.buckets` is on
+  the DTO the row already reads.
 - **Toggle chip:** the interactive variant, in the card panel and the bulk bar, with `is-on`,
   `is-extra` and `is-clear` states. It carries its **axis's own family**, off as the hue in text on the
   plain surface and on as the hue in fill with `ground` text — the same two states the bucket chips
@@ -696,11 +704,11 @@ Used for a project's roll-up. It is the only bar in the system.
   `warn` **1.03:1** in dark — invisible. Every filled state takes `ground`, which is 7.58:1 at worst
   across the same four combinations, and is what every filled state does — `.btn.primary`, the two
   bucket chips, and `.togglechip.is-on`, which takes `ground` over its axis's hue and measured 5.90:1
-  at worst across nine families in light and 7.58:1 in dark. `.icon-button.is-on` is not in this list
+  at worst across the seven families in light and 7.58:1 in dark. `.icon-button.is-on` is not in this list
   and is not an exception: it is an `accent` glyph on an `accent-soft` wash, which is a tint rather
   than a fill.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
-- **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `rel-blocks` at
+- **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `bad` at
   `#b06060` in light, the `chip-tint` and state-wash mixes, the derived light neutrals, the five
   shadow `rgba()` values and the scrim, and the two minimap masks — are documented where they occur
   and each has a stated reason.

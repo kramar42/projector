@@ -26,8 +26,15 @@ import type { Dir } from './refs.ts';
 
 export interface Focus {
   id: string;
-  /** A reference facet name, or an edge type while both still exist. */
-  via: string;
+  /**
+   * Which relation to walk. Absent means the first the vocabulary declares.
+   *
+   * It defaulted to `'parent'` in three places — the URL parser, the serialiser
+   * and the intent — which was a facet name written into modules that cannot
+   * read `facets.yaml`, and a vault without that relation focused on nothing.
+   * The default belongs where the vocabulary is known, which is here.
+   */
+  via?: string;
   dir: Dir;
   /** Hops from the focus. Omit for unlimited. */
   depth?: number;
@@ -250,13 +257,23 @@ function buildCtx(records: Map<string, Rec>, facets: Facets, today: string): Ctx
 
 // ---------------------------------------------------------------- traversal
 
+/** The relation a focus walks: the one it names, or the vault's first. */
+export function viaOf(focus: Focus, facets: Facets): string {
+  return focus.via ?? firstRef(facets) ?? '';
+}
+
+/** The first reference facet the vocabulary declares — the default relation. */
+export function firstRef(facets: Facets): string | undefined {
+  return Object.entries(facets).find(([, def]) => def.type === 'ref')?.[0];
+}
+
 /**
  * The records a focus selects, including the focus itself.
  *
  * `both` is the union of two separate walks, not one walk over both directions —
  * the latter would drag in every sibling's subtree and stop being a focus.
  */
-export function focused(focus: Focus, records: Map<string, Rec>): Set<string> {
+export function focused(focus: Focus & { via: string }, records: Map<string, Rec>): Set<string> {
   const adj = adjacency(focus.via, records);
   if (focus.dir === 'out') return walk(focus.id, adj.out, focus.depth);
   if (focus.dir === 'in') return walk(focus.id, adj.in, focus.depth);
@@ -546,7 +563,7 @@ export function runQuery(
   // Focus and full text bound the universe; the facet filter refines inside it.
   // Both are outside the histogram's disjunction on purpose — lifting them per
   // facet would make counts describe a set nobody asked for.
-  const scope = query.focus ? focused(query.focus, records) : null;
+  const scope = query.focus ? focused({ ...query.focus, via: viaOf(query.focus, facets) }, records) : null;
   const text = query.q ? ftsIds(db, query.q) : null;
 
   const universe: Rec[] = [];

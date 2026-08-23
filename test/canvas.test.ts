@@ -105,7 +105,7 @@ test('deleting a record drops every reference pointing at it', () => {
   try {
     writeFileSync(pathJoin(root, 'facets.yaml'), 'parent: { type: ref, single: true }\n', 'utf8');
     createCard(root, { title: 'Container', id: 'box' });
-    createCard(root, { title: 'Inside', id: 'thing', parent: 'box' });
+    createCard(root, { title: 'Inside', id: 'thing', facets: { parent: ['box'] } });
     const { removedEdges } = deleteCard(root, 'box');
     assert.equal(removedEdges, 1);
     const left = loadCard(pathJoin(root, 'cards', 'thing.md'));

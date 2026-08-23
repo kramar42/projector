@@ -104,7 +104,7 @@ export const api = {
 
   bulk: (input: {
     ids: string[];
-    op: 'facet' | 'move' | 'parent' | 'delete';
+    op: 'facet' | 'move' | 'delete';
     facet?: string;
     values?: string[];
     /** `move` only: one entry per grouping axis the drag crossed. */

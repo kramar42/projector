@@ -161,21 +161,36 @@ export function initVault(
   seedViews: { path: string; body: string }[] = [],
 ): void {
   const p = paths(path);
-  if (existsSync(path)) {
+  // Adopting a folder that is already a vault, or making one out of an empty
+  // folder. Anything else is somebody's documents.
+  const adopting = looksLikeVault(path);
+  if (existsSync(path) && !adopting) {
     const entries = readdirSync(path).filter((f) => !f.startsWith('.'));
-    if (entries.length && !looksLikeVault(path)) {
-      throw new Error(`${path} is not empty and does not look like a vault`);
-    }
+    if (entries.length) throw new Error(`${path} is not empty and does not look like a vault`);
   }
   mkdirSync(p.cards, { recursive: true });
   mkdirSync(p.assets, { recursive: true });
   mkdirSync(p.views, { recursive: true });
+
+  // The starter vocabulary and views go into a *new* vault only.
+  //
+  // They used to go in whenever the file was missing, which was the same thing
+  // while a vault could not do without them. It is not any more: an absent
+  // `facets.yaml` is a vault that carries the built-ins and nothing else, and a
+  // deleted `home.yaml` is a view somebody deleted. Re-running `--create` over
+  // an existing vault would have put both back, silently, as a fresh start.
+  if (adopting) return ensureIgnore(path);
   if (!existsSync(p.facets)) writeFileSync(p.facets, seedFacets, 'utf8');
   for (const v of seedViews) {
     const target = join(p.views, v.path);
     mkdirSync(dirname(target), { recursive: true });
     if (!existsSync(target)) writeFileSync(target, v.body, 'utf8');
   }
+  ensureIgnore(path);
+}
+
+/** The databases and scratch files a vault should never commit. */
+function ensureIgnore(path: string): void {
   const ignore = join(path, '.gitignore');
   if (!existsSync(ignore)) {
     writeFileSync(

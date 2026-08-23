@@ -97,6 +97,7 @@ export function loadFacets(file: string): Facets {
       ...(d.expected === true ? { expected: true } : {}),
       ...(d.blocking === true ? { blocking: true } : {}),
       ...(typeof d.hue === 'string' ? { hue: d.hue } : {}),
+      ...(typeof d.inverse === 'string' ? { inverse: d.inverse } : {}),
     };
   }
   // Built-ins lead the order, and win their structural keys. A vault may still

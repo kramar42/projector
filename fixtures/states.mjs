@@ -133,12 +133,14 @@ parent:
   type: ref
   single: true
   hue: purple
+  inverse: Children
 
 blocked_by:
   label: blocked by
   type: ref
   blocking: true
   hue: red
+  inverse: Blocks
 `;
 
 // ---------------------------------------------------------------- cards

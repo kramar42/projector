@@ -151,7 +151,9 @@ export function CanvasView({
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [newRelation, setNewRelation] = useState('parent');
+  // The vault's first relation, not a name written here — a vault that has no
+  // `parent` used to open this control on a relation it does not have.
+  const [newRelation, setNewRelation] = useState(relations(meta)[0] ?? '');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [naming, setNaming] = useState(false);

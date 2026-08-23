@@ -51,14 +51,14 @@ Executable work and conceptual thinking in **one record set**, not two tools tha
 step. The mechanisms a neighbouring product could not truthfully copy:
 
 - **Facets, not lists.** Every facet value is an array, uniformly; no facet is structurally privileged.
-  Relations — `parent`, `blocks`, `project` — are reference facets, so "group by project" and "group by
+  Relations — `parent`, `blocked_by`, `project` — are reference facets, so "group by project" and "group by
   priority" are the same board with one control moved rather than two boards to keep in sync.
 - **One record type at two altitudes.** A record becomes *work* by acquiring a `status` and a
   *container* by being named by **any** reference facet. A mind-map leaf and a tracked card are the
   same file, which is what makes Trello-and-Miro-in-one structurally true rather than a feature list.
 - **Two promises.** The markdown files are the source of truth, and nothing is ever written back to
   Jira, GitHub, Trello or Slack.
-- **`blocks` and its transitive closure** — the relation neither Trello nor Jira gives usefully, and
+- **`blocked_by` and its transitive closure** — the relation neither Trello nor Jira gives usefully, and
   what "unblocked now" is built from.
 - **Agent-first by construction**, not by integration: no API surface to expose, because the storage
   format *is* the interface.
@@ -123,7 +123,7 @@ Keyboard operation waits on something else — a keystroke has no modifier to sa
 remove, so the gesture semantics are the hard part, and there is no evidence yet about which motions
 are frequent.
 
-**Finished but idle mechanisms** — design must not assume data on these axes: `blocks` carries one
+**Finished but idle mechanisms** — design must not assume data on these axes: `blocked_by` carries one
 value, `due` is set nowhere, `owner` is set on one record, `energy` is on a handful. `pj check`
 reports warnings against the live vault, some of them structural — run it rather than trusting a
 count written here.
@@ -132,11 +132,13 @@ count written here.
 
 - **`projector`**, lowercase. The CLI is `pj`.
 - **xoria256** (Dmitriy Zotikov's pastel Vim scheme, via `estilo-xoria256`) is the committed palette —
-  dark-first, light derived, following the system setting. **One hue family per facet axis**, so a
-  chip's colour says which axis it is before you read it: priority orange, status green, project
-  purple, tech blue. Every hue in `src/web/style.css` comes from the palette file, with the departures
-  DESIGN.md documents where they occur: `--rel-blocks` in light, mixed to stay legible on white, and
-  the `--chip-tint` fills, which dilute a hue toward the surface.
+  dark-first, light derived, following the system setting. **One hue family per facet axis** — the app
+  owns the seven families, the vault picks which axis takes which — so a
+  chip's colour says which axis it is before you read it, and a canvas edge is the same colour as its
+  chips. In the seeded vault: status green, priority orange, `blocked_by` red, `waiting_on` yellow,
+  parent purple, project blue, tech pink. Every hue in `src/web/style.css` comes from the palette file,
+  with the departure DESIGN.md documents where it occurs: the `--chip-tint` fills, which dilute a hue
+  toward the surface.
 - **The record marks are vocabulary, not decoration:** `•` a card, `○` a record something else
   names, `▣` a project, plus a
   count of how many records name it through any reference facet.

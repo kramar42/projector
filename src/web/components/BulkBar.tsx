@@ -4,7 +4,7 @@ import { plural } from '../plural.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { RecordPicker } from './RecordPicker.tsx';
 import { Button } from './Button.tsx';
-import { useHue } from '../vocabulary.tsx';
+import { useHue, useVocabulary } from '../vocabulary.tsx';
 import type { QueryResponse } from '../types.ts';
 
 /**
@@ -27,7 +27,18 @@ export function BulkBar({
   onClear: () => void;
   onProblem: (m: string) => void;
 }) {
-  const [pickParent, setPickParent] = useState(false);
+  /**
+   * Pointing a selection at one record: the vault's first *single-valued*
+   * relation, which is what "put all of these under one thing" means.
+   *
+   * The button said "Set parent…" and posted a bulk op named `parent`, which was
+   * an ordinary facet write wearing a facet's name — so a vault that calls its
+   * containment relation something else had a button for a facet it does not
+   * have, and no button for the one it does.
+   */
+  const facets = useVocabulary();
+  const container = Object.entries(facets).find(([, d]) => d.type === 'ref' && d.single)?.[0];
+  const [pickRelation, setPickRelation] = useState(false);
   const [facet, setFacet] = useState('');
   const editable = counts.filter((c) => !c.pseudo);
   const chosen = editable.find((c) => c.facet === facet);
@@ -42,9 +53,11 @@ export function BulkBar({
     <div className="bulkbar">
       <span className="bulkbar-count">{ids.length} selected</span>
 
-      <Button size="small" onClick={() => setPickParent((v) => !v)}>
-        Set parent…
-      </Button>
+      {container && (
+        <Button size="small" onClick={() => setPickRelation((v) => !v)}>
+          Set {facets[container]!.label.toLowerCase()}…
+        </Button>
+      )}
 
       <select className="bulkbar-select" value={facet} onChange={(e) => setFacet(e.target.value)}>
         <option value="">set a facet…</option>
@@ -98,15 +111,17 @@ export function BulkBar({
         Clear selection
       </Button>
 
-      {pickParent && (
+      {pickRelation && container && (
         <div className="bulkbar-picker">
           <RecordPicker
             exclude={ids}
-            placeholder="parent for all selected…"
-            onCancel={() => setPickParent(false)}
+            placeholder={`${facets[container]!.label.toLowerCase()} for all selected…`}
+            onCancel={() => setPickRelation(false)}
             onPick={(pid) => {
-              setPickParent(false);
-              void run(() => api.bulk({ ids, op: 'parent', parent: pid }));
+              setPickRelation(false);
+              void run(() =>
+                api.bulk({ ids, op: 'facet', facet: container, values: pid ? [pid] : [], mode: 'set' }),
+              );
             }}
           />
         </div>

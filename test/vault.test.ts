@@ -144,3 +144,42 @@ test('the seeded vocabulary covers every facet the seeded views use', () => {
   }
 });
 
+
+
+test('seeding a fresh vault is not the same act as adopting one', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-adopt-'));
+  try {
+    // Fresh: the starter vocabulary and views go in.
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    assert.ok(existsSync(pathJoin(root, 'facets.yaml')));
+    assert.ok(existsSync(pathJoin(root, 'views', 'home.yaml')));
+
+    // Now the vault decides it wants neither. Both absences are meaningful: no
+    // vocabulary is a vault carrying the built-ins alone, and a deleted view is
+    // a view somebody deleted.
+    rmSync(pathJoin(root, 'facets.yaml'));
+    rmSync(pathJoin(root, 'views', 'home.yaml'));
+
+    // Re-running `--create` over it must not put them back. It used to, because
+    // "the file is missing" and "this vault is new" were the same test while a
+    // vault could not do without them.
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    assert.equal(existsSync(pathJoin(root, 'facets.yaml')), false, 'no vocabulary was re-seeded');
+    assert.equal(existsSync(pathJoin(root, 'views', 'home.yaml')), false, 'and no view');
+
+    // And the folder is still a working vault: `cards/` is what says so.
+    assert.ok(looksLikeVault(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a folder with somebody else\'s files is refused, not adopted', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-notavault-'));
+  try {
+    writeFileSync(pathJoin(root, 'thesis.docx'), 'not a vault', 'utf8');
+    assert.throws(() => initVault(root, SEED_FACETS, SEED_VIEWS), /not empty/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

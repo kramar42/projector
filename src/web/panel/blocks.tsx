@@ -37,34 +37,6 @@ import type { CardDTO, CardDetail, Meta } from '../types.ts';
 const INBOUND_CUTOFF = 3;
 
 /**
- * Which derived list is the other end of which reference facet.
- *
- * Named facets, in a file that otherwise names none — and deliberately, because
- * the inverse of a relation is not vocabulary. The server computes exactly these
- * two pairs, so this is that same fact reaching the surface that draws it rather
- * than a second decision. A new reference facet gets an editable row for free and
- * no inverse row, which is correct: nothing computes its inverse either.
- *
- * `blocked_by` changed ends with the relation. The editable row is now what this
- * card is waiting on — recorded on the card that is stuck, which is the one you
- * open when you are — and the derived row is what it holds up.
- */
-const INVERSE: Record<string, 'children' | 'blocks'> = {
-  parent: 'children',
-};
-
-/**
- * Which relation gets the `Blocks` row: the first one this vault declares
- * blocking. It is a *property* rather than a name now, so the row follows
- * whatever the vault called its dependency axis — and only one relation draws it,
- * because the server merges every blocking reference into one list.
- */
-function inverseFor(name: string, def: Meta['facets'][string], first: boolean) {
-  if (INVERSE[name]) return INVERSE[name];
-  return def.blocking && def.type === 'ref' && first ? ('blocks' as const) : undefined;
-}
-
-/**
  * Closing an editor destroys its document, so ask first.
  *
  * Both editors live behind one toggle each, and both read as harmless view
@@ -162,23 +134,11 @@ function InboundRow({
   label,
   means,
   records,
-  stripe,
   onOpen,
 }: {
   label: string;
   means: string;
   records: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
-  /**
-   * What a record's own state is worth saying on this list, which is not the same
-   * question for both lists.
-   *
-   * Both may say *finished*, in `ok`. Only `Blocked by` may say **open**, in
-   * `bad`, because there the word means "this is in your way" — the one meaning
-   * The Load-Bearing Left Border Rule assigns that colour. An unfinished child is
-   * not a problem, it is a child, and striping six of them red says a project
-   * with work left in it is broken.
-   */
-  stripe: (r: { done?: boolean }) => string;
   onOpen: (id: string) => void;
 }) {
   const [all, setAll] = useState(false);
@@ -199,8 +159,12 @@ function InboundRow({
         {records.length > 1 && <span className="quietcount">{records.length}</span>}
       </span>
       <div className="facetrow-values">
+        {/* Finished says `ok`; unfinished says nothing. Only a record in *your*
+            way earns `bad`, which is what the outbound `blocked by` row draws —
+            a record at this end is one you are holding up, and striping six of
+            them red says a project with work left in it is broken. */}
         {shown.map((r) => (
-          <button className={`reflink ${stripe(r)}`} key={r.id} onClick={() => onOpen(r.id)}>
+          <button className={`reflink ${r.done ? 'is-done' : ''}`} key={r.id} onClick={() => onOpen(r.id)}>
             {/* A record carries its mark wherever you meet it. The `' ✓'` that
                 used to sit here is gone: `.reflink.is-done` already draws that
                 state as an `ok` left edge, so the tick was the same fact twice. */}
@@ -297,38 +261,20 @@ export function Refs({
   onOpen: (id: string) => void;
 }) {
   const rels = Object.keys(defs).filter((n) => defs[n]!.type === 'ref');
-  const firstBlocking = rels.find((n) => defs[n]!.blocking);
   const { show, hidden, reveal } = useRevealed(rels, (n) => (card.facets[n] ?? []).length > 0);
-
-  const inbound = {
-    children: {
-      label: 'Children',
-      means: 'records naming this one as their parent, not stored on this one',
-      records: data.children,
-      stripe: (r: { done?: boolean }) => (r.done ? 'is-done' : ''),
-    },
-    blocks: {
-      label: 'Blocks',
-      means: 'records naming this one as a blocker, not stored on this one',
-      records: data.blocks,
-      // An unfinished record this one holds up is not a problem with *this*
-      // card — the same reason a child is not striped. `is-open` in `bad` means
-      // "in your way", and these are in nobody's way but their own.
-      stripe: (r: { done?: boolean }) => (r.done ? 'is-done' : ''),
-    },
-  };
 
   return (
     <section className="panel-section">
       <div className="facetgrid">
         {rels.flatMap((name) => {
-          const inv = inverseFor(name, defs[name]!, name === firstBlocking);
+          const def = defs[name]!;
+          const naming = data.inbound[name] ?? [];
           return [
             show(name) ? (
               <FacetEditor
                 key={name}
                 name={name}
-                def={defs[name]!}
+                def={def}
                 values={card.facets[name] ?? []}
                 refs={data.refs}
                 selfId={card.id}
@@ -336,7 +282,19 @@ export function Refs({
                 onChange={(next, mode) => write.facet(name, next, mode)}
               />
             ) : null,
-            inv ? <InboundRow key={inv} {...inbound[inv]} onOpen={onOpen} /> : null,
+            // The other end, when this vault gave it a word. Directly under the
+            // relation it inverts, because the two ends of one edge belong
+            // beside each other — that adjacency is the whole of the difference
+            // between `Blocks` and `blocked by`, and the `ƒ` says which is which.
+            def.inverse && naming.length ? (
+              <InboundRow
+                key={`${name}:inverse`}
+                label={def.inverse}
+                means={`records naming this one through "${def.label}", not stored on this one`}
+                records={naming}
+                onOpen={onOpen}
+              />
+            ) : null,
           ];
         })}
       </div>

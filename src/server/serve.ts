@@ -23,7 +23,7 @@ import type { Facets, Rec } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, isProject } from '../index/project.ts';
-import { blockedBy, blockingFacets, isClosed, unblocks } from '../index/blocking.ts';
+import { blockedBy, isClosed, unblocks } from '../index/blocking.ts';
 import { isRef } from '../schema/facets.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
@@ -314,33 +314,36 @@ app.get('/api/card/:id', (c) => {
     // may draw `is-open` in `bad`, because there "open" means in your way; an
     // unfinished child is a child. The panel decides that per list.
     //
-    // One shape, two relations. `children` is the inverse of `parent`; `blocks`
-    // is the inverse of `blocked_by`, and it changed ends when that relation did
-    // — the edge is stored on the card that is stuck, so what a card *holds up*
-    // is now the derived half.
-    ...inverseOf(rec, records, facets, inbound),
+    // Keyed by the relation, so the panel can label each with the word the
+    // vocabulary gave it. `blocked_by` changed ends when the relation did: the
+    // edge is stored on the card that is stuck, so what a card *holds up* is the
+    // derived half.
+    inbound: inverseOf(rec, records, facets, inbound),
     project,
   });
 });
 
 /**
- * The records naming this one, for the two inverses the app has a word for.
+ * The records naming this one, per relation that named its other end.
  *
- * `children` inverts `parent`. `blocks` inverts every *blocking* reference at
- * once — a vault may declare more than one, and "what this holds up" is the same
- * sentence whichever axis it arrived on, so they merge rather than multiply.
- * Nothing computes an inverse for any other reference facet, and the panel draws
- * exactly what arrives: a new relation gets an editable row and no derived one,
- * which is correct rather than missing.
+ * It was two hardcoded lists, `children` and `blocks`, each computed from a
+ * facet named here — so a vault renaming either lost the row and a vault's own
+ * relation could never have one. Which relations have an inverse worth drawing
+ * is `inverse:` in the vocabulary now, and this is a loop.
+ *
+ * A relation that names no inverse gets no entry, which is the same rule as
+ * before: an editable row and no derived one is correct rather than missing.
  */
 function inverseOf(
   rec: Rec,
   records: Map<string, Rec>,
   facets: Facets,
   inbound: Map<string, number>,
-): { children: Inbound[]; blocks: Inbound[] } {
-  const naming = (via: string) =>
-    [...records.values()]
+): Record<string, Inbound[]> {
+  const out: Record<string, Inbound[]> = {};
+  for (const [via, def] of Object.entries(facets)) {
+    if (!isRef(def) || !def.inverse) continue;
+    const naming = [...records.values()]
       .filter((r) => (r.facets[via] ?? []).includes(rec.id))
       .map((r) => ({
         id: r.id,
@@ -349,15 +352,9 @@ function inverseOf(
         isProject: isProject(r),
         refCount: inbound.get(r.id) ?? 0,
       }));
-  return {
-    children: naming('parent'),
-    blocks: blockingRefFacets(facets).flatMap(naming),
-  };
-}
-
-/** Blocking facets that name records, so they have an other end to list. */
-function blockingRefFacets(facets: Facets): string[] {
-  return blockingFacets(facets).filter((n) => isRef(facets[n]));
+    if (naming.length) out[via] = naming;
+  }
+  return out;
 }
 
 interface Inbound {
@@ -422,7 +419,7 @@ app.post('/api/bulk', async (c) => {
   try {
     const b = (await c.req.json()) as {
       ids: string[];
-      op: 'facet' | 'move' | 'parent' | 'delete';
+      op: 'facet' | 'move' | 'delete';
       facet?: string;
       values?: string[];
       mode?: 'set' | 'add' | 'remove';
@@ -433,7 +430,6 @@ app.post('/api/bulk', async (c) => {
        */
       moves?: { facet: string; from: string; to: string }[];
       dragMode?: DragMode;
-      parent?: string | null;
     };
     const ids = b.ids ?? [];
     let res: unknown;
@@ -442,11 +438,6 @@ app.post('/api/bulk', async (c) => {
     // travel and `nextValues` runs here.
     else if (b.op === 'move') {
       res = bulkMove(root, ids, b.moves ?? [], b.dragMode ?? 'replace');
-    }
-    else if (b.op === 'parent') {
-      // Kept as a named op because the board's bulk bar has a "set parent"
-      // button, but it is an ordinary facet write underneath.
-      res = bulkFacet(root, ids, 'parent', b.parent ? [b.parent] : [], 'set');
     }
     else if (b.op === 'delete') res = bulkDelete(root, ids);
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);

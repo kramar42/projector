@@ -88,7 +88,7 @@ export function setFocus(
   return replaceQuery(spec, {
     focus: {
       id: focus.id,
-      via: focus.via ?? prev?.via ?? 'parent',
+      ...(focus.via ?? prev?.via ? { via: focus.via ?? prev?.via } : {}),
       dir: focus.dir ?? prev?.dir ?? 'in',
       ...(focus.depth ?? prev?.depth ? { depth: focus.depth ?? prev?.depth } : {}),
     },

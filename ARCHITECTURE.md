@@ -120,7 +120,8 @@ scale both are free — it is what lets a pseudo-facet be indistinguishable from
 `blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
 the one job it is genuinely better at: full text (FTS5), which `search()` reads out of the `fts` table
-joined to `records`. `src/index/queries.ts` holds only that, plus `counts`. The `blocks` closure came
+joined to `records`. `src/index/queries.ts` holds only that, plus `counts` — which reads which facets
+are relations off the vocabulary, having once named three of them in the SQL. The blocking closure came
 in-memory too — `unblocks()` in `src/index/blocking.ts` walks the adjacency `refs.ts` builds, because
 the SQL version was depth-capped at 10 and kept self-references the record map drops. It used to also carry a general `listRecords`/`filterClause` pair — a
 second filtering engine, which is what this whole section says should not exist — and that is exactly
@@ -216,10 +217,20 @@ pair that agrees reads as one relationship and a pair that *disagrees* still sho
 at different records — the case worth seeing. Edge labels need an explicit neutral fill, because a label
 inherits the stroke colour otherwise.
 
-**Every relation is a reference facet.** `type: ref` says a facet's values are record ids, and
-`parent`, `blocks` and `project` are the three that exist. There is no `edges:` block and no `edges`
-table: `src/index/refs.ts` is the one reader, and focus, the canvas, the roll-ups, config inheritance
-and cycle refusal all walk the `src names dst` pairs it returns.
+**Every relation is a reference facet.** `type: ref` says a facet's values are record ids; the seeded
+vault declares `parent` and `blocked_by`, `project` is built in, and a vault declares whatever else it
+needs. There is no `edges:` block and no `edges` table: `src/index/refs.ts` is the one reader, and
+focus, the canvas, the roll-ups, config inheritance and cycle refusal all walk the `src names dst`
+pairs it returns.
+
+**Every reference is stored on the record that depends**, pointing at what it depends on. That is a
+modelling convention rather than a declaration, and it replaced one: while `blocks` was stored on the
+blocker it pointed *away* from the root of its own dependency tree, so which relations to flip when
+drawing had to be declared, shipped in the payload as `hierarchies` and threaded through four layout
+functions. Inverting it to `blocked_by` turned a list of exceptions into a rule — a canvas flips every
+edge, dagre gets every one the same way round, and nothing says which. A vault whose relation genuinely
+points outward draws its arrows backwards on the canvas and is otherwise unaffected; `points: out` is
+the escape hatch to add the day somebody needs it rather than in advance.
 
 The gain is not symmetry, it is capability. An edge could be traversed but never filtered, grouped,
 counted, dragged or bulk-edited; a facet could be all of those but never traversed. Making relations
@@ -232,7 +243,7 @@ thing is a second thing to keep in step, and it would let a reference point at s
 record id.
 
 **Direction is mechanical, not spatial.** `out` follows a record's own references; `in` finds the
-records naming it. `up`/`down` only reads correctly for containment — on `blocks`, "up" would mean
+records naming it. `up`/`down` only reads correctly for containment — on `blocked_by`, "up" would mean
 toward the blocker, which is the same arrow as `parent`'s "down" — so the words would have meant
 opposite tree-directions depending on the relation.
 
@@ -292,10 +303,19 @@ edges. It takes the outward neighbours as a function rather than a record map, s
 the shape of the graph rather than where it is stored. Before P7 a membership cycle was accepted and
 `resolveProject` silently truncated the config chain.
 
-**Blocked and waiting are computed, never written.** `blocked` is an unfinished `blocks` reference and
-`waiting` is a non-empty `waiting_on`; neither is a `status` value. `status` is lifecycle only —
-`planning · active · frozen · done · archived`. Storing a state beside the thing it is derived from
-gives two answers to one question and nothing to arbitrate between them (C11).
+**Being blocked is computed, never written.** A facet declared `blocking: true` puts its own name on
+the `blocked` axis, and what *unsatisfied* means follows from the type: a reference blocks while
+something it names is not `closed`, anything else blocks while it holds a value at all. The second rule
+is not a shortcut — a person does not complete, you clear the axis rather than marking them closed — so
+`waiting_on` behaves correctly as a label and a vault wanting the traversal can make it a reference
+without changing what the axis means.
+
+None of these is a `status` value; `status` is lifecycle only. Storing a state beside the thing it is
+derived from gives two answers to one question and nothing to arbitrate between them (C11).
+
+The axis had two hardcoded values, `blocked` and `waiting`, computed from two facets by name. Those
+were always the same question asked of two facets — which is why blocking is *plural* and `project` is
+not, and therefore why `blocked_by` is an ordinary facet while `project` is built in.
 
 **A single-valued facet is a vocabulary constraint, not a storage one.** Every facet is a `string[]`
 and the whole engine reads it that way; `single: true` says the *vocabulary* admits one value at a
@@ -527,7 +547,7 @@ full of markdown attracts a README, not because the app puts one there.
 
 | | |
 |---|---|
-| `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading status transitions out of git diffs |
+| `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs |
 | `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a record's inbound references, clusters, bands, and the layout following only the relation shown |
 | `card.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
@@ -544,9 +564,10 @@ full of markdown attracts a README, not because the app puts one there.
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
-| `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, one hue family per facet axis, every `className` resolving to a rule, and this table naming the tests that exist |
-| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, and every seeded file parsing as what it claims to be |
+| `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
+| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, and seeding a fresh vault not being the same act as adopting one |
 | `view.test.ts` | a view file patched in place, an unknown axis refused in every position, the empty-group policy |
+| `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with records, views and an empty `facets.yaml` loads, validates and answers a query |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
 and not whatever the cards happen to say today. `tsconfig` runs with `noUnusedLocals` and

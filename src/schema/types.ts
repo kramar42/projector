@@ -174,6 +174,22 @@ export interface FacetDef {
    * `source` and is what any undeclared axis gets.
    */
   hue?: string;
+  /**
+   * What the *other end* of this relation is called, if it has a name worth
+   * drawing.
+   *
+   * `parent` is answered by children; `blocked_by` by what this card blocks. Both
+   * were a two-entry map keyed by facet name, in the server *and* in the panel,
+   * so a vault renaming either lost the row and a vault's own relation could
+   * never have one.
+   *
+   * The inverse of a relation is not vocabulary in the sense values are — it is
+   * not something a card can carry — but it is a word this vault uses, and there
+   * is nowhere else for it to live. Absent means no derived row, which stays the
+   * right default: nothing computes an inverse for a relation that has not
+   * named one.
+   */
+  inverse?: string;
 }
 
 export type Facets = Record<string, FacetDef>;

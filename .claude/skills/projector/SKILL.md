@@ -49,13 +49,18 @@ alias pj='node "$PWD/src/cli/pj.ts"'   # from the projector project root
    under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
 3. **`parent` is a reference facet too** — "this card is part of that one". Single-valued, drawn by the
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
-   are independent, so a card may have either, both or neither. Set it with `--parent X`, which is
-   `--facet parent=X` spelled the way it reads. `blocks` is the third, and powers the `unblocked` view.
+   are independent, so a card may have either, both or neither. Set it with `--facet parent=X`; there
+   is no `--parent` flag any more, because no relation gets a flag of its own. `blocked_by` is the
+   third, and powers the `unblocked` view.
 4. **There is no `kind`.** A record is not a class of thing. Whether it is work is whether it carries a
    `status` — which is what keeps a grouping record off a status-filtered board — and whether it
    contains anything is whether anything names it as a `parent`. Only `id` and `title` are required.
-5. **Nothing derivable is stored.** `blocked` comes from an unfinished `blocks` edge and `waiting`
-   from a non-empty `waiting_on`; neither is a status. `status` is lifecycle only.
+5. **Nothing derivable is stored.** The `blocked` axis names one value per facet declared
+   `blocking:` — `blocked_by` when something it names is not `closed`, `waiting_on` when it holds any
+   value at all. Neither is a status; `status` is lifecycle only.
+   **`blocked_by` is stored on the card that is stuck**, pointing at what it is stuck on — the same
+   direction as `parent` and `project`. Every reference in this model points at what the record
+   depends on, so you record a blocker on the blocked card rather than on the blocker.
 6. **A facet declares a `type`** — `label` (the default), `ref`, `date` or `number`. `due` is a date
    facet: `pj set <id> --facet due=2026-09-01`, cleared with `--facet due=`. An ordered facet presents
    **buckets** on an axis and compares raw values, so `--filter due=overdue` and
@@ -87,8 +92,8 @@ re-derive those by reading files.
 ## Writing
 
 ```bash
-pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--parent id] [--fingerprint fp] [--body text]
-pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v] [--parent id|none]
+pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]
+pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
 pj set <id> --set 'project={}'      # this is how a record becomes a project
 pj rm <id>...                       # deletes, dropping every reference pointing at it
@@ -105,11 +110,12 @@ refilling the inbox.
 
 - **An unknown flag is an error.** `pj` used to drop them silently, so a typo looked like success.
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
-  `planning|active|frozen|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
+  `planning|active|on-hold|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
   `<vault>/facets.yaml` before inventing a value; `pj set` will refuse anyway.
-- **Never write `status: blocked` or `status: waiting`.** They are not values. If something is
-  blocked by another card, add a `blocks` edge from the blocker; if it is waiting on a person, set
-  `waiting_on`. Both surface on the `blocked` axis without being stored twice.
+- **Never write `status: blocked` or `status: waiting`.** They are not values. If something is blocked
+  by another card, set `blocked_by` **on the blocked card** naming the blocker; if it is waiting on a
+  person, set `waiting_on`. Both surface on the `blocked` axis, under their own facet names, without
+  being stored twice.
 - **`archived` is how you retire a captured card**, not deletion. Deleting it destroys the
   `source_fingerprint` too, so the next `/pj-capture` sweep creates it again.
 - **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a card
@@ -192,7 +198,7 @@ live control in the UI. `nodes` (canvas x/y) and `order` (card order within a co
 
 - **`show` is one list and its order matters.** How each facet is drawn follows from what it is: a
   label facet is a chip and a table column; a reference facet is that *and* a line on a canvas — and
-  **the first reference facet in `show` is what a canvas lays out by**. `show: [parent, blocks]` is a
+  **the first reference facet in `show` is what a canvas lays out by**. `show: [parent, blocked_by]` is a
   decomposition tree with blockers drawn across it; `show: [project]` is the portfolio. Get this wrong
   and the canvas puts every node in one column with the hierarchy invisible.
 - **Never hand-edit `nodes` or `order`.** The app merges them by id on save, so it never drops the
