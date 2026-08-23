@@ -1365,6 +1365,47 @@ input:focus-visible + .checkbox {
   border-color: color-mix(in srgb, var(--tone) var(--tone-edge), transparent);
 }
 
+/*
+ * The app's own axis — `builtin`, which is `project` and nothing else.
+ *
+ * The one place in the vocabulary that draws in the accent, and it is not an
+ * exception to The App Voice Rule: `project` is the app's axis rather than the
+ * vault's, so its colour is the app's too. Every family below belongs to an axis
+ * a vault claimed; this one could not be claimed, and it used to *borrow* —
+ * declaring `blue` in `BUILTIN_FACETS` while the two surfaces that drew a project
+ * value both picked purple, which is three answers to one question.
+ *
+ * `accent-soft` is the fill rather than a `--chip-tint` mix of it: it is already
+ * the diluted form of the family (it is `hue-purple-bg` exactly, in dark), and
+ * tinting a tint is how a chip turns into its own background.
+ */
+.facet-app {
+  --tone: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/*
+ * A reference value, wherever it is drawn.
+ *
+ * The panel's `.refchip` register, exactly: a `surface-2` box, `rule` edge and
+ * `ink-2` text — no family, because a reference is not a value, it is another
+ * record, and what a record *is* is carried by its mark and its title. A card
+ * face and a table row used to draw one as a hued chip, so the same record read
+ * as a purple `parent` pill on a board and as plain text in the editor.
+ *
+ * `ink-2` rather than `facet-muted`'s `ink-3`: a hint recedes, a record does not.
+ * That is the whole difference between these two rules, and it is why they are
+ * two.
+ */
+.facet-ref {
+  --tone: var(--ink-2);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border-color: var(--rule);
+}
+
 /* No hue declared: the chip recedes. Right for a hint like `source`, and what
    any axis the vocabulary says nothing about gets. */
 .facet-muted {
@@ -1387,8 +1428,22 @@ input:focus-visible + .checkbox {
   max-width: 100%;
 }
 
+/*
+ * The kind prefix, which draws in its kind's own family.
+ *
+ * Every one of them was `accent`, which spent the app's one voice on eight kinds
+ * that are not the app speaking — and said nothing the two or three letters did
+ * not already say. The family comes from `LINK_KINDS` in `components/CardBody.tsx`
+ * as an inline `var(--hue-*)`, the same way a canvas edge takes its relation's
+ * colour: the vocabulary names a family, and the token does the rest.
+ *
+ * This is the resting colour for a kind that names no family — `url`, the kind for
+ * a link whose host the app does not recognise. `ink-2` rather than the chip's own
+ * `ink-3`, because the prefix is the fixed half of the label and stays the
+ * stronger of the two.
+ */
 .linkchip b {
-  color: var(--accent);
+  color: var(--ink-2);
   font-weight: 600;
   font-size: var(--text-micro);
   letter-spacing: 0.04em;
@@ -1456,8 +1511,20 @@ input:focus-visible + .checkbox {
   padding: 1px 5px;
 }
 
+/*
+ * The inverse of `.blocked`, and quieter than it on purpose.
+ *
+ * It took the accent, which The App Voice Rule does not allow: how many records
+ * a card holds up is a property of that card — derived, but a property — where
+ * the accent is live state and the app speaking. Being stuck is worth a colour
+ * because it stops the work; being *needed* is worth a number.
+ *
+ * `ink-2` rather than the meta row's own `ink-3`, so the pair still reads as a
+ * pair: red for the one that blocks you, a step brighter than annotation for the
+ * one you unblock.
+ */
 .unblocks {
-  color: var(--accent);
+  color: var(--ink-2);
   cursor: help;
 }
 
@@ -1846,24 +1913,6 @@ code {
   opacity: 0.7;
 }
 
-.proj {
-  font-size: var(--text-body);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.proj details {
-  margin-top: 6px;
-}
-
-.proj summary {
-  cursor: pointer;
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: var(--text-xs);
-}
-
 .instructions {
   font-family: var(--mono);
   font-size: var(--text-xs);
@@ -1877,10 +1926,13 @@ code {
   margin: 8px 0 0;
 }
 
+/* The kind, spelled out. Its colour comes from `linkHue` in `CardBody.tsx`, the
+   same map the face's letters read, so `jira` here and `J` there are one fact in
+   one family. This is the resting colour for a kind that names none. */
 .linkkind {
   font-family: var(--mono);
   font-size: var(--text-label);
-  color: var(--accent);
+  color: var(--ink-2);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   min-width: 62px;
@@ -2598,11 +2650,27 @@ textarea { resize: vertical; font-family: inherit; }
 
 .refchip:hover { border-color: var(--rule-2); }
 
+/* The app's own axis, in the panel's container. The box stays the panel's — a
+   reference here is a go and an unlink — and only the colour is the axis's, which
+   is exactly how a label value works across these two surfaces: a tinted chip on
+   a face, a bordered toggle in here, one family. Without this the same project
+   read `accent` on a board and `ink-2` in the editor, which is the disagreement
+   `.facet-ref` was added to end. */
+.refchip.is-app {
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--accent-soft);
+}
+
+.refchip.is-app .refchip-go { color: var(--accent); }
+.refchip.is-app:hover { border-color: var(--accent); }
+
 /* Hueless on purpose. A vault has several reference axes, and One Hue Per Axis
    means a family serves exactly one — so a shared chip colour across all of them
    would say one axis's name about every other.
-   What a reference *is* is carried by the record mark and the title, which is
-   the same grammar a card face and a table row use.
+   What a reference *is* is carried by the record mark and the title, not by a
+   colour. This register is `.facet-ref`'s too now, which is what a card face and
+   a table row draw a reference in — the sentence that used to be here claimed
+   they already did, while a face was drawing a hued chip.
 
    `align-items: baseline` and no font-size of its own, because that is what the
    mark's optical constants assume: `.recordmark` already sets `0.8em`, and a
@@ -2792,9 +2860,12 @@ textarea { resize: vertical; font-family: inherit; }
 .picker-item:hover { background: var(--surface-2); color: var(--ink); }
 .picker-item.is-clear { color: var(--ink-3); font-style: italic; }
 .picker-title { flex: 1; }
-/* The project axis's own hue. The accent marks live state and the app
-   speaking, never a property of a record. */
-.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--hue-purple); flex: none; max-width: 40%; }
+/* The app's own axis draws in the app's colour — `.facet-app`'s rule, in the one
+   place a project is text rather than a chip. It said `hue-purple` and gave the
+   reason as "never the accent for a property of a record", which was the right
+   rule read one axis too widely: `project` is the axis the *app* defines, and it
+   was not purple's to begin with — `BUILTIN_FACETS` declared `blue`. */
+.picker-proj { font-family: var(--mono); font-size: var(--text-label); color: var(--accent); flex: none; max-width: 40%; }
 /* 7px matches `.picker-item`'s inset, so the message starts where a row does. */
 .picker-empty { padding: 6px 7px; }
 

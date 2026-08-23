@@ -25,7 +25,7 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * pushing it off the rail.
  */
 export const BUILTIN_FACETS: Facets = {
-  project: { label: 'Project', type: 'ref', values: [], open: true, single: false, hue: 'blue' },
+  project: { label: 'Project', type: 'ref', values: [], open: true, single: false, builtin: true },
 };
 
 /**
@@ -34,10 +34,16 @@ export const BUILTIN_FACETS: Facets = {
  *
  * The reason `project` is built in at all is that its *shape* must hold: the
  * config chain walks it as a relation, so retyping it to `label` would strand
- * inheritance with nothing to say so. None of that is true of what it is called,
- * what colour it draws in, or whether a card is expected to carry one — those
- * are a vault's business, and a vault that could not say them would be stuck
- * with a permanently grey axis and no way to ask for `needs-project`.
+ * inheritance with nothing to say so. None of that is true of what it is called
+ * or whether a card is expected to carry one — those are a vault's business.
+ *
+ * It declares no `hue`, and that is the point rather than an omission: `builtin`
+ * is what the client reads, and the app's own axis draws in the app's own colour.
+ * It used to ask for `blue`, which put the one axis every vault shares in a family
+ * a vault's own axis could also claim — and the two places that drew a project
+ * value had picked *purple* anyway, neither of them from this declaration. A vault
+ * may still set `hue`, and on a reference axis that colours its canvas edge; see
+ * `src/web/hue.ts`, which is the one place any of this is decided.
  *
  * So a declaration of a built-in is allowed and merges *under* this list.
  * `pj check` errors only when one of these keys is the thing being set.

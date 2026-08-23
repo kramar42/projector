@@ -4,9 +4,12 @@ import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { loadFacets } from '../src/schema/facets.ts';
+import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 import { SEED_FACETS } from '../src/server/seed.ts';
 import { HUES } from '../src/schema/vocabulary.ts';
+import { chipClass } from '../src/web/hue.ts';
+import { LINK_KINDS, linkHue } from '../src/web/links.ts';
+import type { FacetDef } from '../src/schema/types.ts';
 
 /** The seeded vocabulary, on disk, so the real loader parses it. */
 function seededFacetsFile(): string {
@@ -348,6 +351,71 @@ test('every hue a vocabulary names is a family the stylesheet defines', () => {
   // `overdue` borrowing red from `blocked_by` says the right thing.
   const shared = [...claimed].filter(([, names]) => names.length > 1);
   assert.deepEqual(shared, [], `a hue family serving two axes: ${shared.map(([h, n]) => `${h} <- ${n.join(', ')}`).join('; ')}`);
+});
+
+/**
+ * Every register the client can ask for is a register the stylesheet draws.
+ *
+ * The hue-family test above covers one of the four — a `hue:` naming a family
+ * with no rule behind it. The other three arrive as class names built in
+ * `src/web/hue.ts` rather than as a vault's declaration, so they are invisible to
+ * that test *and* to "every className resolves to a rule", which only reads
+ * literal `className` strings. `.facet-app` and `.facet-ref` were both added
+ * without one, and a missing register does not fail: it renders as an unstyled
+ * chip, which is a transparent box with body text in it.
+ */
+test('every chip register the client can ask for has a rule', () => {
+  const rule = new Set<string>();
+  for (const m of CODE.matchAll(/([^{}]*)\{/g)) {
+    for (const c of m[1]!.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) rule.add(c[1]!);
+  }
+
+  const axis = (d: Partial<FacetDef>): FacetDef =>
+    ({ label: 'x', type: 'label', values: [], open: true, single: false, ...d }) as FacetDef;
+
+  const asked = new Set(
+    [
+      chipClass(undefined),
+      chipClass(axis({ type: 'ref' })),
+      ...Object.values(BUILTIN_FACETS).map((d) => chipClass(d)),
+      ...[...HUES].map((h) => chipClass(axis({ hue: h }))),
+      ...[...HUES].map((h) =>
+        chipClass(axis({ type: 'date', buckets: [{ name: 'b', upTo: 0, hue: h }] }), 'b'),
+      ),
+    ].flatMap((c) => c.split(' ')),
+  );
+
+  const orphans = [...asked].filter((c) => !rule.has(c));
+  assert.deepEqual(orphans, [], `a register with no rule behind it: ${orphans.join(', ')}`);
+  assert.ok(asked.has('facet-app') && asked.has('facet-ref'), 'both new registers are reachable');
+});
+
+/**
+ * Every link kind names a family the palette has, and stays off the two that are
+ * spoken for.
+ *
+ * `linkHue` builds `var(--hue-<name>)` from the vocabulary, so a typo is not an
+ * error: it is a prefix that quietly inherits the chip's own colour and looks
+ * like a kind that chose not to have one. The reservations are the interesting
+ * half — **red** is a failure here, which `.linkchip.is-failed` needs to stay
+ * readable as, and **purple** is the accent, which this map was rewritten to stop
+ * spending.
+ */
+test('every link kind draws in a family the palette defines', () => {
+  const claimed = Object.entries(LINK_KINDS).filter(([, k]) => k.hue);
+  assert.ok(claimed.length >= 5, 'the kinds should be telling themselves apart by colour');
+
+  for (const [kind, { hue }] of claimed) {
+    assert.ok(HUES.includes(hue!), `link kind "${kind}" asks for hue "${hue}", which is not a family`);
+    assert.ok(hue !== 'red' && hue !== 'purple', `link kind "${kind}" takes a reserved family`);
+    assert.equal(linkHue(kind)?.color, `var(--hue-${hue})`);
+  }
+
+  // A kind with no family falls to the rule's own colour, which must not be the
+  // accent — that is the thing being spent less of.
+  assert.equal(linkHue('url'), undefined, 'the unknown-host kind names no family');
+  const b = rules().find((r) => r.sel === '.linkchip b');
+  assert.ok(b && !/var\(--accent\)/.test(b.body), 'the prefix no longer rests on the accent');
 });
 
 /**

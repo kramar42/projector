@@ -172,8 +172,23 @@ export interface FacetDef {
    *
    * Absent means no hue: the chip recedes, which is right for a hint like
    * `source` and is what any undeclared axis gets.
+   *
+   * On a **reference** axis this is a *line* colour and not a chip colour: its
+   * values draw as records rather than as values, so the family reaches the
+   * canvas edge and nothing else. `src/web/hue.ts` is where that is decided.
    */
   hue?: string;
+  /**
+   * The app defined this axis, not the vault — `BUILTIN_FACETS` in
+   * `schema/facets.ts`, which today means `project` alone.
+   *
+   * It exists so the client can say "the app's own axis" without naming a facet,
+   * which is the rule the UI keeps everywhere else (C4). What it buys: the axis
+   * the app itself owns draws in the app's own colour, where a vault's axes draw
+   * in the families the vault claims. Being derivable from the *name* is not the
+   * same as being derivable — the name is exactly what the client must not know.
+   */
+  builtin?: true;
   /**
    * What the *other end* of this relation is called, if it has a name worth
    * drawing.

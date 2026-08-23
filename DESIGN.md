@@ -245,10 +245,23 @@ where saturation is reserved for notation and every neutral is a literal step in
 ### Primary
 
 - **Type Purple** (`accent`): the app's one voice. Focus rings, the selected card's ring, the drop
-  target, the active filter head, the focus pill, badge counts, a link's kind prefix, the primary
-  button, and the Record Mark — the one thing in this list that is not live state, and it is here
-  because a mark is *derived*: nothing writes it, so it is the app talking about a record rather than
-  a value the record carries. See the Don't list. In light mode the accent is the family's dark shade so it reads as ink; in dark it is the
+  target, the active filter head, the focus pill, badge counts, a panel link's clickable label, the
+  primary button, and the Record Mark — the one thing in this list that is not live state, and it is
+  here because a mark is *derived*: nothing writes it, so it is the app talking about a record rather
+  than a value the record carries. See the Don't list.
+
+  This list is meant to stay short, and it has been pruned three times on that ground: a link kind's
+  prefix took it for all eight kinds and now takes its kind's family, `unblocks` took it for a count
+  that is a property of a record, and a project's left border took it before both. A voice used
+  everywhere is not a voice.
+
+  It gained one in exchange, and only one: **the app's own axis**. `project` is `BUILTIN_FACETS`'
+  rather than a vault's — the config chain walks it, its shape cannot be redeclared — so it draws in
+  the app's colour where a vault's axes draw in the families a vault claims. That is `.facet-app` on
+  a face, in a table and in the bulk bar, `.refchip.is-app` in the panel, `.picker-proj` in the
+  record picker, and the accent for its canvas edges. It used to declare `blue` and be drawn in
+  *purple* by the two surfaces that drew it at all, neither of them from the declaration. In light mode the accent is the family's
+  dark shade so it reads as ink; in dark it is the
   light shade so it reads as light. The unsaved-view mark is the one live-state signal that is not the
   accent: `.rail-dirty` takes `warn`, as the Semantic list below says.
 - **Accent Soft** (`accent-soft`): the accent's only fill — the drop-target column wash, the bulk
@@ -257,9 +270,10 @@ where saturation is reserved for notation and every neutral is a literal step in
 
 ### Secondary
 
-A canvas edge has no palette of its own. It draws in the leading relation's `hue` — the same family its
-chips use — so the graph says which relation it draws without a legend and without a second set of
-colours to keep in step. There were three, `rel-parent`, `rel-blocks` and `rel-project`, keyed by facet
+A canvas edge has no palette of its own. It draws in the leading relation's `hue` — the family the
+relation itself declares — so the graph says which relation it draws without a legend and without a
+second set of colours to keep in step. It is now the *only* place a reference axis's family shows: the
+values draw as records, in `facet-ref`, so the line is coloured and the chip at either end is not. There were three, `rel-parent`, `rel-blocks` and `rel-project`, keyed by facet
 name; a renamed relation silently lost its colour, and the same axis could be one colour as a chip and
 another as a line.
 
@@ -271,16 +285,41 @@ the arrangement, so any other line is one you cannot. The words are the facet's 
 ### Tertiary
 
 The facet families. Each is one xoria hue in two roles: the `hue-*` value is the chip's *text*, the
-`hue-*-bg` value is its *fill*.
+`hue-*-bg` value is its *fill*. Which axis takes which is the vault's to say — `facets.yaml` declares
+a `hue:` and the app names no facet — so this is what the **seeded** vocabulary claims, and the shape
+of a sensible claim rather than a fixed table:
 
-- **Number Orange** (`hue-orange`): `priority` — what you intend to do next.
 - **PreProc Green** (`hue-green`): `status` — lifecycle, and nothing else.
-- **Type Purple** (`hue-purple`): `project` — membership.
-- **Statement Blue** (`hue-blue`): `tech`.
-- **Identifier Pink** (`hue-pink`): `layer`. The one family that also carries weight 600, because a
-  layer is a coarser cut than the rest.
-- **Special Red** (`hue-red`): `waiting_on` — the only facet whose presence is itself a warning.
-- **Constant Yellow** (`hue-yellow`): `domain`.
+- **Number Orange** (`hue-orange`): `priority` — what you intend to do next.
+- **Constant Yellow** (`hue-yellow`): `waiting_on` — somebody else's move, and the `today` bucket of
+  `due`.
+- **Identifier Pink** (`hue-pink`): `tech`.
+- **Special Red** (`hue-red`): `blocked_by`, and the `overdue` bucket — the two states that are
+  themselves a warning.
+- **Type Purple** (`hue-purple`): `parent`.
+- **Statement Blue** (`hue-blue`): claimed by no axis, and the family the `jira` link kind draws in.
+
+Two of those are **reference** axes, and their family reaches one place only: the canvas edge. Their
+values draw in `facet-ref` like every other reference — see Chips — so purple and red on that list
+are a *relation's* colour, not a chip's.
+
+`project` is deliberately absent: it is the app's axis rather than the vault's, so it draws in the
+accent and claims no family. It used to declare `blue`, which put the one axis every vault shares in
+a family a vault's own axis could also ask for.
+
+### The Link Kind Vocabulary
+
+Eight link kinds, and each draws its prefix in one family: `jira` blue, the three `gh:` kinds green,
+`claude` orange, `doc` yellow, `slack` pink, and `url` none. It is one map in `src/web/links.ts` —
+`LINK_KINDS`, the letters and the family together — read by the face's `J` and by the panel's
+spelled-out `jira`, so one kind cannot be two colours in two registers. `theme.test.ts` holds the seam
+shut: every kind's family has to be one the palette defines, and neither of the two reserved ones.
+
+This borrows families the axes claim, and does not break The One Hue Per Axis Rule: a link kind is not
+an axis, and it colours two or three mono characters, never a fill. Red stays out because it means a
+failure here and `.linkchip.is-failed` is a state a prefix has to survive; purple stays out because it
+is the accent. The three `gh:` kinds share green because they share a host, and `PR` / `br` / `sha`
+separate them already — seven families do not survive spending three on one host.
 
 ### Neutral
 
@@ -313,6 +352,12 @@ exactly one axis. Adding a facet means claiming a family, not picking a colour y
 one family destroys the property the whole palette exists for: that a chip's colour is legible before
 its text is.
 
+A **link kind** is not an axis and does not claim: the eight kinds borrow families to colour two or
+three mono characters, never a fill — see The Link Kind Vocabulary. A **reference** axis claims one
+and spends it on its canvas edge alone, because its values draw as records rather than as values. The
+**app's own axis** claims none at all: `project` draws in the accent, which no family may take and no
+vault axis may ask for.
+
 It is a rule the *seeded vault* keeps and the app cannot enforce, which is the honest position now that
 `hue:` is a vault's choice: there are seven families and a vault may have twenty axes, so anything past
 seven recedes, and a vault deliberately colouring two related axes alike is its own business. What the
@@ -333,6 +378,17 @@ needs no help. Any new tinted surface goes through `--chip-tint`, not a hand-pic
 target, an active filter, a count the app computed — with the unsaved view as the one exception, which
 takes `warn`. It never marks data structure.
 A property of a record is drawn in that facet's own hue.
+
+Two things sit inside "the app speaking" rather than beside it, and both are load-bearing:
+
+- **The Record Mark.** Derived, never written — `markOf` reads it off what names the record — so the
+  glyph is the app's reading of a record rather than a value the record carries.
+- **The app's own axis.** `project` is defined by `BUILTIN_FACETS`, not by a vault, so its colour is
+  the app's to spend. Every *vault* axis draws in a family it claims, and a vault cannot ask for the
+  accent.
+
+Anything else that is a property of a record and reaches for the accent is the rule being broken, and
+three did: the project card's left border, every link kind's prefix, and the `unblocks` count.
 
 ## Typography
 
@@ -578,6 +634,19 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   `-red`, `-yellow` — plus `facet-muted` for an axis that declares none. Which axis takes which is
   `facets.yaml`'s to say; the chip looks it up through `useHue`. It was one class per facet *name*,
   which is what made a vault's own vocabulary permanently grey.
+- **The app's axis:** `facet-app` — `accent` text on the `accent-soft` fill, with the border at 32%
+  like purple's, which is the family pair the accent would have if it were one. Only `builtin` axes
+  reach it, which today means `project` and nothing else. Not tinted through `--chip-tint`:
+  `accent-soft` *is* the diluted shade already (it is `hue-purple-bg` exactly, in dark), and tinting
+  a tint is how a chip turns into its own background.
+- **Reference:** `facet-ref`, and it outranks a declared family. A reference value is not a value, it is
+  another record, so it draws in the panel's `.refchip` register wherever it appears — `surface-2`
+  box, `rule` edge, `ink-2` text, no family. A card face and a table row used to draw one as a hued
+  chip, so the same record read as a purple `parent` pill on a board and as plain text in the editor.
+  `ink-2` rather than `facet-muted`'s `ink-3` is the whole difference between the two rules: a hint
+  recedes, a record does not. A reference axis's own `hue:` is not dead — the canvas draws its
+  **edges** in it, which is the one place the relation is what is being coloured rather than the
+  record at the end of it.
 - **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket, and a
   bucket that declares its own `hue` wins — drawn **filled** rather than tinted, because that is the
   point of declaring one: `overdue` loud on an axis that is otherwise quiet. A filled chip takes
@@ -596,8 +665,10 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   chip's className loses the cascade and changes nothing. The rail is not a home: its filter value is a
   drawn checkbox, and this document said "the filter panel and bulk bar" for a while after that
   stopped being true.
-- **Link chip:** mono 10px, hairline `rule` border, `ink-3` text, with the link kind as a 9px `accent`
-  bold prefix and the label ellipsised at 130px.
+- **Link chip:** mono 10px, hairline `rule` border, `ink-3` text, with the link kind as a 9px bold
+  prefix in **that kind's own family** and the label ellipsised at 130px. See The Link Kind
+  Vocabulary — the prefix was `accent` for every kind, which spent the app's one voice on eight
+  things that are not the app speaking and said nothing the letters did not.
 
 ### Cards / Containers
 
@@ -846,7 +917,7 @@ border and the same hover, and they are not one component.
 They differ five documented ways: the radius pair is prescribed by name in Shapes (`3px` on a
 chip, `5px` on a reference row); the type step differs, which rescales the record mark's own
 `0.8em` from 10px to 9.6px — the compounding failure the mark's own comment warns about; only the
-inbound form carries the 3px left-edge state border, which is two of the four meanings The
+inbound form carries the 3px left-edge state border, which is two of the three meanings The
 Load-Bearing Left Border Rule permits; the DOM differs, one `<button>` against a span holding a
 go-button and an unlink, which was a deliberate fix for one gesture doing two things; and
 `.refchip-title` must ellipsise at 26ch because it wraps inside the panel while an inbound row
@@ -959,10 +1030,12 @@ the rail's own search, which is the field the rationale was written for.
 ### The project that is named but not chipped
 
 A record's project is a chip everywhere you meet it — a card face, a canvas node, a table cell —
-and bare text in the record picker: `.picker-proj` is mono `--text-label` in `hue-purple`, with no
-fill, no border, no radius and no padding.
+and bare text in the record picker: `.picker-proj` is mono `--text-label` in `accent`, with no
+fill, no border, no radius and no padding. (It said `hue-purple` until the built-in axis got a colour
+of its own, and gave the reason as "never the accent for a property of a record" — the right rule read
+one axis too widely, on an axis that was declaring `blue` at the time.)
 
-It keeps the axis's hue, which is the part that carries meaning, and drops the chip because the
+It keeps the axis's colour, which is the part that carries meaning, and drops the chip because the
 container is the case The Dilution Rule was written for: *"full strength is fine on one chip and
 loud on eight stacked down a column"*, which is why the light theme already mixes the fill to 42%.
 A picker lists every record in the vault — thirteen project labels on the fixture, and 27 rows —
@@ -973,9 +1046,9 @@ would be the third thing on it asking to be read first.
 Measured side by side in one viewport: 13 bare labels in the popover against 14 filled chips on
 the faces behind it.
 
-To change it: give `.picker-proj` the `.chip.facet-project` treatment and check the popover in
-both themes at full list length — the light theme is the harder of the two, since its fill is a
-saturated pastel diluted toward the surface rather than a dark shade.
+To change it: give `.picker-proj` the `.chip.facet-app` treatment and check the popover in
+both themes at full list length — the light theme is the harder of the two, since `accent-soft` there
+is a near-white wash rather than a dark shade, so a filled chip is nearly all border.
 
 ### The vault glyph in the folder browser
 

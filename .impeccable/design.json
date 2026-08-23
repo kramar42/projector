@@ -654,7 +654,7 @@
       "name": "Link Chip",
       "kind": "chip",
       "refersTo": "chip-muted",
-      "description": "A typed link renders as its parsed label with the kind as a 9px accent prefix. Enrichment replaces the label if and when it arrives; nothing waits on it.",
+      "description": "A typed link renders as its parsed label with the kind as a 9px prefix in that kind’s own family. Enrichment replaces the label if and when it arrives; nothing waits on it.",
       "html": "<span class=\"ds-link\"><b>JIRA</b><span class=\"ds-link-label\">PROJ-303 Realm migration</span></span> <span class=\"ds-link\"><b>GH:PR</b><span class=\"ds-link-label\">Acme/platform#412</span></span>",
       "css": ".ds-link { display: inline-flex; align-items: center; gap: 4px; font-family: ui-monospace, \"SF Mono\", Menlo, monospace; font-size: 10px; border: 1px solid var(--rule, #262626); border-radius: 3px; padding: 1px 5px; color: var(--ink-3, #999999); max-width: 100%; } .ds-link b { color: var(--accent, #a6a6e7); font-weight: 600; font-size: 9px; letter-spacing: 0.04em; } .ds-link-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }"
     }
@@ -676,7 +676,7 @@
       {
         "name": "The One Hue Per Axis Rule",
         "section": "colors",
-        "body": "A facet axis owns exactly one hue family, and a hue family serves exactly one axis. Adding a facet means claiming a family, not picking a colour you like. Two axes in one family destroys the property the whole palette exists for: that a chip's colour is legible before its text is."
+        "body": "A facet axis owns exactly one hue family, and a hue family serves exactly one axis. Adding a facet means claiming a family, not picking a colour you like. Two axes in one family destroys the property the whole palette exists for: that a chip's colour is legible before its text is. A link kind is not an axis and claims nothing: the eight kinds borrow families to colour two or three mono characters, never a fill. A reference axis claims one and spends it on its canvas edge alone, since its values draw as records. The app's own axis, project, claims none — it draws in the accent."
       },
       {
         "name": "The Hints Are Hueless Rule",
@@ -691,7 +691,7 @@
       {
         "name": "The App Voice Rule",
         "section": "colors",
-        "body": "The accent marks live state and the app speaking — focus, selection, a drop target, an active filter, an unsaved view, a count the app computed. It never marks data structure. A property of a record is drawn in that facet’s own hue."
+        "body": "The accent marks live state and the app speaking — focus, selection, a drop target, an active filter, an unsaved view, a count the app computed. It never marks data structure. A property of a record is drawn in that facet’s own hue. Two things sit inside “the app speaking” rather than beside it: the record mark, which is derived and never written, and the built-in project axis, which the app defines rather than the vault."
       },
       {
         "name": "The Mono Label Rule",

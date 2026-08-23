@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { chipClass } from './hue.ts';
 import type { Facets } from './types.ts';
 
 /**
@@ -27,20 +28,14 @@ export function useVocabulary(): Facets {
 }
 
 /**
- * The class a value draws in: the bucket's hue if it declares one, else the
- * axis's, else none.
+ * The class a value draws in, for a component that has a facet's *name* and not
+ * its definition.
  *
- * A bucket wins because that is the point of declaring one — `overdue` is loud on
- * an axis that is otherwise quiet — and `hue: none` on a bucket is how a vault
- * says "this one recedes" against a hued axis.
+ * The decision itself is `hue.ts`'s — four registers, one place, shared with the
+ * canvas edge — so this is a lookup and nothing more. It used to hold the rules,
+ * which is how the edge and the chip came to disagree about what an undeclared
+ * axis and a reference mean.
  */
 export function useHue(facet: string, bucket?: string): string {
-  const facets = useContext(VocabularyContext);
-  const def = facets[facet];
-  const fromBucket = bucket ? def?.buckets?.find((b) => b.name === bucket)?.hue : undefined;
-  const hue = fromBucket ?? def?.hue;
-  if (!hue || hue === 'none') return 'facet-muted';
-  // A bucket that asked for its own hue is making a point, so it draws filled
-  // rather than tinted. An axis-wide hue is identity, not emphasis.
-  return `facet-hue-${hue}${fromBucket ? ' is-filled' : ''}`;
+  return chipClass(useContext(VocabularyContext)[facet], bucket);
 }

@@ -1,6 +1,7 @@
 import { useEnrichment } from '../enrichment.tsx';
 import { plural } from '../plural.ts';
 import { useHue } from '../vocabulary.tsx';
+import { LINK_KINDS, linkHue } from '../links.ts';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -22,17 +23,6 @@ import type { CardDTO } from '../types.ts';
  * exact drift that would let the same axis be orange on a card face and green in
  * the editor, and the axis is the only thing either of them knows.
  */
-
-const LINK_GLYPH: Record<string, string> = {
-  jira: 'J',
-  'gh:pr': 'PR',
-  'gh:branch': 'br',
-  'gh:commit': 'sha',
-  claude: 'AI',
-  doc: 'doc',
-  slack: 'sl',
-  url: '↗',
-};
 
 /**
  * One facet value on a face.
@@ -87,7 +77,7 @@ function LinkChip({ kind, linkRef, label }: { kind: string; linkRef: string; lab
 
   return (
     <span className={`linkchip ${state}`} title={tip}>
-      <b>{LINK_GLYPH[kind] ?? '?'}</b>
+      <b style={linkHue(kind)}>{LINK_KINDS[kind]?.glyph ?? '?'}</b>
       <span className="truncate linkchip-label">{shown}</span>
       {d?.badges?.slice(0, 1).map((b) => (
         <em key={b.label} className={`tone-${b.tone}`}>

@@ -36,6 +36,7 @@ import { Button } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { CommitInput } from '../components/CommitInput.tsx';
+import { edgeColour } from '../hue.ts';
 
 /**
  * A canvas node hosts the same `<CardBody>` every other shape renders. That is
@@ -106,8 +107,10 @@ function buildEdges(
   layout: string | null,
 ): Edge[] {
   return edgesFor(raw, facets).map(({ src, dst, types, lead }) => {
-    const hue = facets[lead]?.hue;
-    const colour = hue && hue !== 'none' ? `var(--hue-${hue})` : 'var(--ink-3)';
+    // Through `hue.ts`, which is also what a chip asks — so a relation's line and
+    // its axis's values cannot disagree about the family, and the app's own axis
+    // draws its edges in the accent rather than falling to grey.
+    const colour = edgeColour(facets[lead]);
     const named = types.filter((t) => t !== layout);
     return {
       id: `${types.join('+')}:${src}->${dst}`,
@@ -154,6 +157,9 @@ export function CanvasView({
   onSaved: (name: string) => void;
 }) {
   const [nodes, setNodes] = useState<Node[]>([]);
+  // Which built array `nodes` was seeded from. State and not a ref: a render that
+  // React throws away must not leave behind the record that it happened.
+  const [seed, setSeed] = useState<Node[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // The vault's first relation, not a name written here — a vault that has no
   // `parent` used to open this control on a relation it does not have.
@@ -243,10 +249,30 @@ export function CanvasView({
     return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, meta.facets, data.layout) };
   }, [data, onOpen]);
 
-  useEffect(() => {
-    setNodes(built.nodes);
+  /**
+   * The built nodes, seeded into state so that a drag has somewhere to move them.
+   *
+   * Done while rendering rather than in an effect, which is React's own answer to
+   * "adjust state when the input changes" and here is the difference between a new
+   * query arriving in one paint and arriving in two. `edges` below is handed to
+   * React Flow straight out of `built`, so the commit that paints the new edges
+   * against the previous render's nodes draws every line to a record that is not
+   * on the canvas yet — and an effect runs *after* that paint, which makes that
+   * frame one you would see.
+   *
+   * The selection is applied here for the same reason: the effect below owns the
+   * URL→nodes direction, and left to it alone the ring would drop off every
+   * selected node for a frame whenever the query changed.
+   */
+  if (seed !== built.nodes) {
+    setSeed(built.nodes);
+    setNodes(
+      built.nodes.map((n) =>
+        n.type === 'record' ? { ...n, selected: selection.ids.has(n.id) } : n,
+      ),
+    );
     setDirty(false);
-  }, [built.nodes]);
+  }
 
   /**
    * Node changes, with `select` teed off to the URL.

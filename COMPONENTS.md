@@ -170,8 +170,8 @@ a hoisted tabular rule can be silently undone by a rule further down the file.
 
 ### The Record Reference Rule
 
-**A record carries its mark wherever you meet it, and the mark's size resolves against the type it
-precedes.**
+**A record carries its mark wherever you meet it, the mark's size resolves against the type it
+precedes, and a reference to it is drawn as a record rather than as a value.**
 
 The picker row now carries the real `RecordMark` rather than a bare span holding `markOf(r).glyph`
 — the size had coincided, but it carried neither the per-glyph optical nudge nor the `means` string,
@@ -184,6 +184,21 @@ out at 11.2px beside 13px text — a ratio of 0.862. Since the nudge is
 `centre(glyph) × markSize − 0.254 × textSize`, that under-corrected by 0.255px. The head now names
 its own step and the ratio is 0.8 exactly. Sub-pixel and invisible — but a measurement applied
 against the wrong size is not a measurement.
+
+The third clause is the same rule reaching colour. A reference facet's value was a *value* on two
+surfaces and a *record* on a third: a card face and a table cell drew `parent` as a purple chip and
+`project` as a blue-declared-but-purple-drawn one, while the panel drew both as `.refchip` — a neutral
+box holding a mark and a title, with a comment claiming a face already did the same. `src/web/hue.ts`
+is now the one place that decides, and it answers for the chip *and* for the canvas edge, which were
+two implementations with two different ideas of what an undeclared axis meant. Four registers: the
+app's own axis (`project`, the accent), a reference (neutral), a declared family, and hueless. What a
+reference axis's `hue:` still colours is its edge — the line, where the relation is the subject rather
+than the record at the end of it.
+
+`theme.test.ts` holds both seams shut now: every register the client can ask for has a rule behind it,
+and every link kind names a family the palette defines. Neither was checked before, and both are the
+kind of miss that renders as *almost* right — an unstyled chip is a transparent box with body text in
+it, and a mistyped hue is a prefix that quietly inherits its container's colour.
 
 **Finished since:** `.reflink` (the panel's inbound lists) and the focus pill drew a record with no
 mark at all, and the reason looked structural — `blockedBy` and `children` shipped as

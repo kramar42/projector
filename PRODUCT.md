@@ -133,12 +133,18 @@ count written here.
 - **`projector`**, lowercase. The CLI is `pj`.
 - **xoria256** (Dmitriy Zotikov's pastel Vim scheme, via `estilo-xoria256`) is the committed palette —
   dark-first, light derived, following the system setting. **One hue family per facet axis** — the app
-  owns the seven families, the vault picks which axis takes which — so a
-  chip's colour says which axis it is before you read it, and a canvas edge is the same colour as its
-  chips. In the seeded vault: status green, priority orange, `blocked_by` red, `waiting_on` yellow,
-  parent purple, project blue, tech pink. Every hue in `src/web/style.css` comes from the palette file,
-  with the departure DESIGN.md documents where it occurs: the `--chip-tint` fills, which dilute a hue
-  toward the surface.
+  owns the seven families, the vault picks which axis takes which — so a chip's colour says which axis
+  it is before you read it. In the seeded vault: status green, priority orange, `waiting_on` yellow,
+  tech pink, `blocked_by` red, `parent` purple. Every hue in `src/web/style.css` comes from the palette
+  file, with the departure DESIGN.md documents where it occurs: the `--chip-tint` fills, which dilute a
+  hue toward the surface.
+- **Three things are drawn by what they are rather than by an axis**, and `src/web/hue.ts` is the one
+  place that decides: a **reference** value draws as a record — the neutral register, no family,
+  because it is another card and not a value — with its axis's family reaching its canvas edge alone;
+  the **built-in `project` axis** draws in the accent, since it is the app's axis rather than the
+  vault's; and a **link kind** draws its two-letter prefix in a family of its own (`jira` blue, `gh:`
+  green, `claude` orange, `doc` yellow, `slack` pink) so a card's links tell themselves apart before
+  you read them.
 - **The record marks are vocabulary, not decoration:** `•` a card, `○` a record something else
   names, `▣` a project, plus a
   count of how many records name it through any reference facet.

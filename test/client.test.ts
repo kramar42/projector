@@ -4,6 +4,9 @@ import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { blankQuery } from '../src/view/intents.ts';
 import { specFromFile } from '../src/view/spec.ts';
+import { BUILTIN_FACETS } from '../src/schema/facets.ts';
+import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
+import type { FacetDef } from '../src/schema/types.ts';
 import {
   apiSearch,
   paramsOf,
@@ -254,4 +257,51 @@ test('only query parameters reach the server, and the rest survive a patch', () 
   assert.equal(patchSearch('?f.status=planning&card=x', { 'f.status': null }), '?card=x');
   assert.equal(patchSearch('?card=x', { 'f.status': '' }), '?card=x&f.status=');
   assert.equal(patchSearch('?f.status=planning', { 'f.status': 'active' }), '?f.status=active');
+});
+
+// ---------------------------------------------------------------- colour
+
+/** A definition with only the keys a register decision reads. */
+const axis = (d: Partial<FacetDef>): FacetDef =>
+  ({ label: 'x', type: 'label', values: [], open: true, single: false, ...d }) as FacetDef;
+
+/**
+ * Which colour an axis draws in, decided once for every surface.
+ *
+ * The bug this replaces was two implementations: a chip class built in
+ * `vocabulary.tsx` and an edge colour built in `CanvasView`, each with its own
+ * idea of what a reference and an undeclared axis meant. That is how the same
+ * record came to read as a purple `parent` chip on a board and as plain text in
+ * the editor, and how the built-in axis was drawn in purple by the record picker
+ * while declaring `blue` in its own definition.
+ */
+test("a reference draws as a record, and the app's own axis in the app's colour", () => {
+  // A label axis: its family, and a bucket that declares one wins and fills.
+  assert.equal(chipClass(axis({ hue: 'green' })), 'facet-hue-green');
+  assert.equal(
+    chipClass(axis({ type: 'date', buckets: [{ name: 'overdue', upTo: -1, hue: 'red' }] }), 'overdue'),
+    'facet-hue-red is-filled',
+  );
+  // No hue: the chip recedes. The Hints Are Hueless Rule.
+  assert.equal(chipClass(axis({})), 'facet-muted');
+  assert.equal(chipClass(undefined), 'facet-muted', 'an axis the vocabulary does not have');
+
+  // A reference draws as a record however it is declared — a `hue:` on one is a
+  // line colour, which is the assertion below about the edge.
+  assert.equal(chipClass(axis({ type: 'ref' })), 'facet-ref');
+  assert.equal(chipClass(axis({ type: 'ref', hue: 'purple' })), 'facet-ref');
+
+  // The app's own axis, and the only one allowed the accent.
+  assert.equal(chipClass(BUILTIN_FACETS.project), 'facet-app');
+  assert.equal(registerOf(BUILTIN_FACETS.project).kind, 'app');
+  assert.equal(
+    Object.values(BUILTIN_FACETS).filter((d) => d.builtin).length,
+    Object.keys(BUILTIN_FACETS).length,
+    'every built-in is marked as one, or the client cannot tell without naming it',
+  );
+
+  // The edge is the one place a reference's declared family is drawn.
+  assert.equal(edgeColour(axis({ type: 'ref', hue: 'purple' })), 'var(--hue-purple)');
+  assert.equal(edgeColour(BUILTIN_FACETS.project), 'var(--accent)', "no hue declared, so the app's");
+  assert.equal(edgeColour(axis({ type: 'ref' })), 'var(--ink-3)');
 });

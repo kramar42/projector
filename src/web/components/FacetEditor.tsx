@@ -6,6 +6,7 @@ import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
 import { RecordMark } from './CardBody.tsx';
 import { useHue } from '../vocabulary.tsx';
+import { isAppAxis } from '../hue.ts';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -95,6 +96,16 @@ export function FacetEditor({
   // a hint axis and for anything the map does not name, exactly as a card face
   // resolves it — one map, so the two cannot disagree.
   const tone = useHue(name);
+  /**
+   * The app's own axis, which is the one allowed to draw in the accent.
+   *
+   * Off the definition rather than off the name: `builtin` is what says so, and
+   * a client that knows a facet by name is the thing C4 rules out. The container
+   * stays the panel's — a `.refchip` is a box with a go and an unlink — and only
+   * the colour comes from the axis, which is the same division a label value
+   * follows between a tinted face chip and a bordered toggle here.
+   */
+  const app = isAppAxis(def);
 
   const body = () => {
     if (def.type === 'ref') {
@@ -105,7 +116,7 @@ export function FacetEditor({
             // click that goes there. Removing is its own mark — the row used
             // to remove on click and say so only in a hover title, which put
             // "go to this card" and "unlink this card" on the same gesture.
-            <span key={v} className="refchip">
+            <span key={v} className={`refchip ${app ? 'is-app' : ''}`}>
               {/* The mark sits inside the button, because it is part of the
                   record's identity rather than a control beside it — the same
                   order a card face and the panel title lead with, and the

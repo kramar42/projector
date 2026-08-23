@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useEnrichment } from '../enrichment.tsx';
 import { IconButton } from './Button.tsx';
+import { linkHue } from '../links.ts';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -56,7 +57,9 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
   return (
     <div className={`linkrow ${res?.state ? `state-${res.state}` : ''}`}>
       <div className="linkrow-head">
-        <span className="linkkind">{kind}</span>
+        {/* The same colour the face draws this kind's letters in — one kind, one
+            family, whether it is spelled `jira` here or `J` on a card. */}
+        <span className="linkkind" style={linkHue(kind)}>{kind}</span>
         {href ? (
           <a className="linkrow-label" href={href} target="_blank" rel="noreferrer noopener" title={tip}>
             {label}
