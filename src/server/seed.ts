@@ -14,7 +14,11 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   single:  true  → at most one value at a time
 #   closed:  values meaning no further work is expected, whatever the outcome
 #   expected: true  → a well-filed card carries this; the triage axis is built
-#            from it, and \`pj check\` warns about a card that has none
+#            from it
+#   blocking: true  → while this axis is unsatisfied the card cannot proceed, and
+#            the blocked axis says so by this facet's name. A ref blocks while
+#            something it names is not closed; anything else blocks while it
+#            holds a value at all
 #   type:    label  → a member of the declared values list (the default)
 #            ref    → a record id, so the facet is also traversable: it lays out
 #                     a canvas, walks under focus, and refuses a cycle
@@ -44,9 +48,9 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # is \`project\`, which is built in — its definition is not read from this file, so
 # declaring it does nothing and \`pj check\` says so.
 
-# Lifecycle only. "Blocked" and "waiting" are derived — from an unfinished blocks
-# edge and from a non-empty waiting_on — so they are not values here: storing
-# either beside the thing it is computed from gives two answers to one question.
+# Lifecycle only. Being blocked is derived — see blocking: below — so it is not a
+# value here: storing a reason beside the thing it is computed from gives two
+# answers to one question, and nothing to arbitrate between them.
 status:
   label: Status
   values: [planning, active, on-hold, done, archived]
@@ -75,10 +79,15 @@ due:
   buckets: { overdue: -1, today: 0, week: 7 }
   overflow: later
 
+# Somebody else's move. A blocking facet, so it lands on the blocked axis beside
+# the dependency relation — while it holds any value at all, this card is parked.
+# A label rather than a ref because a person does not *complete*: you clear the
+# axis, you do not mark them closed.
 waiting_on:
   label: Waiting on
   values: []
   open: true
+  blocking: true
 
 energy:
   label: Energy
@@ -126,6 +135,7 @@ parent:
 blocked_by:
   label: blocked by
   type: ref
+  blocking: true
 `;
 
 export const SEED_VIEWS: { path: string; body: string }[] = [
@@ -173,8 +183,8 @@ show: [status, priority]
     path: 'unblocked.yaml',
     body: `# Actionable now: open, nobody waited on, no unfinished blocker.
 #
-# \`blocked\` is computed from the blocks facet and \`waiting\` from waiting_on, so
-# \`clear\` means neither applies. A deadline outranks an intention, so \`due\` sorts
+# \`blocked\` names one value per blocking facet, so \`clear\` means none of them
+# applies. A deadline outranks an intention, so \`due\` sorts
 # before \`priority\`: a card due tomorrow is next whatever bucket it was filed in.
 shape: board
 title: Unblocked now

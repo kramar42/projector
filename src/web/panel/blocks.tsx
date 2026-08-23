@@ -51,8 +51,18 @@ const INBOUND_CUTOFF = 3;
  */
 const INVERSE: Record<string, 'children' | 'blocks'> = {
   parent: 'children',
-  blocked_by: 'blocks',
 };
+
+/**
+ * Which relation gets the `Blocks` row: the first one this vault declares
+ * blocking. It is a *property* rather than a name now, so the row follows
+ * whatever the vault called its dependency axis — and only one relation draws it,
+ * because the server merges every blocking reference into one list.
+ */
+function inverseFor(name: string, def: Meta['facets'][string], first: boolean) {
+  if (INVERSE[name]) return INVERSE[name];
+  return def.blocking && def.type === 'ref' && first ? ('blocks' as const) : undefined;
+}
 
 /**
  * Closing an editor destroys its document, so ask first.
@@ -287,6 +297,7 @@ export function Refs({
   onOpen: (id: string) => void;
 }) {
   const rels = Object.keys(defs).filter((n) => defs[n]!.type === 'ref');
+  const firstBlocking = rels.find((n) => defs[n]!.blocking);
   const { show, hidden, reveal } = useRevealed(rels, (n) => (card.facets[n] ?? []).length > 0);
 
   const inbound = {
@@ -298,7 +309,7 @@ export function Refs({
     },
     blocks: {
       label: 'Blocks',
-      means: "computed from other cards' blocked by, not stored on this one",
+      means: 'records naming this one as a blocker, not stored on this one',
       records: data.blocks,
       // An unfinished record this one holds up is not a problem with *this*
       // card — the same reason a child is not striped. `is-open` in `bad` means
@@ -311,7 +322,7 @@ export function Refs({
     <section className="panel-section">
       <div className="facetgrid">
         {rels.flatMap((name) => {
-          const inv = INVERSE[name];
+          const inv = inverseFor(name, defs[name]!, name === firstBlocking);
           return [
             show(name) ? (
               <FacetEditor

@@ -135,6 +135,26 @@ export interface FacetDef {
    * `energy` and `owner` are both of those and nobody wants to be nagged for them.
    */
   expected?: boolean;
+  /**
+   * While this axis is unsatisfied, a record carrying it cannot proceed.
+   *
+   * What *unsatisfied* means follows from the type, which is how the rest of the
+   * vocabulary already works — the type picks the editor's control and the
+   * validator's check, and it picks this too:
+   *
+   * - a **reference** facet blocks while any record it names is not `closed`;
+   * - any other facet blocks while it holds a value at all.
+   *
+   * That second rule is not a shortcut. A person does not *complete*: marking
+   * `person-a` closed is nonsense, you clear the axis instead — so `waiting_on`
+   * behaves as non-empty whether its values are labels or cards, and a vault is
+   * free to make them cards for the traversal without changing what it means.
+   *
+   * Plural on purpose. Unlike `project`, whose config chain admits exactly one
+   * relation, "reasons this cannot move" is naturally a list — which is what the
+   * `blocked` axis was already saying with two values hardcoded into it.
+   */
+  blocking?: boolean;
 }
 
 export type Facets = Record<string, FacetDef>;

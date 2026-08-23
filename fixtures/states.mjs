@@ -90,6 +90,7 @@ waiting_on:
   label: Waiting on
   values: [person-a, person-b, person-c, person-d, person-e, person-g, person-f]
   open: true
+  blocking: true
 
 energy:
   label: Energy
@@ -131,6 +132,7 @@ parent:
 blocked_by:
   label: blocked by
   type: ref
+  blocking: true
 `;
 
 // ---------------------------------------------------------------- cards

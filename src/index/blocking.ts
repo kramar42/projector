@@ -1,5 +1,6 @@
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, inboundCounts, walk } from './refs.ts';
+import { isRef } from '../schema/facets.ts';
 import { isProject } from './project.ts';
 
 /**
@@ -41,6 +42,35 @@ export function isClosed(rec: Rec | undefined, facets: Facets): boolean {
   return false;
 }
 
+/** Every facet a vault has declared blocking. */
+export function blockingFacets(facets: Facets): string[] {
+  return Object.entries(facets)
+    .filter(([, def]) => def.blocking)
+    .map(([name]) => name);
+}
+
+/**
+ * Those of them that name records, so they have an other end to walk.
+ *
+ * A blocking *label* facet blocks by being non-empty and has nowhere to walk to,
+ * which is why the two lists are not the same list.
+ */
+function blockingRefs(facets: Facets): string[] {
+  return blockingFacets(facets).filter((name) => isRef(facets[name]));
+}
+
+/** Neighbours along every blocking reference at once, merged. */
+function blockingEdges(records: Map<string, Rec>, facets: Facets): { out: Map<string, string[]>; in: Map<string, string[]> } {
+  const out = new Map<string, string[]>();
+  const inward = new Map<string, string[]>();
+  for (const via of blockingRefs(facets)) {
+    const adj = adjacency(via, records);
+    for (const [k, v] of adj.out) out.set(k, [...(out.get(k) ?? []), ...v]);
+    for (const [k, v] of adj.in) inward.set(k, [...(inward.get(k) ?? []), ...v]);
+  }
+  return { out, in: inward };
+}
+
 /**
  * The records this one is waiting on, with whether each is finished.
  *
@@ -66,25 +96,29 @@ export function blockedBy(
    * still stand. A wrong answer is worse than a plain one, so it is required.
    */
   facets: Facets,
-): { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[] {
-  // Through `adjacency` rather than the raw facet, so a self-reference and a
-  // value naming no record are dropped here exactly as they are everywhere else.
-  const blockers = adjacency('blocked_by', records).out.get(id) ?? [];
+): { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[] {
   const inbound = inboundCounts(records, facets);
-  return blockers.flatMap((src) => {
-    const rec = records.get(src);
-    return rec
-      ? [
-          {
-            id: rec.id,
-            title: rec.title,
-            done: isClosed(rec, facets),
-            isProject: isProject(rec),
-            refCount: inbound.get(rec.id) ?? 0,
-          },
-        ]
-      : [];
-  });
+  // Per relation, so each blocker can say which axis it arrived on: a vault with
+  // both `blocked_by` and `needs_review` draws one list and has to distinguish
+  // them. Through `adjacency` rather than the raw facet, so a self-reference and
+  // a value naming no record are dropped exactly as they are everywhere else.
+  return blockingRefs(facets).flatMap((via) =>
+    (adjacency(via, records).out.get(id) ?? []).flatMap((src) => {
+      const rec = records.get(src);
+      return rec
+        ? [
+            {
+              id: rec.id,
+              title: rec.title,
+              via,
+              done: isClosed(rec, facets),
+              isProject: isProject(rec),
+              refCount: inbound.get(rec.id) ?? 0,
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 /**
@@ -94,27 +128,35 @@ export function blockedBy(
  * loop; the SQL version needed a depth cap for exactly the cycle `walk` handles
  * by construction. The origin is excluded: "what this unblocks" is not itself.
  */
-export function unblocks(id: string, records: Map<string, Rec>): string[] {
-  const reached = walk(id, adjacency('blocked_by', records).in);
+export function unblocks(id: string, records: Map<string, Rec>, facets: Facets): string[] {
+  const reached = walk(id, blockingEdges(records, facets).in);
   reached.delete(id);
   return [...reached];
 }
 
 /**
- * Every record still waiting on something unfinished.
+ * Why each record cannot proceed: the blocking facets it is failing, by name.
  *
- * One local rule since the relation was inverted: a record is blocked when any
- * record it names is not closed. It used to walk every *other* record's outward
- * edges and mark their targets — the same answer, arrived at backwards, because
- * the edge was stored on the wrong end.
+ * A set of ids before, because the axis it feeds had two hardcoded values — one
+ * for an unfinished blocker and one for a non-empty `waiting_on`. Those were
+ * always the same question asked of two facets, so the answer is now which
+ * facets rather than which of two reasons, and a vault declaring a third gets a
+ * third value for free.
  *
- * The `blocked` pseudo-facet reads this; it used to compute it inline, which is
- * how the rule came to have two spellings.
+ * The type decides what unsatisfied means: a reference blocks while something it
+ * names is not closed, anything else blocks while it holds a value.
  */
-export function blockedSet(records: Map<string, Rec>, facets: Facets): Set<string> {
-  const out = new Set<string>();
-  for (const [src, blockers] of adjacency('blocked_by', records).out) {
-    if (blockers.some((b) => !isClosed(records.get(b), facets))) out.add(src);
+export function blockedSet(records: Map<string, Rec>, facets: Facets): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (id: string, via: string) => out.set(id, [...(out.get(id) ?? []), via]);
+  for (const via of blockingFacets(facets)) {
+    if (isRef(facets[via])) {
+      for (const [src, blockers] of adjacency(via, records).out) {
+        if (blockers.some((b) => !isClosed(records.get(b), facets))) add(src, via);
+      }
+    } else {
+      for (const rec of records.values()) if (rec.facets[via]?.length) add(rec.id, via);
+    }
   }
   return out;
 }

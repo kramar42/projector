@@ -23,7 +23,8 @@ import type { Facets, Rec } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, isProject } from '../index/project.ts';
-import { blockedBy, isClosed, unblocks } from '../index/blocking.ts';
+import { blockedBy, blockingFacets, isClosed, unblocks } from '../index/blocking.ts';
+import { isRef } from '../schema/facets.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
 import type { DragMode } from '../view/dropOutcome.ts';
@@ -273,7 +274,7 @@ app.get('/api/card/:id', (c) => {
       facets,
       refCount: inbound.get(rec.id) ?? 0,
       blockedBy: blockedBy(rec.id, records, facets),
-      unblocks: unblocks(rec.id, records),
+      unblocks: unblocks(rec.id, records, facets),
     }),
     file: relative(root, rec.file),
     // The client sends this back on a write; a mismatch means an agent or an
@@ -323,12 +324,14 @@ app.get('/api/card/:id', (c) => {
 });
 
 /**
- * The records naming this one, per relation that has a name for its other end.
+ * The records naming this one, for the two inverses the app has a word for.
  *
- * Two relations have one: `parent` is answered by `children`, `blocked_by` by
- * `blocks`. Nothing computes an inverse for any other reference facet, and the
- * panel draws exactly what arrives — so a new relation gets an editable row and
- * no derived one, which is correct rather than missing.
+ * `children` inverts `parent`. `blocks` inverts every *blocking* reference at
+ * once — a vault may declare more than one, and "what this holds up" is the same
+ * sentence whichever axis it arrived on, so they merge rather than multiply.
+ * Nothing computes an inverse for any other reference facet, and the panel draws
+ * exactly what arrives: a new relation gets an editable row and no derived one,
+ * which is correct rather than missing.
  */
 function inverseOf(
   rec: Rec,
@@ -346,7 +349,15 @@ function inverseOf(
         isProject: isProject(r),
         refCount: inbound.get(r.id) ?? 0,
       }));
-  return { children: naming('parent'), blocks: naming('blocked_by') };
+  return {
+    children: naming('parent'),
+    blocks: blockingRefFacets(facets).flatMap(naming),
+  };
+}
+
+/** Blocking facets that name records, so they have an other end to list. */
+function blockingRefFacets(facets: Facets): string[] {
+  return blockingFacets(facets).filter((n) => isRef(facets[n]));
 }
 
 interface Inbound {

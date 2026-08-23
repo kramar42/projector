@@ -41,7 +41,11 @@ export interface CardDTO {
    * could disagree about the same record.
    */
   refCount: number;
-  blockedBy: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
+  /**
+   * The records this one is waiting on, each saying which relation it came along
+   * — a vault may declare several, and a single list has to distinguish them.
+   */
+  blockedBy: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
   unblocks: string[];
 }
 
@@ -89,7 +93,7 @@ export function toDTO(
   rec: Rec,
   extra: {
     refCount?: number;
-    blockedBy?: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
+    blockedBy?: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
     unblocks?: string[];
     facets?: Facets;
     /** Overridable so a test does not depend on the day it runs. */

@@ -3,7 +3,7 @@ import { bucketOf, compareValues, daysBetween, facetRank, isOrdered, orderValues
 import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Rec } from '../schema/types.ts';
 import { adjacency, nodesIn, walk } from './refs.ts';
-import { blockedSet } from './blocking.ts';
+import { blockedSet, blockingFacets } from './blocking.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -103,8 +103,8 @@ export interface QueryResult {
 interface Ctx {
   /** Records named by another record through any declared reference facet. */
   nodes: Set<string>;
-  /** Records with at least one blocker that is not done. */
-  blocked: Set<string>;
+  /** Per record, the blocking facets it is failing — empty for one that is not. */
+  blocked: Map<string, string[]>;
   facets: Facets;
   today: string;
 }
@@ -175,22 +175,20 @@ export const PSEUDO: Record<string, Pseudo> = {
     of: (rec, ctx) => [rec.project ? 'project' : ctx.nodes.has(rec.id) ? 'node' : 'plain'],
   },
   /**
-   * Why a record cannot proceed, if it cannot.
+   * Why a record cannot proceed, if it cannot — one value per blocking facet.
    *
-   * Both reasons are *derived*, which is why neither is a `status` value any
-   * more: `blocked` is an unfinished `blocks` edge and `waiting` is a non-empty
-   * `waiting_on`. Storing either alongside the thing it is computed from gives
-   * two answers to one question, and nothing to arbitrate between them.
+   * Derived, which is why none of these is a `status` value: storing a reason
+   * alongside the thing it is computed from gives two answers to one question,
+   * with nothing to arbitrate between them.
+   *
+   * The values were `blocked` and `waiting`, hardcoded, which was this same axis
+   * with a vault's two blocking facets written into the engine. Naming the facets
+   * says the same thing and lets a vault declare a third.
    */
   blocked: {
     label: 'Blocked',
-    values: () => ['blocked', 'waiting', 'clear'],
-    of: (rec, ctx) => {
-      const why: string[] = [];
-      if (ctx.blocked.has(rec.id)) why.push('blocked');
-      if (rec.facets.waiting_on?.length) why.push('waiting');
-      return why.length ? why : ['clear'];
-    },
+    values: (facets) => [...blockingFacets(facets), 'clear'],
+    of: (rec, ctx) => ctx.blocked.get(rec.id) ?? ['clear'],
   },
   triage: {
     label: 'Triage',

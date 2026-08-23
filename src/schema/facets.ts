@@ -88,6 +88,7 @@ export function loadFacets(file: string): Facets {
       ...(typeof d.overflow === 'string' ? { overflow: d.overflow } : {}),
       ...(Array.isArray(d.closed) ? { closed: d.closed.map(String) } : {}),
       ...(d.expected === true ? { expected: true } : {}),
+      ...(d.blocking === true ? { blocking: true } : {}),
     };
   }
   // Built-ins lead the order, and win their structural keys. A vault may still

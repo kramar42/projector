@@ -92,13 +92,13 @@ updated: 2026-01-01
 
 const FACETS = `
 parent:     { label: Part of,  type: ref, single: true }
-blocked_by: { label: blocked by, type: ref }
+blocked_by: { label: blocked by, type: ref, blocking: true }
 due:        { label: Due, type: date, single: true, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }
 priority:   { label: Priority, values: [now, month, backlog], open: false, single: true, expected: true }
 status:     { label: Status,   values: [planning, active, done], open: false, single: true, closed: [done], expected: true }
 project:    { expected: true }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
-waiting_on: { label: Waiting on, values: [], open: true }
+waiting_on: { label: Waiting on, values: [], open: true, blocking: true }
 `;
 
 function vault(): { root: string; cleanup: () => void } {
@@ -181,7 +181,7 @@ test('pseudo-facets filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['project'] } }), ['project-b', 'keycloak', 'project-a']);
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocker', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
-    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     // A card missing two axes lands in both buckets. `project-b` and `project-a` are project
     // records and appear here too: the engine no longer exempts them, the triage
     // view does.
@@ -807,13 +807,16 @@ test('sorting by due puts the undated last in both directions', () => {
   }
 });
 
-test('blocked and waiting are both derived onto one axis', () => {
+test('every blocking facet lands on one axis, under its own name', () => {
   const { root, cleanup } = datedVault();
   try {
-    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['someday']);
-    // `waiting` comes from waiting_on, never from a stored status value — there
-    // is no `status: waiting` for it to disagree with.
-    assert.deepEqual(ids(root, { filter: { blocked: ['waiting'] } }), ['ask-person-a']);
+    // A reference blocks while something it names is not closed; a label blocks
+    // while it holds a value at all. Two facets, two values, one axis — and the
+    // values are the facet names, so a vault declaring a third gets a third.
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['someday']);
+    // Never from a stored status value — there is no `status: waiting` for it to
+    // disagree with.
+    assert.deepEqual(ids(root, { filter: { blocked: ['waiting_on'] } }), ['ask-person-a']);
     const clear = ids(root, { filter: { blocked: ['clear'] } });
     assert.ok(!clear.includes('someday'));
     assert.ok(!clear.includes('ask-person-a'));
@@ -908,16 +911,16 @@ test('a relation groups a board and reaches (none), like any other facet', () =>
   }
 });
 
-test('the blocked axis reads the blocks facet, and a done blocker stops blocking', () => {
+test('the blocked axis names the facet that is failing, and closed stops blocking', () => {
   const { root, cleanup } = vault();
   try {
-    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     writeFileSync(
       join(root, 'cards', 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
-    assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), []);
+    assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), []);
   } finally {
     cleanup();
   }
