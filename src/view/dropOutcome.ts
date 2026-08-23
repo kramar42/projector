@@ -34,7 +34,18 @@ export function modeFor(input: { altKey?: boolean; shiftKey?: boolean }): DragMo
  * was dragged from. "Card in two columns" is therefore always a gesture, never
  * an accident — which is what makes a multi-valued grouping facet safe to use.
  *
- * Dropping into the uncategorised column clears the facet.
+ * Dropping into the uncategorised column removes **only the value dragged from**,
+ * so it clears the facet for a card that had one value on this axis and leaves a
+ * multi-valued card in its other columns rather than landing it in `(none)`. For
+ * such a card that makes a plain drop into `(none)` return exactly what `⇧`
+ * returns — the two gestures agree where the prose above says they differ.
+ *
+ * Left as it is on purpose, pending a judgement about how it feels in use: the
+ * alternative (`return []` here) would clear every value of the axis, and because
+ * `bulkMove` applies this per `AxisMove`, a diagonal drop into a `(none)` column
+ * and a `(none)` lane would clear both axes at once. `test/gesture.test.ts` pins
+ * the current answer for both the one-value and the many-value case, so whichever
+ * way it goes is a deliberate edit rather than a drift.
  *
  * It reads `current`, so it is **per card**. That is the whole reason the bulk
  * path may not compute values of its own: twelve cards dragged together each need

@@ -360,7 +360,7 @@ bar.
 | drag `now` → `month` | **replace** — remove `now`, add `month` |
 | ⌥ + drop | **add** — the card now appears in both columns |
 | ⇧ + drag out | **remove** just that value |
-| drop into `(none)` | remove every value of the grouped facet |
+| drop into `(none)` | remove the value dragged from — so a card with one value on that axis lands in `(none)`, and a card with several stays in its other columns |
 | drag within a column | **reorder** — needs a saved view, since order is arrangement |
 
 So "card in two columns" is always a gesture, never an accident.

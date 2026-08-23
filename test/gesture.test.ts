@@ -53,8 +53,32 @@ test('a replace never leaves a duplicate behind', () => {
   assert.deepEqual(nextValues(['now', 'month'], 'now', 'month', 'replace'), ['month']);
 });
 
-test('dropping into uncategorised clears the grouped facet', () => {
+test('dropping into uncategorised clears a card that had one value there', () => {
   assert.deepEqual(nextValues(['now'], 'now', NONE, 'replace'), []);
+});
+
+/**
+ * The multi-valued half of the same drop, pinned because it is under review.
+ *
+ * A card in two columns keeps its other value, so it never actually lands in
+ * `(none)` — which makes a plain drop there return exactly what `⇧` returns, and
+ * those two gestures are documented as different. The alternative is clearing the
+ * whole axis; `bulkMove` applies `nextValues` once per `AxisMove`, so that would
+ * also mean a diagonal drop into a `(none)` column and a `(none)` lane clears both
+ * axes at once.
+ *
+ * Neither answer is obviously right, and the one in place has never been used in
+ * anger. This test exists so that choosing the other one is an edit somebody makes
+ * on purpose, rather than something that shifts under a refactor.
+ */
+test('dropping into uncategorised leaves a multi-valued card in its other columns', () => {
+  assert.deepEqual(nextValues(['now', 'month'], 'now', NONE, 'replace'), ['month']);
+  assert.deepEqual(nextValues(['now', 'month', 'backlog'], 'now', NONE, 'replace'), ['month', 'backlog']);
+  // The consequence worth seeing spelled out: for such a card, plain == ⇧.
+  assert.deepEqual(
+    nextValues(['now', 'month'], 'now', NONE, 'replace'),
+    nextValues(['now', 'month'], 'now', NONE, 'remove'),
+  );
 });
 
 test('dragging out of uncategorised just adds the target value', () => {
