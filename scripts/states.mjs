@@ -17,19 +17,23 @@
  * committed: a committed one would be a set of hardcoded dates that all read
  * `overdue` within a month, which is the same failure this exists to prevent.
  *
- *   node fixtures/states.mjs [<out-dir>]      # default: fixtures/states
+ *   npm run states -- [<out-dir>]             # default: .vaults/states
  *
  * Then register it and open it — the server only opens a vault on the list:
  *
- *   node src/cli/pj.ts vaults add fixtures/states --name states
- *   node src/cli/pj.ts --vault fixtures/states check
+ *   node src/cli/pj.ts vaults add .vaults/states --name states
+ *   node src/cli/pj.ts --vault .vaults/states check
  */
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), 'states'));
+// Generated output, so it goes where generated output goes: a hidden, ignored
+// directory beside the repo rather than inside a committed one. `.vaults/` is
+// for sample vaults you open and throw away — this is the first of them.
+const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = resolve(process.argv[2] ?? join(repo, '.vaults', 'states'));
 
 // ---------------------------------------------------------------- dates
 
