@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { paths } from '../config.ts';
+import { loadFacets } from '../schema/facets.ts';
 import { parseCard } from '../schema/card.ts';
 import type { Rec } from '../schema/types.ts';
 
@@ -26,8 +27,17 @@ import type { Rec } from '../schema/types.ts';
 export type Change =
   | { kind: 'created'; id: string; title: string }
   | { kind: 'deleted'; id: string; title: string }
-  | { kind: 'status'; id: string; title: string; from: string | null; to: string | null }
-  | { kind: 'due'; id: string; title: string; from: string | null; to: string | null };
+  /**
+   * One axis moved. It was two variants, `status` and `due`, named in code — so a
+   * vault renaming either lost its log and a vault with a third axis worth
+   * watching could not have one.
+   *
+   * Every **single-valued** facet is narrated, which is the derivable form of the
+   * choice those two names were making: a card holds one value on such an axis,
+   * so changing it is a transition. A multi-valued axis accumulates, and "tech
+   * gained k8s" is not an event in the same sense.
+   */
+  | { kind: 'facet'; facet: string; id: string; title: string; from: string | null; to: string | null };
 
 export interface Commit {
   sha: string;
@@ -40,9 +50,16 @@ export interface Commit {
 export interface HistoryReport {
   since: string;
   commits: Commit[];
-  /** Ids whose last transition in the window was into each state. */
+  /**
+   * Ids whose last transition in the window crossed the `closed` boundary.
+   *
+   * `started` used to sit beside `finished` and could not survive: it read
+   * `to === 'active'`, and nothing in the vocabulary declares which value means
+   * *started*. `closed` does declare the other boundary, so what is derivable is
+   * crossing it — in, and back out.
+   */
   finished: string[];
-  started: string[];
+  reopened: string[];
   created: string[];
 }
 
@@ -147,8 +164,9 @@ function recordOf(text: string | undefined, path: string): Rec | null {
   return res.ok ? res.rec : null;
 }
 
-function statusOf(rec: Rec | null): string | null {
-  return rec?.facets.status?.join(', ') ?? null;
+/** One axis's values as the log prints them, or null when it carries none. */
+function valueOf(rec: Rec | null, facet: string): string | null {
+  return rec?.facets[facet]?.join(', ') ?? null;
 }
 
 /**
@@ -156,6 +174,12 @@ function statusOf(rec: Rec | null): string | null {
  * `2026-08-01`, `yesterday`.
  */
 export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
+  const facets = loadFacets(paths(dataRoot).facets);
+  // The axes a card holds one of, so moving one is a transition rather than an
+  // accumulation. Declaration order, so a log reads in the vocabulary's order.
+  const watched = Object.entries(facets)
+    .filter(([, def]) => def.single)
+    .map(([name]) => name);
   const cards = paths(dataRoot).cards.replace(dataRoot + '/', '');
   const raw = parseLog(
     git(dataRoot, [
@@ -189,12 +213,11 @@ export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
       if (!before) changes.push({ kind: 'created', id, title });
       else if (!after) changes.push({ kind: 'deleted', id, title });
       else {
-        const from = statusOf(before);
-        const to = statusOf(after);
-        if (from !== to) changes.push({ kind: 'status', id, title, from, to });
-        const df = before.facets.due?.[0] ?? null;
-        const dt = after.facets.due?.[0] ?? null;
-        if (df !== dt) changes.push({ kind: 'due', id, title, from: df, to: dt });
+        for (const facet of watched) {
+          const from = valueOf(before, facet);
+          const to = valueOf(after, facet);
+          if (from !== to) changes.push({ kind: 'facet', facet, id, title, from, to });
+        }
       }
     }
     if (changes.length) {
@@ -209,27 +232,29 @@ export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
   }
 
   const finished = new Set<string>();
-  const started = new Set<string>();
+  const reopened = new Set<string>();
   const created = new Set<string>();
+  const shuts = (facet: string, value: string | null) =>
+    value !== null && !!facets[facet]?.closed?.includes(value);
   // Oldest first, so the last transition in the window is the one that stands.
   for (const c of [...commits].reverse()) {
     for (const ch of c.changes) {
       if (ch.kind === 'created') created.add(ch.id);
-      if (ch.kind !== 'status') continue;
-      if (ch.to === 'done') {
+      if (ch.kind !== 'facet' || !facets[ch.facet]?.closed?.length) continue;
+      const was = shuts(ch.facet, ch.from);
+      const is = shuts(ch.facet, ch.to);
+      if (was === is) continue;
+      if (is) {
         finished.add(ch.id);
-        started.delete(ch.id);
-      } else if (ch.to === 'active') {
-        started.add(ch.id);
-        finished.delete(ch.id);
+        reopened.delete(ch.id);
       } else {
+        reopened.add(ch.id);
         finished.delete(ch.id);
-        started.delete(ch.id);
       }
     }
   }
 
-  return { since, commits, finished: [...finished], started: [...started], created: [...created] };
+  return { since, commits, finished: [...finished], reopened: [...reopened], created: [...created] };
 }
 
 export function formatHistory(r: HistoryReport): string {
@@ -243,14 +268,11 @@ export function formatHistory(r: HistoryReport): string {
     for (const ch of c.changes) {
       if (ch.kind === 'created') L.push(`    + ${ch.id} — ${ch.title}`);
       else if (ch.kind === 'deleted') L.push(`    − ${ch.id} — ${ch.title}`);
-      else {
-        const label = ch.kind === 'status' ? '' : 'due ';
-        L.push(`      ${ch.id}: ${label}${ch.from ?? '—'} → ${ch.to ?? '—'}`);
-      }
+      else L.push(`      ${ch.id}: ${ch.facet} ${ch.from ?? '—'} → ${ch.to ?? '—'}`);
     }
     L.push('');
   }
-  L.push(`${r.finished.length} finished · ${r.started.length} started · ${r.created.length} created`);
+  L.push(`${r.finished.length} finished · ${r.reopened.length} reopened · ${r.created.length} created`);
   if (r.finished.length) L.push(`finished: ${r.finished.join(', ')}`);
   return L.join('\n');
 }

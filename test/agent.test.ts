@@ -121,11 +121,20 @@ test('the briefing names failed repos as out of scope and stops before building'
 
 // ---------------------------------------------------------------- history
 
-test('pj log reads status transitions out of the diffs', () => {
+test('pj log narrates every single-valued axis, and closed is what finishes', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
   try {
     mkdirSync(pathJoin(root, 'cards'), { recursive: true });
+    // The vocabulary decides what is watched and what "finished" means. Nothing
+    // in the log names a facet or a value any more.
+    writeFileSync(
+      pathJoin(root, 'facets.yaml'),
+      'status: { values: [planning, done], single: true, closed: [done] }\n' +
+        'due: { type: date, single: true }\n' +
+        'tech: { values: [], open: true }\n',
+      'utf8',
+    );
     git('init', '-q');
     git('config', 'user.email', 't@t');
     git('config', 'user.name', 'T');
@@ -135,22 +144,31 @@ test('pj log reads status transitions out of the diffs', () => {
     git('add', '-A');
     git('commit', '-qm', 'add ship');
 
-    writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [done], due: [2026-09-01] }\n---\n', 'utf8');
+    writeFileSync(
+      card,
+      '---\nid: ship\ntitle: Ship\nfacets: { status: [done], due: [2026-09-01], tech: [k8s] }\n---\n',
+      'utf8',
+    );
     git('add', '-A');
     git('commit', '-qm', 'finish ship');
 
     const r = history(root, '1 year ago');
     assert.deepEqual(r.created, ['ship']);
+    // `done` is in `closed`, and that is the whole rule — no value is named here.
     assert.deepEqual(r.finished, ['ship']);
+    assert.deepEqual(r.reopened, []);
+
     // Newest first, and the transition is read from the diff rather than from
     // `updated`, which only ever says that *something* changed.
-    const moved = r.commits[0]!.changes.find((c) => c.kind === 'status');
-    assert.ok(moved && moved.kind === 'status');
-    assert.equal(moved.from, 'planning');
-    assert.equal(moved.to, 'done');
-    const dated = r.commits[0]!.changes.find((c) => c.kind === 'due');
-    assert.ok(dated && dated.kind === 'due');
-    assert.equal(dated.to, '2026-09-01');
+    const moved = r.commits[0]!.changes.filter((c) => c.kind === 'facet');
+    assert.deepEqual(
+      moved.map((c) => [c.facet, c.from, c.to]),
+      [
+        ['status', 'planning', 'done'],
+        ['due', null, '2026-09-01'],
+      ],
+      'both single-valued axes, in declaration order — and `tech` is not one',
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
