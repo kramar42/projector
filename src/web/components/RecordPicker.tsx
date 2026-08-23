@@ -20,7 +20,6 @@ export function RecordPicker({
   clearLabel,
   onPick,
   onCancel,
-  inline = false,
 }: {
   exclude?: string[];
   placeholder?: string;
@@ -36,11 +35,6 @@ export function RecordPicker({
   clearLabel?: string;
   onPick: (id: string | null) => void;
   onCancel?: () => void;
-  /**
-   * Rendered in the flow of a scrolling surface rather than floating over one, so
-   * the list must not scroll on its own — one region scrolls per axis.
-   */
-  inline?: boolean;
 }) {
   const [all, setAll] = useState<CardDTO[]>([]);
   const [q, setQ] = useState('');
@@ -72,7 +66,7 @@ export function RecordPicker({
   const matches = found.slice(0, CAP);
 
   return (
-    <div className={`picker ${inline ? 'is-inline' : ''}`}>
+    <div className="picker">
       <input
         autoFocus
         value={q}

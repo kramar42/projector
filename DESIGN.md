@@ -186,7 +186,7 @@ components:
   panel:
     backgroundColor: "{colors.surface}"
     width: "min(560px, 92vw)"
-    padding: "18px 20px 40px"
+    padding: "0 0 30px"
   table-header:
     backgroundColor: "{colors.ground}"
     textColor: "{colors.ink-3}"
@@ -372,8 +372,21 @@ line, column name, table header and glyph is mono. There is no third case, and t
 makes a screen with fourteen type sizes read as two voices rather than fourteen.
 
 **The Tabular Number Rule.** Any number that can change while its neighbours stay put carries
-`font-variant-numeric: tabular-nums` — column counts, progress numbers, roll-up columns, the sidebar
-ribbon. A count that shifts width when it increments is a count you cannot read at a glance.
+`font-variant-numeric: tabular-nums`. A count that shifts width when it increments is a count you
+cannot read at a glance.
+
+The rule is a **guard, not a fix**, and it is worth knowing which: every counter in this app is mono,
+and in a monospaced face the digits already share one advance, so the declaration changes the
+rendering of exactly none of them. What it does is make a counter survive *losing* its mono — which is
+not hypothetical, because a commit correcting a font-family divergence once dropped thirteen labels
+onto a `<button>`'s own font with every test green. The one number in the app that is genuinely not
+mono is `.popbtn` 's label, which renders `{n} columns` and `{first} +{n}` in the body sans; there the
+rule does real work today, and it took this audit to notice it was the one place the rule was missing.
+
+Membership is a decision, so it lives in one hoisted rule and is pinned by `test/theme.test.ts`
+rather than counted in prose. The test also guards the mechanism that removed it twice: the `font:`
+shorthand resets every sub-property it does not name, so a counter that acquires one has to
+re-declare the guard, and two of them do.
 
 **The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The record marks
 sit at `0.8em` with `line-height: 1`, baseline-aligned, plus a per-glyph `translateY` derived from
@@ -391,8 +404,8 @@ second relative size, and therefore its own pair of measured constants — same 
 pair, written down beside them.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
-tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for the two drawn glyphs,
-`trash` and `refresh`) so they read as one family — but
+tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for the three drawn
+glyphs, `trash`, `refresh` and `edit`) so they read as one family — but
 those metrics deliberately do **not** live here. The glyph set is closed, so the table in
 `src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
 a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
@@ -421,9 +434,13 @@ strip under the last one that nothing could use. Lanes are 14px apart, and a lan
 `position: sticky; left: 0` so its name survives horizontal scroll.
 
 **The panel** is fixed to the right edge at `min(560px, 92vw)` over a `rgba(10, 8, 14, 0.34)` scrim,
-with `18px 20px 40px` of padding — the deep bottom pad so the last section clears the viewport edge
-when scrolled. Inside it there are two intervals, not one: 8px between the sections of a tier, and
-20px plus a hairline between tiers.
+with `0 0 30px` of padding on the scrolling body and `10px` on every tier inside it — the deep bottom
+pad so the last section clears the viewport edge when scrolled. **The tier owns its padding**, which is
+what lets its divider reach the panel's edges instead of stopping 20px short at both ends; the panel
+had 20px at the sides against 10px above and below the rule, so the horizontal breathing room was
+twice the vertical. Uniform 10px is `.rail-block`'s own number, and it makes the interval between two
+tiers exactly the interval to the edge — 6px between a section's parts, 5px between the rows of a
+facet grid, 10px and a hairline between tiers.
 
 **Density is the point.** At 1080p a column shows about ten cards, and a couple of hundred records are
 four columns and one scroll. Every measurement in the system is hand-tuned to a 1px granularity rather
@@ -488,7 +505,7 @@ container the border vocabulary cannot.
 
 Radius rises with the size of the thing it is applied to, and the ladder is the whole form language:
 `--radius-sm` **3px** on anything chip-sized — a facet chip, link chip, toggle chip or reference chip,
-the read/edit tab, the panel's mark toggle and its new-value field — and on inline `code`;
+the panel's mark toggle and its new-value field — and on inline `code`;
 `--radius-md` **4px** on a date input, a filter row, a hover highlight; `--radius-base` **5px** on
 every control — button, input, select, reference row, banner, rail item; `--radius-lg` **6px** on a
 card face, the picker, the minimap, the editor host and a vault row; `--radius-badge` **7px** on a
@@ -552,11 +569,21 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   `facet-muted`.
 - **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket as a class,
   so `is-overdue` and `is-today` colour themselves without anything knowing the facet by name. They
-  are the only two chips filled from a *facet* hue; `.togglechip.is-on` below is a third filled chip,
-  and takes the accent. A table cell does not draw the bucket — `TableView` renders `FacetChip`
-  without it, though `card.buckets` is on the DTO the row already reads.
-- **Toggle chip:** the interactive variant, used in the filter panel and bulk bar, with `is-on` and
-  `is-clear` states.
+  were the only two chips filled from a *facet* hue until the toggle chip joined them, and they remain
+  the only two that pick their fill from a **bucket** rather than an axis. A table cell does not draw
+  the bucket — `TableView` renders `FacetChip` without it, though `card.buckets` is on the DTO the row
+  already reads.
+- **Toggle chip:** the interactive variant, in the card panel and the bulk bar, with `is-on`,
+  `is-extra` and `is-clear` states. It carries its **axis's own family**, off as the hue in text on the
+  plain surface and on as the hue in fill with `ground` text — the same two states the bucket chips
+  use. It took the *accent* in both until the card editor became the one surface where a facet value
+  did not say which axis it was, in the one place all the axes are on screen together: The App Voice
+  Rule gives the accent to live state and the app speaking, never to a property of a record.
+  The hue arrives as `--tone`, declared once per family beside that family's fill, because the
+  `.facet-*` rules are declared above `.togglechip` at equal specificity — a tone class appended to the
+  chip's className loses the cascade and changes nothing. The rail is not a home: its filter value is a
+  drawn checkbox, and this document said "the filter panel and bulk bar" for a while after that
+  stopped being true.
 - **Link chip:** mono 10px, hairline `rule` border, `ink-3` text, with the link kind as a 9px `accent`
   bold prefix and the label ellipsised at 130px.
 
@@ -586,7 +613,7 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   removes the outline and moves its border to `accent` instead, because a 2px ring against the rail's
   edge read as a second boundary. Two of the three are in the rail — its search and its saved-view
   namer — and the third is the canvas toolbar's view-namer, where the reason is inherited rather than
-  re-argued. The panel's new-value field is not this class: `.facetedit-add input` is its own register
+  re-argued. The panel’s new-value field is not this class: `.facetrow-add input` is its own register
   and re-implements the same swap in its own rule — see **Accepted Exceptions**.
 - **Selects:** `appearance: none`, `surface-2` fill, `rule` border, 12px — flatter than a text input,
   because a select is a control rather than a field.
@@ -599,7 +626,13 @@ The sidebar is the navigation, and it has no links. It is a stack of `rail-block
 hairlines, each a row of a 62px mono uppercase 9.5px label and a control. The filter panel below it is
 the only scrolling region: a facet head that turns `accent` and weight 600 when active, a caret, a
 count badge, and an indented list of values at 12px. A computed axis carries an italic mono glyph so
-you know nothing is written on the card — the panel otherwise treats it identically to a stored one.
+you know nothing is written on the card, right-aligned against the label column's inner edge.
+
+The card panel reads the rail's grammar rather than sharing its components. It takes the absence rule —
+an axis carrying nothing is not drawn — the `ƒ` and its right alignment, and the 10px block padding;
+it does **not** take the disclosure, because once an empty axis is absent there is nothing left to
+disclose. Where the rail collapses, the panel omits and offers a door: `+ facet` and `+ ref` open a
+popover of the axes this card carries nothing on.
 
 ### The Record Mark
 
@@ -661,8 +694,11 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Don't** put `--ink` on a filled background. `ink` and the semantic hues follow the theme in the
   same direction, so the pair never has contrast: `ink` on `bad` measured 1.92:1 in light, and `ink` on
   `warn` **1.03:1** in dark — invisible. Every filled state takes `ground`, which is 7.58:1 at worst
-  across the same four combinations, and is what all five filled states do — `.btn.primary`, the two
-  bucket chips, `.togglechip.is-on` and `.tab.is-on`.
+  across the same four combinations, and is what every filled state does — `.btn.primary`, the two
+  bucket chips, and `.togglechip.is-on`, which takes `ground` over its axis's hue and measured 5.90:1
+  at worst across nine families in light and 7.58:1 in dark. `.icon-button.is-on` is not in this list
+  and is not an exception: it is an `accent` glyph on an `accent-soft` wash, which is a tint rather
+  than a fill.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
 - **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `rel-blocks` at
   `#b06060` in light, the `chip-tint` and state-wash mixes, the derived light neutrals, the five
@@ -700,9 +736,14 @@ user (the canvas band).
 ### The counts that declare no type
 
 `.lane-count` declares `color` and nothing else and `.section-count` adds only a left margin, so both
-inherit family, size, tracking and case from the heading they annotate. That is the table's reading of
-`.section-count`; the panel wears the same class alongside `.quietcount`, which does declare a family
-and a size, so there the inheritance does not apply.
+inherit family, size, tracking and case from the heading they annotate.
+
+Each has exactly one call site now — a board lane head and a table section head. This entry used to
+name a second for `.section-count`, the card panel's inbound heading, and note that the class arrived
+there beside `.quietcount` so the inheritance did not apply. That was true and is not: the panel's
+inbound lists are rows of a facet grid rather than sections with headings, and their count is a plain
+`.quietcount`. A one-site class is still the right shape here — the mechanism is the inheritance, not
+the reuse.
 
 That inheritance *is* the mechanism: the count reads as part of its heading's type run rather
 than as a badge beside it. Giving either one a step from the scale would break it on purpose.
@@ -756,9 +797,17 @@ the *Chip* step: the Label register at the wrong size, which is a third register
 of the second. It now renders the vocabulary's own casing.
 
 Settled since, and the rail had it right: both surfaces render the facet label in **sans** at
-`--text-body-sm`. `.facetedit-label` declares a size and a colour and no family, so the panel inherits
-the sans stack too. The Mono Label Rule reads with both of them — a facet's `label:` is a string from
+`--text-body-sm`. The Mono Label Rule reads with both of them — a facet's `label:` is a string from
 the vault's own `facets.yaml`, not the app naming an axis slot. Same casing, one font.
+
+And the second half of that is a measurement, not an inference. This paragraph used to read *"declares
+a size and a colour and no family, so the panel inherits the sans stack too"* — which was false, and
+false in the direction nobody checks. The label's parent was `.facetedit-head`, a `<button>` declaring
+no family, and a browser gives form controls a family of their own: the panel rendered thirteen axis
+labels in **Arial**, 30px from the rail rendering the same strings in `--sans`. The label is now a
+grid cell (`.facetrow-label`) with no form control in its chain, and it names `var(--sans)` anyway.
+`test/theme.test.ts` has a test for it — every `<button>` must carry a class that names a family —
+because inheritance is a default everywhere except the four elements where it is not.
 
 ### The reference chip and the reference row
 
@@ -792,22 +841,26 @@ Contrast holds either way — measured, the change is 8.80:1 → 8.36:1 in dark 
 light, so it costs a little in one theme and gains a little in the other — and there is a live
 reading in which `surface` is the right value: the badge sits in the sidebar, whose fill *is*
 `surface`, so the digits read as knocked out of the accent rather than printed on it. It also
-inherits `font-weight: 600` from the active facet head, which two of the five `ground` filled states
-declare for themselves — `.btn.primary` and `.togglechip.is-on`; the other three carry no weight — so
+inherits `font-weight: 600` from the active facet head, which two of the four `ground` filled states
+declare for themselves — `.btn.primary` and `.togglechip.is-on`; the other two carry no weight — so
 a fill arriving with the weight is not unique to it.
 
 Low confidence, and the cheapest of these to revisit.
 
-### The mode switch that cancels its parent
+### The mode switch that is gone
 
-`.tab` declares `text-transform: none` and `letter-spacing: 0`, which appear inert.
+`.tab` and `.tab.is-on` are retired, and this entry is kept as the record of why rather than deleted.
 
-They are one of two rules in this repo that cancel an *explicit* ancestor `text-transform:
-uppercase` — the panel section heading both sit inside. `.derived` is the other, and cancels it so the
-panel's `ƒ` is not uppercased into `Ƒ`. Deleting them moves the tab's casing onto
-the browser's own form-control stylesheet, and the failure mode is a mode switch reading
-`READ / EDIT` on the one control this system says is not a chip. The `letter-spacing: 0` is not
-inert either: it records the tab's departure from the chip step's `0.01em`.
+They were the panel's Body `read` / `edit` pair — the last two `.tab` uses in the app — and the entry
+here defended their `text-transform: none` and `letter-spacing: 0` as the one place a rule cancels an
+*explicit* ancestor uppercase. That defence still holds for `.derived`, which cancels the same
+inherited uppercase so the panel's `ƒ` is not rendered as `Ƒ`, and which is now the only rule doing it.
+
+What retired the tab was not the casing but the shape. `.tab` said "you are in this mode" while the
+frontmatter's `edit raw` said "do a thing", for the same act — reveal an editor over a readout — a
+screen apart in one panel. Both are now one `.icon-button` with the `edit` glyph and a pressed state,
+which is also the first time either announced that state: `aria-pressed` arrives with `on`, and two
+plain buttons reading `read` and `edit` had announced nothing at all.
 
 ### The canvas that says nothing when it is empty
 
@@ -861,7 +914,7 @@ rail's edge read as a second boundary.
 
 That reason is a rail reason, and one of the three fields it paints is not in the rail: the canvas
 toolbar's view-namer. The other two are the rail's own search and its saved-view namer; the panel's
-new-value field is `.facetedit-add input`, which is not this class and re-implements the same swap on
+new-value field is `.facetrow-add input`, which is not this class and re-implements the same swap on
 its own. The canvas one keeps the treatment on purpose —
 the alternative is a field whose focus depends on which surface its caller happened to mount it
 in, which is exactly the defect that produced this component. `CommitInput` chose between two

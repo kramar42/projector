@@ -62,6 +62,6 @@ export interface CardDetail {
    * raw ids.
    */
   refs: Record<string, { title: string; isProject: boolean; refCount: number }>;
-  children: { id: string; title: string; isProject: boolean; refCount: number }[];
+  children: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
   project: ResolvedProject | null;
 }

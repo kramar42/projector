@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { RecordPicker } from './RecordPicker.tsx';
+import { PopoverButton } from './Popover.tsx';
 import type { CardDetail, FacetDef } from '../types.ts';
 import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
-import { RecordMark } from './CardBody.tsx';
+import { FACET_TONE, RecordMark } from './CardBody.tsx';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -24,13 +25,22 @@ import { RecordMark } from './CardBody.tsx';
  * agent added a moment ago — inside the write gate's tolerance, with nothing to
  * report. A delta cannot.
  *
- * An axis carrying nothing draws its label and stops. The vocabulary is a
- * *picker*, not a readout: thirteen axes rendered whole is 48 chips of which
- * four are usually lit, so the panel spent its first screen restating
- * facets.yaml instead of describing the card. This is the disclosure the filter
- * rail already uses, on the same rule — an axis you are using stays open.
+ * **There is no disclosure here any more.** An axis carrying nothing used to
+ * draw a collapsed head, so thirteen axes drew thirteen rows and nine of them
+ * said only their own name — the panel restating facets.yaml instead of
+ * describing the card. The caller now renders a row only for an axis that is
+ * carried or was asked for, which is the filter rail's own policy ("empty facets
+ * are absent"), and what is left needs no caret: a row is here because it has
+ * something to show.
+ *
+ * That also retired the last `font-family`-less button in the app. `.facetedit-head`
+ * was a `<button>` declaring no font, so when the label's explicit `--mono` was
+ * removed to match the rail, the label fell through to the UA form-control font
+ * and rendered in Arial — the divergence the change set out to close, in a font
+ * belonging to neither stack. A label in a grid cell inherits from the panel.
  */
 export function FacetEditor({
+  name,
   def,
   values,
   refs,
@@ -38,6 +48,16 @@ export function FacetEditor({
   onChange,
   onOpen,
 }: {
+  /**
+   * The axis's key, which is what its hue is looked up by.
+   *
+   * It was not passed before, and could not be: `FacetDef` carries the label and
+   * the vocabulary but not its own name, so the editor knew every fact about an
+   * axis except which one it was — and drew every lit value in the accent as a
+   * result. The accent is the app speaking; a value of a record is drawn in that
+   * record's axis's family.
+   */
+  name: string;
   def: FacetDef;
   values: string[];
   /** Titles for reference values. Absent for a label or date axis. */
@@ -48,10 +68,6 @@ export function FacetEditor({
   onOpen?: (id: string) => void;
 }) {
   const [adding, setAdding] = useState('');
-  const [picking, setPicking] = useState(false);
-  // Same rule as the filter rail: an axis you are using is open, one you are
-  // not starts collapsed. A date counts as carried when it holds a value.
-  const [open, setOpen] = useState(values.length > 0);
 
   /**
    * Taking a value on. A single-valued axis genuinely replaces, so it is the one
@@ -74,56 +90,66 @@ export function FacetEditor({
   // they can be removed rather than silently hidden.
   const extras = values.filter((v) => !def.values.includes(v));
 
-  const head = (
-    <button className="facetedit-head" onClick={() => setOpen((v) => !v)}>
-      <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
-      <span className="facetedit-label">{def.label}</span>
-      {!open && values.length > 0 && <span className="quietcount">{values.length}</span>}
-    </button>
-  );
+  // The axis's family, which the chips wear rather than the accent. Hueless for
+  // a hint axis and for anything the map does not name, exactly as a card face
+  // resolves it — one map, so the two cannot disagree.
+  const tone = FACET_TONE[name] ?? 'facet-muted';
 
   const body = () => {
     if (def.type === 'ref') {
       return (
         <>
-          <div className="facetedit-values">
-            {values.map((v) => (
-              // A reference is a record, so it reads as one: the title, and a
-              // click that goes there. Removing is its own mark — the row used
-              // to remove on click and say so only in a hover title, which put
-              // "go to this card" and "unlink this card" on the same gesture.
-              <span key={v} className="refchip">
-                {/* The mark sits inside the button, because it is part of the
-                    record's identity rather than a control beside it — the same
-                    order a card face and the panel title lead with, and the
-                    arrangement the per-glyph optical nudges were measured for. */}
-                <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
-                  <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
-                  <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
-                </button>
-                <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
-              </span>
-            ))}
-            {!picking && (
-              <Button tone="ghost" size="small" onClick={() => setPicking(true)}>
-                + record
-              </Button>
+          {values.map((v) => (
+            // A reference is a record, so it reads as one: the title, and a
+            // click that goes there. Removing is its own mark — the row used
+            // to remove on click and say so only in a hover title, which put
+            // "go to this card" and "unlink this card" on the same gesture.
+            <span key={v} className="refchip">
+              {/* The mark sits inside the button, because it is part of the
+                  record's identity rather than a control beside it — the same
+                  order a card face and the panel title lead with, and the
+                  arrangement the per-glyph optical nudges were measured for. */}
+              <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
+                <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
+                <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
+              </button>
+              <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
+            </span>
+          ))}
+          {/*
+              A popover, like every other picker in the app.
+
+              It used to render `inline`, in the flow of the panel — so opening it
+              pushed the body, the links and the whole workshop tier down by the
+              height of a forty-row list, and there was no way out but Escape. The
+              component's own note gave the reason as one-region-scrolls-per-axis,
+              which is an argument against a *scroller* inside the panel and not
+              an argument for occupying it: the sidebar's focus rail has always
+              floated this same picker in a popover, and `.popover .picker-list`
+              exists precisely so the popover does the scrolling. Floating it here
+              also makes the three add-controls in this panel — `+ facet`,
+              `+ ref`, `+ record` — one gesture with one dismissal.
+          */}
+          <PopoverButton
+            className="addbtn"
+            minWidth={320}
+            fitContent
+            label="+ record"
+            title={`add a record to ${def.label.toLowerCase()}`}
+            render={(close) => (
+              <RecordPicker
+                exclude={selfId ? [...values, selfId] : values}
+                placeholder={`${def.label.toLowerCase()}…`}
+                clearLabel={def.single && values.length ? `— no ${def.label.toLowerCase()} —` : undefined}
+                onCancel={close}
+                onPick={(id) => {
+                  close();
+                  if (id) take(id);
+                  else onChange([], 'set');
+                }}
+              />
             )}
-          </div>
-          {picking && (
-            <RecordPicker
-              inline
-              exclude={selfId ? [...values, selfId] : values}
-              placeholder={`${def.label.toLowerCase()}…`}
-              clearLabel={def.single && values.length ? `— no ${def.label.toLowerCase()} —` : undefined}
-              onCancel={() => setPicking(false)}
-              onPick={(id) => {
-                setPicking(false);
-                if (id) take(id);
-                else onChange([], 'set');
-              }}
-            />
-          )}
+          />
         </>
       );
     }
@@ -131,7 +157,7 @@ export function FacetEditor({
     if (def.type === 'date') {
       // A date is single by nature: there is one value, and setting it replaces.
       return (
-        <div className="facetedit-values">
+        <>
           <input
             type="date"
             className="dateinput"
@@ -139,31 +165,38 @@ export function FacetEditor({
             onChange={(e) => onChange(e.target.value ? [e.target.value] : [], 'set')}
           />
           {values[0] && (
+            // `small`, and measured rather than assumed: against the date input's
+            // 22.67px a `small` ghost button is 25.67 and a `tiny` one 19.4, so
+            // `tiny` is marginally further out, not closer. The two are vertically
+            // centred and this is the one row with no chips in it to disagree
+            // with — the date input's height is a native control's, not a step of
+            // ours, which is the actual reason nothing here lines up exactly.
             <Button tone="ghost" size="small" onClick={() => onChange([], 'set')}>
               clear
             </Button>
           )}
-        </div>
+        </>
       );
     }
 
     return (
-      <div className="facetedit-values">
+      <>
         {/* No "open" badge: the `+ new` field is present exactly when new values
             are accepted, so it already says so. */}
         {[...def.values, ...extras].map((v) => (
           <button
             key={v}
-            className={`togglechip ${values.includes(v) ? 'is-on' : ''} ${
+            className={`togglechip ${tone} ${values.includes(v) ? 'is-on' : ''} ${
               def.values.includes(v) ? '' : 'is-extra'
             }`}
+            aria-pressed={values.includes(v)}
             onClick={() => toggle(v)}
           >
             {v}
           </button>
         ))}
         {def.open && (
-          <span className="facetedit-add">
+          <span className="facetrow-add">
             <input
               value={adding}
               placeholder="+ new"
@@ -178,14 +211,14 @@ export function FacetEditor({
             />
           </span>
         )}
-      </div>
+      </>
     );
   };
 
   return (
-    <div className={`facetedit ${values.length ? 'is-carried' : ''}`}>
-      {head}
-      {open && body()}
+    <div className="facetrow">
+      <span className="facetrow-label">{def.label}</span>
+      <div className="facetrow-values">{body()}</div>
     </div>
   );
 }

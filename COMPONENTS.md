@@ -86,31 +86,62 @@ link row's field keys were a second, at the *Micro* step and recorded nowhere; t
 
 ### The Count Rule
 
-**A count is quiet unless it is the only thing saying a filter is on. Any number that can change
-while its neighbours stay put carries `tabular-nums`.**
+**What a number means picks its treatment, and there are five treatments. A count is quiet unless it
+is the only thing saying a filter is on. Every counter is mono, because a count is the app speaking.**
 
-The second sentence is `DESIGN.md`'s and was the real defect. Seven of fourteen numbers lacked it,
-and the four where it genuinely bites were all among them: the roll-up columns (a column of numbers
-read vertically — the case `DESIGN.md` names explicitly), the rail's value counts (right-aligned
-down a list of up to eight values × thirteen axes), the bulk bar (the word "selected" follows the
-digits), and the footer (changes on every keystroke of the search box). It is now one rule naming
-thirteen selectors, because the property inherits and a rule per site is a rule to forget.
+A whole-app pass over every number this interface draws — the rail, the board, the table, the card
+face, the panel, the bulk bar, the pickers — found the families below. They were already there; what
+was missing was anyone having written down which was which, so the differences between them read as
+drift and two real defects hid among them.
 
-**`.quietcount`** is the extracted component: mono, `--text-micro`, `tabular-nums`, `ink-3`, no
-fill. Four classes shared that spec in three type steps — one of them at the *Label* step, whose
-register is uppercase and which a bare numeral is exactly not for. Each site keeps only how it sits
-in its row.
+**Quiet** — a bare numeral beside the thing it counts. `.quietcount`: mono, `--text-micro`, `ink-3`,
+no fill, and each site adds only how it sits in its row. This is most of them, and it is the one that
+was already extracted.
 
-`.facet-badge` is the single **marked** count and the only one that may take the accent fill: it is
-the only signal that a filter is narrowing what you see. Six other numbers are deliberately not
-members, each for a reason now in `DESIGN.md`'s Accepted Exceptions — including two that declare no
-type of their own, so they inherit their heading's family, size, tracking and case, and one
-(`.pop-annotation`) that is not a count at all, since it renders `"board"` and `"missing"` as often
-as a number.
+**Marked** — the accent, and the only family allowed it: a count of something *the reader caused*.
+`.facet-badge` is how many values of this axis you checked, which is the only signal that a filter is
+narrowing what you see, and `.bulkbar-count` is the sentence *"N selected"*. Nothing the server merely
+computed may wear the accent — that is The App Voice Rule reaching the counters.
+
+**A heading's own type** — `.lane-count` and `.section-count`, which declare colour and position and
+*nothing else*, so the number reads as part of the heading's type run rather than as a badge beside
+it. Giving either a step from the scale would break it on purpose.
+
+**Filled** — a count that has to separate itself from things on *both* sides. `.column-count` sits
+between a flexing column name and a 20px add button; `.count` sits in a table title cell between a
+title and the cell edge. Both now take `--radius-pill`, which is the rung whose token comment says
+"a count badge, a canvas band" — `.count` was on `--radius-xl`, the container rung, so one of the two
+filled counts was shaped like a popover and neither token's enumeration was true.
+
+**A column read vertically** — the roll-ups, `.table .num` and `.num-total`: right-aligned, `nowrap`,
+compared down the column rather than across the row. The one place the tabular guard's *stated*
+purpose is the actual purpose.
+
+And a sixth group that is **not** counting at all, which is what dissolves most of the apparent drift:
+`.pop-annotation`, `.popbtn`'s label, `.facet-more`, the table's `Updated` column, a numeric facet
+value in a table cell. The discriminator is **position, not content** — a slot defined by where it
+sits, which sometimes holds digits. `.pop-annotation` is the right-hand slot on a popover row, so it
+renders a card count at one site and the word `board` at another; `.facet-more` and `.popbtn` are
+control labels, which is why they are sans and why that is not a Mono Label Rule violation.
+
+Two defects came out of the pass, and both were invisible because they were about a guard rather than
+a rendering. `.facet-count` was named in the hoisted rule's own preamble and was not in the rule — it
+held the guard only because one JSX template string happened to render `quietcount facet-count`
+together. And `.popbtn`, the single counter in the app that is *not* mono and therefore the only one
+whose digits can actually shift the words after them, was the one the rule had never reached.
+`test/theme.test.ts` now pins the membership set and checks the `font:`-shorthand reset that had
+already removed the guard twice. No tallies here: how many counters there are changes by working, and
+the set that changes by deciding is in the test.
 
 ### The Drawn Control Rule
 
 **Nothing on screen is drawn by the browser.**
+
+Now actually true. The audit below found three checkboxes and two stray selects and missed a sixth
+case entirely: the project's instruction blocks in the card panel were a native
+`<details>`/`<summary>`, the only browser-drawn disclosure left in an app that draws its own caret in
+two other places. It is a `.facet-more` button now — the control the panel and the rail already use
+for "there is more of this list", which is the same sentence.
 
 The draft named two offending sites and claimed selects were already fine. Both halves were wrong.
 There were **three** checkboxes and **two** stray selects:
@@ -184,6 +215,24 @@ identical to `trash`, so the two drawn glyphs are the same size as each other, a
 which sits with `✕` and `+` so it reads at the characters' weight. The arrowhead is filled because a
 stroked chevron renders about 1.1px here and does not read as an arrow at all.
 
+The set grew by one again, the same way, and it is worth recording that the rule *held* the second
+time. `edit` replaces two controls with one — the Body's `read` / `edit` tab pair and the
+frontmatter's `edit raw` / `hide` word, which were two grammars for the identical act of revealing an
+editor over a readout. No character was available on the terms the last four were rejected on: `✎`
+`✏` `🖉` `🖊` sit on advances of 0.72 / 0.80 / 0.60 / 0.60 em against the family's 0.6021, and the two
+that match are Miscellaneous-Symbols codepoints with no coverage in any face this stack resolves to —
+tofu without a fallback emoji font and *colour* emoji with one, which is the objection that ruled out
+`🗑`. So: a drawn parallelogram on the 45° axis the other two avoid, with a collar stroke, at 15px.
+Rasterised beside its neighbours on one instrument: 10.5×10.5 at 34.7 lit px, against `refresh` at
+10.5×11.8 and 33.4, and `trash` at 11.5×11.5 and 57.6. It reads at `refresh`'s weight and nowhere near
+`trash`'s, which is twice as heavy because it destroys. Three shaft lengths were drawn; the longer two
+square the bounding box up at 36.4 and 37.0 lit px, buying a tidier box by moving the coverage away
+from the glyph it has to match. The box is not what a reader sees.
+
+So `refresh` was the last control in the app spelled out for about as long as it took to find the next
+one. That sentence is the rule working, not failing: "otherwise is a measurement, not an inventory"
+means the set is open to anything that measures, and closed to anything that does not.
+
 Every member's metric lives beside its character in `Button.tsx`. A new glyph is a row there.
 
 ### The One Pattern Rule
@@ -233,7 +282,7 @@ proposed consolidations were dropped rather than built.
 | **Drawn control** | 2 native checkboxes | 3 checkboxes and 2 selects. All drawn; the select treatment moved onto the element |
 | **Record mark** | 3 impls, 2 hardcoded sites | The picker's second implementation removed; the ribbon's hardcoded glyphs removed along with the trichotomy bug; the face's `0.8em` corrected to resolve against its title |
 | **Record reference** | 5 renderings, 4 classes | Merge rejected: five documented differences over two call sites. The DTO change it needed has since landed, and all six sites carry a mark |
-| **Disclosure** | 2 impls sharing only a caret | Merge rejected: four load-bearing differences, including that the rail's active state is the accent (a filter the user turned on) and the panel's is not (a property of the record) |
+| **Disclosure** | 2 impls sharing only a caret | Merge rejected: four load-bearing differences, including that the rail's active state is the accent (a filter the user turned on) and the panel's is not (a property of the record). **Moot since:** the panel's disclosure is gone rather than merged. Once an axis carrying nothing is not drawn at all, a collapsed row has nothing to collapse — so there is one implementation, in the rail, and the panel takes the absence rule instead of the widget |
 | **Clickable row** | 5 impls, incidental differences | Merge rejected: the shared hover is `DESIGN.md`'s Ghost-hover token obeyed, the radii come off the documented ladder, and no reader can ever see two of them at once |
 | **Truncation** | *not in the draft* | 10 sites, one idiom, five different constraints. `.truncate` extracted |
 | **Section-head control** | *not in the draft* | Two float mechanisms for one corner slot, and every control 2.5–3.5px below its label's optical centre. One flex row, one slot |
@@ -323,9 +372,16 @@ Nothing from the first two passes. The four items that were open are settled:
   it, so the surface already says so twice.
 - **`.pop-count` is `.pop-annotation`**, which is what it always was.
 
-What is *not* closed is the thing that made all of this necessary: only the type scale, the radius
-ladder and — now — the frontmatter's token references are enforced. Every other rule in this
-document is prose, and prose is what drifted.
+What is *not* closed, though it is closing: `test/theme.test.ts` now enforces nine of these rules
+rather than three — the type scale, the radius ladder, the frontmatter's token references, the One
+Casing Rule's uppercase-via-the-Label-step, the Drawn Control Rule's `appearance`, stillness, the
+absence of breakpoints, one hue family per axis, and that every `className` resolves to a rule. A
+tenth was added with the panel rework, and it is the one worth naming here: **every `<button>` must
+carry a class that names a font family.** The Mono Label Rule is the most-cited rule in `DESIGN.md`
+and was the least enforced, and it failed in the direction prose cannot catch — a commit *correcting*
+the rail/panel divergence dropped the panel's explicit family onto a `<button>`, which has a family of
+its own, and thirteen labels rendered in Arial with every test green. The rules still unenforced are
+colour, contrast, and the register rules above. Prose is still what drifts.
 
 ## How this relates to the other documents
 

@@ -22,7 +22,7 @@ import { loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, parentsOf, isProject } from '../index/project.ts';
-import { blockedBy, unblocks } from '../index/blocking.ts';
+import { blockedBy, isDone, unblocks } from '../index/blocking.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
 import type { DragMode } from '../view/dropOutcome.ts';
@@ -302,11 +302,21 @@ app.get('/api/card/:id', (c) => {
     ),
     // Each child is a record you click through to, so it carries its own mark —
     // the same three fields `refs` above has always sent.
+    //
+    // `done` joins them because the panel now draws children and blocked-by as
+    // adjacent rows, and "finished" is worth saying on both — a difference in
+    // what the server bothered to send would read as a difference between the
+    // records. `blockedBy` has always carried it.
+    //
+    // It does not follow that both lists draw the same *states*. Only a blocker
+    // may draw `is-open` in `bad`, because there "open" means in your way; an
+    // unfinished child is a child. The panel decides that per list.
     children: [...records.values()]
       .filter((r) => parentsOf(r).includes(rec.id))
       .map((r) => ({
         id: r.id,
         title: r.title,
+        done: isDone(r),
         isProject: isProject(r),
         refCount: inbound.get(r.id) ?? 0,
       })),

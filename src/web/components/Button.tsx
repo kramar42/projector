@@ -101,17 +101,67 @@ const GLYPH = {
     path: 'M13 8A5 5 0 1 1 8 3',
     fill: 'M7.6 1.1L11.5 3 7.6 4.9Z',
   },
+  /**
+   * The third drawing, and the one that let two controls become one.
+   *
+   * `read`/`edit` was a two-button mode switch and `edit raw`/`hide` was a
+   * one-button label swap, for the same act: reveal an editor over a readout.
+   * Both are now this glyph with a pressed state, which is why it is a toggle
+   * rather than an action — see `on` on `IconButton`.
+   *
+   * No character was available on the same terms the other two were rejected on.
+   * `✎` `✏` `🖉` `🖊` sit on advances of 0.72 / 0.80 / 0.60 / 0.60em against this
+   * family's 0.6021em, and the two that match are Miscellaneous-Symbols
+   * codepoints with no coverage in any face this stack resolves to — they render
+   * as tofu on a machine without a fallback emoji font, and as *colour* emoji on
+   * one with it, which is the same objection that ruled out `🗑`.
+   *
+   * So: a parallelogram body on the 45° axis the two existing drawings avoid —
+   * `trash` is orthogonal and `refresh` is circular, so a diagonal collides with
+   * neither at a glance — plus the collar stroke, without which the shape reads
+   * as a plain rhombus rather than as a pencil.
+   *
+   * 15px, matching both existing drawings, because the same two measurements
+   * agree again. Rasterised at 15px against its two neighbours on one instrument,
+   * so the comparison is the claim and not the absolute numbers: this is an ink
+   * box of 10.5×10.5 at 34.7 lit px, against `refresh` at 10.5×11.8 and 33.4 and
+   * `trash` at 11.5×11.5 and 57.6. So it reads at `refresh`'s weight — within 4%
+   * of its coverage, and identical in width — and nowhere near `trash`'s, which
+   * is twice as heavy because it destroys.
+   *
+   * Three shaft lengths were drawn and measured. A longer one squares the box up
+   * (11.0×11.0, then 11.3×11.3) at 36.4 and 37.0 lit px, which buys a tidier
+   * bounding box by moving the coverage away from the glyph it must match. The
+   * box is not the thing a reader sees; the weight is.
+   */
+  edit: {
+    px: 15,
+    path: 'M3 13L4.1 9.7L10.9 2.9L13.1 5.1L6.3 11.9ZM4.1 9.7L6.3 11.9',
+  },
 } as const;
 
 export type GlyphName = keyof typeof GLYPH;
 
+/**
+ * A glyph button that is a toggle rather than an action.
+ *
+ * `on` is the only way to get a pressed icon button, and it writes both halves at
+ * once: the class the accent treatment hangs off, and `aria-pressed`. They are
+ * one prop because they were two facts that could disagree — the panel's mode
+ * switch painted its state and announced none of it, so a screen reader heard two
+ * identical buttons where the eye saw one lit.
+ *
+ * Omitting `on` renders no `aria-pressed` at all, which is correct: a button that
+ * does a thing is not a button that is in a state.
+ */
 export function IconButton({
   glyph,
   tone = 'ghost',
   size = 'tiny',
   extra,
+  on,
   ...rest
-}: Base & { glyph: GlyphName; tone?: Tone; size?: Size; extra?: string }) {
+}: Base & { glyph: GlyphName; tone?: Tone; size?: Size; extra?: string; on?: boolean }) {
   const g = GLYPH[glyph] as {
     mark?: string;
     path?: string;
@@ -122,7 +172,8 @@ export function IconButton({
   };
   return (
     <button
-      className={cls('btn', TONE[tone], SIZE[size], 'icon-button', extra)}
+      className={cls('btn', TONE[tone], SIZE[size], 'icon-button', on && 'is-on', extra)}
+      aria-pressed={on}
       // Inline because it is per-glyph metric data, not a theme decision: a new
       // glyph should mean a row in the table above and nothing in the stylesheet.
       style={{ fontSize: `${g.px}px`, ...(g.nudge ? { transform: `translateY(${g.nudge})` } : {}) }}

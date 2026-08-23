@@ -159,9 +159,12 @@ same component, or evidence it is a third?
 a descendant of `.vaultgate`. Neither overflows at 820px height yet, so it is latent.
 
 This is a stated non-negotiable — "no nested scroll on one axis" — and it is the identical shape
-`.picker.is-inline .picker-list` was explicitly fixed for, with a comment citing the rule. The
-picker's answer was to cap at 40 rows and make typing the way past it; the browse list has no cap
-and a folder can hold hundreds of entries.
+the record picker was twice fixed for. (Both of the picker's fixes are now gone, and the second one
+is the better precedent: `.picker.is-inline .picker-list` surrendered the scroll while the picker sat
+in the card panel's flow, and that variant is retired because the picker no longer sits there — it
+floats in a popover, which measures its own `maxHeight` and does the scrolling. Escaping the
+containing scroller beat negotiating with it.) The picker's other answer was to cap at 40 rows and
+make typing the way past it; the browse list has no cap and a folder can hold hundreds of entries.
 
 Attack: is a `max-height` cap on an intrinsically-sized list the same thing the rule forbids, or
 is the rule about two *panes* competing for a wheel? What is the right bound for a directory

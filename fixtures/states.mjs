@@ -62,14 +62,17 @@ const FACETS = `# Fixture vocabulary — a copy of the work vault's, so this vau
 # Every value declared here is carried by at least one card in cards/. If you add
 # a value and no card takes it, the fixture has stopped doing its job.
 
-parent:
-  label: Part of
-  type: ref
+status:
+  label: Status
+  values: [planning, active, frozen, done, archived]
+  open: false
   single: true
 
-blocks:
-  label: Blocks
-  type: ref
+priority:
+  label: Priority
+  values: [now, month, backlog, someday]
+  open: false
+  single: true
 
 due:
   label: Due
@@ -78,17 +81,10 @@ due:
   buckets: { overdue: -1, today: 0, week: 7 }
   overflow: later
 
-priority:
-  label: Priority
-  values: [now, month, backlog, someday]
-  open: false
-  single: true
-
-status:
-  label: Status
-  values: [planning, active, frozen, done, archived]
-  open: false
-  single: true
+waiting_on:
+  label: Waiting on
+  values: [person-a, person-b, person-c, person-d, person-e, person-g, person-f]
+  open: true
 
 energy:
   label: Energy
@@ -96,24 +92,24 @@ energy:
   open: false
   single: true
 
-waiting_on:
-  label: Waiting on
-  values: [person-a, person-b, person-c, person-d, person-e, person-g, person-f]
-  open: true
-
 domain:
   label: Domain
   values: [eventing, identity, master-data, workflow, observability, lifecycle]
   open: true
 
-source:
-  label: Source
-  values: [brain, trello, slack, jira, gmail, gdocs, git, claude]
-  open: true
-
 tech:
   label: Tech
   values: [k8s, aws, github, kafka, keycloak, quarkus, temporal, mongodb, devops]
+  open: true
+
+layer:
+  label: Layer
+  values: [layer-1, layer-2, layer-3, layer-4, layer-5]
+  open: false
+
+source:
+  label: Source
+  values: [brain, trello, slack, jira, gmail, gdocs, git, claude]
   open: true
 
 owner:
@@ -122,13 +118,17 @@ owner:
   open: true
   single: true
 
-layer:
-  label: Layer
-  values: [layer-1, layer-2, layer-3, layer-4, layer-5]
-  open: false
+parent:
+  label: Part of
+  type: ref
+  single: true
 
 project:
   label: Project
+  type: ref
+
+blocks:
+  label: Blocks
   type: ref
 `;
 

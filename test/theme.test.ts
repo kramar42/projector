@@ -389,3 +389,177 @@ test('ARCHITECTURE.md names the tests that exist', () => {
     'a test that exists and the document does not name',
   );
 });
+
+/**
+ * The Mono Label Rule's missing half: a control that carries text names its font.
+ *
+ * The most-cited rule in DESIGN.md was the least enforced, and it failed in the
+ * one direction prose cannot catch. `.facetedit-head` was a bare `<button>`
+ * declaring no family, so when its label's explicit `--mono` was removed to make
+ * the panel agree with the filter rail, the label did not land on `--sans` — it
+ * landed on the UA's form-control font, and thirteen axis labels rendered in
+ * Arial thirty pixels from the rail rendering the same strings. The commit that
+ * did it was *correcting* this exact divergence, and every test passed.
+ *
+ * A browser gives `button`, `input`, `textarea` and `select` their own family, so
+ * for those elements inheritance is not a default — it is a declaration you have
+ * to make. Hence the check: every `<button>` in the client must carry at least
+ * one class whose rule names a family. The rail's `.facet-head` says
+ * `font: inherit` and passes; the panel's old head said nothing and would not.
+ *
+ * Scoped to `<button>` because the shared `input, textarea, select` rule already
+ * covers the other three in one place, and 'every field is drawn by the app'
+ * above is what keeps that rule honest.
+ */
+test('a button names its font, because the browser otherwise names it for you', () => {
+  /** `font: inherit`, a `font-family:`, or a `font:` shorthand naming a token. */
+  const NAMES_FAMILY = /(font-family:|font:\s*inherit|font:[^;]*var\(--(?:sans|mono)\))/;
+  const byClass = new Map<string, string[]>();
+  for (const r of rules()) {
+    for (const c of r.sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
+      byClass.set(c[1]!, [...(byClass.get(c[1]!) ?? []), r.body]);
+    }
+  }
+  const names = (cl: string) => (byClass.get(cl) ?? []).some((b) => NAMES_FAMILY.test(b));
+
+  const dir = fileURLToPath(new URL('../src/web/', import.meta.url));
+  const files: string[] = [];
+  const walk = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else if (e.name.endsWith('.tsx')) files.push(join(d, e.name));
+    }
+  };
+  walk(dir);
+
+  /**
+   * The classes on one opening tag, however the caller spelled them.
+   *
+   * `className` is a string here, a template literal there, and a `cls(...)` call
+   * in `Button.tsx` — which is the one that matters most, since every real button
+   * in the app goes through it. So: take the whole attribute value with balanced
+   * braces, then read every quoted or backticked run inside it. An interpolation
+   * contributes nothing and is simply not a class this test can see.
+   */
+  const classesOn = (tag: string): string[] => {
+    const at = tag.indexOf('className=');
+    if (at < 0) return [];
+    let i = at + 'className='.length;
+    let value: string;
+    if (tag[i] === '{') {
+      let depth = 0;
+      const from = i;
+      for (; i < tag.length; i++) {
+        if (tag[i] === '{') depth++;
+        else if (tag[i] === '}' && --depth === 0) break;
+      }
+      value = tag.slice(from + 1, i);
+    } else {
+      value = tag.slice(i, tag.indexOf('"', i + 1) + 1);
+    }
+    const out: string[] = [];
+    for (const m of value.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)) {
+      for (const cl of (m[1] ?? m[2] ?? m[3] ?? '').split(/\s+/)) if (cl && !cl.includes('$')) out.push(cl);
+    }
+    return out;
+  };
+
+  const bare: string[] = [];
+  for (const f of files) {
+    // Prose talks about markup — this very test's own comment names a `<button>`
+    // — so comments come out before anything is counted as an element.
+    const src = readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    for (const m of src.matchAll(/<button\b[\s\S]*?>/g)) {
+      const classes = classesOn(m[0]);
+      if (classes.some(names)) continue;
+      bare.push(`  ${f.slice(dir.length)} — ${classes.join(' ') || '(no class at all)'}`);
+    }
+  }
+  assert.deepEqual(
+    bare,
+    [],
+    `a <button> whose classes never name a font family, so it keeps the UA's:\n${bare.join('\n')}`,
+  );
+});
+
+/**
+ * A counter cannot lose its tabular guard by accident.
+ *
+ * The guard is not doing what it looks like it does. Every member of the hoisted
+ * rule is mono, and in a monospaced face the digits already share one advance —
+ * so the declaration changes nothing about any of them *today*. What it is, is
+ * insurance against a counter losing its mono, which is a thing that happens: the
+ * commit that dropped thirteen axis labels onto a `<button>`'s own font did it
+ * with every test in this file green. On the day that lands on a counter, this
+ * declaration is the difference between a number that shoves its neighbours on
+ * every increment and one that does not.
+ *
+ * Two things can silently remove it, and the test is one assertion each.
+ *
+ * **The `font:` shorthand resets every sub-property it does not name**, including
+ * this one. So a hoisted rule is undone by any later rule that sets `font:` on the
+ * same element, and the two counters that do — `.facet-more` and `.popbtn` — have
+ * to re-declare it for themselves. Membership is pinned as a set rather than a
+ * count so that adding a counter is a deliberate edit here, and so that the file
+ * cannot disagree with a tally in prose about how many there are.
+ *
+ * **A co-class is not membership.** `.facet-count` renders as
+ * `quietcount facet-count` in one template string, so it inherited the guard from
+ * a sibling class in a `className` rather than from a rule. That is a guard held
+ * in place by a JSX string, and this test would not have noticed it leaving.
+ */
+test('a counter cannot lose its tabular guard by accident', () => {
+  /**
+   * The counters, pinned. This list is the decision; the stylesheet is checked
+   * against it, never the other way round — a set derived from "whichever rules
+   * declare the guard" cannot notice a counter dropping the guard, because
+   * dropping it also drops the counter out of the set doing the checking.
+   */
+  const COUNTERS = [
+    'bulkbar-count',
+    'cardface-meta',
+    'column-count',
+    'count',
+    'facet-badge',
+    'facet-count',
+    'facet-more',
+    'lane-count',
+    'num',
+    'popbtn',
+    'progress-num',
+    'quietcount',
+    'rail-active',
+    'rail-stats',
+    'section-count',
+    'sidebar-ribbon-info',
+    'table',
+    'vaultrow-meta',
+  ];
+
+  const classesIn = (sel: string) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]!);
+  const tabular = rules().filter((r) => /font-variant-numeric:\s*tabular-nums/.test(r.body));
+
+  // (a) Nothing joined or left the guard without this list being edited on purpose.
+  assert.deepEqual(
+    [...new Set(tabular.flatMap((r) => classesIn(r.sel)))].sort(),
+    [...COUNTERS].sort(),
+    'a counter joined or left the tabular guard',
+  );
+
+  // (b) A rule that sets the `font:` shorthand wipes the guard for its subtree, so
+  // any rule doing that to a pinned counter must re-declare it. Checked against the
+  // pinned list rather than the derived set, or removing the declaration would also
+  // remove the element being asked about.
+  const broken = rules()
+    .filter((r) => /(^|[;{\s])font:\s*[^;]+;/.test(r.body))
+    .filter((r) => classesIn(r.sel).some((c) => COUNTERS.includes(c)))
+    .filter((r) => !/font-variant-numeric:\s*tabular-nums/.test(r.body))
+    .map((r) => r.sel);
+  assert.deepEqual(
+    broken,
+    [],
+    `a counter sets the \`font:\` shorthand, which resets its own tabular guard:\n  ${broken.join('\n  ')}`,
+  );
+});

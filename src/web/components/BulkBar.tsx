@@ -4,6 +4,7 @@ import { plural } from '../plural.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { RecordPicker } from './RecordPicker.tsx';
 import { Button } from './Button.tsx';
+import { FACET_TONE } from './CardBody.tsx';
 import type { QueryResponse } from '../types.ts';
 
 /**
@@ -59,7 +60,13 @@ export function BulkBar({
             .map((v) => (
               <button
                 key={v.value}
-                className="togglechip"
+                // The axis's own family, from the same map the card face and the
+                // panel read. These chips name values of the facet chosen in the
+                // select beside them, so they are properties of records exactly
+                // as the panel's are — a hueless chip here would put the same
+                // value in two colours on one screen, which is the drift the map
+                // is shared to prevent.
+                className={`togglechip ${FACET_TONE[facet] ?? 'facet-muted'}`}
                 onClick={() =>
                   void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
                 }

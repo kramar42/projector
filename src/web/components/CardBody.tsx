@@ -12,7 +12,16 @@ import type { CardDTO } from '../types.ts';
  * a deep link and the real editors.
  */
 
-const FACET_TONE: Record<string, string> = {
+/**
+ * Which hue family an axis draws in — one entry per axis, seven hued and two
+ * deliberately not (`source` and `energy` are hints, and The Hints Are Hueless
+ * Rule says a hint gets no family rather than a diluted one).
+ *
+ * Exported because the panel's toggle chips read it too. A second copy is the
+ * exact drift that would let the same axis be orange on a card face and green in
+ * the editor, and the axis is the only thing either of them knows.
+ */
+export const FACET_TONE: Record<string, string> = {
   priority: 'facet-priority',
   status: 'facet-status',
   layer: 'facet-layer',

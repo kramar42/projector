@@ -90,7 +90,7 @@
   --radius-md: 4px;
   --radius-base: 5px;     /* every control: button, input, select, row, banner */
   --radius-lg: 6px;       /* a card face, the picker, the minimap */
-  --radius-badge: 7px;
+  --radius-badge: 7px;    /* the filter rail's marked count, and nothing else */
   --radius-xl: 8px;       /* a container: column, popover, bulk bar, toolbar */
   --radius-pill: 10px;    /* a count badge, a canvas band */
 }
@@ -180,10 +180,12 @@
  * Tabular numerals, once, for everything that reports a number.
  *
  * The Tabular Number Rule is unconditional in DESIGN.md — "**Do** give every
- * count `font-variant-numeric: tabular-nums`" — and it was true of five of the
- * fourteen places this app prints a number. The omissions were not uniform in
- * cost: most counts sit last in a flex row with nothing to their right to shift,
- * but four genuinely move their neighbours, and those were all among the misses.
+ * count `font-variant-numeric: tabular-nums`" — and it was true of a minority of
+ * the places this app prints a number. The omissions were not uniform in cost:
+ * most counts sit last in a flex row with nothing to their right to shift, and
+ * these four genuinely move their neighbours, so these were the misses that
+ * mattered. (No tally: how many counters exist changes by working, and the set
+ * that changes by deciding is pinned in `test/theme.test.ts`.)
  *
  *   `.table .num`      the roll-up columns, which DESIGN.md names *by name* as a
  *                      tabular case. A column of numbers read vertically is where
@@ -195,17 +197,35 @@
  *   `.rail-active`     the footer's own counts, which change on every keystroke of
  *                      the search box.
  *
- * Declared once rather than fourteen times, the way the focus ring above is: the
+ * Declared once rather than at each site, the way the focus ring above is: the
  * property inherits, so naming the container is enough, and a number added inside
- * any of these is covered without anyone remembering the rule. `.pop-annotation`
- * is deliberately absent — it renders `v.shape` and `'missing'`, so it is a
- * right-hand annotation that sometimes holds digits, not a count.
+ * any of these is covered without anyone remembering the rule.
+ *
+ * What this rule is *for* is worth stating precisely, because the obvious reading
+ * is wrong. Every member below is mono, and in a monospaced face the digits are
+ * already on one advance — so `tabular-nums` changes nothing about any of them
+ * today. It is not a fix, it is a **guard**: it is what makes a counter survive
+ * losing its mono. That is not hypothetical here. A commit correcting a
+ * font-family divergence dropped a label onto a `<button>`'s own font and thirteen
+ * of them rendered in Arial with every test green; the day that happens to a
+ * counter, this declaration is the difference between a number that shifts its
+ * neighbours on every increment and one that does not.
+ *
+ * Which is also why the exclusions matter more than the members. `.pop-annotation`
+ * is deliberately absent, and the discriminator is **position, not content**: it
+ * is the right-hand slot on a popover row, so it renders `v.shape` at one site and
+ * a card count at another. A slot defined by where it sits is not a count.
  */
 .rail-stats,
 .rail-active,
 .sidebar-ribbon-info,
 .facet-badge,
 .quietcount,
+/* Listed as well as `.quietcount`, though every current call site renders the two
+   together in one `className` string. A co-class is not membership: the guard
+   would leave the moment a site drew `.facet-count` on its own, and the rule's own
+   preamble already claims this counter. */
+.facet-count,
 .column-count,
 .lane-count,
 .count,
@@ -642,6 +662,12 @@ body {
   border-radius: var(--radius-base);
   color: var(--ink);
   font: inherit;
+  /* After the shorthand, which resets it — the same reason `.facet-more` declares
+     its own. This is the one number in the app that is genuinely *not* mono: the
+     label renders `{n} columns` and `{first} +{n}`, in the body sans, so its
+     digits are the only ones whose width can change and push the words after
+     them. The rule above is a guard everywhere else and does real work here. */
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-body-sm);
   padding: 3px 6px;
   cursor: pointer;
@@ -1017,9 +1043,14 @@ input:focus-visible + .checkbox {
  * is the one thing that step is not for. They differed otherwise only in how they
  * sit in their row, so that is all the site classes keep now.
  *
- * This is the Count Rule's "quiet" case, which is every count in the app except
- * one: `.facet-badge` takes the accent fill because it is the only signal that a
- * filter is narrowing what you see, and that is the app speaking about live state.
+ * This is the Count Rule's "quiet" case, and the largest of its five families —
+ * see COMPONENTS.md, which names them. The accent belongs to the *marked* family
+ * alone: `.facet-badge` and `.bulkbar-count`, both counts of something the reader
+ * caused, which is the app speaking about live state.
+ *
+ * `.facet-count` is now a member of the hoisted tabular rule as well as of this
+ * one. It had the guard only because every call site renders `quietcount
+ * facet-count` in one string, which is a guard held in place by JSX.
  *
  * Deliberately NOT members, each for its own reason:
  *   `.column-count`   carries a `surface-3` pill that DESIGN.md commits in its
@@ -1323,49 +1354,58 @@ input:focus-visible + .checkbox {
    fit: priority is Number (orange), status is PreProc (green), project is Type
    (purple), tech is Statement (blue), layer is Identifier (pink). */
 .facet-priority {
+  --tone: var(--hue-orange);
   background: color-mix(in srgb, var(--hue-orange-bg) var(--chip-tint), var(--surface));
   color: var(--hue-orange);
   border-color: color-mix(in srgb, var(--hue-orange) 30%, transparent);
 }
 .facet-status {
+  --tone: var(--hue-green);
   background: color-mix(in srgb, var(--hue-green-bg) var(--chip-tint), var(--surface));
   color: var(--hue-green);
   border-color: color-mix(in srgb, var(--hue-green) 30%, transparent);
 }
 .facet-project {
+  --tone: var(--hue-purple);
   background: color-mix(in srgb, var(--hue-purple-bg) var(--chip-tint), var(--surface));
   color: var(--hue-purple);
   border-color: color-mix(in srgb, var(--hue-purple) 32%, transparent);
 }
 .facet-tech {
+  --tone: var(--hue-blue);
   background: color-mix(in srgb, var(--hue-blue-bg) var(--chip-tint), var(--surface));
   color: var(--hue-blue);
   border-color: color-mix(in srgb, var(--hue-blue) 30%, transparent);
 }
 .facet-layer {
+  --tone: var(--hue-pink);
   background: color-mix(in srgb, var(--hue-pink-bg) var(--chip-tint), var(--surface));
   color: var(--hue-pink);
   border-color: color-mix(in srgb, var(--hue-pink) 34%, transparent);
   font-weight: 600;
 }
 .facet-waiting {
+  --tone: var(--hue-red);
   background: color-mix(in srgb, var(--hue-red-bg) var(--chip-tint), var(--surface));
   color: var(--hue-red);
   border-color: color-mix(in srgb, var(--hue-red) 32%, transparent);
 }
 .facet-domain {
+  --tone: var(--hue-yellow);
   background: color-mix(in srgb, var(--hue-yellow-bg) var(--chip-tint), var(--surface));
   color: var(--hue-yellow);
   border-color: color-mix(in srgb, var(--hue-yellow) 30%, transparent);
 }
 /* Energy and source are hints, not identity: no hue, so they recede. */
 .facet-energy {
+  --tone: var(--ink-2);
   background: transparent;
   color: var(--ink-3);
   border-color: var(--rule);
   font-style: italic;
 }
 .facet-muted {
+  --tone: var(--ink-2);
   background: transparent;
   color: var(--ink-3);
   border-color: var(--rule);
@@ -1458,10 +1498,20 @@ input:focus-visible + .checkbox {
 
 .count {
   font-family: var(--mono);
-  font-size: var(--text-chip);
+  /* `--text-xs`, with `.column-count`: same family, same rung, and now the same
+     step. It was `--text-chip` 10px against the column count's 11px, with both
+     annotating a 12.5px host — a 1px split inside one family that nothing stated a
+     reason for. 11px is also what `.table .num` reads at, so the table's two kinds
+     of number now agree with each other as well. */
+  font-size: var(--text-xs);
   color: var(--ink-3);
   background: var(--surface-3);
-  border-radius: var(--radius-xl);
+  /* `--radius-pill`, with `.column-count`: the token's comment reads "a count
+     badge, a canvas band" and this is a count badge. It sat on `--radius-xl`,
+     whose comment enumerates containers — a column, a popover, the bulk bar, the
+     toolbar — so one of the two filled counts in the app was on the container
+     rung and neither enumeration was true. Same family, same rung. */
+  border-radius: var(--radius-pill);
   padding: 0 5px;
   flex: none;
 }
@@ -1608,43 +1658,71 @@ input:focus-visible + .checkbox {
  * Both are steps of the committed scale (1·4·6·7·8·12·14·18·20); 18px is now
  * spent on the page padding alone, where it always was.
  */
+/*
+ * The tier owns its own padding, so its rule can reach the panel's edges.
+ *
+ * The separator used to be `border-top` on a tier inside a `.panel-body` that
+ * held the 20px horizontal padding, so every divider stopped 20px short at both
+ * ends and read as a rule drawn *around* the content rather than *between* the
+ * sections. Escaping that with a negative margin would have been a new idiom in
+ * a file that has none; the structural fix is the one `.rail-block` already uses,
+ * which is to let the block own both its padding and its border.
+ *
+ * The cadence survives the move because it is stated in the numbers rather than
+ * in which element carries them: 10px of tier padding on each side of the
+ * hairline is the same 20px-and-a-rule between tiers, `.panel-body`'s remaining
+ * vertical padding puts the first tier's content at the old 18px from the sticky
+ * head, and 10 + 30 leaves the old 40px of clearance under the last one.
+ */
 .panel-body {
-  padding: 18px 20px 40px;
+  padding: 0 0 30px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
+/*
+ * One number, all four sides — the rail's number.
+ *
+ * `.rail-block` is `padding: 10px 10px` with a `gap: 5px` and a hairline under
+ * it, and that block is the densest readable thing in this app: thirteen axes and
+ * five controls in 248px that still reads as a flow rather than a list of boxes.
+ * The panel had 20px at the sides against 10px above and below its rule, so the
+ * horizontal breathing room was twice the vertical and the dividers read as
+ * inset rules drawn *around* content rather than joins *between* sections.
+ *
+ * Uniform 10px makes the interval between two tiers exactly the interval to the
+ * panel's edge, which is what makes the rail feel continuous. The first tier
+ * needs no lead-in of its own — a sticky head with a hairline is the same
+ * boundary a divider is — so `.panel-body` keeps only the deep bottom pad that
+ * clears the viewport edge.
+ */
 .panel-tier {
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .panel-tier + .panel-tier {
   border-top: 1px solid var(--rule);
-  padding-top: 20px;
 }
 
 /*
- * The workshop: the raw file and its path, the things you look at least often.
+ * The workshop tier — the raw file, what it inherits, the things you look at
+ * least often — has no class of its own any more, and needs none: it recedes by
+ * *position*, last and under a rule, and by `ink-3` on its keys, which is what
+ * this system already calls the ground state of annotation. Its one declaration
+ * was a 4px margin buying separation that every tier now gets from the divider.
  *
- * It recedes by *position* — last, under a rule, after everything the panel was
- * opened for — and by `ink-3` on its keys, which is what this system already
- * calls the ground state of annotation. It does not recede by opacity.
- *
- * It did, at 0.72, with a hover that took it back to 1. Two things wrong with
- * that, and the second is the reason the first mattered. A readout that
- * brightens under the cursor is not still, and the trigger was the whole tier,
- * so pointing at the frontmatter editor lit up the file path underneath it —
- * feedback on a sibling you were not touching. And the reveal existed because
- * the rest state was too dim to read: measured, the `dt` label sat at 3.16:1,
- * under the 4.5:1 floor, against 5.74:1 with the opacity gone. The hover was
- * paying for a contrast failure rather than expressing anything.
+ * It does not recede by opacity, and the measurement is why. It did, at 0.72,
+ * with a hover that took it back to 1. A readout that brightens under the cursor
+ * is not still, and the trigger was the whole tier, so pointing at the
+ * frontmatter editor lit up the file path underneath it — feedback on a sibling
+ * you were not touching. And the reveal existed because the rest state was too
+ * dim to read: measured, the `dt` label sat at 3.16:1, under the 4.5:1 floor,
+ * against 5.74:1 with the opacity gone. The hover was paying for a contrast
+ * failure rather than expressing anything. Do not reintroduce it.
  */
-.panel-tier.is-workshop {
-  margin-top: 4px;
-}
 
 /*
  * A section's heading, and the corner its control sits in.
@@ -1662,12 +1740,22 @@ input:focus-visible + .checkbox {
  * control overflowed the 13.8px box into the 8px margin; it is now true on
  * purpose, and costs 6px on the three heads that carry no control.
  */
+/* A section is a column with one gap, so a heading's spacing is the same
+   mechanism as a row's. The heading used to carry `margin-bottom: 8px` while the
+   rows carried their own margins — two mechanisms for one rhythm, and the reason
+   a section with a head sat differently from one without. */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .panel-section h3 {
   --label-track: 0.13em;
   display: flex;
   align-items: center;
   min-height: 20px;
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .kv {
@@ -1678,13 +1766,49 @@ input:focus-visible + .checkbox {
   font-size: var(--text-body-sm);
 }
 
+/*
+ * A key, and — when the value is resolved rather than stored — the `ƒ` that says
+ * so, at the right edge of the key column.
+ *
+ * Right-aligned because that is where the rail puts it: `.facet-label` takes
+ * `flex: 1` so the marker lands against the column's inner edge, in one vertical
+ * line down the list. Beside the word instead, the marker sat at a different x on
+ * every row — `KEYƒ`, `CHAINƒ`, `BRANCHƒ` — which reads as part of the key rather
+ * than as an annotation of the column, and made a ragged second edge inside a
+ * grid whose whole job is one edge.
+ */
 .kv dt {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   font-family: var(--mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding-top: 1px;
+}
+
+.kv dt .derived {
+  margin-left: auto;
+}
+
+/*
+ * On a derived row the `ƒ` stays with the label, and the count goes to the edge.
+ *
+ * The right-aligned marker is right in the `kv` key column, which is 68px wide —
+ * there, "against the column's inner edge" and "beside the word" are the same
+ * place. A derived row spans the panel, so the same rule pushed `ƒ` 500px away
+ * from the word it annotates and parked it against the count, where it read as
+ * part of the number. The annotation belongs to the label; the count is the thing
+ * with a right edge to sit on.
+ */
+.facetrow.is-derived .facetrow-label .derived {
+  margin-left: 3px;
+}
+
+.facetrow.is-derived .facetrow-label .quietcount {
+  margin-left: auto;
 }
 
 .kv dd {
@@ -2058,26 +2182,63 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* A chip that is also a hit target: the chip family's type, with padding tuned
    up from the chip's `1.5px 6px` because this one is pressed. */
+/*
+ * A value you can take on or off — and, now, in its axis's own family.
+ *
+ * It was the accent in both states: an unset value in `ink-3`, a set one filled
+ * `--accent`. That made the card editor the one surface where a facet value does
+ * not carry its axis's hue, in the one place all the axes are on screen at once —
+ * a lit `priority` and a lit `project` the same purple, and `waiting_on`, the
+ * facet whose presence is itself a warning, losing its red exactly where you set
+ * it. The App Voice Rule says the accent marks live state and the app speaking
+ * and never a property of a record, which is what these are.
+ *
+ * The colour arrives as `--tone`, declared once per family beside the `.facet-*`
+ * fill those families already own. That indirection is not decoration: the
+ * `.facet-*` rules are declared *above* this one at equal specificity, so a tone
+ * class appended to the chip's className would have lost the cascade and changed
+ * nothing at all. A custom property is resolved on the element rather than
+ * fought over by selector order, and it keeps the literal `color: var(--hue-…)`
+ * that `test/theme.test.ts`'s one-hue-per-axis check reads out of each family.
+ *
+ * Off is the hue as *text* on the plain surface — an unset value is not a value,
+ * so it gets no fill — and the row still says which axis it is before you read a
+ * word of it. On is the hue as *fill*, with `--ground` text, which is what the
+ * two bucket chips already do and what the Don't-put-ink-on-a-fill rule requires.
+ */
 .togglechip {
   appearance: none;
   font-family: var(--mono);
   font-size: var(--text-chip);
   border: 1px solid var(--rule-2);
   background: var(--surface);
-  color: var(--ink-3);
+  color: var(--tone, var(--ink-3));
   border-radius: var(--radius-sm);
   padding: 2px 7px;
   cursor: pointer;
 }
-.togglechip:hover { border-color: var(--accent); color: var(--ink); }
+
+/* Only an off chip hovers. `--ink` over a `--tone` fill is the pairing that
+   measured 1.03:1 elsewhere in this file, and an on chip already reads as on. */
+.togglechip:not(.is-on):hover {
+  border-color: var(--tone, var(--accent));
+  background: color-mix(in srgb, var(--tone, var(--accent)) 12%, var(--surface));
+  color: var(--ink);
+}
+
 .togglechip.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--tone, var(--accent));
+  border-color: var(--tone, var(--accent));
   color: var(--ground);
   font-weight: 600;
 }
 .togglechip.is-extra { border-style: dashed; font-style: italic; }
-.togglechip.is-clear { color: var(--bad); }
+
+/* After `.is-on` and the tone, because a clear button is not a value on the axis
+   and must not wear its colour — it is the one member of this family that says
+   `bad`, and two classes of tone would otherwise out-order one of it. */
+.togglechip.is-clear,
+.togglechip.is-clear:not(.is-on):hover { color: var(--bad); }
 
 /* panel editing */
 
@@ -2267,64 +2428,130 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 2px;
 }
 
-.tab {
-  appearance: none;
-  border: 1px solid var(--rule);
-  background: var(--surface-2);
-  color: var(--ink-3);
-  font-family: var(--mono);
-  font-size: var(--text-chip);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.tab.is-on { background: var(--accent); border-color: var(--accent); color: var(--ground); }
+/*
+ * `.tab` is gone, and with it the panel's last mode switch.
+ *
+ * It painted two pills for `read` / `edit` where the frontmatter's `edit raw`
+ * painted one word, for the same act — reveal an editor over a readout. Both are
+ * one pressed `.icon-button` now, so the shape that meant "you are in this mode"
+ * and the shape that meant "do a thing" stopped disagreeing about which of the
+ * two this is. Its `text-transform: none` and `letter-spacing: 0` went with it:
+ * they existed to cancel the panel heading's uppercase, and a glyph has no case.
+ */
 
-/* An axis carrying nothing is one line; one carrying something is open. Closed
-   rows sit tighter than open ones, so a run of empty axes reads as a list of
-   names rather than as a stack of sections. */
-.facetedit { margin-bottom: 2px; }
-.facetedit.is-carried { margin-bottom: 10px; }
-
-/* The whole label row is the toggle, so the target is the width of the panel
-   rather than the width of the word — the same head the filter rail uses. */
-.facetedit-head {
-  appearance: none;
-  width: 100%;
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  background: none;
-  border: 0;
-  padding: 2px 0;
-  margin-bottom: 2px;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
+/*
+ * A pressed icon button — the toggle's on-state.
+ *
+ * `accent-soft` fill with an `accent` glyph rather than the accent *fill* the
+ * retired `.tab.is-on` used: a 20px solid accent square in a section head is the
+ * loudest thing on the panel, for a state that is merely "the editor is open".
+ * This is the pairing the focus pill already uses, and it keeps the accent for
+ * the glyph, where The App Voice Rule wants it — this is live state, and the app
+ * saying so.
+ */
+.icon-button.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /*
- * An axis's name, in the panel. Cased once — see The One Casing Rule.
+ * One grid for a section's axes, so every label shares one column.
  *
- * `facets.yaml` says `label: Part of`, and the filter rail thirty pixels away
- * renders exactly that. This rule used to `text-transform: uppercase` it, so one
- * string carried two identities in a single viewport. Casing is part of a word's
- * identity, not part of a surface's styling.
+ * The rows were a stack of disclosure widgets: thirteen heads, nine of which
+ * said only their own name, each a full-width `<button>` toggling a body. The
+ * caller now renders a row only for an axis that is carried or was asked for —
+ * the filter rail's own "empty facets are absent" — and what is left needs no
+ * caret, so the head stops being a control and becomes a label in a cell.
  *
- * The rule permits the uppercase mono register where a surface genuinely takes
- * the **Label** type step, which carries that register — a table header and a
- * lane head both do, and both keep it. This did not: it was `--text-chip` with
- * `uppercase` and `0.1em` bolted on, which is a third register rather than the
- * Label step, and the only place in the app hand-rolling one.
- *
- * Mono stays, because the app is naming an axis (The Mono Label Rule). The step
- * moves up to the one meant for a long vertical list, which is what thirteen axes
- * are — and at `--text-chip` the label was the same size as the chips underneath
- * it, so the row had no hierarchy. Tracking falls to the chip step's `0.01em`:
- * `0.1em` exists to open up uppercase, and there is no uppercase now.
+ * `max-content` on the label track, not a fixed 62px like the rail's: the rail
+ * gutter is shared by every rail row in the app, where this grid is per-section
+ * and can size itself to the longest label it actually holds. `display: contents`
+ * on the row is what lets two sections' rows each align internally while the
+ * markup still nests a row as a row.
  */
+.facetgrid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: start;
+}
+
+.facetrow {
+  display: contents;
+}
+
+/* 2px of optical lead, so a 12px label sits on the same line as the 10px chips
+   beside it rather than on the top edge of their box. */
+.facetrow-label {
+  font-family: var(--sans);
+  font-size: var(--text-body-sm);
+  color: var(--ink-2);
+  padding-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* So `ƒ` and the count can be pushed to the column's inner edge rather than
+     trailing the word — see `.kv dt`. The track is `max-content`, so the widest
+     label still sets the width and nothing stretches. */
+  width: 100%;
+}
+
+/* `align-items: center` because these children are genuinely different heights: a
+   `.refchip` sized by a 20px IconButton, a `small` ghost Button at `3.5px 8px`, a
+   `.dateinput`, and the `+ new` field. */
+.facetrow-values {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+/*
+ * A derived row breaks the grid and stacks: label on its own line, records under it.
+ *
+ * The editable axes are a `label | values` grid because their values are chips —
+ * short, wrapping, and readable at the end of a 90px gutter. A derived row's values
+ * are `.reflink`s, full-width lines you click, and a column of them squeezed into
+ * the grid's second track left each title fighting a 90px indent for the width it
+ * needed. So the row spans both tracks and puts its label above, which is where it
+ * was before this section existed — and it makes the label read as the heading of
+ * the list under it rather than as one cell of a table.
+ *
+ * `display: flex` overrides the `display: contents` every other row takes, which is
+ * how one class can be both a grid participant and a block that spans it.
+ */
+.facetrow.is-derived {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  grid-column: 1 / -1;
+}
+
+.facetrow.is-derived .facetrow-values {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+/* The door to an axis this card carries nothing on. A `.popbtn` by construction —
+   it opens a popover, and that machinery is the reason — but painted as the ghost
+   button it reads as, and sized to its own words rather than to a rail column. */
+.addbtn.popbtn {
+  align-self: start;
+  width: auto;
+  background: none;
+  border-color: transparent;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  padding: 2px 6px;
+}
+
+.addbtn.popbtn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
 /*
  * An axis's name, in the panel. Sans, and the same size the rail renders it at.
  *
@@ -2335,26 +2562,20 @@ textarea { resize: vertical; font-family: inherit; }
  * this was first read: the rail was taken for the deviation and the panel for the
  * correct one, when the rail had it right all along.
  *
- * Casing came first: this rule used to `text-transform: uppercase` at the *Chip*
- * step, so one string carried two identities thirty pixels apart. Now the string
- * renders the same way in both places, which is the whole of The One Casing Rule.
+ * The family is now *declared* rather than inherited, and that is the whole of
+ * the fix this rule was missing. It said only `font-size` and `color`, and its
+ * parent was a `<button>` — `.facetedit-head`, which declared no font at all
+ * where the rail's `.facet-head` declares `font: inherit`. So removing the
+ * explicit `--mono` did not land the label on the sans stack; it landed on the
+ * UA form-control font, and thirteen labels rendered in Arial, 30px from the rail
+ * rendering the same strings in `--sans`. Nothing caught it because nothing tests
+ * a font-family — `test/theme.test.ts` now does.
+ *
+ * `.facetrow-label` supersedes this class. It is a cell in a grid rather than the
+ * text of a button, so there is no form-control font in its chain at all — but it
+ * names the family anyway, because the last two attempts at this rule were both
+ * one inherited value away from being right.
  */
-.facetedit-label {
-  font-size: var(--text-body-sm);
-  color: var(--ink-3);
-}
-
-/* What a collapsed axis still says: how many values are under it. `FacetEditor`
-   renders that count under `!open`, so it is the head's, not the values row's —
-   which is where this note used to sit, describing an element that only exists
-   when the count does not. */
-.facetedit-head:hover .facetedit-label { color: var(--ink-2); }
-.facetedit.is-carried .facetedit-label { color: var(--ink-2); }
-
-/* `align-items: center` because these children are genuinely different heights: a
-   `.refchip` sized by a 20px IconButton, a `small` ghost Button at `3.5px 8px`, a
-   `.dateinput`, and the `+ new` field. */
-.facetedit-values { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 
 /* A reference value is a record, so it carries a record's two affordances side
    by side: the title goes there, the ✕ unlinks it. They used to be one gesture —
@@ -2423,11 +2644,39 @@ textarea { resize: vertical; font-family: inherit; }
  * without it the dashed rule at (0,3,1) outranks the focus rule at (0,2,1) and a
  * focused empty field would dash, which is where this came in.
  */
-.facetedit-add input {
+/*
+ * The wrapper hugs the field, or the field's own height is not what you measure.
+ *
+ * `.facetrow-add` is a `<span>` around an inline `<input>`, so it inherited the
+ * root's 14px line box and stood 22px tall around an 18px field — which is how
+ * matching the field to the chip made the row *worse* by 0.8px instead of better.
+ * An `inline-flex` wrapper has no line box of its own to be taller than.
+ */
+.facetrow-add {
+  display: inline-flex;
+}
+
+/*
+ * The `+ new` field takes the chip's metrics, because it sits in a row of chips.
+ *
+ * It was `--text-meta` at `2px 6px`, which rendered 21.22px tall against the
+ * togglechip's 18.00 — a 3.2px step between two things on one line, which is
+ * exactly the size of difference that reads as "slightly off" and never gets
+ * found by looking at either one. Measured across all nine families, every chip
+ * is 18.00px on the nose; the only member of this row that was not was the field
+ * for adding one more of them.
+ */
+.facetrow-add input {
   width: 52px;
   font-family: var(--mono);
-  font-size: var(--text-meta);
-  padding: 2px 6px;
+  font-size: var(--text-chip);
+  /* The last 2.5px, and the reason a matching font-size was not enough: an
+     `<input>` resolves `line-height: normal` against its own font metrics and a
+     `<button>` does not, so the same 10px mono in the same 2px/7px box came out
+     20.5px here against the chip's 18.00. Stated, so the two agree by declaration
+     rather than by two browsers happening to round the same way. */
+  line-height: 1.2;
+  padding: 2px 7px;
   border: 1px solid var(--rule-2);
   border-radius: var(--radius-sm);
   background: none;
@@ -2435,12 +2684,12 @@ textarea { resize: vertical; font-family: inherit; }
   transition: width 90ms ease;
 }
 
-.facetedit-add input:placeholder-shown:not(:focus) {
+.facetrow-add input:placeholder-shown:not(:focus) {
   border-style: dashed;
 }
 
 /* `border-style` is the base's now, so this only has to say which colour. */
-.facetedit-add input:focus {
+.facetrow-add input:focus {
   width: 108px;
   outline: none;
   border-color: var(--accent);
@@ -2498,21 +2747,27 @@ textarea { resize: vertical; font-family: inherit; }
  * `maxHeight` from `place()` — the space actually available above or below its
  * anchor, floored at 120px — and scrolls that. Measured with the focus rail's
  * picker open: the popover was scrolling 340px of content through 286, and the
- * list inside it 737px through 290. Two wheels on one axis, which is the thing
- * `.picker.is-inline` exists to avoid and cites the rule for.
+ * list inside it 737px through 290. Two wheels on one axis.
+ *
+ * This rule is now the only answer to that, and it covers every picker: the card
+ * panel's reference picker used to sit in the panel's flow behind a
+ * `.picker.is-inline` variant that surrendered the scroll the same way. It floats
+ * here too now, so one mechanism serves both and the variant is gone.
  */
 .popover .picker-list {
   max-height: none;
   overflow-y: visible;
 }
 
-/* Inline in the panel, the list must not scroll: the panel already does, and one
-   region scrolls per axis. Forty rows is the bound, and typing is the faster way
-   past it than a wheel inside a wheel. */
-.picker.is-inline .picker-list {
-  max-height: none;
-  overflow-y: visible;
-}
+/*
+ * `.picker.is-inline` is gone with its one caller.
+ *
+ * It existed so the card panel's reference picker did not scroll inside a surface
+ * that already scrolls. That picker floats in a popover now, where
+ * `.popover .picker-list` above already surrenders the scroll to the popover's own
+ * measured `maxHeight` — so the rule the inline variant was avoiding is satisfied
+ * by the same mechanism the focus rail has always used, and one fewer variant.
+ */
 .picker-item {
   appearance: none;
   border: 0;

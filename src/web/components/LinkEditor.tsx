@@ -105,6 +105,17 @@ function LinkRow({ link, onRemove }: { link: CardDTO['links'][number]; onRemove:
   );
 }
 
+/**
+ * Past this, the link list stops being an annotation and becomes the section.
+ *
+ * Three rather than the inbound lists' six, because a link row is not a line: an
+ * enriched one carries a head, a label, a field row and possibly an error, so
+ * three of them already outweigh the body they sit under. Same `n more` control
+ * the inbound lists and the filter rail use, for the same reason — a fold, not a
+ * scroll inside a scroll.
+ */
+const LINK_CUTOFF = 3;
+
 export function LinkEditor({
   links,
   onChange,
@@ -113,15 +124,22 @@ export function LinkEditor({
   onChange: (next: string[]) => void;
 }) {
   const [adding, setAdding] = useState('');
+  const [all, setAll] = useState(false);
+  const shown = all ? links : links.slice(0, LINK_CUTOFF);
   return (
     <div className="linkedit">
-      {links.map((l) => (
+      {shown.map((l) => (
         <LinkRow
           key={l.raw}
           link={l}
           onRemove={() => onChange(links.filter((x) => x.raw !== l.raw).map((x) => x.raw))}
         />
       ))}
+      {links.length > LINK_CUTOFF && (
+        <button className="facet-more" onClick={() => setAll((v) => !v)}>
+          {all ? 'less' : `${links.length - LINK_CUTOFF} more`}
+        </button>
+      )}
       <input
         value={adding}
         placeholder="jira:PROJ-303 · gh:pr:Org/repo#4 · claude:local_… · doc:path.md · https://…"

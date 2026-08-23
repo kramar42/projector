@@ -24,26 +24,32 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # ref, date and number declare no values: their vocabularies are the vault and
 # the number line.
 #
+# The order of the facets themselves is also read, and in more places than the
+# order of a facet's values: it is the filter rail's resting order, the order of
+# the group/sort/facet pickers, and the order of the rows in a card's panel. The
+# panel additionally splits on type — every ref facet is drawn together with the
+# derived lists that point back along it — so a reference facet's position
+# matters only relative to the other reference facets.
+#
 # Every facet is stored and written identically, project and the relations
 # included. There is deliberately no kind of facet the app writes through some
 # other mechanism — and no facet saying what class of thing a record is: that is
 # read off the record, never declared on it.
 
-# What a record is part of. A reference facet, so it is both classification and
-# structure: it filters and groups a board like any facet, and it lays out the
-# canvas and walks under focus like an edge used to. Single, because one
-# container is the shape every gesture already assumed.
-parent:
-  label: Part of
-  type: ref
+# Lifecycle only. "Blocked" and "waiting" are derived — from an unfinished blocks
+# edge and from a non-empty waiting_on — so they are not values here: storing
+# either beside the thing it is computed from gives two answers to one question.
+status:
+  label: Status
+  values: [planning, active, frozen, done, archived]
+  open: false
   single: true
 
-# What must finish before the target. Its transitive closure is what the blocked
-# axis and views/unblocked.yaml are built from. Not worth grouping a board by — the
-# question is always the inverse, which the derived blocked axis answers.
-blocks:
-  label: Blocks
-  type: ref
+priority:
+  label: Priority
+  values: [now, month, backlog, someday]
+  open: false
+  single: true
 
 # A deadline. priority says what you intend to do next; due says what the
 # world expects regardless of intent, so it is compared against today rather than
@@ -56,20 +62,10 @@ due:
   buckets: { overdue: -1, today: 0, week: 7 }
   overflow: later
 
-priority:
-  label: Priority
-  values: [now, month, backlog, someday]
-  open: false
-  single: true
-
-# Lifecycle only. "Blocked" and "waiting" are derived — from an unfinished blocks
-# edge and from a non-empty waiting_on — so they are not values here: storing
-# either beside the thing it is computed from gives two answers to one question.
-status:
-  label: Status
-  values: [planning, active, frozen, done, archived]
-  open: false
-  single: true
+waiting_on:
+  label: Waiting on
+  values: []
+  open: true
 
 energy:
   label: Energy
@@ -77,13 +73,13 @@ energy:
   open: false
   single: true
 
-waiting_on:
-  label: Waiting on
+domain:
+  label: Domain
   values: []
   open: true
 
-domain:
-  label: Domain
+tech:
+  label: Tech
   values: []
   open: true
 
@@ -92,15 +88,19 @@ source:
   values: [brain, slack, jira, gmail, git, claude]
   open: true
 
-tech:
-  label: Tech
-  values: []
-  open: true
-
 owner:
   label: Owner
   values: []
   open: true
+  single: true
+
+# What a record is part of. A reference facet, so it is both classification and
+# structure: it filters and groups a board like any facet, and it lays out the
+# canvas and walks under focus like an edge used to. Single, because one
+# container is the shape every gesture already assumed.
+parent:
+  label: Part of
+  type: ref
   single: true
 
 # Which project(s) a card belongs to — an ordinary multi-valued facet, so a card
@@ -109,6 +109,13 @@ owner:
 # it means decomposition, and config is inherited through project alone.
 project:
   label: Project
+  type: ref
+
+# What must finish before the target. Its transitive closure is what the blocked
+# axis and views/unblocked.yaml are built from. Not worth grouping a board by — the
+# question is always the inverse, which the derived blocked axis answers.
+blocks:
+  label: Blocks
   type: ref
 `;
 
