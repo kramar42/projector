@@ -1,4 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { Facets } from '../schema/types.ts';
+import { isRef } from '../schema/facets.ts';
 
 /**
  * What SQL is still for.
@@ -33,16 +35,29 @@ export function search(db: DatabaseSync, query: string, limit?: number): Row[] {
   return db.prepare(sql).all(...args) as unknown as Row[];
 }
 
-export function counts(db: DatabaseSync): Record<string, number> {
-  const one = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
+export function counts(db: DatabaseSync, facets: Facets): Record<string, number> {
+  const one = (sql: string, ...args: string[]) =>
+    (db.prepare(sql).get(...args) as { n: number }).n;
+  // Which facets are relations is the vocabulary's answer. It was three names in
+  // the SQL, so a vault's own relation went uncounted and a renamed one dropped
+  // out of `pj stats` silently — the only place a wrong number here would show.
+  const refs = Object.entries(facets)
+    .filter(([, def]) => isRef(def))
+    .map(([name]) => name);
+  const placeholders = refs.map(() => '?').join(', ') || 'NULL';
   return {
     records: one('SELECT count(*) AS n FROM records'),
     projects: one('SELECT count(*) AS n FROM records WHERE is_project = 1'),
-    // A container is a record something is part of — derived, like the glyph.
-    containers: one("SELECT count(DISTINCT value) AS n FROM facets WHERE facet = 'parent'"),
+    // A container is a record something names — derived, like the glyph, and
+    // across every relation rather than one of them.
+    containers: one(
+      `SELECT count(DISTINCT value) AS n FROM facets WHERE facet IN (${placeholders})`,
+      ...refs,
+    ),
     // Relations are facet values, so there is no separate table to count.
     relations: one(
-      "SELECT count(*) AS n FROM facets WHERE facet IN ('parent', 'blocked_by', 'project')",
+      `SELECT count(*) AS n FROM facets WHERE facet IN (${placeholders})`,
+      ...refs,
     ),
     links: one('SELECT count(*) AS n FROM links'),
     facetValues: one('SELECT count(*) AS n FROM facets'),

@@ -60,7 +60,7 @@ function blockingRefs(facets: Facets): string[] {
 }
 
 /** Neighbours along every blocking reference at once, merged. */
-function blockingEdges(records: Map<string, Rec>, facets: Facets): { out: Map<string, string[]>; in: Map<string, string[]> } {
+export function blockingEdges(records: Map<string, Rec>, facets: Facets): { out: Map<string, string[]>; in: Map<string, string[]> } {
   const out = new Map<string, string[]>();
   const inward = new Map<string, string[]>();
   for (const via of blockingRefs(facets)) {

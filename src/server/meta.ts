@@ -36,7 +36,7 @@ export function meta(
     vault: root,
     vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
     facets: deps.facets,
-    counts: counts(deps.db),
+    counts: counts(deps.db, deps.facets),
     enrichment: enrichmentStats(root),
     views: summariseViews(deps.views),
   };

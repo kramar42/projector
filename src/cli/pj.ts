@@ -443,7 +443,7 @@ function cmdCheck(): void {
  */
 function cmdReindex(): void {
   const { db, unreadable } = reindex(root);
-  const c = counts(db);
+  const c = counts(db, loadFacets(p.facets));
   console.log(`indexed ${c.records} record(s)`);
   for (const [k, v] of Object.entries(c)) {
     if (k === 'records') continue;

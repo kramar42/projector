@@ -1,8 +1,7 @@
 import { paths } from '../config.ts';
-import { adjacency } from '../index/refs.ts';
 import { readAll } from '../index/indexer.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { isClosed } from '../index/blocking.ts';
+import { blockingEdges, isClosed } from '../index/blocking.ts';
 import { parentsOf, resolveProject } from '../index/project.ts';
 import { readCached } from '../server/enrich.ts';
 import type { Rec, ResolvedProject } from '../schema/types.ts';
@@ -49,9 +48,9 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
   const enriched = readCached(dataRoot, links.map((l) => l.raw));
   const byRef = new Map(enriched.map((e) => [e.ref, e]));
 
-  // Both directions of the same relation: what this record blocks, and what
-  // names it as a blocker.
-  const adj = adjacency('blocked_by', records);
+  // Both directions at once, across every relation the vault declares blocking:
+  // what this record is waiting on, and what is waiting on it.
+  const adj = blockingEdges(records, facets);
   const along = (m: Map<string, string[]>) =>
     (m.get(id) ?? []).map((n) => records.get(n)).filter((r): r is Rec => !!r);
   const blockers = along(adj.out);
