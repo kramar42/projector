@@ -334,12 +334,20 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
   return (a, b) => {
     for (const { name, sign } of keys) {
       let cmp = 0;
-      if (isOrdered(ctx.facets[name])) {
-        cmp = ordered(a, b, name, sign);
-      } else if (name === 'updated' || name === 'created') {
+      // Record fields first, and unconditionally.
+      //
+      // These three names are reserved, so in a valid vault no facet can wear
+      // one and the order here decides nothing. It decides everything in a vault
+      // that ignored the error: `updated:desc` is the *default* sort, so a facet
+      // shadowing it would break the resting view of every board. Testing the
+      // vocabulary first also made the winner depend on the facet's type — a
+      // `date` one beat the field while a `label` one lost to it.
+      if (name === 'updated' || name === 'created') {
         cmp = (a[name] ?? '').localeCompare(b[name] ?? '');
       } else if (name === 'title') {
         cmp = a.title.localeCompare(b.title);
+      } else if (isOrdered(ctx.facets[name])) {
+        cmp = ordered(a, b, name, sign);
       } else {
         cmp = rankOf(a, name) - rankOf(b, name);
       }

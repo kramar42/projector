@@ -1,14 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
-import { validateViews } from '../src/view/validate.ts';
+import { validateViews, validateVocabulary } from '../src/view/validate.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { groupsFor, labelFor } from '../src/web/views/groups.ts';
+import { reindex } from '../src/index/indexer.ts';
+import { runQuery } from '../src/index/query.ts';
 
 
 /**
@@ -148,4 +150,43 @@ test('a value the axis does not declare sorts after the ones it does', () => {
 test('the absence refinement has one wording', () => {
   assert.equal(labelFor(NONE), 'no value');
   assert.equal(labelFor('now'), 'now');
+});
+
+
+test('a facet may not take a reserved name, and the sort keys prove why', () => {
+  const facets = loadFacets(
+    facetsFile(
+      'blocked: { values: [yes, no] }\nupdated: { type: date }\nlayer: { values: [a, b] }\n',
+    ),
+  );
+  const issues = validateVocabulary(facets, '/data/facets.yaml');
+  const named = issues.map((i) => i.field).sort();
+
+  // `blocked` is a pseudo-facet and would be silently shadowed; `updated` is a
+  // sortable record field. `layer` is an ordinary axis and must survive.
+  assert.deepEqual(named, ['blocked', 'updated']);
+  assert.ok(issues.every((i) => i.severity === 'error'));
+  assert.match(issues[0]!.message, /reserved/);
+});
+
+test('a record field outranks a facet wearing its name, whatever the facet type', () => {
+  // Reserved names make this unreachable in a tended vault. It decides the
+  // resting view of every board in one that ignored the error: `updated:desc` is
+  // the default sort, and the vocabulary used to win it for a `date` facet and
+  // lose it for a `label` one — the same collision, decided two ways.
+  const card = (id: string, updated: string, facetValue: string) =>
+    `---\nid: ${id}\ntitle: ${id}\nfacets: {updated: [${facetValue}]}\nupdated: ${updated}\n---\n\n`;
+
+  for (const decl of ['updated: { type: date }', 'updated: { values: [a, b] }']) {
+    const root = mkdtempSync(join(tmpdir(), 'projector-shadow-'));
+    mkdirSync(join(root, 'cards'), { recursive: true });
+    writeFileSync(join(root, 'cards', 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
+    writeFileSync(join(root, 'cards', 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
+    writeFileSync(join(root, 'facets.yaml'), decl + '\n', 'utf8');
+
+    const { db, records } = reindex(root);
+    const out = runQuery(db, records, loadFacets(join(root, 'facets.yaml')), { sort: ['updated:asc'] });
+    assert.deepEqual(out.ids, ['older', 'newer'], `${decl}: the record field must decide`);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -1,17 +1,64 @@
 import { PSEUDO } from '../index/query.ts';
 import { isRef } from '../schema/vocabulary.ts';
+import { KEY_ORDER } from '../schema/frontmatter.ts';
 import type { Facets, Issue } from '../schema/types.ts';
 import type { ViewSpec } from './spec.ts';
 
 /**
- * Validating a saved view.
+ * Validating the two things a card's own schema cannot judge: the vocabulary's
+ * choice of *names*, and a saved view.
  *
- * Beside `ViewSpec` rather than in `src/schema/`, because a view is not a schema
- * concern: this checks a spec against the facet vocabulary *and* against `PSEUDO`,
- * so putting it in `schema/` made the lowest layer import both `index/` and
+ * Beside `ViewSpec` rather than in `src/schema/`, because neither is a schema
+ * concern: both check against the facet vocabulary *and* against `PSEUDO`, so
+ * putting them in `schema/` made the lowest layer import both `index/` and
  * `view/` — the floor reaching up two storeys. `src/schema/` is where a card's
  * shape is decided; a view is a query over cards, which is one level out.
  */
+
+/**
+ * Names a facet may not take.
+ *
+ * Two of these are *correctness* collisions rather than confusion. A pseudo-facet
+ * shares the facet namespace outright and wins it — `valuesOf` reaches for
+ * `PSEUDO[facet]` first — so a facet named `type` or `blocked` would store
+ * values, validate writes, draw a row in the panel, and then be ignored by every
+ * query: writes succeeding while reads lie. And `title`, `updated` and `created`
+ * are sortable record fields, so a facet wearing one of those names is either
+ * unsortable or shadows the default sort.
+ *
+ * The rest of `KEY_ORDER` cannot collide — frontmatter namespaces facets under
+ * `facets:`, and `--set` reaches them by dotted path — but they are reserved
+ * anyway. A vocabulary is read far more often than it is written, and an axis
+ * called `links` beside a card's links is a sentence you have to stop and parse.
+ *
+ * `project` is the one exception, and only for now: it names both a frontmatter
+ * block and a facet every vault declares. It joins this list in the change that
+ * makes the facet a built-in, which is the change that makes declaring it wrong.
+ */
+export const RESERVED: readonly string[] = [
+  ...KEY_ORDER.filter((k) => k !== 'project'),
+  'body',
+  ...Object.keys(PSEUDO),
+];
+
+/**
+ * Check the vocabulary's own names.
+ *
+ * Separate from `validate`, which checks *records* against the vocabulary: this
+ * asks whether the vocabulary is sayable at all. An error rather than a warning,
+ * because the failure it prevents is silent — the axis works everywhere except
+ * where it matters.
+ */
+export function validateVocabulary(facets: Facets, file: string): Issue[] {
+  return Object.keys(facets)
+    .filter((name) => RESERVED.includes(name))
+    .map((name) => ({
+      severity: 'error' as const,
+      file,
+      field: name,
+      message: `"${name}" is a reserved name — rename this facet`,
+    }));
+}
 
 /**
  * Validate saved views against the loaded vocabulary.

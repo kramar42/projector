@@ -7,7 +7,7 @@ import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { listCardFiles } from '../schema/card.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
-import { validateViews } from '../view/validate.ts';
+import { validateViews, validateVocabulary } from '../view/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
@@ -414,6 +414,10 @@ function cmdCheck(): void {
   const facets = loadFacets(p.facets);
   const { records, unreadable, duplicates } = readAll(p.cards);
   const issues = [
+    // Before the records, because a facet wearing a reserved name is a fault in
+    // the vocabulary itself — every card checked against it is checked against
+    // an axis that will not answer.
+    ...validateVocabulary(facets, p.facets),
     ...validate(records, facets, root, { unreadable, duplicates }),
     // A view is checked against the same vocabulary its cards are. Until it was,
     // a filter naming a deleted facet matched nothing and reported success.
