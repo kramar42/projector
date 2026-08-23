@@ -68,6 +68,21 @@ export function Popover({
     setRect(place(anchor, panel.current, minWidth, fitContent));
   }, [open, anchor, minWidth, fitContent, children]);
 
+  /**
+   * The dismiss handlers read the latest `onClose` through a ref rather than
+   * taking it as a dependency.
+   *
+   * A caller writes `onClose={() => setOpen(false)}` inline — every one of them
+   * does — so the identity changes on every render, and with it in the dependency
+   * list this effect tore down and re-registered the `pointerdown` capture
+   * listener continuously. A pointerdown that arrives in that window lands on no
+   * listener and the popover stays open, which is exactly the intermittent
+   * "clicking away does not close it". The listeners now outlive the callback's
+   * identity and only the open/anchor pair remounts them.
+   */
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
     if (!open || !anchor) return;
     const reposition = () => setRect(place(anchor, panel.current, minWidth, fitContent));
@@ -78,13 +93,13 @@ export function Popover({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        close.current();
       }
     };
     const onPointer = (e: PointerEvent) => {
       const target = e.target as Node;
       if (panel.current?.contains(target) || anchor.contains(target)) return;
-      onClose();
+      close.current();
     };
     document.addEventListener('keydown', onKey);
     // Pointerdown, not click: a mousedown that lands elsewhere should dismiss
@@ -96,7 +111,7 @@ export function Popover({
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointer, true);
     };
-  }, [open, anchor, minWidth, fitContent, onClose]);
+  }, [open, anchor, minWidth, fitContent]);
 
   if (!open || !anchor) return null;
   return createPortal(

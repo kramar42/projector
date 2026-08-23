@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { projectorHighlight } from './highlight.ts';
 import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
@@ -53,12 +53,33 @@ export function FrontmatterEditor({
     onSave,
   });
 
-  useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+  /**
+   * Report the flag, and report clean on the way out.
+   *
+   * Both go through a ref, and that is the whole of the bug they fix. The exit
+   * report used to be `useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])`
+   * — an unmount cleanup keyed on a callback whose identity a caller has no
+   * reason to keep stable. `CardPanel`'s blocks build theirs inline, so every
+   * render produced a new one, the cleanup fired on every render rather than on
+   * unmount, and the two effects drove each other: the first reported `true`, the
+   * re-render that caused made a new callback, the cleanup reported `false`, and
+   * that re-render re-ran the first. Typing one character in either editor hit
+   * React's update-depth limit and blanked the page.
+   *
+   * A ref is the fix rather than `useCallback` at each call site, because the
+   * hazard is in the contract: an effect that means "on unmount" must not take a
+   * prop as a dependency, and no caller should have to know that to type safely.
+   */
+  const report = useRef(onDirtyChange);
+  report.current = onDirtyChange;
 
-  // Closing the disclosure destroys the document, so the flag must not outlive it.
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  useEffect(() => {
+    report.current?.(dirty);
+  }, [dirty]);
+
+  // Report false on the way out, so the panel's close guard is not left warning
+  // about text that no longer exists — closing the editor destroys the document.
+  useEffect(() => () => report.current?.(false), []);
 
   const run = () => {
     // The attempt, not its outcome, invalidates the previous answer — otherwise a
