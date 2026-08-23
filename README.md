@@ -4,9 +4,10 @@ A personal work-management app. One card database in markdown files, projected a
 **mind-map canvas** or a **table** — whichever the current query asks for — with read-only inline views
 of Jira issues, GitHub PRs, Claude sessions and local docs.
 
-It is a single-user app that runs on your own machine against a folder of your own files. Two promises
-shape everything else: **your markdown files are the source of truth**, and **nothing is ever written
-back** to Jira, GitHub, Trello or Slack.
+It is a single-user app that runs on your own machine against a folder of your own files. Three
+promises shape everything else: **your markdown files are the source of truth**, **nothing is ever
+written back** to Jira, GitHub, Trello or Slack, and **the vocabulary is yours** — the axes a card can
+carry, and what each one means, are declared in your vault rather than built into the app.
 
 ## Running
 
@@ -30,28 +31,41 @@ hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
 
 ## Facets, not lists
 
-A card does not live in a column. It carries **facets** — the seeded vault offers `priority`, `status`,
-`due`, `domain`, `energy`, `owner`, `waiting_on`, `source`, `tech` and the relations `parent` and
-`blocked_by`, and you declare whatever your own domain needs — and **every facet value is an array**,
+A card does not live in a column. It carries **facets**, and **every facet value is an array**,
 uniformly. Group by any facet to get columns; group by a multi-valued one and a card appears in every
 column it belongs to, by construction.
 
-**No facet is named in the engine.** That sentence used to be aspiration: seven of them were, each
-carrying behaviour that read as general and was not. Everything the code once knew by name is a
-declared property now — `closed` says which values mean finished, `blocking` which axis stops a card,
-`expected` which the triage axis asks for, `hue` which colour it draws in, `inverse` what the other end
-of a relation is called. A vault with an empty `facets.yaml` is a working vault, and `test/vocabulary.test.ts`
-fails the build if a facet name reappears in `src/`.
+**Every facet is your vault's.** `facets.yaml` is the whole vocabulary — the axes, their values, their
+order, and what each one *means* — and the engine knows none of them by name. A new vault is seeded
+with a working set (`priority`, `status`, `due`, `domain`, `energy`, `owner`, `waiting_on`, `source`,
+`tech`, and the relations `parent` and `blocked_by`), and every one of those is an ordinary
+declaration you can rename, retype or delete. An empty `facets.yaml` is a working vault.
 
-The one exception is **`project`**, which is built in — see below. Everything else, relations included,
-is yours: "group by project" and "group by priority" are the same board with one control moved rather
-than two boards to keep in sync.
+That includes the behaviour, not just the labels. A deadline is loud when it passes, a card is blocked
+while something it waits on is unfinished, an axis draws in orange, a relation has a name for its other
+end — these are things a vault *says*, in five keys beside `type`:
+
+| | |
+|---|---|
+| `closed:` | which values mean *no further work expected* — what makes a blocker stop blocking |
+| `blocking:` | while this axis is unsatisfied the card cannot proceed |
+| `expected:` | a well-filed card carries this; the triage axis is built from it |
+| `inverse:` | what the other end of a relation is called |
+| `hue:` | which family this axis draws in |
+
+So `blocked` is not a feature about `blocked_by` — it is what *any* reference facet does once you mark
+it `blocking: true`, and a vault with three such axes gets three values on the axis. `due` is not a
+deadline feature — it is a `date` facet with buckets, and a vault that tracks `review_by` the same way
+gets the same colouring, filtering and sorting. Neither is a special case in the app.
 
 Storage is uniform; the **vocabulary** is where the constraints live. `open: false` refuses a value the
 list does not declare, and `single: true` refuses a second value at all — because `status: [planning,
 done]` is not a card in two columns, it is a card in no coherent state, and the thing writing most of
-these files is an agent (C3). In the seeded vault `priority`, `status`, `energy`, `owner`, `parent` and
-`due` are single; `project`, `blocked_by`, `tech`, `domain`, `waiting_on` and `source` are not.
+these files is an agent.
+
+There is one built-in facet, `project`, described [below](#the-one-built-in). Everything else,
+relations included, is yours: "group by project" and "group by priority" are the same board with one
+control moved rather than two boards to keep in sync.
 
 A facet also declares a **type**, which says what its values *are*:
 
@@ -79,17 +93,15 @@ marked `ƒ` for computed:
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
-absence, a record's links, or the app-written `updated` field. Each is a count, a date comparison or the presence of a
-reference — never a judgement. `type=project`
-*is* the projects view, and `triage` turns the untriaged pile into something you can drag out of. The
-three `type` values are exclusive — a project that something is part of stays a `project` — so the
-counts always add up.
+absence, a record's links, or the app-written `updated` field. Each is a count, a date comparison or
+the presence of a reference — never a judgement. `type=project` *is* the projects view, and `triage`
+turns the untriaged pile into something you can drag out of. The three `type` values are exclusive — a
+project that something is part of stays a `project` — so the counts always add up.
 
-Two of them take their *values* from the vocabulary rather than from a list here. `blocked` names one
-value per facet declared `blocking:`, and `triage` one per facet declared `expected:` — so a vault
-adding a third blocking axis gets a third value in the filter, the grouping and the sort with no code
-change. Both were fixed lists naming particular facets, which is the same axis with one vault's
-vocabulary welded into it.
+Two of them take their *values* from your vocabulary. `blocked` names one value per facet declared
+`blocking:`, and `triage` one per facet declared `expected:` — so declaring a fourth blocking axis
+gives it a value on the filter, the grouping and the sort, and a vault that declares none has a
+`blocked` axis reading `clear` for everything.
 
 **Every one of them computes.** Nothing derivable is also storable, which is why there is no
 `status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
@@ -120,23 +132,22 @@ quiet; the terse `week: 7` form stays available for the ones that are not making
 a bucketed axis is urgent cannot be derived — `due` runs urgent-at-the-low-end and an `effort` axis
 would run trivial-at-the-low-end — so it is declared or it is nothing.
 
-`due` was a top-level field until facets were typed, because the argument for a field was that a facet
-is a string set matched for membership while a date needs comparison. Typing dissolved it. `created`
-and `updated` stay fields: a facet is vocabulary you declare, and those are written by the app.
+Buckets are what makes a deadline a facet rather than a special field. Any `date` or `number` facet can
+declare them, so an `effort` axis in points buckets exactly as `due` does in days. `created` and
+`updated` are *not* facets and never will be: a facet is vocabulary you declare, and those two are
+written by the app.
 
 ## There is only a record
 
 A canvas and a board sit at different altitudes: most leaves of a mind-map are scaffolding, not work.
-There used to be a `kind` saying `card` or `node`, and it turned out to assert two things the record
-already showed:
+There is no field saying which a record is, because two questions the record already answers cover it:
 
-- **Is it work?** Whether it carries a `status`. That is what keeps a grouping record off every
-  status-filtered board — `kind: [card]` was doing a job the status filter already did.
-- **Does anything point at it?** Whether any reference facet names it. That is the count the glyph
-  draws: `▣` a project, `○` something names it, `•` neither.
+- **Is it work?** Whether it carries a lifecycle facet. That is what keeps a grouping record off a
+  status-filtered board — it has no status, so the filter does not select it.
+- **Does anything point at it?** Whether any reference facet names it.
 
-So it is gone (C11). Only `id` and `title` are required, and a record becomes work by acquiring a
-lifecycle rather than by being reclassified.
+Only `id` and `title` are required, and a record becomes work by acquiring a lifecycle rather than by
+being reclassified.
 
 Every record carries a mark before its title saying which it is. The number is drawn only in a table,
 after the title; a card face carries the same fact as the `○` glyph itself, with the number in the
@@ -152,13 +163,14 @@ mark's tooltip:
 ## Relations are facets
 
 A facet declared **`type: ref`** holds record ids rather than labels. That one word is the whole
-relation model:
+relation model — there is no separate notion of an edge, and no limit on how many relations a vault
+declares. The seeded ones:
 
 | | Meaning | Powers |
 |---|---|---|
 | `parent` | decomposition — this record is *part of* that one | the mind-map tree, roll-up progress |
 | `blocked_by` | this card cannot move until that one is finished | the `blocked` axis, "what does finishing this unblock" |
-| `project` | membership | config inheritance, the portfolio, transitive roll-up |
+| `project` | membership *(built in)* | config inheritance, the portfolio, transitive roll-up |
 
 There is no `edges:` block, because a relation was never a different kind of thing. Being a facet means
 a relation **filters, groups a board, reaches `(none)`, bulk-edits and drags** — none of which an edge
@@ -173,13 +185,12 @@ is recorded there rather than on the other card.
 
 `blocked_by` is the relation neither Trello nor Jira gives usefully. Its transitive closure is what
 "unblocked now" is built from. It is the one relation not worth grouping a board by, because the
-question is always the inverse — which is what the derived `blocked` axis answers, and what the panel
-draws beside it under whatever `inverse:` calls it.
+question is always the inverse — which the derived `blocked` axis answers, and which the panel draws
+beside it under whatever `inverse:` calls it.
 
-There was a fourth, `relates`, for soft association. It is gone: every job it could do is done better
-by something already here. "See also" is a link, "these are similar" is a label facet, and a canvas
-already keeps connected records visible without one. It is also the one shape a reference facet is bad
-at — an association where every value is unique makes a useless column and a noisy filter panel.
+**Not every association wants to be a relation.** A reference facet is poor at one shape: an
+association where every value is unique makes a useless column and a noisy filter panel. "See also" is
+a link, and "these are similar" is a label facet.
 
 ## Projects
 
@@ -216,10 +227,8 @@ outward — each value's record, then whatever *that* record belongs to. `repos`
 (a nested project needs its parent's plus its own), `instructions` concatenate outermost-first so the
 most specific advice reads last, and everything else takes the nearest value.
 
-**Instructions are configuration**, so they live in the block with the rest of it. They were a
-`## Instructions` heading in the record's body once, matched by regex — the one place prose was
-load-bearing, where renaming a heading silently stopped inheritance with nothing to check against. The
-body is free-form again: nothing in it is configuration. It is still read — task boxes become a
+**Instructions are configuration**, so they live in the block with the rest of it rather than under a
+heading in the body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a
 progress bar, the first prose paragraph becomes the card-face excerpt, and the whole of it goes into
 FTS — but no heading or marker in it changes how the app behaves.
 
@@ -310,23 +319,17 @@ drawn follows from what it is:
 | canvas | — | a line between records, and the **first** one lays the graph out |
 | table | a column | a column of links |
 
-There used to be `chips` for the first row and `edges.show` for the second, asking the same question
-twice — and "why does my canvas draw nothing" was answered by the one you forgot.
-
 ## grouping
 
 `groupBy: [primary, secondary]` gives a board columns and swimlane rows, and a table sections and
-sub-sections. Its options are shared, because they describe grouping rather than any one shape: `sort` orders within
-a column, a section or a canvas rank. Every value the query *admits* gets a group — the facet's
+sub-sections. Its options are shared, because they describe grouping rather than any one shape: `sort`
+orders within a column, a section or a canvas rank. Every value the query *admits* gets a group — the facet's
 declared order narrowed to the current selection, so a filter makes an axis smaller rather than empty.
 A board keeps a group nothing is in, because an empty column is somewhere to drag a card to; a table
 and a canvas drop it, because neither offers anything to drag.
 
-The no-value group always comes last, and appears only when something is in it. There was an
-`uncategorised: end | start | hide` option and it is gone: `start` had no user, and `hide` was a
-*filter* spelled a second way — worse than the filter, because it dropped the cards from the groups
-and left them in the count, and a canvas draws its nodes from the count. To leave the uncategorised
-out, select the values you want.
+The no-value group always comes last, and appears only when something is in it. To leave the
+uncategorised out entirely, select the values you want — excluding them is what a filter is for.
 
 Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
 That works because a hierarchy concentrates: 26 distinct parents across 134 references here, only 7 of
@@ -526,8 +529,7 @@ agrees, and `pj intake commit` does the second once the proposal is resolved. A 
 a run that was resolved, and an abandoned sweep must not swallow what it listed.
 
 What a sweep *does* write is where it **would** move each cursor to, alongside how many items it
-examined — both `pj`'s own numbers, and both previously carried from one process to the next by hand,
-once per channel. `--advance` promotes them. A pending proposal is inert until then, and promoting it
+examined. `--advance` promotes them. A pending proposal is inert until then, and promoting it
 spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
 between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
 
@@ -653,7 +655,7 @@ be a sort key. `pj context` is the only way to read one card — `show` and `pro
 what it already assembles.
 
 A saved view's curated card order is applied in the payload, so `pj ls`, a board column and a table
-section of the same view agree about it — it used to run only in the browser, and only on a board.
+section of the same view agree about it.
 
 The CLI and the app share one query compiler *and* one payload builder, so `pj ls --view unblocked` and
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`
@@ -750,19 +752,21 @@ due:
 A `ref`, `date` or `number` facet declares no `values`: its vocabulary is the vault or the number
 line, so `open` is implied and a declared list is dropped rather than half-honoured.
 
-The five keys past `type` are what used to be facet names in code. `closed` defines *finished* for the
-blocked axis and for `pj log`; `blocking` puts an axis on the blocked axis under its own name;
+The five keys past `type` are where a facet's *behaviour* is declared. `closed` defines finished, for
+the blocked axis and for `pj log`; `blocking` puts an axis on the blocked axis under its own name;
 `expected` puts it on the triage axis; `inverse` names the derived row the panel draws beside a
-relation; `hue` picks a family from the app's palette. Declare none of them and nothing breaks — an
-empty `facets.yaml` is a working vault.
+relation; `hue` picks a family from the app's palette. All five are optional — declare none and the
+axis is an ordinary one you can filter, group and sort by.
+
+`pj check` rejects a declaration that cannot take effect: an `inverse:` on a facet that is not a
+reference, a `hue:` outside the palette, a `closed:` value the vocabulary does not list.
 
 ## The one built-in
 
-`project` is the exception, and the only one. Its definition is not read from `facets.yaml`, because
-the config chain walks it as a relation and retyping it to `label` would strand inheritance with
-nothing to say so. It is still a *facet* — injected into the vocabulary, so the filter rail, the panel,
-the pickers and drag-and-drop all get it from the same loop as everything else, which is what stops it
-being a special case anywhere but here.
+`project` is the exception, and the only one. Its definition is not read from `facets.yaml`: config
+inheritance walks it as a relation, so its shape is fixed. It is still a *facet* — injected into the
+vocabulary, so the filter rail, the panel, the pickers and drag-and-drop reach it through the same loop
+as everything else, and it filters, groups and drags exactly like an axis you declared.
 
 A vault may declare `project:` to set what is its to set — its label, its hue, whether triage asks for
 it — and `pj check` errors only if the declaration touches the shape:
