@@ -145,6 +145,16 @@ export function LinkEditor({
         placeholder="jira:PROJ-303 · gh:pr:Org/repo#4 · claude:local_… · doc:path.md · https://…"
         onChange={(e) => setAdding(e.target.value)}
         onKeyDown={(e) => {
+          // Escape stops here, as it does at the title editor, the facet's
+          // `+ new` field and the record picker. It did not, and this was the one
+          // silent data-loss path in the panel: the panel's guard is a `window`
+          // listener, a typed-but-uncommitted link sets no dirty flag, so Escape
+          // closed the whole card and took the text with it without asking.
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            setAdding('');
+            return;
+          }
           if (e.key !== 'Enter') return;
           const v = adding.trim();
           if (!v || links.some((l) => l.raw === v)) return;

@@ -1750,12 +1750,33 @@ input:focus-visible + .checkbox {
   gap: 6px;
 }
 
+/*
+ * A section head outranks the rows under it, and does it with colour.
+ *
+ * It did not. At the Label step a head is 9.5px against a facet row's 12px, so a
+ * row label is 26% larger than the heading that contains it — and the shared rule
+ * gives the head `ink-3` while a row label takes `ink-2`, so the *dimmer* of the
+ * two was also the outer one. Size and colour both pointed inward.
+ *
+ * Only one of those is a defect. The size is register, and this document already
+ * accepts that argument for the board's lane head: prominence at the Label step is
+ * carried by uppercase and tracking, not by size, which is why a 9.5px lane head
+ * can sit outside a 12.5px column head. Raising the step is not available anyway —
+ * the Label rule is shared with the rail, both table headers and the vault gate.
+ *
+ * The colour was not register, it was an accident, and it is the half worth
+ * fixing: `ink-2` is documented as the resting colour of a control, `ink-3` as
+ * "the ground state of annotation". A section head is neither a control nor an
+ * annotation — it is the thing being annotated — so it takes the brighter of the
+ * two and the row label takes the ground state its own token describes.
+ */
 .panel-section h3 {
   --label-track: 0.13em;
   display: flex;
   align-items: center;
   min-height: 20px;
   margin: 0;
+  color: var(--ink-2);
 }
 
 .kv {
@@ -2252,8 +2273,25 @@ textarea { resize: vertical; font-family: inherit; }
   border-bottom: 1px solid var(--rule);
   padding: 10px 12px;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The row the mark, the title, the in-flight word and the trash sit on. It was
+   `.panel-top` itself, until the banner joined them inside the sticky region and
+   the container had to become a column to hold both. */
+.panel-head {
+  display: flex;
   gap: 8px;
   align-items: flex-start;
+}
+
+/* Inside the head, the banner's own margin would push it off the padding the head
+   already sets — the same override `.editor > .banner` makes, for the same reason.
+   The default `10px 20px` is right at its eight other call sites, which sit in a
+   page rather than in a fixed bar. */
+.panel-top > .banner {
+  margin: 0;
 }
 
 .panel-x {
@@ -2482,10 +2520,18 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* 2px of optical lead, so a 12px label sits on the same line as the 10px chips
    beside it rather than on the top edge of their box. */
+/*
+ * `ink-3`, not `ink-2`, and the difference from the filter rail is the rule rather
+ * than a deviation from it. The rail's facet label is inside `.facet-head`, a
+ * button whose whole row is the click target, and `ink-2` is documented as a
+ * control's resting colour. This one is a label in a grid cell with no behaviour
+ * at all, which is the case `ink-3` — "the ground state of annotation" — names.
+ * It inherited `ink-2` from the disclosure button it used to live in.
+ */
 .facetrow-label {
   font-family: var(--sans);
   font-size: var(--text-body-sm);
-  color: var(--ink-2);
+  color: var(--ink-3);
   padding-top: 2px;
   display: flex;
   align-items: center;

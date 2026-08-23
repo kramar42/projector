@@ -53,6 +53,29 @@ needs to be part of two things.
   second write path beside the one P2 unified. And **there is no evidence yet about which motions are
   frequent**; the honest input is a few days of noticing what the mouse keeps being reached for, which
   is cheaper to collect than to guess. Revisit with that list in hand.
+
+  What the panel critique of 2026-08-22 added to this, and it is a shorter list than it was — the
+  markup, as distinct from the bindings. Four items, each independently doable and none of them needing
+  the gesture question answered first:
+
+  - **There is no keyboard path to open a card.** The board tile is a `div` with `onClick` and the table
+    row a `tr` with `onClick`; the canvas opens on double-click. None is focusable. Paths *do* exist —
+    the sidebar's focus pill, and the panel's own reflinks and reference chips are native buttons — so
+    the accurate statement is that the focus pill is the only cold start and the rest only switch cards
+    once a panel is already open. Making the two openers buttons is the whole of it.
+  - **The panel manages no focus.** `role="dialog"` with no `aria-modal`, nothing focused on open
+    (`activeElement` stays on `body`), no trap — Tab from the last control lands in the sidebar behind
+    the scrim — and no restore on close. The board behind it stays in the tab order with no `inert`.
+  - **Rename is pointer-only.** The title is an `h2` with `onClick` and a `title` tooltip: no
+    `tabIndex`, no `role`, no key handler, and a screen reader announces the heading as "Rename".
+  - **The filter rail's disclosure heads carry no `aria-expanded`**, so an open axis and a closed one
+    are indistinguishable to anything that is not looking at the caret. Eighteen of them.
+
+  Two things came off the list rather than onto it. The card panel's own thirteen disclosure heads are
+  gone — an axis carrying nothing is not drawn, so there is nothing to expand — and the Body and
+  Frontmatter toggles now announce their state, because `aria-pressed` arrives with the pressed
+  treatment they share. The `read`/`edit` pair had been two buttons a screen reader could not tell
+  apart.
 - **Tokenizing the rest of the scale.** `font-size` and `border-radius` are `--text-*` and `--radius-*`
   now, and `test/theme.test.ts` refuses a raw one — which held through 349 lines of new panel CSS
   without a single new step. `padding`, `gap` and `letter-spacing` did not get the same treatment:

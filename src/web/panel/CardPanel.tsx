@@ -126,6 +126,40 @@ export function CardPanel({
 
   const card = data?.card;
 
+  /**
+   * Stop being a project, or start being one — and only one of those asks.
+   *
+   * The mark is a 15px glyph seven pixels from a title whose whole row opens the
+   * rename editor, and clicking it used to write straight through. In the
+   * destructive direction that write is `project: null`, which reaches
+   * `doc.delete('project')` and takes the whole block: the repos `pj work` clones,
+   * the branch template it names them from, the jira key and every instruction
+   * block, plus whatever the records downstream were inheriting. The panel's own
+   * comment already claimed weight follows blast radius; this is the control it was
+   * not true of.
+   *
+   * The other direction adds an empty block and is undone by clicking again, so it
+   * asks nothing. Confirming both would train the answer.
+   *
+   * The prompt names the kinds rather than counting them. `data.project` is
+   * resolved *along the chain*, so on a project that is itself inside another its
+   * repos are a mix of its own and its ancestors' — a count taken from there would
+   * be confidently wrong in exactly the case where the reader most needs it right.
+   */
+  const toggleProject = () => {
+    if (!card) return;
+    if (card.isProject) {
+      const ok = confirm(
+        `Stop "${card.title}" being a project?\n\n` +
+          'This deletes its project block — the repos, the branch template, the jira key ' +
+          'and any instruction blocks — and the records that name it stop inheriting them.\n\n' +
+          'The file is in git, so this is recoverable.',
+      );
+      if (!ok) return;
+    }
+    write.projectBlock(card.isProject ? null : {});
+  };
+
   return (
     <>
       <div className="scrim" onClick={() => (held ? undefined : onClose())} />
@@ -137,10 +171,11 @@ export function CardPanel({
           reads everywhere else.
         */}
         <div className="panel-top">
+          <div className="panel-head">
           {card &&
             (editTitle === null ? (
               <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="Rename">
-                <ProjectMark card={card} onToggle={() => write.projectBlock(card.isProject ? null : {})} />
+                <ProjectMark card={card} onToggle={() => toggleProject()} />
                 <span className="panel-title-text">{card.title}</span>
               </h2>
             ) : (
@@ -201,18 +236,24 @@ export function CardPanel({
               }}
             />
           )}
-        </div>
+          </div>
 
-        {error && <div className="pane-error">{error}</div>}
-        {!data && !error && <div className="pane-loading">loading…</div>}
+          {/*
+            One banner, from one fact. There used to be two states for one failure
+            — a `problem` string and a `conflict` flag — and the flag was never
+            cleared on a new attempt, so a rejected value rendered under "Changed
+            on disk, probably a Claude session" with a Reload that fixed nothing.
 
-        {/*
-          One banner, from one fact. There used to be two states for one failure
-          — a `problem` string and a `conflict` flag — and the flag was never
-          cleared on a new attempt, so a rejected value rendered under "Changed
-          on disk, probably a Claude session" with a Reload that fixed nothing.
-        */}
-        {write.banner && (
+            It lives inside the sticky head, which is the whole point. As a flow
+            child of the scrolling panel it was the only report a refused write
+            got, at a fixed distance from the top of a surface that runs to three
+            screens — so a cycle refused by the `Project` picker, or a value the
+            vocabulary rejected, produced no visible response at all from anywhere
+            below the fold. `write.busy` was already up here: one write announced
+            its start in a fixed place and its failure in a place that scrolled
+            away.
+          */}
+          {write.banner && (
           <div className={`banner is-${write.banner.tone}`}>
             {write.banner.canReload ? (
               <>
@@ -226,7 +267,11 @@ export function CardPanel({
               write.banner.message
             )}
           </div>
-        )}
+          )}
+        </div>
+
+        {error && <div className="pane-error">{error}</div>}
+        {!data && !error && <div className="pane-loading">loading…</div>}
 
         {data && card && (
           /*
