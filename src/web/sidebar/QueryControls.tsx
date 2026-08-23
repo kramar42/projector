@@ -1,7 +1,7 @@
 import { PopoverButton } from '../components/Popover.tsx';
 import { Button } from '../components/Button.tsx';
 import { SHAPES } from '../query.ts';
-import { setGroupBy, setShape, setShow, setSort, setUncategorised } from '../../view/intents.ts';
+import { setGroupBy, setShape, setShow, setSort } from '../../view/intents.ts';
 import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
 
 // ---------------------------------------------------------------- shape
@@ -9,9 +9,9 @@ import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
 /**
  * Shape, and the grouping controls that turned out not to belong to it.
  *
- * `uncategorised` and `sort` read identically for a board's columns and a table's
- * sections — they are properties of *grouping*, not of boards, which is why they
- * live here once rather than twice.
+ * `group`, `then by` and `sort` read identically for a board's columns and a
+ * table's sections — they are properties of *grouping*, not of boards, which is
+ * why they live here once rather than twice.
  *
  * **Nothing here appears or disappears with the shape.** The three controls that
  * only a canvas can honour — which edges are drawn, whether context is kept, and
@@ -78,22 +78,6 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
                 ))}
             </select>
           </div>
-
-          <div className="rail-row">
-            <label className="rail-label">No value</label>
-            <select
-              className="rail-select"
-              value={query.uncategorised ?? 'end'}
-              onChange={(e) =>
-                edit((spec) => setUncategorised(spec, e.target.value as 'end' | 'start' | 'hide'))
-              }
-            >
-              <option value="end">last</option>
-              <option value="start">first</option>
-              <option value="hide">hide</option>
-            </select>
-          </div>
-
 
         </>
       )}

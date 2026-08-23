@@ -167,13 +167,13 @@ filter:
 groupBy: [priority]
 sort: [updated:desc]
 show: [project, tech]
-uncategorised: end
 `,
   },
   {
     path: 'due.yaml',
     body: `# Deadlines, soonest first. \`due\` is an ordered facet: it declares its own
-# buckets, computed against today, so this view never goes stale.
+# buckets, computed against today, so this view never goes stale. The filter is
+# what keeps undated cards out — there is no separate policy for that.
 shape: board
 title: Due
 filter:
@@ -182,7 +182,6 @@ filter:
 groupBy: [due]
 sort: [due:asc]
 show: [project, priority]
-uncategorised: hide
 `,
   },
   {

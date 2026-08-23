@@ -188,7 +188,6 @@ q: keycloak                   # full-text, optional
 focus: { id: project-a, via: project, dir: in }   # dir: out · in · both, plus depth
 groupBy: [priority]           # primary axis first; a second one draws lanes/sections
 sort: [updated:desc]          # `facet:asc` ranks by declared order, not alphabetically
-uncategorised: end            # end · start · hide — where the (none) group goes
 show: [project, tech]         # which facets this view surfaces, in order
 ```
 

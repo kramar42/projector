@@ -511,7 +511,6 @@ shape: board
 title: Home
 groupBy: [priority]
 sort: [updated:desc]
-uncategorised: end
 show: [project, status, tech]
 `,
   due: `# Every \`due\` bucket at once. The two filled chips live here and nowhere else.
@@ -519,7 +518,6 @@ shape: board
 title: Due
 groupBy: [due]
 sort: [due:asc]
-uncategorised: hide
 show: [priority, status, due]
 `,
   blocked: `# The derived axis: blocked · waiting · clear, including the card whose blocker is done.
@@ -541,7 +539,6 @@ shape: board
 title: Lanes
 groupBy: [priority, status]
 sort: [title:asc]
-uncategorised: end
 show: [project, due]
 `,
   linked: `# Grouped by which kinds of link a record carries — one card carries all of them.
@@ -549,7 +546,6 @@ shape: board
 title: Linked
 groupBy: [linked]
 sort: [title:asc]
-uncategorised: end
 show: [status, project]
 `,
   staleness: `# week · month · older, and the undated record that has no value on the axis at all.
@@ -557,7 +553,6 @@ shape: board
 title: Staleness
 groupBy: [staleness]
 sort: [updated:desc]
-uncategorised: end
 show: [status, priority]
 `,
   map: `# The decomposition tree, plus blocking edges. Two relation colours on one canvas.

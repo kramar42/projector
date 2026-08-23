@@ -223,3 +223,46 @@ test('a declaration that cannot take effect is an error, not a shrug', () => {
   // `fine` and `rel` declare the same keys correctly and must say nothing.
   assert.deepEqual(messages.filter((m) => /"fine"|"rel"/.test(m)), []);
 });
+
+
+test('a view key the reader does not know is an error, not a line that does nothing', () => {
+  const facets = loadFacets(facetsFile('status: { values: [planning, done] }\n'));
+  const view = (raw: Record<string, unknown>) => [
+    { spec: specFromFile('v', raw), file: '/data/views/v.yaml', raw },
+  ];
+
+  // Both of these were real keys once. `uncategorised` was a grouping policy;
+  // `layout: manual` was written beside `nodes` and read by nothing. A retired
+  // key parses exactly like a live one, which is why this check exists.
+  const issues = validateViews(
+    view({ shape: 'board', title: 'T', uncategorised: 'hide', layout: 'manual', sort: ['title:asc'] }),
+    facets,
+  );
+  assert.deepEqual(issues.map((i) => i.field).sort(), ['layout', 'uncategorised']);
+  assert.ok(issues.every((i) => i.severity === 'error'));
+
+  // Everything the writer emits, and the two arrangement keys, are accepted.
+  assert.deepEqual(
+    validateViews(
+      view({
+        shape: 'canvas',
+        title: 'T',
+        filter: { status: ['planning'] },
+        groupBy: ['status'],
+        sort: ['updated:desc'],
+        show: ['status'],
+        q: 'text',
+        nodes: { a: { x: 1, y: 2 } },
+        order: { planning: ['a'] },
+      }),
+      facets,
+    ),
+    [],
+  );
+
+  // A caller holding only a spec still checks the axes, and reports no keys.
+  assert.deepEqual(
+    validateViews([{ spec: specFromFile('v', { shape: 'board', nope: 1 }), file: 'f' }], facets),
+    [],
+  );
+});

@@ -53,11 +53,6 @@ export interface Query {
   groupBy?: string[];
   /** `facet:asc` ranks by declared order, not alphabetically. */
   sort?: string[];
-  /**
-   * A grouping option, not a board option — it reads identically for a board's
-   * columns and a table's sections.
-   */
-  uncategorised?: 'end' | 'start' | 'hide';
 }
 
 export interface ValueCount {
@@ -633,12 +628,19 @@ export function runQuery(
       const order = (pseudo ? pseudo.values(facets) : orderValues(facets[facet], seen)).filter(
         (v) => admit === null || admit.has(v),
       );
-      // `(none)` needs no test of its own. A card with no value here is a hit only
-      // when the selection names `(none)`, so `none` is already empty whenever it
-      // is not admitted — and `uncategorised` remains its own explicit policy.
-      if (none.length && query.uncategorised !== 'hide') {
-        if (query.uncategorised === 'start') order.unshift(NONE);
-        else order.push(NONE);
+      // `(none)` needs no test of its own, and no policy either. A card with no
+      // value here is a hit only when the selection names `(none)`, so the column
+      // is absent exactly when nothing is uncategorised or the filter excluded it.
+      //
+      // There used to be an `uncategorised: end | start | hide` option. `start`
+      // had no user in any vault; `hide` had one, and it was dead config — the
+      // view already filtered the axis it grouped by, so `(none)` could not
+      // appear. Where `hide` was live it was a broken duplicate of a filter: it
+      // dropped the cards from the groups but left them in `ids`, so the count
+      // over-reported and a canvas — which draws its nodes from `ids` — went on
+      // drawing them, in the band meant for context records.
+      if (none.length) {
+        order.push(NONE);
         buckets.set(NONE, none);
       }
       return { order, buckets };

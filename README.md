@@ -316,12 +316,17 @@ twice — and "why does my canvas draw nothing" was answered by the one you forg
 ## grouping
 
 `groupBy: [primary, secondary]` gives a board columns and swimlane rows, and a table sections and
-sub-sections. Its options are shared, because they describe grouping rather than any one shape:
-`uncategorised` places the no-value group, and `sort` orders within a column, a section or a canvas
-rank. Every value the query *admits* gets a group — the facet's declared order narrowed to the current
-selection, so a filter makes an axis smaller rather than empty. A board keeps a group nothing is in,
-because an empty column is somewhere to drag a card to; a table and a canvas drop it, because neither
-offers anything to drag.
+sub-sections. Its options are shared, because they describe grouping rather than any one shape: `sort` orders within
+a column, a section or a canvas rank. Every value the query *admits* gets a group — the facet's
+declared order narrowed to the current selection, so a filter makes an axis smaller rather than empty.
+A board keeps a group nothing is in, because an empty column is somewhere to drag a card to; a table
+and a canvas drop it, because neither offers anything to drag.
+
+The no-value group always comes last, and appears only when something is in it. There was an
+`uncategorised: end | start | hide` option and it is gone: `start` had no user, and `hide` was a
+*filter* spelled a second way — worse than the filter, because it dropped the cards from the groups
+and left them in the count, and a canvas draws its nodes from the count. To leave the uncategorised
+out, select the values you want.
 
 Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
 That works because a hierarchy concentrates: 26 distinct parents across 134 references here, only 7 of
@@ -363,14 +368,17 @@ focus: { id: platform, via: parent, dir: in, depth: 2 }
 q: keycloak
 groupBy: [priority, project]
 sort: [due:asc, priority:asc]
-uncategorised: end | start | hide
 show: [parent, project, tech]      # references first: the canvas lays out by the first
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
 order: { now: [id, id] }           # written by a drag, not by hand
 ```
 
 `connect` is not a key: keeping unmatched ancestors so a graph stays readable is something only a
-canvas ever honoured, so it follows the shape.
+canvas ever honoured, so it follows the shape. Nor is `layout`, which was written beside `nodes` and
+read by nothing — a canvas knows it is hand-arranged because `nodes` is there.
+
+**Those are all the keys there are.** `pj check` rejects any other, because a view with a misspelled
+or retired key parses exactly like one that works and then does nothing.
 
 ---
 
@@ -624,7 +632,7 @@ one.
 
 | | |
 |---|---|
-| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--uncategorised end\|start\|hide] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
+| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a record |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |

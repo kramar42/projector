@@ -563,10 +563,10 @@ full of markdown attracts a README, not because the app puts one there.
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `source.test.ts` | no source file hides a control byte from grep |
-| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
+| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
 | `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, and seeding a fresh vault not being the same act as adopting one |
-| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, the empty-group policy |
+| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy |
 | `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with records, views and an empty `facets.yaml` loads, validates and answers a query |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine

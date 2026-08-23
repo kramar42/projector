@@ -50,10 +50,6 @@ export function setSort(spec: ViewSpec, key: string, dir: 'asc' | 'desc'): ViewS
   return replaceQuery(spec, { sort: key ? [`${key}:${dir}`] : undefined });
 }
 
-export function setUncategorised(spec: ViewSpec, where: 'end' | 'start' | 'hide'): ViewSpec {
-  return replaceQuery(spec, { uncategorised: where });
-}
-
 export function setSearch(spec: ViewSpec, q: string): ViewSpec {
   return replaceQuery(spec, { q: q.trim() ? q : undefined });
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NONE } from '../src/index/query.ts';
-import { parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
+import { VIEW_KEYS, parseSpec, specFromFile, specToFile, specToParams } from '../src/view/spec.ts';
 import { layoutRelation } from '../src/view/payload.ts';
 import {
   clearFilters,
@@ -26,7 +26,6 @@ test('a spec survives the round trip through URL parameters', () => {
     depth: '2',
     group: 'priority,status',
     sort: 'priority:asc,updated:desc',
-    uncategorised: 'start',
     show: 'parent,project,tech',
   };
   const spec = parseSpec(params);
@@ -67,7 +66,6 @@ test('a view file reads back as the query it was written from', () => {
     filter: { kind: ['card'], due: ['overdue', 'today'] },
     groupBy: ['due'],
     sort: ['due:asc'],
-    uncategorised: 'hide',
     show: ['project'],
     q: 'keycloak',
   });
@@ -75,7 +73,6 @@ test('a view file reads back as the query it was written from', () => {
   assert.deepEqual(spec.query.filter, { kind: ['card'], due: ['overdue', 'today'] });
   assert.deepEqual(spec.query.groupBy, ['due']);
   assert.deepEqual(spec.query.sort, ['due:asc']);
-  assert.equal(spec.query.uncategorised, 'hide');
   assert.deepEqual(spec.show, ['project']);
   // `q` used to be written and never read back, so a saved search vanished on
   // the next open.
@@ -279,4 +276,42 @@ test('clearing the primary grouping axis promotes the secondary', () => {
   const two = specFromFile('v', { shape: 'board', groupBy: ['priority', 'project'] });
   assert.deepEqual(setGroupBy(two, 0, null).query.groupBy, ['project']);
   assert.deepEqual(setGroupBy(two, 1, null).query.groupBy, ['priority']);
+});
+
+
+test('every key the writer emits is a key the checker knows', () => {
+  // `VIEW_KEYS` is a second list beside `specFromFile`, which is the shape of a
+  // pair that drifts. The drift that actually happens is writer-first — a new
+  // key reaches `specToFile` and `VIEW_KEYS` does not learn it — and then
+  // `pj check` rejects a file the app itself just wrote. This is that direction,
+  // pinned.
+  //
+  // Reader-first drift is left to a human on purpose: a key read but not listed
+  // makes `pj check` reject a working file, loudly, which is the failure that
+  // announces itself.
+  const spec = parseSpec({
+    shape: 'canvas',
+    'f.project': 'project-a',
+    q: 'keycloak',
+    focus: 'project-b',
+    via: 'project',
+    dir: 'in',
+    depth: '2',
+    group: 'priority,status',
+    sort: 'priority:asc',
+    show: 'parent,tech',
+  });
+  spec.nodes = { project-a: { x: 1, y: 2 } };
+  spec.order = { now: ['a'] };
+
+  const written = Object.keys(specToFile(spec, 'T'));
+  assert.ok(written.length >= 7, 'the fixture should exercise most of the writer');
+  const unknown = written.filter((k) => !VIEW_KEYS.includes(k));
+  assert.deepEqual(unknown, [], `specToFile writes keys VIEW_KEYS does not list: ${unknown.join(', ')}`);
+
+  // Arrangement is written by `saveArrangement` rather than `specToFile`, so it
+  // has to be asserted separately or the two writers are only half covered.
+  for (const key of ['nodes', 'order']) {
+    assert.ok(VIEW_KEYS.includes(key), `${key} is written to view files and must be known`);
+  }
 });

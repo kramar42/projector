@@ -46,14 +46,35 @@ export function viewFileFor(root: string, name: string): string {
   return existing?.file ?? join(paths(root).views, `${name}.yaml`);
 }
 
-export function loadViews(root: string): ViewSpec[] {
-  const out: ViewSpec[] = [];
+/** A view file's parsed mapping beside the spec it produced, and where it came from. */
+export interface LoadedView {
+  name: string;
+  file: string;
+  /** Exactly what the file says, for the checker — `specFromFile` drops the rest. */
+  raw: Record<string, unknown>;
+  spec: ViewSpec;
+}
+
+/**
+ * Every view, read once.
+ *
+ * `pj check` used to call `findView` per view, and `findView` was
+ * `loadViews(root).find(...)` — so it re-read and re-parsed every file once per
+ * file. One pass now, and it keeps the raw mapping, which is what the key check
+ * needs: by the time a `ViewSpec` exists the unknown keys are gone.
+ */
+export function loadViewFiles(root: string): LoadedView[] {
+  const out: LoadedView[] = [];
   for (const { name, file } of viewFiles(root)) {
     const raw = parse(readFileSync(file, 'utf8')) as Record<string, unknown> | null;
     if (!raw) continue;
-    out.push(specFromFile(name, raw));
+    out.push({ name, file, raw, spec: specFromFile(name, raw) });
   }
   return out;
+}
+
+export function loadViews(root: string): ViewSpec[] {
+  return loadViewFiles(root).map((v) => v.spec);
 }
 
 export function findView(root: string, name: string): ViewSpec | undefined {

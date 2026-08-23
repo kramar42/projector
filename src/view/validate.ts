@@ -3,7 +3,7 @@ import { HUES, isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
 import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
-import type { ViewSpec } from './spec.ts';
+import { VIEW_KEYS, type ViewSpec } from './spec.ts';
 
 /**
  * Validating the two things a card's own schema cannot judge: the vocabulary's
@@ -146,11 +146,13 @@ function bucketHues(def: Record<string, unknown>): unknown[] {
  * that needs more than existence: it is *walked*, so a label facet parses
  * happily and then traverses nothing.
  *
- * Views arrive already loaded, with the file each came from. This module knows
- * how to judge a view, not where views live.
+ * Views arrive already loaded, with the file each came from and — for a caller
+ * that has it — the raw mapping, which is the only thing that still knows about
+ * a key the reader dropped. This module knows how to judge a view, not where
+ * views live.
  */
 export function validateViews(
-  views: { spec: ViewSpec; file: string }[],
+  views: { spec: ViewSpec; file: string; raw?: Record<string, unknown> }[],
   facets: Facets,
 ): Issue[] {
   const issues: Issue[] = [];
@@ -158,9 +160,19 @@ export function validateViews(
   // for being derived (C4), and a view may name either.
   const known = (name: string) => !!facets[name] || !!PSEUDO[name];
 
-  for (const { spec, file } of views) {
+  for (const { spec, file, raw } of views) {
     const at = (field: string, message: string) =>
       issues.push({ severity: 'error', file, id: spec.name, field, message });
+
+    // A key the reader does not know is a line that parsed and did nothing — the
+    // same silent failure as an axis that matches nothing, one level out. `raw`
+    // is optional only so a caller holding a spec alone can still check the
+    // axes; `pj check` passes it.
+    for (const key of Object.keys(raw ?? {})) {
+      if (!VIEW_KEYS.includes(key)) {
+        at(key, `no view key "${key}" — this line parses and does nothing`);
+      }
+    }
 
     const axis = (name: string, field: string) => {
       if (!known(name)) {

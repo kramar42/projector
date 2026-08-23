@@ -17,7 +17,7 @@ export { DIRS, NONE, SHAPES, type Dir, type Shape };
  *
  * One list, because there were three: this module's reader, the client's
  * "which params belong to the query" predicate, and the CLI's flag list — which
- * was short by `shape`, `show` and `uncategorised`, so `pj ls --shape canvas`
+ * was short by `shape` and `show`, so `pj ls --shape canvas`
  * simply did not exist. Adding a key here is what makes every surface able to say
  * it.
  */
@@ -32,7 +32,6 @@ export const SPEC_PARAMS = [
   'dir',
   'depth',
   'show',
-  'uncategorised',
 ] as const;
 
 export interface ViewSpec {
@@ -121,8 +120,6 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   if (grouping.length) query.groupBy = grouping.slice(0, 2);
   const sort = list(params.sort);
   if (sort.length) query.sort = sort;
-  const uncategorised = one(params.uncategorised, ['end', 'start', 'hide'] as const);
-  if (uncategorised) query.uncategorised = uncategorised;
 
   const shape = one(params.shape, SHAPES) ?? 'board';
 
@@ -148,7 +145,6 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
   if (q.q) out.q = q.q;
   if (q.groupBy?.length) out.group = q.groupBy.join(',');
   if (q.sort?.length) out.sort = q.sort.join(',');
-  if (q.uncategorised) out.uncategorised = q.uncategorised;
   if (q.focus) {
     out.focus = q.focus.id;
     if (q.focus.via) out.via = q.focus.via;
@@ -168,6 +164,36 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
  * is the file half of `parseSpec` and nothing else — there is no second reading
  * for keys an older version wrote.
  */
+/**
+ * Every key a view file may hold: what `specFromFile` reads below, plus the two
+ * `saveArrangement` writes.
+ *
+ * A view file was the one document nothing checked the *shape* of. Card
+ * frontmatter has a schema and `facets.yaml` has `validateVocabulary`, but a view
+ * with a misspelled or retired key parsed fine and did nothing — which is how an
+ * `uncategorised:` line survived in the seeded `due.yaml` long after it had
+ * stopped meaning anything there.
+ *
+ * It is a second list beside the reader, which is a pair that drifts. The drift
+ * that actually happens is writer-first — `specToFile` learns a key and this
+ * forgets — so `spec.test.ts` holds the two against each other. Reader-first
+ * drift stays a human check, and is the cheaper direction: a key read but not
+ * listed makes `pj check` reject a file that works, loudly.
+ */
+export const VIEW_KEYS: readonly string[] = [
+  'shape',
+  'title',
+  'filter',
+  'focus',
+  'q',
+  'groupBy',
+  'sort',
+  'show',
+  // Arrangement. Written by `saveArrangement`, never by hand.
+  'nodes',
+  'order',
+];
+
 export function specFromFile(name: string, raw: Record<string, unknown>): ViewSpec {
   const params: Record<string, string> = {};
   params.shape = one(String(raw.shape ?? ''), SHAPES) ?? 'board';
@@ -188,7 +214,6 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (typeof raw.q === 'string') params.q = raw.q;
   if (Array.isArray(raw.groupBy)) params.group = raw.groupBy.map(String).join(',');
   if (Array.isArray(raw.sort)) params.sort = raw.sort.map(String).join(',');
-  if (typeof raw.uncategorised === 'string') params.uncategorised = raw.uncategorised;
   if (Array.isArray(raw.show)) params.show = raw.show.map(String).join(',');
 
   const spec = parseSpec(params);
@@ -217,7 +242,6 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.q ? { q: q.q } : {}),
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
-    ...(q.uncategorised ? { uncategorised: q.uncategorised } : {}),
     ...(spec.show.length ? { show: spec.show } : {}),
   };
 }

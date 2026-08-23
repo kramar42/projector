@@ -13,7 +13,7 @@ import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
 import { SPEC_PARAMS, parseSpec, specToParams, type ViewSpec } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
-import { findView, loadViews, viewFiles } from '../server/views.ts';
+import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
 import { cardContext, renderContext } from '../agent/context.ts';
@@ -97,7 +97,7 @@ const HELP = `pj — projector CLI${vaultNote}
   pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
      [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
      --dir out|in|both --depth n] [--shape s]
-     [--show f,f] [--uncategorised end|start|hide]
+     [--show f,f]
      [--json]                                      list records, grouped
   pj log [--since "1 week ago"]                        what changed, from git history
   pj add <title> [--id slug] [--facet f=v ...]
@@ -242,7 +242,7 @@ function cmdLs(argv: string[]): void {
     if (facet && values !== undefined) params[`f.${facet}`] = values;
   }
   // Every spec parameter, from the one list that says what a spec is made of —
-  // which is how `--shape`, `--show` and `--uncategorised` arrive: they were
+  // which is how `--shape` and `--show` arrive: they were
   // missing from a hand-kept copy, so the CLI could not ask for a canvas.
   for (const key of SPEC_PARAMS) {
     if (key === 'view') continue;
@@ -419,10 +419,7 @@ function cmdCheck(): void {
     ...validate(records, facets, root, { unreadable, duplicates }),
     // A view is checked against the same vocabulary its cards are. Until it was,
     // a filter naming a deleted facet matched nothing and reported success.
-    ...validateViews(
-      viewFiles(root).map(({ name, file }) => ({ spec: findView(root, name)!, file })),
-      facets,
-    ),
+    ...validateViews(loadViewFiles(root), facets),
   ];
   console.log(formatIssues(issues, root));
   if (issues.some((i) => i.severity === 'error')) process.exit(1);

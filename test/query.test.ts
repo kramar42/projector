@@ -366,15 +366,24 @@ test('every declared value gets a group, empty or not', () => {
   }
 });
 
-test('uncategorised places or hides the (none) column', () => {
+test('the (none) column comes last, and only when something is in it', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
-    const values = (u: Query['uncategorised']) =>
-      run({ groupBy: ['priority'], uncategorised: u }).groups!.map((g) => g.value);
-    assert.deepEqual(values('start'), [NONE, 'now', 'month', 'backlog']);
-    assert.deepEqual(values('end'), ['now', 'month', 'backlog', NONE]);
-    assert.deepEqual(values('hide'), ['now', 'month', 'backlog']);
+    const values = (q: Query) => run(q).groups!.map((g) => g.value);
+    assert.deepEqual(values({ groupBy: ['priority'] }), ['now', 'month', 'backlog', NONE]);
+
+    // There was an `uncategorised: end | start | hide` option. Excluding the
+    // uncategorised is what a *filter* does — and does correctly, where `hide`
+    // dropped the cards from the groups but left them in `ids`, so the count
+    // over-reported and a canvas went on drawing them.
+    const filtered = run({ groupBy: ['priority'], filter: { priority: ['now', 'month'] } });
+    assert.deepEqual(filtered.groups!.map((g) => g.value), ['now', 'month']);
+    assert.equal(
+      filtered.total,
+      filtered.groups!.reduce((n, g) => n + g.ids.length, 0),
+      'and the total counts exactly what the groups hold',
+    );
   } finally {
     cleanup();
   }
@@ -660,13 +669,13 @@ test('grouping options read the same on either axis', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
-    // `showEmpty` and `uncategorised` are properties of grouping, not of boards:
-    // they apply to the lane axis exactly as they apply to the column axis.
-    const res = run({ groupBy: ['status', 'priority'], uncategorised: 'start' });
+    // Grouping is a property of the query, not of a board: whatever the column
+    // axis does, the lane axis does.
+    const res = run({ groupBy: ['status', 'priority'] });
     // `project-a-eventing` is a node with no facets at all, so both axes have a
-    // (none) — leading, because `uncategorised` says so, on either axis.
-    assert.deepEqual(res.axis, [NONE, 'planning', 'active', 'done']);
-    assert.deepEqual(res.lanes, [NONE, 'now', 'month', 'backlog']);
+    // (none), and it trails on both.
+    assert.deepEqual(res.axis, ['planning', 'active', 'done', NONE]);
+    assert.deepEqual(res.lanes, ['now', 'month', 'backlog', NONE]);
   } finally {
     cleanup();
   }
@@ -897,7 +906,7 @@ test('only a label facet declares a vocabulary of its own', () => {
 test('a relation groups a board and reaches (none), like any other facet', () => {
   const { root, cleanup } = vault();
   try {
-    const res = open(root)({ groupBy: ['parent'], uncategorised: 'end' });
+    const res = open(root)({ groupBy: ['parent'] });
     const byValue = Object.fromEntries((res.groups ?? []).map((g) => [g.value, g.ids.length]));
     // None of this was possible while relations lived in an `edges` block:
     // filtering, grouping and absence all arrive because it is a facet.

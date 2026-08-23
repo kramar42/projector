@@ -627,8 +627,10 @@ export function saveArrangement(
     }
     for (const id of dead(Object.keys(merged))) delete merged[id];
     patch.nodes = merged;
-    // Storing positions only means anything under a manual layout.
-    patch.layout = 'manual';
+    // No `layout: manual` beside it. It was written here and preserved by
+    // `saveView`, and read by nothing: a canvas decides it is hand-arranged from
+    // `nodes` being present, which is the same fact one hop earlier. A stored
+    // value duplicating a derivable one is the rule that retired `kind` (C11).
   }
 
   if (arrangement.order) {
@@ -673,7 +675,6 @@ export function saveView(root: string, name: string, body: Record<string, unknow
     merged = { ...body };
     if (before.nodes) merged.nodes = before.nodes;
     if (before.order) merged.order = before.order;
-    if (before.layout) merged.layout = before.layout;
   }
 
   // Through the YAML patcher rather than a bare stringify, so a view the app
