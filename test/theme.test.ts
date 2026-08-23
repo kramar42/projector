@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * one system rather than 108 independent decisions.
  *
  * Consistency here was never the problem — a documentation pass over the whole
- * file found two exceptions in 48 KB. The problem is that consistency was held in
+ * file found two exceptions in the whole of it. The problem is that consistency was held in
  * one person's head: a `11.5px` where `12px` belonged, or a sixth radius step,
  * reads as plausible in a diff and is invisible in the app. Naming the scale does
  * not shrink it; these tests are what stop it growing by accident.
@@ -189,5 +190,202 @@ test('every token reference in DESIGN.md components resolves', () => {
     [...new Set(dangling)],
     [],
     'a components: reference pointing at a token that does not exist',
+  );
+});
+
+/**
+ * The rules below were prose until this pass, and prose is what drifted.
+ *
+ * Every defect these catch is one that actually happened, was found by a person
+ * or an agent *reading*, and in three cases happened more than once — which is
+ * the argument for a test rather than a more careful reader. What they cost is a
+ * grep; what they buy is that a rule stops depending on whoever last looked.
+ */
+
+/** Selectors, one per rule, with comments stripped so prose cannot match. */
+function rules(): { sel: string; body: string }[] {
+  const out: { sel: string; body: string }[] = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  for (const m of CODE.matchAll(re)) out.push({ sel: m[1]!.trim(), body: m[2]! });
+  return out;
+}
+
+/**
+ * The One Casing Rule: uppercase is the Label register, reached by taking the
+ * step — never by transforming a string at some other size.
+ *
+ * This fired twice for real. The panel's axis label hand-rolled
+ * `text-transform: uppercase` plus `0.1em` at the *Chip* step, and a link row's
+ * field keys did the same at the *Micro* step — each a third register rather than
+ * a use of the second, and each invisible in a screenshot.
+ *
+ * `.kv dt` is the one exemption, and it is not a loophole: DESIGN.md's Typography
+ * Hierarchy commits it by name — "the panel's `kv` keys in uppercase" — at the
+ * Meta step. An exemption a document states out loud is a decision.
+ */
+test('uppercase is reached by taking the Label step', () => {
+  const EXEMPT = new Set(['.kv dt']);
+  const offenders = rules()
+    .filter((r) => /text-transform:\s*uppercase/.test(r.body))
+    .filter((r) => !EXEMPT.has(r.sel))
+    .filter((r) => !/font-size:\s*var\(--text-label\)/.test(r.body))
+    .map((r) => r.sel);
+  assert.deepEqual(
+    offenders,
+    [],
+    'uppercase off the Label step — take the step, or render the string as it arrives:\n' +
+      offenders.map((s) => `  ${s}`).join('\n'),
+  );
+});
+
+/**
+ * The Drawn Control Rule: nothing on screen is drawn by the browser.
+ *
+ * Checked structurally rather than per control, because per control is exactly
+ * how this rule kept failing. Three checkboxes and two selects were found in one
+ * pass; a later pass found `input[type=search]` and `input[type=date]` still
+ * computing `appearance: auto`, because `appearance` was declared on nine classes
+ * and on `select`, and on nothing that reached an unclassed or oddly-typed input.
+ *
+ * Asserting it on the shared element rule is what makes the defect unable to
+ * recur: a control with no class, or with a type nobody thought about, is covered
+ * by construction.
+ */
+test('every field is drawn by the app, not the browser', () => {
+  const shared = rules().find((r) => r.sel === 'input, textarea, select');
+  assert.ok(shared, 'the shared field rule should be declared on the elements');
+  assert.match(
+    shared.body,
+    /appearance:\s*none/,
+    'the shared `input, textarea, select` rule must declare `appearance: none`, or a control with ' +
+      'no class is drawn by the browser',
+  );
+  const revived = rules().filter((r) => /appearance:\s*auto/.test(r.body)).map((r) => r.sel);
+  assert.deepEqual(revived, [], `appearance handed back to the browser: ${revived.join(', ')}`);
+});
+
+/**
+ * Still at rest. No keyframes, and no transition longer than 140ms.
+ *
+ * The rule with the widest blast radius in the Don't list and nothing checked it.
+ * A surface that sits open on a second monitor all day is a readout, and one
+ * transition added in sympathy is how a readout stops being one.
+ */
+test('the surface is still', () => {
+  assert.deepEqual([...CODE.matchAll(/@keyframes/g)].map((m) => m[0]), [], 'a keyframe animation');
+  assert.deepEqual([...CODE.matchAll(/(?<!-)\banimation:/g)].map((m) => m[0]), [], 'an animation declaration');
+  const slow = [...CODE.matchAll(/transition:[^;]*?(\d+)ms/g)].filter((m) => Number(m[1]) > 140).map((m) => m[0]);
+  assert.deepEqual(slow, [], `a transition longer than 140ms: ${slow.join(', ')}`);
+});
+
+/**
+ * The Desktop-Only Rule. One `@media`, and it is the theme.
+ *
+ * Stated as an imperative — "Do not add breakpoints; if something must fit a
+ * narrower window, clamp it" — which is precisely the kind of instruction that
+ * needs an enforcer rather than a reader.
+ */
+test('there are no breakpoints', () => {
+  const queries = [...CODE.matchAll(/@media([^{]*)\{/g)].map((m) => m[1]!.trim());
+  assert.deepEqual(queries, ['(prefers-color-scheme: dark)'], `an @media that is not the theme: ${queries.join(' | ')}`);
+  assert.deepEqual([...CODE.matchAll(/@container/g)].map((m) => m[0]), [], 'a container query');
+});
+
+/**
+ * The One Hue Per Axis Rule: a facet axis owns one hue family, and a family
+ * serves one axis.
+ *
+ * The property the whole palette exists for — that a chip's colour is legible
+ * before its text is — and it dies quietly the first time two axes share a
+ * family. The two hueless classes are the documented Hints Are Hueless case.
+ */
+test('one hue family per facet axis', () => {
+  const HUELESS = new Set(['.facet-energy', '.facet-muted']);
+  const byFamily = new Map<string, string[]>();
+  for (const r of rules()) {
+    if (!/^\.facet-[a-z]+$/.test(r.sel) || HUELESS.has(r.sel)) continue;
+    const hue = r.body.match(/color:\s*var\(--(hue-[a-z]+)\)/);
+    if (!hue) continue;
+    byFamily.set(hue[1]!, [...(byFamily.get(hue[1]!) ?? []), r.sel]);
+  }
+  assert.ok(byFamily.size >= 5, 'the facet chip classes should each claim a hue');
+  const shared = [...byFamily].filter(([, sels]) => sels.length > 1);
+  assert.deepEqual(shared, [], `a hue family serving two axes: ${shared.map(([h, s]) => `${h} <- ${s.join(', ')}`).join('; ')}`);
+});
+
+/**
+ * Every class the client asks for exists in the stylesheet.
+ *
+ * `className` is a string, so a class with no rule behind it fails silently and
+ * looks exactly like a class that works. Two passes found seven: three
+ * `panelClassName`s on `PopoverButton`, then `vaultmenu`, `viewmenu`,
+ * `vaultbtn-name` and `lane-name` — all live DOM hooks with nothing behind them,
+ * two of them on elements whose siblings *were* styled, which is what made them
+ * read as intentional.
+ *
+ * Only static names are checked. A class assembled by interpolation is skipped,
+ * because its value is not knowable here and guessing would make this test lie in
+ * the other direction.
+ */
+test('every className resolves to a rule', () => {
+  /** Classes owned by a library, whose elements this stylesheet only reaches into. */
+  const FOREIGN = /^(react-flow|cm-)/;
+  const declared = new Set<string>();
+  for (const m of CODE.matchAll(/([^{}]*)\{/g)) {
+    for (const c of m[1]!.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) declared.add(c[1]!);
+  }
+
+  const dir = fileURLToPath(new URL('../src/web/', import.meta.url));
+  const files: string[] = [];
+  const walk = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else if (e.name.endsWith('.tsx')) files.push(join(d, e.name));
+    }
+  };
+  walk(dir);
+  assert.ok(files.length > 10, 'the client should have been found');
+
+  const orphans = new Map<string, string[]>();
+  for (const f of files) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?:className|panelClassName)=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+      // An interpolation leaves a `~`, which cannot occur in a class name — so
+      // `tone-${t}` is skipped whole rather than truncated to a bogus `tone-`.
+      const raw = (m[1] ?? m[2] ?? '').replace(/\$\{[^}]*\}/g, '~');
+      for (const cl of raw.split(/\s+/)) {
+        if (!cl || cl.includes('~') || FOREIGN.test(cl) || declared.has(cl)) continue;
+        orphans.set(cl, [...(orphans.get(cl) ?? []), f.slice(dir.length)]);
+      }
+    }
+  }
+  const listed = [...orphans].map(([cl, where]) => `  ${cl} — ${[...new Set(where)].join(', ')}`);
+  assert.deepEqual(listed, [], `a className with no rule behind it:\n${listed.join('\n')}`);
+});
+
+/**
+ * ARCHITECTURE.md's test table names exactly the tests that exist.
+ *
+ * It named `model.test.ts`, which does not exist and had not for some time, while
+ * omitting sixteen files that do — so the table read as a complete account of what
+ * is covered and was neither complete nor accurate. A table asserting coverage is
+ * worse than no table when it is wrong, because it answers the question the reader
+ * came to ask.
+ */
+test('ARCHITECTURE.md names the tests that exist', () => {
+  const doc = readFileSync(fileURLToPath(new URL('../ARCHITECTURE.md', import.meta.url)), 'utf8');
+  const named = new Set([...doc.matchAll(/`([a-z]+\.test\.ts)`/g)].map((m) => m[1]!));
+  const real = new Set(
+    readdirSync(fileURLToPath(new URL('../test/', import.meta.url))).filter((f) => f.endsWith('.test.ts')),
+  );
+  assert.deepEqual(
+    [...named].filter((n) => !real.has(n)).sort(),
+    [],
+    'a test the document names that does not exist',
+  );
+  assert.deepEqual(
+    [...real].filter((r) => !named.has(r)).sort(),
+    [],
+    'a test that exists and the document does not name',
   );
 });
