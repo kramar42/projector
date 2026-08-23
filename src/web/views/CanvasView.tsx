@@ -382,6 +382,25 @@ export function CanvasView({
            * it, so the key is turned off rather than rebound.
            */
           deleteKeyCode={null}
+          /*
+           * Selecting is what a click means; moving is what a drag means.
+           *
+           * React Flow selects from two places, and the source says so at
+           * `handleNodeClick`: the click handler, and — under `selectNodesOnDrag`
+           * — drag start. The click branch is already live, because it runs
+           * whenever `nodeDragThreshold > 0` and the default threshold is 1. So
+           * the drag-start copy was never what made click-to-select work; it only
+           * gave dragging a second meaning, and repositioning a card selected it
+           * whether or not that was the point.
+           */
+          selectNodesOnDrag={false}
+          /*
+           * And a click is allowed to wobble. At the default of one pixel a twitch
+           * during a click is a drag, which emits a `position` change and trips
+           * `setDirty` above — so a canvas you had only clicked at started
+           * offering to save a layout you never moved.
+           */
+          nodeDragThreshold={4}
           onNodeDoubleClick={(_, n) => onOpen(n.id)}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--dot)" />
