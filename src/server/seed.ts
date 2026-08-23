@@ -38,8 +38,8 @@ parent:
   type: ref
   single: true
 
-# What must finish before the target. Its transitive closure is what pj next
-# and the blocked axis are built from. Not worth grouping a board by — the
+# What must finish before the target. Its transitive closure is what the blocked
+# axis and views/unblocked.yaml are built from. Not worth grouping a board by — the
 # question is always the inverse, which the derived blocked axis answers.
 blocks:
   label: Blocks
@@ -129,8 +129,8 @@ uncategorised: end
   },
   {
     path: 'due.yaml',
-    body: `# Deadlines, soonest first. \`due\` is a pseudo-facet over the \`due\` field —
-# the buckets are computed against today, so this view never goes stale.
+    body: `# Deadlines, soonest first. \`due\` is an ordered facet: it declares its own
+# buckets, computed against today, so this view never goes stale.
 shape: board
 title: Due
 filter:

@@ -183,22 +183,24 @@ export function CardBody({
  * derivable is also stored.
  */
 export function markOf(card: Marked): { glyph: string; role: Role; means: string } {
+  // One sentence for the count, so the project and container branches cannot
+  // drift: a table draws the number for any record with references, projects
+  // included, and the face carries the same fact only in this tooltip.
+  const references =
+    card.refCount === 1
+      ? '1 record references this one.'
+      : `${plural(card.refCount, 'record')} reference this one.`;
   if (card.isProject) {
     return {
       glyph: GLYPH_OF.project,
       role: 'project',
-      means: 'A project: other records inherit its repos and instructions.',
+      means:
+        'A project: other records inherit its repos and instructions.' +
+        (card.refCount > 0 ? ` ${references}` : ''),
     };
   }
   if (card.refCount > 0) {
-    return {
-      glyph: GLYPH_OF.container,
-      role: 'container',
-      means:
-        card.refCount === 1
-          ? '1 record references this one.'
-          : `${plural(card.refCount, 'record')} reference this one.`,
-    };
+    return { glyph: GLYPH_OF.container, role: 'container', means: references };
   }
   return { glyph: GLYPH_OF.leaf, role: 'leaf', means: 'Nothing references this one.' };
 }

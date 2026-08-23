@@ -22,13 +22,12 @@ export function VaultSwitcher({
   return (
     <PopoverButton
       className="vaultbtn"
-      panelClassName="vaultmenu"
       minWidth={280}
       title={meta.vault}
       label={
         <>
           <span className="vaultbtn-mark">▣</span>
-          <span className="vaultbtn-name">{meta.vaultName}</span>
+          <span>{meta.vaultName}</span>
         </>
       }
       render={(close) => <VaultMenu meta={meta} onSwitch={onSwitch} onAdd={onAdd} close={close} />}

@@ -115,11 +115,10 @@ function buildEdges(
       // An arrowhead per type, so direction is legible without reading a label.
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: colour },
       // Only `blocks` earns text: it is the one relationship you cannot infer
-      // from the layout. Neutral, because a label inherits the edge colour as its
-      // fill otherwise, and a red word floating over a graph reads as an error.
+      // from the layout. Its fill and step live in `.react-flow__edge-text`, not
+      // here — an inline `fontSize` is a type decision the scale test cannot see.
       ...(types.includes('blocks') ? { label: types.length > 1 ? types.join(' + ') : 'blocks' } : {}),
-      labelStyle: { fill: 'var(--ink-2)', fontSize: 10 },
-      labelBgStyle: { fill: 'var(--surface)', fillOpacity: 0.9 },
+      labelBgStyle: { fillOpacity: 0.9 },
       labelBgPadding: [4, 2] as [number, number],
       labelBgBorderRadius: 3,
       data: { types, src, dst },

@@ -7,6 +7,7 @@ import { frontmatterSchema, listCardFiles, loadCard, renderCard, writeCardFile }
 import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
+import { wouldCycle } from '../index/refs.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
@@ -326,27 +327,6 @@ export function deleteCard(root: string, id: string): { removedEdges: number } {
   const assets = join(p.assets, id);
   if (existsSync(assets)) rmSync(assets, { recursive: true });
   return { removedEdges };
-}
-
-/**
- * Would pointing `from` at `to` close a loop?
- *
- * Takes the outward neighbours as a function rather than a record map, so one
- * implementation serves a `parent` edge and a reference facet alike — the check
- * is about the shape of the graph, not about where it is stored.
- */
-function wouldCycle(from: string, to: string, outOf: (id: string) => string[]): boolean {
-  if (from === to) return true;
-  const seen = new Set<string>();
-  const stack = [to];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    if (cur === from) return true;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    stack.push(...outOf(cur));
-  }
-  return false;
 }
 
 /**

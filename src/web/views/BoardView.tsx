@@ -184,7 +184,7 @@ export function BoardView({
           <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>
             {lane !== undefined && (
               <div className="lane-head">
-                <span className="lane-name">{labelFor(lane ?? '')}</span>
+                <span>{labelFor(lane ?? '')}</span>
                 <span className="lane-count">
                   {columns(lane).reduce((n, g) => n + g.ids.length, 0)}
                 </span>

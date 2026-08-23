@@ -18,7 +18,7 @@ const DIR_MEANS: Record<string, string> = {
 
 /**
  * Focus is a traversal, not a facet — pick a record and walk edges from it. The
- * pseudo-facets (`kind`, `type`, `blocked`, `triage`, `staleness`) are the
+ * pseudo-facets (`type`, `blocked`, `triage`, `linked`, `staleness`) are the
  * facet-like things that aren't facets, and they live in the filter panel,
  * indistinguishable from the real ones.
  */

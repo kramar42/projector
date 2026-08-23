@@ -62,7 +62,6 @@ export function SavedViews({
     <>
       <div className="rail-row">
         <PopoverButton
-          panelClassName="viewmenu"
           minWidth={240}
           label={current?.title ?? current?.name ?? 'Ad-hoc query'}
           render={(close) => (

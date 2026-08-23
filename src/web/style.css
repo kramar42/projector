@@ -14,6 +14,7 @@
      #323232 shadow, #101010 bg, #080808 darker, #040404 darkest. */
 
 :root {
+  color-scheme: light;
   /* Light: xoria's own greys read as ink, its dark shades as accents. */
   --ground: #f7f7f7;
   --surface: #ffffff;
@@ -96,6 +97,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    color-scheme: dark;
     /* Strictly xoria: darkest → darker → bg → shadow is the panel stack. */
     --ground: #080808;    /* darker */
     --surface: #101010;   /* bg */
@@ -216,6 +218,7 @@
 .progress-num,
 .section-count,
 .bulkbar-count,
+.vaultrow-meta,
 .table .num {
   font-variant-numeric: tabular-nums;
 }
@@ -515,7 +518,6 @@ body {
   min-width: 20px;
   height: 20px;
   padding: 0 !important;
-  color: inherit;
   line-height: 1 !important;
 }
 
@@ -1050,6 +1052,12 @@ input:focus-visible + .checkbox {
   border: 0;
   color: var(--accent);
   font: inherit;
+  /* Declared here rather than in the shared tabular rule above: the `font:`
+     shorthand on the line before resets every sub-property it does not name,
+     `font-variant-numeric` included, so a hoisted rule would be undone here. It
+     renders `{n} more` in the rail and the panel's inbound lists — digits with a
+     word after them, which is the case that rule exists for. */
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
   padding: 2px 4px;
   text-align: left;
@@ -1170,7 +1178,7 @@ input:focus-visible + .checkbox {
  *
  * `.reflink` resolves the same collision the opposite way, and by accident: its
  * hover and its `.is-open` are both (0,2,0), so the stripe survives only because
- * it is declared eleven lines later.
+ * it is declared later in the file.
  */
 :where(.column-card:hover) .cardface {
   border-color: var(--rule-2);
@@ -1407,8 +1415,6 @@ input:focus-visible + .checkbox {
   background: var(--ok);
 }
 
-.progress-num {
-}
 
 .blocked {
   color: var(--bad);
@@ -1531,14 +1537,18 @@ input:focus-visible + .checkbox {
   opacity: 0;
 }
 
+/* The `blocks` edge label. Neutral rather than `rel-blocks`, because a label
+   inherits its edge's colour as a fill otherwise and a red word floating over a
+   graph reads as an error — `buildEdges` used to say this inline, where the type
+   step was invisible to the scale test. */
 .react-flow__edge-text {
   font-family: var(--mono);
-  font-size: var(--text-micro);
-  fill: var(--rel-blocks);
+  font-size: var(--text-chip);
+  fill: var(--ink-2);
 }
 
 .react-flow__edge-textbg {
-  fill: var(--ground);
+  fill: var(--surface);
 }
 
 .react-flow__controls button {
@@ -1933,10 +1943,21 @@ code {
   font-weight: 600;
 }
 .btn.primary:hover { filter: brightness(1.08); color: var(--ground); }
-.btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.btn.danger { background: none; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 .btn.danger:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
 
+/*
+ * Every field, once — and `appearance` belongs here rather than on a class.
+ *
+ * The select treatment moved onto the element for exactly this reason and this
+ * rule kept the older shape, so `appearance` was declared on nine classes and on
+ * `select`, and on nothing that reached an unclassed or oddly-typed input.
+ * Measured: `input[type=search].field-recessed` and `input[type=date].dateinput`
+ * both computed `appearance: auto`, i.e. the browser was drawing two controls
+ * against a rule that says it draws none.
+ */
 input, textarea, select {
+  appearance: none;
   font: inherit;
   font-size: var(--text-body);
   color: var(--ink);
@@ -1944,6 +1965,15 @@ input, textarea, select {
   border: 1px solid var(--rule-2);
   border-radius: var(--radius-base);
   padding: 5px 8px;
+}
+
+/* `appearance: none` does not reach a UA shadow child. The search field's cancel
+   button is the app's own Escape handler drawn twice, so it goes; the date
+   field's picker indicator is the only way to open the calendar, so it stays and
+   is themed by `color-scheme` instead. */
+input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+  display: none;
 }
 /*
  * Every select, once.
@@ -2237,8 +2267,6 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 2px;
 }
 
-/* How many are under a head that caps its list, so the count is not hidden by
-   the cap. Tabular, because it changes while its neighbours stay put. */
 .tab {
   appearance: none;
   border: 1px solid var(--rule);
@@ -2644,8 +2672,6 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
    workshop tier made and lost. */
 .linkrow-fields em {
   font-style: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   font-size: var(--text-micro);
   margin-right: 3px;
 }
@@ -2890,7 +2916,11 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   flex: 1 1 0;
   /* The old cap, become a floor: the 44vh a column had plus the head and gap a
      lane wraps it in, so three lanes or more overflow and the board scrolls
-     exactly as before rather than shrinking every band to a sliver. */
+     exactly as before rather than shrinking every band to a sliver.
+
+     Measured at 1920x1080: two lanes sit at 504px each with zero overflow, grown
+     past the 495px floor by `flex: 1 1 0` to fill the pane exactly; three sit at
+     the floor and overflow by 492px. */
   min-height: calc(44vh + 20px);
 }
 
