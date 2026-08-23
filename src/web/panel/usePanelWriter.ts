@@ -116,8 +116,8 @@ export function usePanelWriter(o: {
   read.current = o.mtime;
   const fresh = baseOf(o.mtime, wrote.current);
   held.current = {
-    body: heldBase(held.current.body, fresh, o.held.body),
-    frontmatter: heldBase(held.current.frontmatter, fresh, o.held.frontmatter),
+    body: heldBase(held.current.body, fresh, o.held.body, wrote.current),
+    frontmatter: heldBase(held.current.frontmatter, fresh, o.held.frontmatter, wrote.current),
   };
   live.current = o;
 

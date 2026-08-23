@@ -10,6 +10,7 @@ import {
   bulkFacet,
   bulkMove,
   checkFacets,
+  deleteNote,
   mtimeOf,
   patchNote,
   putFrontmatter,
@@ -499,3 +500,131 @@ test('linking bumps updated, and unlinking an absent ref refuses', () => {
  * cardinality branch to test any more, so this asserts the property instead — the
  * intent carries endpoints, and one transform answers for every card.
  */
+
+// ------------------------------------------------- the base a loop writes from
+
+/**
+ * Every loop in this module writes a record's whole `facets:` key, so the map it
+ * writes has to come from a read of that record's own file — not from the
+ * snapshot the loop opened with.
+ *
+ * `bulkMove` carried a comment claiming this property while not having it: "it
+ * writes only the named facets, so a value an agent changed since the client's
+ * last read cannot be reverted". True of the payload, false of the file. Real
+ * cost, on the real vault: `readAll` measures around 31ms over 191 notes, and
+ * every write in the loop widens the gap after it, so a concurrent edit inside
+ * that window was reverted with no conflict to report.
+ *
+ * Naming an id twice is the same staleness expressed synchronously, which is what
+ * makes it testable at all. A `replace` drag is idempotent — the second pass finds
+ * `from` already gone and `to` already present, so it has nothing to do and must
+ * not count as changed. Reading the pre-loop snapshot instead, the second pass
+ * sees the *original* values, decides there is work, and writes the file a second
+ * time: `changed` comes back 2, and `updated` is bumped twice for one gesture.
+ */
+test('a loop writes from the file it is about to write, not from its opening snapshot', () => {
+  const v = vault({ twice: card('twice', 'priority: [now], tech: [kafka]') });
+  try {
+    const move = [{ facet: 'priority', from: 'now', to: 'month' }];
+    const res = bulkMove(v.root, ['twice', 'twice'], move, 'replace');
+    assert.equal(res.changed, 1, 'the second pass sees the first write and has nothing to do');
+    assert.deepEqual(facetsOf(v.root, 'twice').priority, ['month']);
+    // The axis nobody named survives, which is the property the whole-key write
+    // threatens and the re-read protects.
+    assert.deepEqual(facetsOf(v.root, 'twice').tech, ['kafka']);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The same rule on the widest fan-out in the module: deleting a note rewrites the
+ * whole `facets:` key of every note that referenced it — files the caller never
+ * named, never read, and holds no mtime for.
+ *
+ * **This test does not discriminate on the re-read, and saying so is the point.**
+ * `deleteNote` takes its own `readAll` at the top of the call, so there is no gap
+ * a test can write into from outside: the snapshot is already current by the time
+ * the loop runs, and the assertions below pass with or without `facetsNow`. What
+ * it pins is the property — a bystander keeps every axis but the dangling one —
+ * which is worth a test on its own. The staleness it cannot reach is a concurrent
+ * writer landing between that `readAll` and each bystander's write, and reaching
+ * that needs an injectable read rather than a temp directory.
+ */
+test('the delete cascade takes only the dangling reference off a bystander', () => {
+  const v = vault({
+    target: card('target', 'priority: [now]'),
+    holder: card('holder', 'parent: [target], tech: [kafka]'),
+  });
+  try {
+    // Change the bystander on disk after it would have been snapshotted by an
+    // earlier read, then delete. The cascade must keep what it finds there.
+    writeFileSync(
+      join(v.root, 'notes', 'holder.md'),
+      card('holder', 'parent: [target], tech: [kafka], priority: [backlog]'),
+      'utf8',
+    );
+    const res = deleteNote(v.root, 'target');
+    assert.equal(res.removedEdges, 1);
+    const holder = facetsOf(v.root, 'holder');
+    assert.equal(holder.parent, undefined, 'the dangling reference is gone');
+    assert.deepEqual(holder.tech, ['kafka']);
+    assert.deepEqual(holder.priority, ['backlog'], 'and nothing else on the bystander moved');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ------------------------------------------------------ who declines the guard
+
+/**
+ * Which writes carry a concurrency guard, pinned — because the claim about it
+ * drifted, not the code.
+ *
+ * `ARCHITECTURE.md` labelled its own diagram "409 on a concurrent edit" and stated
+ * "conflicts are refused, not merged" as a property of the product. Both are
+ * properties of one surface: `guard` returns immediately when no base arrives, and
+ * only three functions here ever receive one. Every bulk op, every `pj` command and
+ * the delete cascade decline it, most of them because their signature has nowhere
+ * to put one.
+ *
+ * So the set is the decision and the prose has to match it. This asserts both
+ * directions: a guard added or removed without a document change fails here, and a
+ * document that stops naming a guarded path fails here too.
+ */
+test('the write paths that carry a guard are the ones the document names', () => {
+  const src = readFileSync(new URL('../src/server/mutate.ts', import.meta.url), 'utf8');
+  const lines = src.split('\n');
+
+  /** Every `guard(...)` call, attributed to the exported function it sits in. */
+  const guarded = new Set<string>();
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s+guard\(/.test(lines[i]!)) continue;
+    for (let j = i; j >= 0; j--) {
+      const m = lines[j]!.match(/^export function (\w+)/);
+      if (m) {
+        guarded.add(m[1]!);
+        break;
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...guarded].sort(),
+    ['patchFields', 'putFrontmatter', 'patchNote'].sort(),
+    'a write path gained or lost its guard — update ARCHITECTURE.md’s write-path table with it',
+  );
+
+  // And the document says so, in the table rather than in a sentence that reads
+  // like a promise about everything.
+  const doc = readFileSync(new URL('../ARCHITECTURE.md', import.meta.url), 'utf8');
+  assert.match(doc, /Conflicts are refused where a base is sent/, 'the scoped claim');
+  assert.doesNotMatch(
+    doc,
+    /\*\*Conflicts are refused, not merged\.\*\*/,
+    'the unscoped claim came back',
+  );
+  for (const row of ['cannot be guarded', 'merges', 'narrows']) {
+    assert.ok(doc.includes(row), `the write-path table should still say "${row}"`);
+  }
+});

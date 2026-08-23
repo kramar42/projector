@@ -233,7 +233,8 @@ the thing next to it, and the reason is written down.
 - A fourteen-step type scale in which the largest working size is 16px and the signature size is 9.5px
 - One hue family per facet axis, chosen by the vault from the app's seven; hueless chips for facets that are hints rather than identity
 - Four tonal surfaces and 1px hairlines — depth by layering, shadows only for what genuinely floats
-- Still at rest: instant regrouping, motion only where a mouse gesture would feel broken without it
+- Still at rest: instant regrouping, motion only where a mouse gesture would feel broken without it —
+  and one sanctioned exception, for a change the reader did not cause
 - Desktop-only by construction; no breakpoints, no responsive system, no top bar
 - Precise and unadorned: no fill, stroke or radius that is not load-bearing
 
@@ -774,7 +775,7 @@ Used for a project's roll-up. It is the only bar in the system.
 
 - **Don't** animate a note, chip, column, panel or table. There are no keyframes in this system and no
   transition longer than 140ms, and both existing ones animate a width. A surface that sits open all
-  day must be still.
+  day must be still. **One exception is sanctioned and not yet built — see The Something Moved Rule.**
 - **Don't** drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii,
   gradients, illustrated empty states, spring easing. The working type size here is 12.5px and the
   largest radius is 10px, on purpose.
@@ -808,6 +809,32 @@ Used for a project's roll-up. It is the only bar in the system.
   text — or it earns a family of its own.
 - **Don't** nest a scroll inside a scroll. One region scrolls per axis.
 - **Don't** use dashed borders for anything but a container whose value does not exist.
+
+### Named Rules
+
+**The Something Moved Rule.** *Motion is permitted for exactly one thing: telling the reader that a
+note changed when they did not change it.* This is the one event on this surface that stillness cannot
+express — every other piece of motion the Don't list forbids is the app decorating something the reader
+already knows they did, and this is the app reporting something they could not have known. A note
+adopted under their eyes with no signal is worse than a still surface is good.
+
+The bound is what makes it an exception rather than a hole. It fires on **a foreign write only**, never
+on the reader's own — the panel can tell them apart, because `wrote` is set only by this client's
+writes while `read` moves for anything, and `heldBase` already depends on that distinction being
+correct. It fires **once per change**, not as a resting state; a thing that keeps moving is a thing you
+learn to stop seeing. And the register is the accent, because The App Voice Rule already reserves it
+for live state and the app speaking, which is precisely what this is.
+
+Two things it may not become. Not an animated *transition* of the value itself — a chip that slides or
+cross-fades to its new text makes the reader watch the app work rather than read the result. And not
+attribution: the watcher sees a path change and cannot know whether an agent, a `git checkout` or a
+sync client did it, so the honest register is "changed outside this app", which is the hedge the
+conflict banner already gets right with *"probably a Claude session"*.
+
+`test/theme.test.ts`'s stillness assertions are deliberately **left strict** until this ships. An
+exception recorded in a document and pre-approved in a test is an exception nobody has to make on
+purpose — the same reason adding a type step has to be a deliberate edit. Whoever builds this edits
+that test, and the diff is where the decision shows up.
 
 ## Accepted Exceptions
 

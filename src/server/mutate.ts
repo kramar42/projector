@@ -50,12 +50,62 @@ export function mtimeOf(file: string): number {
   return Math.floor(statSync(file).mtimeMs);
 }
 
+/**
+ * The facets on disk *now*, for a record we are about to write.
+ *
+ * Every loop below writes the whole `facets:` key, so the map it writes has to
+ * come from a read of that record's own file rather than from the snapshot the
+ * loop opened with. Otherwise a write to record twelve is derived from a read
+ * taken before record one was written — and, worse, any axis another writer
+ * touched in the meantime is reverted, silently, because the whole key goes back.
+ *
+ * This is the rule `patchNote` has always followed for the single-record case
+ * ("Read *after* the guard, so this sees the file the guard just approved rather
+ * than the one the client last rendered"). The loops did not follow it, and one of
+ * them carried a comment claiming they did.
+ *
+ * Falls back to the snapshot when the file will not parse, which is the same thing
+ * the indexer does with an unreadable note and the only answer available.
+ */
+function facetsNow(rec: { file: string; facets: Record<string, string[]> }): Record<string, string[]> {
+  const res = loadNote(rec.file);
+  return res.ok ? res.rec.facets : rec.facets;
+}
+
+/**
+ * How far the file may have moved and still be the one the caller read.
+ *
+ * The stated reason used to be filesystem rounding, and that is measurably not
+ * it: two back-to-back writes on this machine's APFS differ by 0.254ms, so the
+ * tolerance is four thousand times the resolution it was said to be absorbing.
+ *
+ * What it actually absorbs is **this app's own in-flight writes**, and they are
+ * deliberate. The panel's `press` is fire-and-forget by design — its status
+ * machine exists so that overlapping writes report correctly rather than being
+ * serialised — so clicking a priority chip and then a status chip inside a second
+ * dispatches two requests whose bases were both computed before either returned.
+ * The second carries the pre-write mtime. At zero tolerance that is a 409 against
+ * the user's own preceding click, which is the exact failure `baseOf` is written
+ * to prevent, reported as "probably a Claude session".
+ *
+ * So it is a real mechanism with a wrong label, not a wrong value. Removing it
+ * needs the panel's writes serialised first, and serialising them contradicts the
+ * status machine and the test that pins it. The cost of keeping it is a window in
+ * which a foreign write passes unrefused — narrow, and narrowed further by what
+ * the writes are: `patchNote` re-reads the axis and folds a delta into it, so the
+ * common case merges rather than losing anything. The paths that replace wholesale
+ * — the frontmatter pane, the project block, the links array — are the ones this
+ * window can genuinely cost, and they are the rare ones.
+ */
+const SELF_WRITE_WINDOW_MS = 1000;
+
 function guard(file: string, baseMtime?: number): void {
+  // An absent base is not an unguarded write, it is a caller declining the guard —
+  // which every CLI path and every bulk op does, because neither has anywhere to
+  // put one. See ARCHITECTURE.md's write-path table for who does what.
   if (baseMtime === undefined) return;
   const current = mtimeOf(file);
-  // A one-second tolerance: some filesystems round mtime, and a write we just
-  // made ourselves should not read as somebody else's change.
-  if (Math.abs(current - baseMtime) > 1000) throw new Conflict(current);
+  if (Math.abs(current - baseMtime) > SELF_WRITE_WINDOW_MS) throw new Conflict(current);
 }
 
 function today(): string {
@@ -309,7 +359,10 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
 
   for (const rec of notes.values()) {
     if (rec.id === id) continue;
-    const facets = { ...rec.facets };
+    // These are files the caller never named and never read, and the write below
+    // replaces the whole `facets:` key on each of them — so the map has to be the
+    // one on disk. See `facetsNow`.
+    const facets = { ...facetsNow(rec) };
     let touched = false;
     for (const name of refFacets) {
       const kept = (facets[name] ?? []).filter((v) => v !== id);
@@ -344,9 +397,13 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
  * shift-dragging `now`→`month` removed `now` for one card and `month` for two.
  * One transform, applied here, is what makes that unrepresentable.
  *
- * It also writes only the named facets, so a value an agent changed since the
- * client's last read cannot be reverted — which the old whole-map replacement did
- * silently, with no conflict to report.
+ * It also writes only the named facets *of the payload* — but the write itself is
+ * the whole `facets:` key, so "cannot be reverted" was true of the wire form and
+ * false of the file. It is true now: each record's map is folded from a read of its
+ * own file taken immediately before its write, not from the snapshot this loop
+ * opened with. `readAll` measures around 31ms on a 191-note vault, and every write
+ * in the loop widens the gap further, so the stale window was real rather than
+ * theoretical. See `facetsNow`.
  */
 export function bulkMove(
   root: string,
@@ -363,7 +420,8 @@ export function bulkMove(
     // both endpoints fold into one map and one write. Writing per axis would bump
     // `updated` twice and let the second write land on a card the first changed —
     // and would leave the card half moved when the second value is refused.
-    let facets = rec.facets;
+    // Not `rec.facets`: that is the pre-loop snapshot. See `facetsNow`.
+    let facets = facetsNow(rec);
     const check: Record<string, string[]> = {};
     let touched = false;
     for (const { facet, from, to } of moves) {
@@ -397,10 +455,12 @@ export function bulkFacet(
   for (const id of ids) {
     const rec = notes.get(id);
     if (!rec) continue;
-    const current = rec.facets[facet] ?? [];
+    // Read this record's own file, not the pre-loop snapshot. See `facetsNow`.
+    const now = facetsNow(rec);
+    const current = now[facet] ?? [];
     const next = applyMode(current, values, mode);
     if (same(current, next)) continue;
-    const facets = withFacet(rec.facets, facet, next);
+    const facets = withFacet(now, facet, next);
     checkFacets(root, id, next.length ? { [facet]: next } : {}, notes);
     patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;

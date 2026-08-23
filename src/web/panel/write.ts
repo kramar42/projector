@@ -128,19 +128,41 @@ export function baseOf(read: number | null, wrote: number | null): number | null
 
 /**
  * The mtime a **body** write is gated on: the base as of the last moment the
- * editor had nothing unsaved.
+ * editor had nothing unsaved — plus anything this panel has written since.
  *
- * While held it does not move, and that is the only thing standing between a
- * dirty editor and silently destroying an agent's work. The editor declines to
- * adopt an incoming `value` while dirty, so the document on screen belongs to an
- * older read — and the write has to say so, or it sails through `guard` carrying
- * a freshness it does not have. The two rules are one rule: both key on the
- * editor's own `dirty`, and there is only one of those.
+ * While held it does not follow the *read*, and that is the only thing standing
+ * between a dirty editor and silently destroying an agent's work. The editor
+ * declines to adopt an incoming `value` while dirty, so the document on screen
+ * belongs to an older read — and the write has to say so, or it sails through
+ * `guard` carrying a freshness it does not have. The two rules are one rule: both
+ * key on the editor's own `dirty`, and there is only one of those.
+ *
+ * It does follow `wrote`, and that half is the fix for a trap that needed no
+ * second writer at all. Reproduced: open a note, type in the body, click any
+ * chip, save the body — *"file changed on disk — nothing was written. Copy your
+ * text out before reloading."* The file that changed was the chip click, one
+ * second earlier, in the same panel. The base froze at load time while the panel
+ * itself moved the file past it, so the guard fired as soon as more than a second
+ * had passed between opening the note and clicking — which is always. Every retry
+ * sent the same stale base, so the only exits were to copy the text out by hand
+ * or to lose it.
+ *
+ * Following `wrote` is safe precisely because of what this panel's own writes
+ * are: a chip, a rename, a link, a project block. None of them touches body
+ * bytes, so accepting them costs the document nothing. A *foreign* write might
+ * have touched them, and `read` is the half that sees those — which is why it
+ * stays frozen and why the refusal still happens when it should.
  *
  * Idempotent, so assigning it during a StrictMode double render changes nothing.
  */
-export function heldBase(prev: number | null, base: number | null, held: boolean): number | null {
-  return held ? prev : base;
+export function heldBase(
+  prev: number | null,
+  base: number | null,
+  held: boolean,
+  /** What this panel last wrote. `null` before it has written anything. */
+  wrote: number | null,
+): number | null {
+  return held ? baseOf(prev, wrote) : base;
 }
 
 // ---------------------------------------------------------------- one failure

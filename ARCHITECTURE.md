@@ -67,7 +67,7 @@ flowchart TB
   q --> refs
   refs --> proj
 
-  surfaces -.->|"writes: validated, atomic,<br/>409 on a concurrent edit"| notes
+  surfaces -.->|"writes: validated, atomic,<br/>409 only where a base is sent"| notes
   agent -.->|"or plain file writes — no API, no app running (C3)"| notes
 
   idx <-->|"links, resolved lazily and cached with a TTL"| outside
@@ -356,9 +356,29 @@ stops a canvas laying out along one hierarchy and pulling context from another. 
 single answer to *which relation*, computed server-side and sent as `layout`, so the client never
 recomputes it.
 
-**Conflicts are refused, not merged.** A note read into the panel carries its file mtime; a write sends
-it back and a mismatch is a 409. This matters because an agent may be editing the same file in another
-window (C3).
+**Conflicts are refused where a base is sent, and narrowed everywhere else.** A note read into the
+panel carries its file mtime; a write sends it back and a mismatch is a 409. This matters because an
+agent may be editing the same file in another window (C3).
+
+That sentence used to end there and read as a property of the product. It is a property of one surface.
+`guard` returns immediately when no base arrives — an absent base is a caller *declining* the guard,
+not an unguarded accident — and only three functions ever receive one. What every other path has
+instead is **narrowness**: a write that names one axis cannot revert another, whatever else happened.
+
+| Path | On a concurrent edit |
+|---|---|
+| panel facet `add` / `remove` | **merges** — the axis is re-read after the guard and the delta folded in |
+| panel `set`, title, links, project block, body, frontmatter | **refuses**, outside the self-write window |
+| board drag, canvas connect, bulk facet / parent | **narrows** — only the named axes travel; a concurrent edit to the same axis is lost silently |
+| every `pj` write, the delete cascade, saved views, `vaults.json` | **replaces** the keys it touches, with no base and no report |
+| an agent's `Write` / `Edit` | **cannot be guarded** — there is nowhere to put a base, and this is the primary writer |
+
+The asymmetry in the last two rows is the honest shape of it: the panel's edit can be refused because
+of the agent, and the agent's edit can never be refused because of the human. What makes that
+survivable is not the gate. It is that a write derives its payload from a read taken *inside* the
+write — `patchNote` has always done this, and since the per-record `facetsNow` read the bulk loops and
+the delete cascade do too — so a writer that never saw an axis cannot revert it. **Narrowness protects
+against writers you cannot see; a gate only reports on the one caller that opts in.**
 
 **Grouping is one function called twice.** A second axis is a position in `groupBy`, not a separate
 `swimlanes` concept, which is why a matrix needed no new code path. Every value the query *admits* gets

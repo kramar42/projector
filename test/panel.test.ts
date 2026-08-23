@@ -126,15 +126,44 @@ test('the base is the freshest of the last read and the last write, not the late
  * The one assertion standing between a dirty editor and destroying an agent's
  * work. The editor refuses to adopt an incoming document while dirty, so what is
  * on screen belongs to an older read — and its write has to say so.
+ *
+ * The `wrote` half is the other side of it, and it is here because leaving it out
+ * was a reproducible trap with no second writer in it: type in the body, click any
+ * chip, save — refused, because the panel had moved the file past a base it was
+ * holding against itself. A chip, a rename, a link and a project block are the
+ * only things this panel writes and none of them touches body bytes, so accepting
+ * our own writes costs the document nothing. A foreign write arrives through
+ * `read`, which stays frozen — the last case below is the one that matters.
  */
 test('a body write is gated on the read its document came from', () => {
-  assert.equal(heldBase(1000, 2000, true), 1000, 'held: the base does not move under the text');
-  assert.equal(heldBase(1000, 2000, false), 2000, 'clean: it tracks the freshest read');
-  assert.equal(heldBase(null, 2000, true), null);
+  assert.equal(heldBase(1000, 2000, true, null), 1000, 'held: the base does not move under the text');
+  assert.equal(heldBase(1000, 2000, false, null), 2000, 'clean: it tracks the freshest read');
+  assert.equal(heldBase(null, 2000, true, null), null);
+
+  assert.equal(
+    heldBase(1000, 2000, true, 1500),
+    1500,
+    'held: our own write advances it, or saving the body after clicking a chip is refused',
+  );
+  assert.equal(heldBase(1800, 2000, true, 1500), 1800, 'held: and never goes backwards');
+
+  // The whole point, stated as a case: a foreign write lands in `read`, not in
+  // `wrote`, so the base stays where the document came from and the write is
+  // refused. `read` at 9000 is an agent; `wrote` at 1500 is us.
+  assert.equal(
+    heldBase(1000, 9000, true, 1500),
+    1500,
+    'held: a foreign read does not advance it, which is what makes the refusal happen',
+  );
 
   // Assigned during render, so StrictMode applies it twice.
   for (const held of [true, false]) {
-    assert.equal(heldBase(heldBase(1000, 2000, held), 2000, held), heldBase(1000, 2000, held));
+    for (const wrote of [null, 1500]) {
+      assert.equal(
+        heldBase(heldBase(1000, 2000, held, wrote), 2000, held, wrote),
+        heldBase(1000, 2000, held, wrote),
+      );
+    }
   }
 });
 
