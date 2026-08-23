@@ -246,7 +246,9 @@ where saturation is reserved for notation and every neutral is a literal step in
 
 - **Type Purple** (`accent`): the app's one voice. Focus rings, the selected card's ring, the drop
   target, the active filter head, the focus pill, badge counts, a link's kind prefix, the primary
-  button. In light mode the accent is the family's dark shade so it reads as ink; in dark it is the
+  button, and the Record Mark — the one thing in this list that is not live state, and it is here
+  because a mark is *derived*: nothing writes it, so it is the app talking about a record rather than
+  a value the record carries. See the Don't list. In light mode the accent is the family's dark shade so it reads as ink; in dark it is the
   light shade so it reads as light. The unsaved-view mark is the one live-state signal that is not the
   accent: `.rail-dirty` takes `warn`, as the Semantic list below says.
 - **Accent Soft** (`accent-soft`): the accent's only fill — the drop-target column wash, the bulk
@@ -528,16 +530,18 @@ work:
   canvas band, both also at reduced opacity; a toggle chip for a value the axis's vocabulary does not
   list; the panel's new-value field while it is empty; a link chip whose fetch returned nothing; and a
   vault row whose directory is gone. In each case the container exists but the value does not.
-- **3px solid, left edge only** — state. A project (`hue-purple`), a blocked card (`bad`), an open
-  reference (`bad`), a finished one (`ok`, at 0.7 opacity). The project's edge is the project axis's
-  own family, not the accent: see the Don't list, and `.cardface.is-project`, which have always said
-  so — this bullet said `accent` and was the odd one out.
+- **3px solid, left edge only** — state. A blocked card (`bad`), an open reference (`bad`), a
+  finished one (`ok`, at 0.7 opacity). A project used to take a fourth in `hue-purple`; the Record
+  Mark says that in every place a record appears, so the face said it twice and one of the two was
+  the shape of the card itself. Every card face is now the same rectangle until something blocks it.
 
 ### Named Rules
 
 **The Load-Bearing Left Border Rule.** The 3px left border is the only place a card face changes shape,
-and it always encodes state. It is not available for decoration, for grouping, or for a fifth meaning
-without retiring one of the four.
+and it always encodes state. It is not available for decoration, for grouping, or for a fourth meaning
+without retiring one of the three. Retiring one is what happened to the project's edge: a property a
+glyph already states in every place a record appears was not paying for the only shape change a face
+has.
 
 **The Dashed Means Absent Rule.** Dashed is reserved for a container whose value does not exist. It
 never means "draft", "disabled" or "optional".
@@ -631,10 +635,20 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
 ### Navigation
 
 The sidebar is the navigation, and it has no links. It is a stack of `rail-block` groups separated by
-hairlines, each a row of a 62px mono uppercase 9.5px label and a control. The filter panel below it is
-the only scrolling region: a facet head that turns `accent` and weight 600 when active, a caret, a
-count badge, and an indented list of values at 12px. A computed axis carries an italic mono glyph so
-you know nothing is written on the card, right-aligned against the label column's inner edge.
+hairlines, each a row of a 62px mono uppercase 9.5px label and a control — every row, with no
+exceptions: `Vault` and `View` were the two a reader had to identify from their value alone, and a
+folder name beside a view name is two unlabelled words in the one place that says where you are
+looking. Two groups sit above the filter: **which vault**, with its record and project counts, and
+then **the whole query** — the saved view it starts from, then shape, grouping, sort, faces and
+focus, which are the overrides on top of it and what a save writes back. The query used to be spread
+across three groups — the saved view sat with the vault, and focus had a hairline of its own — and
+each of those two hairlines said something untrue: that choosing where a query starts belongs with
+choosing a vault, and that a traversal is a different kind of control from the axis it walks.
+
+The filter panel below them is the only scrolling region: a facet head that turns `accent` and weight
+600 when active, a caret, a count badge, and an indented list of values at 12px. A computed axis
+carries an italic mono glyph so you know nothing is written on the card, right-aligned against the
+label column's inner edge.
 
 The card panel reads the rail's grammar rather than sharing its components. It takes the absence rule —
 an axis carrying nothing is not drawn — the `ƒ` and its right alignment, and the 10px block padding;
@@ -646,7 +660,10 @@ popover of the axes this card carries nothing on.
 
 The signature component, and the one nothing else can substitute for. A mono glyph before every title
 saying what the record is — `•` a card, `○` a node, `▣` a project. The mark draws the glyph alone: how
-many records name it is spelled out in its tooltip, and printed beside it only on a table row. `○`
+many records name it is spelled out in its tooltip, and printed beside it only on a table row. It
+draws in `accent` — one colour in all of them, so the glyph is one vocabulary rather than whatever
+each surface paints; it was `ink-3` everywhere except a project's mark in the panel, which was
+`hue-purple`, so the signature component was the colour of a label with one invisible exception. `○`
 means named by **any** reference facet, which is what `nodesIn` has always meant
 by a node: being named by `parent` and being named by `project` make a record a node equally. It read
 the `parent` facet alone until this was settled, which is how the mark and the `type` axis came to
@@ -696,9 +713,13 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Don't** dress the terminal up. Xoria and the mono labels are a working grammar, not a costume —
   no ASCII borders, scanlines, CRT glow, blinking cursors or fixed 80-column measures.
 - **Don't** use the accent for data structure. It marks live state and the app speaking, and nothing
-  else. A record *being* a project is a property of the record, so `.cardface.is-project` draws its
-  left border in `hue-purple` — the project axis's own family — even though the two tokens hold the
-  same value in both themes.
+  else. A *value* is data: a chip takes its axis's own family, never the accent, and a hue family
+  belongs to one axis — which is why the Record Mark is not the exception it looks like. Nothing
+  writes a mark; `markOf` derives it from what names the record, so it is the app speaking, and
+  `hue-purple` would have claimed an axis's family for something that is not an axis — `parent`'s, in
+  the seeded vocabulary, which would have put a purple chip and a purple mark on one card face meaning
+  two different things. The two tokens hold the same value in both themes, so this is which word is
+  true and not which colour is drawn.
 - **Don't** put `--ink` on a filled background. `ink` and the semantic hues follow the theme in the
   same direction, so the pair never has contrast: `ink` on `bad` measured 1.92:1 in light, and `ink` on
   `warn` **1.03:1** in dark — invisible. Every filled state takes `ground`, which is 7.58:1 at worst
@@ -887,10 +908,10 @@ To change it: it would want the same `.emptystate` register the other six use, n
 
 ### The three left edges outside the record vocabulary
 
-The Load-Bearing Left Border Rule enumerates four meanings for the 3px left edge and closes by
-saying a fifth is not available without retiring one of the four. Seven rules draw one. The four
-enumerated are the *record* vocabulary — `.cardface.is-project`, `.cardface.is-blocked`,
-`.reflink.is-open`, `.reflink.is-done`. Three more sit outside it deliberately:
+The Load-Bearing Left Border Rule enumerates three meanings for the 3px left edge and closes by
+saying a fourth is not available without retiring one of the three. Six rules draw one. The three
+enumerated are the *record* vocabulary — `.cardface.is-blocked`, `.reflink.is-open`,
+`.reflink.is-done`. Three more sit outside it deliberately:
 
 - **`.banner.is-bad` and `.banner.is-conflict`** are two branches of one typed decision —
   `bannerFor` returns `tone: 'conflict' | 'bad'` — on an element that *is* a message about state
@@ -901,13 +922,14 @@ enumerated are the *record* vocabulary — `.cardface.is-project`, `.cardface.is
   is the documented survivor of a pruning from four link-row stripes to one, and the row it marks
   is not a record — it is a link on one.
 
-So the rule governs the vocabulary a *record* is drawn in, and the count is four there. To change
-it: retire one of the four, or restate the rule as being about records specifically.
+So the rule governs the vocabulary a *record* is drawn in, and the count is three there — it was four
+until the project's edge was retired, which is the rule being spent down on purpose rather than drifting
+up. To change it: retire another, or restate the rule as being about records specifically.
 
 Not consolidated into a shared `.stripe` rule, and this is the interesting part. Two reasons killed
 it: the rule count would go up rather than down, because both banners
 keep their `color-mix` wash and `.reflink.is-done` its `0.7` opacity; and the design detector
-matches per declaration, so folding seven declarations into one would take its count from 8 to 2 —
+matches per declaration, so folding the six into one rule would collapse its findings to two —
 disarming the only automated tripwire on this very rule.
 
 A third reason has since dissolved: the hover and selection rules a bare `.stripe` used to lose to are
@@ -955,11 +977,17 @@ To change it: give `.picker-proj` the `.chip.facet-project` treatment and check 
 both themes at full list length — the light theme is the harder of the two, since its fill is a
 saturated pastel diluted toward the surface rather than a dark shade.
 
-### The vault mark that borrows a record glyph
+### The vault glyph in the folder browser
 
-`.vaultbtn-mark` draws `▣`, which the Record Mark vocabulary assigns to a project, for a thing
-that is not a record at all. It also takes `--accent`, which is correct here — which vault you are
-looking at is live state.
+`.browse-item` marks a directory that looks like a vault with `▣`, against `›` for a plain folder —
+the Record Mark vocabulary's project glyph worn by something that is not a record.
 
-A pun, not a collision, since a vault and a project never appear in the same list. Changing it
-would be tidying.
+It stays because the vault gate is a file browser: no record appears anywhere on that surface, so
+there is nothing for the glyph to be confused with, and the pair it belongs to is `▣` against `›`
+rather than `▣` against `○` and `•`.
+
+The rail's vault button carried the same borrowing — `.vaultbtn-mark`, held here as a pun on the same
+grounds — and it is gone. What dissolved was the premise: the pun only worked while nothing in the
+rail said what that control *was*, and the row carries a `Vault` label now, so the glyph was a second
+answer to a question already answered in words. To bring it back you would have to argue the label
+away first.

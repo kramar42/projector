@@ -731,7 +731,7 @@
       {
         "name": "The Load-Bearing Left Border Rule",
         "section": "shapes",
-        "body": "The 3px left border is the only place a card face changes shape, and it always encodes state — project, blocked, open reference, finished reference. It is not available for decoration or for a fifth meaning without retiring one of the four."
+        "body": "The 3px left border is the only place a card face changes shape, and it always encodes state — blocked, open reference, finished reference. It is not available for decoration or for a fourth meaning without retiring one of the three; the project\u2019s edge is the one that was retired, because the record mark already states it wherever a record appears."
       },
       {
         "name": "The Dashed Means Absent Rule",
@@ -754,7 +754,7 @@
       "Don’t drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii, gradients, illustrated empty states, spring easing. The working type size here is 12.5px and the largest radius is 10px, on purpose.",
       "Don’t drift toward enterprise tracker chrome either: stacked toolbars, breadcrumbs, avatar rows, modal over modal, or status rendered as a filled pill competing for attention.",
       "Don’t dress the terminal up. Xoria and the mono labels are a working grammar, not a costume — no ASCII borders, scanlines, CRT glow, blinking cursors or fixed 80-column measures.",
-      "Don’t use the accent for data structure. It marks live state and the app speaking, and nothing else. A record being a project is a property of the record, so .cardface.is-project draws its left border in hue-purple — the project axis’s own family — even though the two tokens hold the same value in both themes.",
+      "Don’t use the accent for data structure. It marks live state and the app speaking, and nothing else. A value is data: a chip takes its axis’s own family, never the accent. The record mark is not the exception it looks like — nothing writes a mark, markOf derives it from what names the record, so it is the app speaking, and hue-purple would have claimed an axis’s family for something that is not an axis.",
       "Don’t put --ink on a filled background. ink and the semantic hues follow the theme in the same direction, so the pair never has contrast: ink on bad measured 1.92:1 in light, and ink on warn 1.03:1 in dark — invisible. Every filled state takes ground, which is 7.58:1 at worst across the same four combinations, and is what .btn.primary and the two bucket chips do.",
       "Don’t add a breakpoint. There are none, and the surface is a second monitor.",
       "Don’t interpolate a colour. Every value comes from xoria256.yml; the two exceptions (rel-blocks at #b06060 in light, and the chip-tint mixes) are documented where they occur and each has a stated reason.",

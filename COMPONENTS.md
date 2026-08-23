@@ -293,11 +293,20 @@ proposed consolidations were dropped rather than built.
 ## Settled during the pass
 
 **The filter value is a drawn checkbox.** Three treatments were built and compared at real
-repetition behind `?filterstyle=`. `chip` fitted nine facets where the box fits five and unified
-the rail with the panel's editor, at the cost of a wall of pills and a count that ran into its
-value; `edge` was quietest and gave up the affordance with the box — with nothing in the left
-column the rows read as a readout. The box keeps the column the eye scans down, which is what a
-filter rail is for. The two losers and the URL parameter are gone.
+repetition behind `?filterstyle=` (retired — see below). `chip` fitted nine facets where the box
+fits five and unified the rail with the panel's editor, at the cost of a wall of pills and a count
+that ran into its value; `edge` was quietest and gave up the affordance with the box — with nothing
+in the left column the rows read as a readout. The box keeps the column the eye scans down, which
+is what a filter rail is for. The two losers and the URL parameter are gone.
+
+**A retired parameter used to outlive its code.** `?filterstyle=` was deleted from the app and kept
+appearing in the address bar, because `patchSearch` preserves keys it does not recognise — correctly,
+since it writes what it is told — and nothing else ever looked. If the URL is the view, a key nothing
+reads is not part of it: `strippedOfStrays` in `src/web/query.ts` names what the app owns (the query,
+`f.<facet>`, and `card`) and the App replaces the location once on load when the URL carries anything
+else. It returns `null` for "nothing to rewrite" rather than an unchanged string, because
+`URLSearchParams` re-encodes as it serialises and a round-trip is not a fixed point — comparing the
+output would have made the normalisation loop.
 
 **`○` means "some other record names this one, through any reference facet".** It meant "something
 names it as `parent`", which is why the mark and the `type` pseudo-facet disagreed: `type` has

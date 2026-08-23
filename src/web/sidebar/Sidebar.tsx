@@ -106,12 +106,11 @@ export function Sidebar({
 
   return (
     <nav className="sidebar">
+      {/* Which vault, and how much is in it. The row is labelled like every other
+          rail row now: `Vault` was one of two that a reader had to identify from
+          its value alone, and a folder name on its own is a word, not a control.
+          The collapse toggle rides in this row rather than in one of its own. */}
       <div className="rail-block">
-        {/* Labelled like every other rail row, and for the same reason: the two
-            controls that name *where you are looking* were the only ones a reader
-            had to identify from their value alone — and a vault called `work`
-            beside a view called `Ad-hoc query` is two unlabelled words. The
-            collapse toggle rides in this row rather than in one of its own. */}
         <div className="rail-row">
           <label className="rail-label">Vault</label>
           <VaultSwitcher meta={meta} onSwitch={onSwitchVault} onAdd={onAddVault} />
@@ -128,6 +127,15 @@ export function Sidebar({
         <div className="rail-stats">
           {meta.counts.records} records · {meta.counts.projects} projects
         </div>
+      </div>
+
+      {/* One group, because these are one job: the query. The saved view is where
+          it starts from, and shape, grouping, faces and focus are the overrides on
+          top — which is exactly what a save writes back into the file. Both had a
+          hairline of their own, and each said the same wrong thing: that picking a
+          starting point belongs with the vault, and that a traversal is a
+          different kind of control from the axis it walks. */}
+      <div className="rail-block">
         <SavedViews
           views={data?.views ?? meta.views}
           current={spec}
@@ -137,13 +145,6 @@ export function Sidebar({
           patch={patch}
           apiSearch={wire}
         />
-      </div>
-
-      {/* One group, because these are one job: everything that decides what the
-          query is and how it is drawn. Focus sat behind a hairline of its own,
-          which said it was a different kind of control — it is not, it is the
-          traversal half of the same query. */}
-      <div className="rail-block">
         <ShapeSection data={data} edit={edit} />
         <FacetsSection meta={meta} data={data} edit={edit} />
         <FocusSection meta={meta} data={data} edit={edit} onOpenCard={onOpenCard} />
