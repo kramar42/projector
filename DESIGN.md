@@ -205,22 +205,25 @@ projection, annotation, hierarchy and technical precision. Not a retro terminal 
 decoration — a working drawing made interactive.
 
 The palette is [xoria256](https://github.com/neozenith/estilo-xoria256), Dmitriy Zotikov's pastel Vim
-scheme, taken whole. Nothing is interpolated: every value in the stylesheet is a literal from
-`estilo/palettes/xoria256.yml`. The scheme is dark-first and has no light neutrals, so **the dark theme
-*is* xoria and the light theme is derived** from it — the same seven hue families, using the dark shades
-as ink where the light shades would disappear on white. The frontmatter above records the dark values
+scheme, taken whole. Every hue in the stylesheet is a literal from `estilo/palettes/xoria256.yml`, and
+what is not a hue is named as a departure: the derived light neutrals, the five shadow `rgba()` values
+and the scrim, the two minimap masks, and the `color-mix` tints and washes. The scheme is dark-first
+and has no light neutrals, so **the dark theme *is* xoria and the light theme is derived** from it —
+the same seven hue families, using the dark shades as ink where the light shades would disappear on
+white. The frontmatter above records the dark values
 because they are the source; the light assignments are in `.impeccable/design.json`.
 
 Two things make this a drawing rather than a dashboard. First, **colour is notation.** Each facet axis
 owns one hue family, mapped from xoria's own syntax roles — priority is Number (orange), status is
 PreProc (green), project is Type (purple), tech is Statement (blue), layer is Identifier (pink) — so a
 chip's hue tells you which axis it is before you read the word. Second, **the surface is still.** Two
-CSS transitions exist in 48 KB of stylesheet and both animate a width; there are no keyframes. A
+CSS transitions exist in the whole stylesheet — one on a grid track, one on a width, both a box
+changing size — and there are no keyframes. A
 surface that sits open on a second monitor all day is a readout, and a readout that moves is a
 distraction.
 
 The precision is literal, not atmospheric. The record mark beside every title carries two
-`translateY` constants — `0.03em` and `-0.058em` — derived from where each glyph's ink actually centres
+`translateY` constants — `0.054em` and `-0.058em` — derived from where each glyph's ink actually centres
 against lowercase text. They are measurements, not taste. That is the register: everything is sized to
 the thing next to it, and the reason is written down.
 
@@ -228,7 +231,7 @@ the thing next to it, and the reason is written down.
 
 - Dark-first xoria256, taken literally; light derived from the same seven families
 - Monospace for everything the app says, sans for everything a human typed
-- A nine-step type scale in which the largest working size is 16px and the signature size is 9.5px
+- A fourteen-step type scale in which the largest working size is 16px and the signature size is 9.5px
 - One hue family per facet axis; hueless chips for facets that are hints rather than identity
 - Four tonal surfaces and 1px hairlines — depth by layering, shadows only for what genuinely floats
 - Still at rest: instant regrouping, motion only where a mouse gesture would feel broken without it
@@ -243,11 +246,13 @@ where saturation is reserved for notation and every neutral is a literal step in
 ### Primary
 
 - **Type Purple** (`accent`): the app's one voice. Focus rings, the selected card's ring, the drop
-  target, the active filter head, the focus pill, the unsaved-view mark, badge counts, a link's kind
-  prefix, the primary button. In light mode the accent is the family's dark shade so it reads as ink;
-  in dark it is the light shade so it reads as light.
-- **Accent Soft** (`accent-soft`): the accent's only fill — a hover-column wash, the bulk bar's ground,
-  the focus pill. Never used for text.
+  target, the active filter head, the focus pill, badge counts, a link's kind prefix, the primary
+  button. In light mode the accent is the family's dark shade so it reads as ink; in dark it is the
+  light shade so it reads as light. The unsaved-view mark is the one live-state signal that is not the
+  accent: `.rail-dirty` takes `warn`, as the Semantic list below says.
+- **Accent Soft** (`accent-soft`): the accent's only fill — the drop-target column wash, the bulk
+  bar's ground, the focus pill, the selected table row, and `::selection` in the document and in both
+  editors. Never used for text.
 
 ### Secondary
 
@@ -277,15 +282,19 @@ The facet families. Each is one xoria hue in two roles: the `hue-*` value is the
 
 ### Neutral
 
-- **Text** (`ink`): every title, value and piece of body copy.
-- **Gandalf** (`ink-2`): control labels and secondary values — the resting colour of a button or a
-  filter row, which goes to `ink` on hover.
+- **Text** (`ink`): the document's default — every title and value, and a heading inside rendered
+  markdown.
+- **Gandalf** (`ink-2`): control labels, secondary values and body copy — the resting colour of a
+  button, which goes to `ink` on hover, and the colour of the rendered card body. A filter row rests
+  here too but reaches `ink` when it is *on*, not on hover.
 - **Grey** (`ink-3`): every label, key, count, meta line and excerpt. Roughly half the type in the app
   is this colour; it is the ground state of annotation.
 - **Darker / BG / Shadow-Step** (`ground`, `surface`, `surface-2`, `surface-3`): the four-surface
   stack, in that order, outermost to innermost.
 - **Rule / Grey3** (`rule`, `rule-2`): the hairline and its emphasised form. `rule` separates regions;
-  `rule-2` marks an interactive edge — an input, a popover, a hovered card.
+  `rule-2` marks an interactive edge — an input, a popover, a hovered card. Three users are not that:
+  the canvas band, which is never interactive and says so in its own comment; the scrollbar thumb,
+  which takes it as a fill; and `.linkchip.is-live`, which takes it as a data state.
 - **Shadow** (`dot`): the canvas dot grid, and nothing else.
 
 ### Semantic
@@ -313,7 +322,8 @@ mode mixes the fill toward the surface with `color-mix`. Dark mode already uses 
 needs no help. Any new tinted surface goes through `--chip-tint`, not a hand-picked value.
 
 **The App Voice Rule.** The accent marks live state and the app speaking — focus, selection, a drop
-target, an active filter, an unsaved view, a count the app computed. It never marks data structure.
+target, an active filter, a count the app computed — with the unsaved view as the one exception, which
+takes `warn`. It never marks data structure.
 A property of a record is drawn in that facet's own hue.
 
 ## Typography
@@ -345,9 +355,10 @@ between the two.
 - **Meta** (mono, 10.5px, `0.08em`): a face's meta line, and the panel's `kv` keys in uppercase.
 - **Label** (mono, 500, 9.5px, `0.10–0.14em`, uppercase): the signature. Panel section heads, table
   headers, lane heads, rail labels, the vault gate's section heads. Tracking widens with prominence —
-  `0.1em` in the rails and tables, `0.13em` in the panel, `0.14em` at the gate.
-- **Chip** (mono, 10px, `0.01em`): every facet chip and link chip.
-- **Micro** (mono, 9px, `0.04em`): canvas edge labels, badge counts, a link chip's kind prefix, the
+  `0.1em` in the rails and tables, `0.12em` on a popover head, `0.13em` in the panel, `0.14em` at the
+  gate.
+- **Chip** (mono, 10px, `0.01em`): every facet chip and link chip, and a canvas edge label.
+- **Micro** (mono, 9px, `0.04em`): badge counts, a link chip's kind prefix, the
   React Flow attribution.
 
 ### Named Rules
@@ -358,7 +369,7 @@ in the vault's own `facets.yaml`, written by whoever keeps the vocabulary, so th
 card panel both render it sans. The app names the *axis slot* — `SHAPE`, `GROUP BY`, `FACETS` — and
 those are mono. Titles, excerpts and body copy are sans. Every label, key, count, chip, meta
 line, column name, table header and glyph is mono. There is no third case, and the division is what
-makes a screen with nine type sizes read as two voices rather than nine.
+makes a screen with fourteen type sizes read as two voices rather than fourteen.
 
 **The Tabular Number Rule.** Any number that can change while its neighbours stay put carries
 `font-variant-numeric: tabular-nums` — column counts, progress numbers, roll-up columns, the sidebar
@@ -380,7 +391,8 @@ second relative size, and therefore its own pair of measured constants — same 
 pair, written down beside them.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
-tuned individually (14px check, 15px close, 16px revert, 17px add) so they read as one family — but
+tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for the two drawn glyphs,
+`trash` and `refresh`) so they read as one family — but
 those metrics deliberately do **not** live here. The glyph set is closed, so the table in
 `src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
 a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
@@ -395,7 +407,9 @@ adding a chrome row that would be empty in the other two shapes.
 
 **Exactly one region scrolls per axis.** The sidebar's filter panel is the only scrolling part of the
 rail (`flex: 1 1 auto` between two `flex: none` blocks); the board scrolls in the content area; a
-column scrolls its own body under a fixed head. Nothing scrolls inside something that also scrolls.
+column scrolls its own body under a fixed head. Nothing scrolls inside something that also scrolls on
+the same axis, with one known exception: from three lanes up the board scrolls vertically, and the
+column bodies inside it still scroll vertically too.
 
 **The board** is a flex row of fixed 292px columns with a 12px gutter, `align-items: flex-start` so a
 short column does not stretch. Cards stack 7px apart in an 8px-padded body. A single-lane board lets
@@ -407,14 +421,16 @@ strip under the last one that nothing could use. Lanes are 14px apart, and a lan
 `position: sticky; left: 0` so its name survives horizontal scroll.
 
 **The panel** is fixed to the right edge at `min(560px, 92vw)` over a `rgba(10, 8, 14, 0.34)` scrim,
-with 18px between sections and `18px 20px 40px` of padding — the deep bottom pad so the last section
-clears the viewport edge when scrolled.
+with `18px 20px 40px` of padding — the deep bottom pad so the last section clears the viewport edge
+when scrolled. Inside it there are two intervals, not one: 8px between the sections of a tier, and
+20px plus a hairline between tiers.
 
-**Density is the point.** At 1080p a column shows about ten cards, and the whole 191-record vault is
+**Density is the point.** At 1080p a column shows about ten cards, and a couple of hundred records are
 four columns and one scroll. Every measurement in the system is hand-tuned to a 1px granularity rather
 than snapped to a 4- or 8-point grid: `1.5px 6px` on a chip, `3.5px 8px` on a small button, `9px 10px`
-on a card face. The scale is `1 · 4 · 6 · 7 · 8 · 12 · 14 · 18 · 20`, and each step exists because
-something needed it.
+on a card face. The nine named steps are `1 · 4 · 6 · 7 · 8 · 12 · 14 · 18 · 20`, and each exists
+because something needed it — but they are names, not a closed set: `5px` is the second most common
+spacing value in the stylesheet, and `2`, `3`, `9` and `10` are all in heavy use.
 
 ### Named Rules
 
@@ -435,7 +451,7 @@ an input in the rail, a hovered table row, a canvas band), `surface-3` (a count 
 hover) — and every boundary between regions is exactly one hairline of `rule`. A card face is flat: a
 lighter fill inside a darker column, with a 1px border, and nothing else.
 
-Shadows are reserved for the four things that genuinely float above the plane. Their values are not
+Shadows are reserved for the five things that genuinely float above the plane. Their values are not
 interchangeable: the offset points away from the edge the element is attached to.
 
 ### Shadow Vocabulary
@@ -457,10 +473,13 @@ interchangeable: the offset points away from the edge the element is attached to
 A shadow is permission to leave the plane, and only five elements have it. A card, a column, a chip, a
 button, a table row and an input never do.
 
-**The Stroke-As-Shadow Rule.** Three `box-shadow` declarations are not shadows and must not be read as
-elevation: `0 0 0 1px var(--accent)` is the selected card's ring, `0 ±2px 0 0 var(--accent)` is the
-reorder drop line above or below a card, and `inset 2px 0 0 0 var(--accent)` marks a selected table
-row. All three use the shadow property to draw a stroke where the border is already spoken for. The
+**The Stroke-As-Shadow Rule.** Three `box-shadow` idioms — five declarations in all — are not shadows
+and must not be read as elevation: `0 0 0 1px var(--accent)` is the selected card's ring,
+`0 ±2px 0 0 var(--accent)` is the reorder drop line above or below a card, and
+`inset 2px 0 0 0 var(--accent)` marks a selected table row. All three use the shadow property to draw
+a stroke where the border is already spoken for; the ring and the drop line are each written twice — a
+card is selected in a column and on the canvas, and a card can be dropped above or below — which is
+where the five come from. The
 table row's is inset and on one side because a row cannot take a border — `outline` on a `<tr>` is
 drawn per cell and a border shifts the column grid — so it is the same 3px-left-edge idea reaching a
 container the border vocabulary cannot.
@@ -468,19 +487,24 @@ container the border vocabulary cannot.
 ## Shapes
 
 Radius rises with the size of the thing it is applied to, and the ladder is the whole form language:
-`--radius-sm` **3px** on a chip, link chip or inline `code`; `--radius-md` **4px** on a date input, a
-filter row, a hover highlight; `--radius-base` **5px** on every control — button, input, select,
-reference row, banner, rail item; `--radius-lg` **6px** on a card face, the picker and the minimap;
-`--radius-badge` **7px** on a facet badge; `--radius-xl` **8px** on a container — a column, a popover,
-the bulk bar, the canvas toolbar; `--radius-pill` **10px** on a count badge and a canvas band; and
-`--radius-xs` **2px** on the progress track alone. Nothing is a full pill and nothing is square.
+`--radius-sm` **3px** on anything chip-sized — a facet chip, link chip, toggle chip or reference chip,
+the read/edit tab, the panel's mark toggle and its new-value field — and on inline `code`;
+`--radius-md` **4px** on a date input, a filter row, a hover highlight; `--radius-base` **5px** on
+every control — button, input, select, reference row, banner, rail item; `--radius-lg` **6px** on a
+card face, the picker, the minimap, the editor host and a vault row; `--radius-badge` **7px** on a
+facet badge; `--radius-xl` **8px** on a container — a column, a popover, the bulk bar, the canvas
+toolbar; `--radius-pill` **10px** on a count badge and a canvas band; and `--radius-xs` **2px** on the
+smallest boxes — the progress track, the drawn checkbox, a markdown task-list checkbox and a link
+row's kind badge. Nothing is a full pill and nothing is square.
 
 Borders carry three distinct meanings, and the difference between them is the form language doing real
 work:
 
 - **1px solid `rule`** — a boundary. Between regions, around a card, under a table row.
-- **1px dashed** — *not a real value.* The `(none)` column and a context-only canvas band, both drawn
-  dashed and at reduced opacity, because in each case the container exists but the value does not.
+- **1px dashed** — *not a real value.* Six rules draw it: the `(none)` column and a context-only
+  canvas band, both also at reduced opacity; a toggle chip for a value the axis's vocabulary does not
+  list; the panel's new-value field while it is empty; a link chip whose fetch returned nothing; and a
+  vault row whose directory is gone. In each case the container exists but the value does not.
 - **3px solid, left edge only** — state. A project (`hue-purple`), a blocked card (`bad`), an open
   reference (`bad`), a finished one (`ok`, at 0.7 opacity). The project's edge is the project axis's
   own family, not the accent: see the Don't list, and `.cardface.is-project`, which have always said
@@ -526,9 +550,11 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
 - **Tones:** one class per facet axis (`facet-priority`, `facet-status`, `facet-project`, `facet-tech`,
   `facet-layer`, `facet-waiting`, `facet-domain`), plus two hueless ones — `facet-energy` (italic) and
   `facet-muted`.
-- **Bucket override:** an ordered facet draws its bucket as a class, so `is-overdue` and `is-today`
-  colour themselves without anything knowing the facet by name. These are the system's only two filled
-  chips.
+- **Bucket override:** on a card face and a canvas node, an ordered facet draws its bucket as a class,
+  so `is-overdue` and `is-today` colour themselves without anything knowing the facet by name. They
+  are the only two chips filled from a *facet* hue; `.togglechip.is-on` below is a third filled chip,
+  and takes the accent. A table cell does not draw the bucket — `TableView` renders `FacetChip`
+  without it, though `card.buckets` is on the DTO the row already reads.
 - **Toggle chip:** the interactive variant, used in the filter panel and bulk bar, with `is-on` and
   `is-clear` states.
 - **Link chip:** mono 10px, hairline `rule` border, `ink-3` text, with the link kind as a 9px `accent`
@@ -540,8 +566,10 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
   its rows. Hover moves the border to `rule-2` and nothing else — no lift, no shadow, no scale.
   Selection adds a 1px `accent` ring; dragging drops it to `0.4` opacity.
 - **Structure:** a head row (record mark + title, baseline-aligned), an optional two-line clamped
-  excerpt, a chip row, and a mono meta line. The same face renders in a column, on the canvas and in a
-  table cell — how much of it appears is a property of the view, never of the record.
+  excerpt, a chip row, and a mono meta line. The same face renders in a column and on the canvas — how
+  much of it appears is a property of the view, never of the record. A table row is not the face: it
+  builds the same parts (record mark, title, chips) into a single-line flex cell — see **Accepted
+  Exceptions**.
 - **Column:** `surface-2` fill, 1px `rule`, `8px` radius, fixed 292px. A head row with the axis value
   in mono 12.5px/600 and a pill count in `surface-3`, a hairline under it, then a scrolling body. The
   `(none)` column is the same column dashed at `0.72` opacity.
@@ -556,12 +584,14 @@ nothing that is not load-bearing. Controls state their affordance by being crisp
 - **Focus:** `2px solid accent` at `outline-offset: -1px`, drawn inside the box so a focused field in a
   dense list does not shift its neighbours. `.field-recessed` is the exception, at three sites: it
   removes the outline and moves its border to `accent` instead, because a 2px ring against the rail's
-  edge read as a second boundary. It was written for the rail and now also paints the canvas
-  toolbar's view-namer and the panel's new-value field, where the reason is inherited rather than
-  re-argued — see **Accepted Exceptions**.
+  edge read as a second boundary. Two of the three are in the rail — its search and its saved-view
+  namer — and the third is the canvas toolbar's view-namer, where the reason is inherited rather than
+  re-argued. The panel's new-value field is not this class: `.facetedit-add input` is its own register
+  and re-implements the same swap in its own rule — see **Accepted Exceptions**.
 - **Selects:** `appearance: none`, `surface-2` fill, `rule` border, 12px — flatter than a text input,
   because a select is a control rather than a field.
-- **Disabled:** `0.45–0.5` opacity and `cursor: not-allowed`. No colour change.
+- **Disabled:** a field is `0.45` opacity and `cursor: not-allowed`; a button is `0.5` and
+  `cursor: default`. The two cursors differ on purpose. No colour change either way.
 
 ### Navigation
 
@@ -574,13 +604,16 @@ you know nothing is written on the card — the panel otherwise treats it identi
 ### The Record Mark
 
 The signature component, and the one nothing else can substitute for. A mono glyph before every title
-saying what the record is — `•` a card, `○` a node, `▣` a project — followed by a count of how many
-records name it. `○` means named by **any** reference facet, which is what `nodesIn` has always meant
+saying what the record is — `•` a card, `○` a node, `▣` a project. The mark draws the glyph alone: how
+many records name it is spelled out in its tooltip, and printed beside it only on a table row. `○`
+means named by **any** reference facet, which is what `nodesIn` has always meant
 by a node: being named by `parent` and being named by `project` make a record a node equally. It read
 the `parent` facet alone until this was settled, which is how the mark and the `type` axis came to
-disagree about the same record. It sits at `0.8em` of whatever type it precedes, so one rule serves the
-12.5px table row, the 13px card face and the 16px panel header — and that `em` resolves against the
-type it sits beside, not against whatever its row inherited. See **The Measured Glyph Rule**.
+disagree about the same record. It sits at `0.8em` of whatever type it precedes, so one rule serves
+the 12.5px table row, reference row and picker row, the 12px reference chip and focus pill, and the
+13px card face — and that `em` resolves against the type it sits beside, not against whatever its row
+inherited. The panel header is the one place it does not: there the mark is a control and names
+`--text-lg` outright. See **The Measured Glyph Rule**.
 
 ### Progress
 
@@ -604,8 +637,9 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Do** measure a glyph you place in a text run, and write the measurement down in a comment beside
   the constant.
 - **Do** clamp overlays with `min(px, vw)` when a window might be narrow.
-- **Do** let motion exist exactly where a mouse gesture would feel broken without it — dragging a card,
-  panning or zooming the canvas, collapsing the rail. Regrouping, re-sorting and filtering are instant.
+- **Do** let motion exist exactly where a gesture would feel broken without it — dragging a card,
+  panning or zooming the canvas, collapsing the rail, and the panel's new-value field widening as it
+  takes focus. Regrouping, re-sorting and filtering are instant.
 
 ### Don't:
 
@@ -627,11 +661,13 @@ Used for a project's roll-up. It is the only bar in the system.
 - **Don't** put `--ink` on a filled background. `ink` and the semantic hues follow the theme in the
   same direction, so the pair never has contrast: `ink` on `bad` measured 1.92:1 in light, and `ink` on
   `warn` **1.03:1** in dark — invisible. Every filled state takes `ground`, which is 7.58:1 at worst
-  across the same four combinations, and is what `.btn.primary` and the two bucket chips do.
+  across the same four combinations, and is what all five filled states do — `.btn.primary`, the two
+  bucket chips, `.togglechip.is-on` and `.tab.is-on`.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
-- **Don't** interpolate a colour. Every value comes from `xoria256.yml`; the two exceptions
-  (`rel-blocks` at `#b06060` in light, and the `chip-tint` mixes) are documented where they occur and
-  each has a stated reason.
+- **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `rel-blocks` at
+  `#b06060` in light, the `chip-tint` and state-wash mixes, the derived light neutrals, the five
+  shadow `rgba()` values and the scrim, and the two minimap masks — are documented where they occur
+  and each has a stated reason.
 - **Don't** give a hint facet a diluted hue. It gets no hue — transparent fill, `rule` border, `ink-3`
   text — or it earns a family of its own.
 - **Don't** nest a scroll inside a scroll. One region scrolls per axis.
@@ -663,8 +699,10 @@ user (the canvas band).
 
 ### The counts that declare no type
 
-`.lane-count` and the table's `.section-count` declare `color` and nothing else, so they inherit
-family, size, tracking and case from the heading they annotate.
+`.lane-count` declares `color` and nothing else and `.section-count` adds only a left margin, so both
+inherit family, size, tracking and case from the heading they annotate. That is the table's reading of
+`.section-count`; the panel wears the same class alongside `.quietcount`, which does declare a family
+and a size, so there the inheritance does not apply.
 
 That inheritance *is* the mechanism: the count reads as part of its heading's type run rather
 than as a badge beside it. Giving either one a step from the scale would break it on purpose.
@@ -672,7 +710,7 @@ than as a badge beside it. Giving either one a step from the scale would break i
 ### The number that is not a count
 
 `.count` on a table row looks like the count family and is not — it is the second half of the
-Record Mark, the child count DESIGN.md's Record Mark section describes. It appears in the table
+Record Mark, the reference count DESIGN.md's Record Mark section describes. It appears in the table
 and not on a card face because a table's title cell is a single-line flex row with a stable end,
 where a face's title is unclamped in a column and clamped to two lines on a canvas node. The face
 carries the same fact as the `○` glyph itself, with the number in the mark's tooltip.
@@ -682,9 +720,10 @@ the bulk bar's own `accent-soft` fill — The App Voice Rule speaking about live
 into the quiet class would put the app's quietest ink on an accent fill as that bar's only
 statement.
 
-`.pop-count` is misnamed rather than misdesigned: it renders `v.shape` ("board") and the word
-`'missing'` as often as it renders a number. It is the right-hand annotation slot on a popover
-row — the same job as `.pop-note` beside it. Worth renaming; not worth merging into a count.
+`.pop-annotation` is not a count either: it renders `v.shape` ("board") and the word `'missing'` as
+often as it renders a number. It is the right-hand annotation slot on a popover row — the same job as
+`.pop-note` beside it. It used to be `.pop-count`, and the rename was the whole fix; it was never
+worth merging into a count.
 
 ### The three headings that stay four treatments
 
@@ -716,10 +755,10 @@ axis label was the violation, because it hand-rolled `text-transform: uppercase`
 the *Chip* step: the Label register at the wrong size, which is a third register rather than a use
 of the second. It now renders the vocabulary's own casing.
 
-Open, and deliberately not settled here: the filter rail renders its facet label in **sans** at
-`--text-body-sm` while the panel renders the same string in mono. The Mono Label Rule reads
-against the rail, but the rail is a dense vertical list of thirteen axes and the Navigation
-section does not settle the facet head's font. Same casing, two fonts.
+Settled since, and the rail had it right: both surfaces render the facet label in **sans** at
+`--text-body-sm`. `.facetedit-label` declares a size and a colour and no family, so the panel inherits
+the sans stack too. The Mono Label Rule reads with both of them — a facet's `label:` is a string from
+the vault's own `facets.yaml`, not the app naming an axis slot. Same casing, one font.
 
 ### The reference chip and the reference row
 
@@ -735,25 +774,27 @@ go-button and an unlink, which was a deliberate fix for one gesture doing two th
 `.refchip-title` must ellipsise at 26ch because it wraps inside the panel while an inbound row
 gets a line of its own.
 
-Five modes across **two** call sites is under the three-use threshold. There is also a structural
-reason: `blockedBy` and `children` ship as `{ id, title }` with no `isProject` or `childCount`, and
-`countChildren` lives in `src/view/` which `src/index/` may not import from — so giving the
-inbound row its record mark is a server DTO change across an architectural boundary, not a CSS
-change.
+Five modes across **two** call sites is under the three-use threshold. The structural reason that used
+to stand beside it is gone: `blockedBy` and `children` once shipped as `{ id, title }`, so giving the
+inbound row a mark meant a server DTO change. They now carry `isProject` and `refCount`, counted by
+`inboundCounts()` in `src/index/refs.ts` — inside `src/index/`, so no boundary is crossed.
 
-Still outstanding from that: `.reflink` and the focus pill are the two places a record appears
-with no mark at all, against the Record Reference Rule. Recorded as unfinished, not as accepted.
+Settled since: `.reflink` and the focus pill were the two places a record appeared with no mark at
+all. Both draw one now — there are six `<RecordMark>` call sites — so the Record Reference Rule holds
+everywhere a record appears.
 
 ### The badge that takes `surface`, not `ground`
 
 `.facet-badge` puts `color: var(--surface)` on an `--accent` fill where the Don't list says every
 filled state takes `ground`.
 
-Contrast holds either way — measured, the change is 7.9:1 → 8.1:1 in dark — and there is a live
+Contrast holds either way — measured, the change is 8.80:1 → 8.36:1 in dark and 10.40:1 → 11.14:1 in
+light, so it costs a little in one theme and gains a little in the other — and there is a live
 reading in which `surface` is the right value: the badge sits in the sidebar, whose fill *is*
 `surface`, so the digits read as knocked out of the accent rather than printed on it. It also
-inherits `font-weight: 600` from the active facet head, which is the other half of what the five
-`ground` filled states pair together, so it is not the outlier it looks like.
+inherits `font-weight: 600` from the active facet head, which two of the five `ground` filled states
+declare for themselves — `.btn.primary` and `.togglechip.is-on`; the other three carry no weight — so
+a fill arriving with the weight is not unique to it.
 
 Low confidence, and the cheapest of these to revisit.
 
@@ -761,16 +802,18 @@ Low confidence, and the cheapest of these to revisit.
 
 `.tab` declares `text-transform: none` and `letter-spacing: 0`, which appear inert.
 
-They are the only place in this repo that cancels an *explicit* ancestor `text-transform:
-uppercase` — the panel section heading it sits inside. Deleting them moves the tab's casing onto
+They are one of two rules in this repo that cancel an *explicit* ancestor `text-transform:
+uppercase` — the panel section heading both sit inside. `.derived` is the other, and cancels it so the
+panel's `ƒ` is not uppercased into `Ƒ`. Deleting them moves the tab's casing onto
 the browser's own form-control stylesheet, and the failure mode is a mode switch reading
 `READ / EDIT` on the one control this system says is not a chip. The `letter-spacing: 0` is not
 inert either: it records the tab's departure from the chip step's `0.01em`.
 
 ### The canvas that says nothing when it is empty
 
-Five surfaces state their own emptiness — the board, the table, the filter rail, the record picker
-and the panel's body — through `.emptystate`. The canvas does not: a query matching nothing leaves
+Six surfaces state their own emptiness — the board, the table, the filter rail, the record picker, the
+vault gate's folder browser and the panel's body — through `.emptystate`. The canvas does not: a query
+matching nothing leaves
 an empty dot grid.
 
 It stays that way. The minimap empties with it, so two things on screen agree that there is nothing
@@ -778,7 +821,7 @@ there, which is the information a message would carry. And the canvas is the one
 chrome of its own by construction — the toolbar floats and vanishes — so a centred sentence would
 be the only fixed element it ever draws.
 
-To change it: it would want the same `.emptystate` register the other five use, not an illustration
+To change it: it would want the same `.emptystate` register the other six use, not an illustration
 — see the Don't list.
 
 ### The three left edges outside the record vocabulary
@@ -800,12 +843,15 @@ enumerated are the *record* vocabulary — `.cardface.is-project`, `.cardface.is
 So the rule governs the vocabulary a *record* is drawn in, and the count is four there. To change
 it: retire one of the four, or restate the rule as being about records specifically.
 
-Not consolidated into a shared `.stripe` rule, and this is the interesting part. Three independent
-reasons killed it: a bare `.stripe` at one class loses to `.column-card:hover .cardface` and the
-two selection rules at three; the rule count would go up rather than down, because both banners
+Not consolidated into a shared `.stripe` rule, and this is the interesting part. Two reasons killed
+it: the rule count would go up rather than down, because both banners
 keep their `color-mix` wash and `.reflink.is-done` its `0.7` opacity; and the design detector
 matches per declaration, so folding seven declarations into one would take its count from 8 to 2 —
 disarming the only automated tripwire on this very rule.
+
+A third reason has since dissolved: the hover and selection rules a bare `.stripe` used to lose to are
+all wrapped in `:where()` now, so they contribute one class rather than three, and a `.stripe` would
+tie them and win on order.
 
 ### The accent-border focus, at three sites
 
@@ -813,16 +859,19 @@ DESIGN.md's Inputs/Fields section gives every field a 2px `accent` ring at `outl
 `.field-recessed` replaces it with an accent *border* instead, because a 2px ring against the
 rail's edge read as a second boundary.
 
-That reason is a rail reason, and the class now paints two fields that are not in the rail: the
-canvas toolbar's view-namer, and the panel's new-value field. Both keep the treatment on purpose —
+That reason is a rail reason, and one of the three fields it paints is not in the rail: the canvas
+toolbar's view-namer. The other two are the rail's own search and its saved-view namer; the panel's
+new-value field is `.facetedit-add input`, which is not this class and re-implements the same swap on
+its own. The canvas one keeps the treatment on purpose —
 the alternative is a field whose focus depends on which surface its caller happened to mount it
 in, which is exactly the defect that produced this component. `CommitInput` chose between two
 paints based on the wrapper *tag* its caller passed; one register with one focus rule is what
 replaced that.
 
-To change it: scope the border-swap to `.rail-row .field-recessed` and let the other two take the
-global ring — and expect the canvas float and the panel to then disagree with the rail about a
-field that is otherwise identical.
+To change it: scope the border-swap to `.rail-search .field-recessed, .rail-row .field-recessed` and
+let the canvas float take the global ring — and expect the float to then disagree with the rail about
+a field that is otherwise identical. Scoping to `.rail-row` alone would strip the accent border from
+the rail's own search, which is the field the rationale was written for.
 
 ### The project that is named but not chipped
 

@@ -19,7 +19,7 @@ number.
 | C7 | No freehand drawing | the canvas is records and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
-| C9 | A view is a query, not a place | `view = filter × focus × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
+| C9 | A view is a query, not a place | `view = filter × search × focus × group × sort × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
 | C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?card=` |
 
 ## The shape of it
@@ -44,7 +44,7 @@ flowchart TB
 
   idx[("index.db · enrich.db<br/>derived and disposable — delete them and nothing is lost.<br/>The index is memoised on an exact stamp of every file it read")]
 
-  spec["ViewSpec — filter × focus × shape × show<br/>a URL, a saved view and CLI flags all parse into this one object,<br/>which is why the two surfaces cannot drift"]
+  spec["ViewSpec — filter · search · focus · group · sort · shape · show<br/>a URL, a saved view and CLI flags all parse into this one object,<br/>which is why the two surfaces cannot drift"]
 
   subgraph engine["The engine"]
     direction LR
@@ -119,9 +119,10 @@ the same thing.
 scale both are free — it is what lets a pseudo-facet be indistinguishable from a real one. In SQL,
 `blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
-the two jobs it is genuinely better at: full text (FTS5) and the recursive `blocks` closure — and both
-now read the `facets` table, since a relation is a facet value like any other. `src/index/queries.ts`
-holds only those, plus `counts`. It used to also carry a general `listRecords`/`filterClause` pair — a
+the one job it is genuinely better at: full text (FTS5), which `search()` reads out of the `fts` table
+joined to `records`. `src/index/queries.ts` holds only that, plus `counts`. The `blocks` closure came
+in-memory too — `unblocks()` in `src/index/blocking.ts` walks the adjacency `refs.ts` builds, because
+the SQL version was depth-capped at 10 and kept self-references the record map drops. It used to also carry a general `listRecords`/`filterClause` pair — a
 second filtering engine, which is what this whole section says should not exist — and that is exactly
 where `pj next` went on filtering by `kind` for two days after P7 deleted it. It then spent a while as
 one `runQuery` call in `cmdNext` — right engine, wrong place, since a query written in TypeScript is a
@@ -132,10 +133,11 @@ is an error, not an empty answer.
 
 **Every pseudo-facet computes.** `kind` used to sit in `PSEUDO` and return a stored field. Moving it
 into `facets.yaml` showed it asserted two things the record already said — carrying a `status` is what
-makes it work, being named as a `parent` is what makes it a container — so it is gone entirely (C11).
+makes it work, being named by **any** reference facet is what makes it a container — so it is gone
+entirely (C11).
 `type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
-their place — and `type` also reads the reference graph, since its third value `node` is "something
-names this as a parent". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
+their place — and `type` also reads the reference graph, since its third value `node` is "some other
+record names this one, through any reference facet". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
 
 **Focus and filter are the same operation at two levels, deliberately.** A focus is a filter clause
 whose test is transitive rather than one level deep, so in principle
@@ -164,7 +166,9 @@ selected value always stays listed or it could never be unselected.
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
-are. Rebuilding costs ~34ms at 191 records; checking the stamp costs ~0.5ms.
+are. Rebuilding costs tens of milliseconds at this vault's size; checking the stamp costs a fraction of
+one. The ratio is the point — two orders of magnitude — and it is what makes the memo worth having
+rather than the absolute numbers, which move with the machine and the card count.
 
 Before the query became interactive the index was rebuilt on every request, which was right while a
 request meant a click. A live search box makes that several rebuilds a second. The stamp is not a TTL
@@ -264,8 +268,9 @@ channel that returned the *newest* N items and then advanced would step over eve
 looked at. Channels therefore work **oldest-first from the cursor**, and a run truncated by its limit
 holds its cursor where it was: the next sweep resumes at the same place, and the backlog drains through
 fingerprint dedup rather than through the cursor. `pj intake` is also the only command that reads
-external state and writes nothing at all — advancing a cursor is a separate explicit step, because a
-run that fetched is not a run that was resolved.
+external state and writes nothing of its own — it rebuilds the derived index the way every read does,
+and advancing a cursor is a separate explicit step, because a run that fetched is not a run that was
+resolved.
 
 **Enrichment and intake are mirror images that share only the way out.** Enrichment is given a ref and
 answers how to display it; intake is given a channel and a cursor and answers which refs nobody has
@@ -277,8 +282,10 @@ where the sweep got to and not of who did the fetching.
 
 **Instructions are configuration, not prose.** They live in the `project:` block. They were once a
 `## Instructions` heading in the body matched by regex — the only place where renaming a heading
-silently changed behaviour, with nothing to validate against. The body is free-form again (C6): the app
-reads nothing in it.
+silently changed behaviour, with nothing to validate against. The body is free-form again (C6): nothing in
+it is configuration. It is still read — `progressOf` counts its task boxes, `excerptOf` picks its first
+prose paragraph for the card face, and `reindex` puts it in FTS5 — but no heading or marker in it
+changes how the app behaves.
 
 **Cycles are refused on every reference facet**, through the one `wouldCycle` that also guards `parent`
 edges. It takes the outward neighbours as a function rather than a record map, so the check is about
@@ -298,9 +305,12 @@ a board draws it in planning. That matters because the primary writer is an agen
 writes (C3): a model that cannot refuse an incoherent state accumulates them.
 
 **A facet has a type, and storage is uniform anyway.** `label · ref · date · number` say what values
-*are*; the file still holds strings and the engine still holds `string[]`. That is what makes typing
-cheap: a facet is read in exactly two places — `valuesOf` for what an axis shows, `rankOf`/`ordered`
-for how it sorts — so the type is consulted twice rather than everywhere.
+*are*; the file still holds strings and the engine still holds `string[]`. That is what keeps typing
+cheap *in the compiler*: it interprets a type in exactly two places — `valuesOf` for what an axis
+shows, `rankOf`/`ordered` for how it sorts. Outside the compiler the type is read at about two dozen
+sites, through `isRef`/`isOrdered` in `src/schema/vocabulary.ts` or by comparing `def.type` directly in
+the writer, the validator, the payload builder and the editing controls — so adding a type means
+auditing those rather than one function.
 
 **An ordered facet presents buckets and compares raw.** A date has as many values as there are days, so
 filtering and grouping see the buckets it declares while sorting and range filters see the value.
@@ -374,16 +384,18 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
 | `pj link`, `pj set`, `PATCH /api/card/:id` | one card's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
-| `POST /api/bulk` op `parent` | one facet on many cards | it is `bulkFacet` under a name the bulk bar uses |
+| `POST /api/bulk` ops `facet`, `move`, `parent` | many cards' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed, `parent` is `bulkFacet` under the name the bulk bar uses | one write per card whatever the op; the `delete` op is the row below |
 | `PUT /api/card/:id/frontmatter` | one card's whole frontmatter block | never touches the body |
 | `pj rm`, `DELETE /api/card/:id`, `POST /api/bulk` | card files, and every reference that pointed at them | nothing outside `cards/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
-| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose card still exists |
+| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id, plus `layout: manual` whenever positions are sent | never drops an entry whose card still exists |
 | `DELETE /api/view/:name` | one view file | never touches the cards it selected |
 | `POST /api/card/:id/asset` | one file under `cards/assets/<id>/` | never overwrites: the name is a content hash |
-| `POST`/`DELETE /api/vaults` | `vaults.json` beside the app | never touches a vault's contents |
-| `pj intake` | nothing at all | proposes; it writes no card and moves no cursor |
+| `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
+| `pj intake` | `.index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no card and moves no cursor |
 | `pj intake commit` | one row in `.intake.db` | never a card, and never on its own initiative |
+| `pj work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo |
+| `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a card file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
@@ -416,6 +428,7 @@ sees half a file. The registry is written the same way.
 | Path | Why | Surface |
 |---|---|---|
 | `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link, and discovering sessions that moved | read-only |
+| `~/Library/Application Support/Claude/claude-code-sessions/<org>/<account>/*.json` | the Claude Desktop store — a different vendor surface with its own `local_` id space, for a `claude:` link whose session lives there | read-only |
 | any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
 | any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
 | a project's declared `repos` | `pj work`, through `git`; `pj intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
@@ -426,7 +439,9 @@ pick a folder. Neither reads anything you have not named.
 
 **Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `pj log`, and
 `log`/`branch`/`config`/`remote` in declared repos for `pj intake git`),
-`gh` (`pr view`, `api` GETs), and `osascript` (opening a terminal, `pj work` only). No shell — `execFile` with an argument array, so
+`gh` (`pr view`, `api` GETs), `osascript` (opening a terminal, `pj work` only), and `ps` (one `ppid`
+read per level, walking up the process tree to find which live Claude session is asking). No shell —
+`execFile`/`execFileSync`/`spawnSync`, always with an argument array, so
 nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
 because a path may contain a quote.
 
@@ -440,6 +455,10 @@ because a path may contain a quote.
 | `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
 | `PROJECTOR_INTAKE_JQL` | overrides the JQL `pj intake jira` searches with |
 | `PROJECTOR_GIT_AUTHOR` | whose commits `pj intake git` looks for (default: each repo's own `user.email`) |
+| `PROJECTOR_VAULTS` | where the registry file lives (default: `vaults.json` beside the app — the qualifier on *Why the registry is a file*) |
+| `PROJECTOR_CLAUDE_HOME` | where `~/.claude` is, for transcripts and live sessions |
+| `PROJECTOR_CLAUDE_DESKTOP` | where the Claude Desktop session store is |
+| `PROJECTOR_DOC_URL` | an editor URL template for `doc:` links (`cursor://file{path}`); absent means a copyable command instead |
 
 No credential is read from anywhere but the environment, and none reaches the browser: enrichment
 responses carry the resolved fields, never the token.
@@ -466,7 +485,8 @@ nothing else.
 
 ## Vault seeding
 
-`initVault` writes `cards/`, `facets.yaml`, four starter views and a `.gitignore`. **No prose.**
+`initVault` writes `cards/`, `cards/assets/`, `views/`, `facets.yaml`, five starter views — `home`,
+`due`, `projects`, `unblocked`, `everything` — and a `.gitignore`. **No prose.**
 
 It used to also write `cards/README.md`, a per-vault conventions document from `SEED_README`. That was
 a near-verbatim copy of the `projector` skill, and its only audience — an agent editing card files
@@ -493,8 +513,8 @@ full of markdown attracts a README, not because the app puts one there.
 - **`yaml`** for writes. Its Document API patches surgically, preserving comments, key order and
   formatting, so a file the app wrote is indistinguishable from a hand-edited one. `gray-matter`
   re-serialises the whole block.
-- **`node:sqlite`**, built in. Recursive CTEs and FTS5 both verified. No native rebuild, nothing to
-  install.
+- **`node:sqlite`**, built in. FTS5 verified and in use; recursive CTEs are headroom nothing currently
+  needs. No native rebuild, nothing to install.
 - **`hono`** for the server — typed routing, a first-class SSE helper, static files: the three things
   this server does.
 - **No client-side query cache.** The rendering rule is stale-while-revalidate, which is what TanStack
@@ -507,11 +527,26 @@ full of markdown attracts a README, not because the app puts one there.
 
 | | |
 |---|---|
-| `model.test.ts` | frontmatter round-trips, link parsing, project resolution, reference cycles, validation, drag semantics, canvas clusters, nested `--set`, worktrees, `pj log` over a scratch repo, and the seed files parsing as what they claim to be |
-| `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
-| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
+| `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading status transitions out of git diffs |
 | `arrangement.test.ts` | positions and card order merge rather than replace; save keeps arrangement |
+| `canvas.test.ts` | nested `--set` and its validation against the result, deleting a record's inbound references, clusters, bands, and the layout following only the relation shown |
+| `card.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
+| `cli.test.ts` | every command refusing an unknown flag, `--json` being the payload the app receives, the registry, exit codes |
+| `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
+| `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
+| `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
+| `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
+| `mutate.test.ts` | the write gate: per-card moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
+| `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
+| `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging |
+| `query.test.ts` | the compiler: filters, `(none)`, ranges, pseudo-facets, buckets, references, focus traversals, grouping, counts, FTS |
+| `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
+| `source.test.ts` | no source file hides a control byte from grep |
+| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out |
+| `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, one hue family per facet axis, every `className` resolving to a rule, and this table naming the tests that exist |
+| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, and every seeded file parsing as what it claims to be |
+| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, the empty-group policy |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
 and not whatever the cards happen to say today. `tsconfig` runs with `noUnusedLocals` and

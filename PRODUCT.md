@@ -31,7 +31,7 @@ other person or public release is confirmed.
 
 A personal work-management app. **One card database in markdown files, projected as a board, a
 mind-map canvas or a table** — whichever the current query asks for — with read-only inline views of
-Jira issues, GitHub PRs, Claude sessions and local docs.
+Jira issues, GitHub PRs, branches and commits, Claude sessions and local docs.
 
 Success, in the user's own terms, all at once:
 
@@ -54,8 +54,8 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   Relations — `parent`, `blocks`, `project` — are reference facets, so "group by project" and "group by
   priority" are the same board with one control moved rather than two boards to keep in sync.
 - **One record type at two altitudes.** A record becomes *work* by acquiring a `status` and a
-  *container* by being named as a `parent`. A mind-map leaf and a tracked card are the same file, which
-  is what makes Trello-and-Miro-in-one structurally true rather than a feature list.
+  *container* by being named by **any** reference facet. A mind-map leaf and a tracked card are the
+  same file, which is what makes Trello-and-Miro-in-one structurally true rather than a feature list.
 - **Two promises.** The markdown files are the source of truth, and nothing is ever written back to
   Jira, GitHub, Trello or Slack.
 - **`blocks` and its transitive closure** — the relation neither Trello nor Jira gives usefully, and
@@ -70,7 +70,7 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   `GET /api/query` returns, so a view means the same thing in both.
 - **A vault** is a folder holding `cards/`, `facets.yaml` and `views/`, opened the way Obsidian opens
   one. It is a git repository, which is where `pj log` reads history from. The live work vault holds
-  **191 cards and 11 saved views**.
+  a couple of hundred cards and a dozen saved views.
 - **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL — plus Slack and
   Gmail, which have no fetcher here and are read by an agent through MCP. Sweeps propose and stop;
   `pj intake` creates no card and moves no cursor.
@@ -93,7 +93,9 @@ Table: the one thing the others cannot give — columns of numbers, with project
 `direct / total`, blocked, untriaged, last activity.
 
 **Editing has two channels.** Structure is edited by gesture — drag, bulk bar, canvas handles — and
-content in the card panel. Inline creation in a column is the single exception.
+content in the card panel. Creation is the exception, in two places: inline in a board column, which
+inherits that column's value for the grouped facet, and `+ record` on the canvas toolbar, which
+prompts for a title and sets no facets at all.
 
 **Conflicts are refused, not merged.** If a file changed since the panel read it, the write is refused
 and says so. This matters specifically because an agent may hold the same card in another window.
@@ -115,12 +117,16 @@ only open a vault listed in `vaults.json`, so a page in the browser cannot point
 directory.
 
 **Deliberately undecided** (recorded in `NEXT.md`, deferred rather than missing): an expression
-language for moving the five pseudo-facets into `facets.yaml`, and per-column summaries. Both wait on a
-question appearing on screen that cannot currently be answered.
+language for moving the five pseudo-facets into `facets.yaml`, per-column summaries, and keyboard
+operation. The first two wait on a question appearing on screen that cannot currently be answered.
+Keyboard operation waits on something else — a keystroke has no modifier to say replace / add /
+remove, so the gesture semantics are the hard part, and there is no evidence yet about which motions
+are frequent.
 
 **Finished but idle mechanisms** — design must not assume data on these axes: `blocks` carries one
-value across 191 records, `due` is set nowhere, `owner` is declared and unused, `energy` is on a
-handful of records. Seven `pj check` warnings remain, three of them structural.
+value, `due` is set nowhere, `owner` is set on one record, `energy` is on a handful. `pj check`
+reports warnings against the live vault, some of them structural — run it rather than trusting a
+count written here.
 
 ## Brand Commitments
 
@@ -128,8 +134,9 @@ handful of records. Seven `pj check` warnings remain, three of them structural.
 - **xoria256** (Dmitriy Zotikov's pastel Vim scheme, via `estilo-xoria256`) is the committed palette —
   dark-first, light derived, following the system setting. **One hue family per facet axis**, so a
   chip's colour says which axis it is before you read it: priority orange, status green, project
-  purple, tech blue. Every value in `src/web/style.css` comes from the palette file; nothing is
-  interpolated.
+  purple, tech blue. Every hue in `src/web/style.css` comes from the palette file, with the departures
+  DESIGN.md documents where they occur: `--rel-blocks` in light, mixed to stay legible on white, and
+  the `--chip-tint` fills, which dilute a hue toward the surface.
 - **The record marks are vocabulary, not decoration:** `•` a card, `○` a record something else
   names, `▣` a project, plus a
   count of how many records name it through any reference facet.
@@ -140,11 +147,12 @@ handful of records. Seven `pj check` warnings remain, three of them structural.
 
 ## Evidence on Hand
 
-- `README.md` (~35 KB) and `ARCHITECTURE.md` (~33 KB) are the written product record; `NEXT.md`
+- `README.md` and `ARCHITECTURE.md` are the written product record; `NEXT.md`
   records what is deliberately not being done and why.
-- The `work/` vault: 191 real cards, 11 saved views, a real annotated `facets.yaml`. Gitignored, so it
+- The `work/` vault: a couple of hundred real cards, a dozen saved views, a real annotated
+  `facets.yaml`. Gitignored, so it
   is private working data — usable as design evidence, never as publishable content.
-- 57 commits, one author.
+- One author; no external contributors.
 - **Absences that must not be filled by invention:** no testimonials, users, customers, benchmarks,
   pricing, licence or deployment story exists. Nothing is published or hosted, and there is no landing
   page or marketing surface of any kind.

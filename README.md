@@ -60,12 +60,12 @@ is what makes it cheap — the engine reads a facet in exactly two places.
 
 ## Pseudo-facets
 
-Five axes are computed rather than stored, and appear in the filter panel indistinguishable from real
-facets:
+Five axes are computed rather than stored, and appear in the filter panel alongside the real facets,
+marked `ƒ` for computed:
 
 | | Values | Derived from |
 |---|---|---|
-| `type` | `project`, `node`, `plain` | a `project:` block · being named as a `parent` |
+| `type` | `project`, `node`, `plain` | a `project:` block · being named through any reference facet |
 | `blocked` | `blocked`, `waiting`, `clear` | an unfinished `blocks` edge · a non-empty `waiting_on` |
 | `triage` | `needs-project`, `needs-priority`, `needs-status`, `complete` | absence of those facets |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a record carries |
@@ -120,8 +120,9 @@ already showed:
 So it is gone (C11). Only `id` and `title` are required, and a record becomes work by acquiring a
 lifecycle rather than by being reclassified.
 
-Every record carries a mark before its title saying which it is, and a count after it when others
-name it:
+Every record carries a mark before its title saying which it is. The number is drawn only in a table,
+after the title; a card face carries the same fact as the `○` glyph itself, with the number in the
+mark's tooltip:
 
 | | |
 |---|---|
@@ -193,7 +194,9 @@ most specific advice reads last, and everything else takes the nearest value.
 **Instructions are configuration**, so they live in the block with the rest of it. They were a
 `## Instructions` heading in the record's body once, matched by regex — the one place prose was
 load-bearing, where renaming a heading silently stopped inheritance with nothing to check against. The
-body is free-form again: nothing in it is read by the app.
+body is free-form again: nothing in it is configuration. It is still read — task boxes become a
+progress bar, the first prose paragraph becomes the card-face excerpt, and the whole of it goes into
+FTS — but no heading or marker in it changes how the app behaves.
 
 `parent` is a separate relation: it means decomposition and carries no config. A card may have a
 project, a parent, both or neither.
@@ -234,7 +237,8 @@ canvas is what only a canvas can do *and* only while one is open:
 [ drag creates: parent ▾ ] [ + record ] [ Save layout ]
 ```
 
-The board floats its bulk-selection bar for the same reason: it exists only while a selection does.
+The bulk-selection bar floats over whichever shape has a selection, for the same reason: it exists
+only while one does.
 The footer always says how many records are shown, how many the filter is hiding and how many are
 context, with a one-click *clear* — so a card that is missing is never a mystery.
 
@@ -289,8 +293,10 @@ twice — and "why does my canvas draw nothing" was answered by the one you forg
 `groupBy: [primary, secondary]` gives a board columns and swimlane rows, and a table sections and
 sub-sections. Its options are shared, because they describe grouping rather than any one shape:
 `uncategorised` places the no-value group, and `sort` orders within a column, a section or a canvas
-rank. Every value the facet declares gets a group whether anything is in it or not — an empty column is
-somewhere to drag a card to.
+rank. Every value the query *admits* gets a group — the facet's declared order narrowed to the current
+selection, so a filter makes an axis smaller rather than empty. A board keeps a group nothing is in,
+because an empty column is somewhere to drag a card to; a table and a canvas drop it, because neither
+offers anything to drag.
 
 Grouping by a **reference** facet gives a column per record — one board per parent, or per project.
 That works because a hierarchy concentrates: 26 distinct parents across 134 references here, only 7 of
@@ -389,8 +395,8 @@ exactly the code path that changes its priority.
 |---|---|
 | Card panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
-| Canvas | drag records and **Save layout**, handle-to-handle to add a reference, `+ record` |
-| Table | click a row to open the panel |
+| Canvas | drag records and **Save layout**, handle-to-handle to add a reference, `+ record`, ⌘-click or marquee to select, bulk bar |
+| Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
 
 **Bulk actions** make a few hundred cards tractable: ⌘-click a selection, then set a parent, set or
 clear one facet, or delete, across all of it.
@@ -422,8 +428,8 @@ command where it does not.
 |---|---|---|---|---|
 | `jira` | `jira:PROJ-303` | Jira REST | `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | 15 min |
 | `gh:pr` | `gh:pr:ORG/repo#412` | `gh pr view --json` | the `gh` CLI, authenticated | 5 min |
-| `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | — | 10 min |
-| `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | — | never |
+| `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | the `gh` CLI, authenticated | 10 min |
+| `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | the `gh` CLI, authenticated | never |
 | `claude` | `claude:<uuid>` | `~/.claude/projects/**` | — | 1 min |
 | `doc` | `doc:path.md` | filesystem | `PROJECTOR_DOC_URL` to make it clickable | 30 s |
 | `slack` `url` | — | not fetched — the ref is already the URL | — | — |
@@ -567,9 +573,10 @@ A **vault** is a folder holding `cards/`, `facets.yaml` and `views/`, opened the
 one. The app has no built-in location and assumes no directory name: on first run it asks for a folder
 and remembers the choice, and the switcher at the top of the sidebar opens or adds others.
 
-Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, four
-starter views, and a `.gitignore` for the derived index and cache. A non-empty folder that is not a
-vault is refused. No prose is written into a vault — the format lives in the `projector` skill.
+Pointing at an empty or non-existent folder sets one up: a card directory, a facet vocabulary, five
+starter views, and a `.gitignore` for the index, the cache and the intake cursors. A non-empty folder that is not a
+vault is refused. No prose document is written into a vault — there is no seeded README, and the card format is
+explained in the `projector` skill.
 
 The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
 one that is on that list — so a page in your browser cannot point it at an arbitrary directory. It is
@@ -592,15 +599,15 @@ one.
 
 | | |
 |---|---|
-| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
+| `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--uncategorised end\|start\|hide] [--json]` | list records. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
-| `pj add <title> [--id slug] [--parent] [--facet f=v] [--link ref] [--fingerprint fp]` | create a record |
+| `pj add <title> [--id slug] [--parent id] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a record |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--parent id\|none`, `--set path=yaml` |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
 | `pj context <id> [--json]` | everything known about a card, assembled |
 | `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
-| `pj enrich [<ref>…] [--all]` | resolve link enrichment |
+| `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which cards already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
@@ -634,7 +641,7 @@ by `pj check` like anything else.
   facets.yaml                    # facet vocabulary, order, constraints
   views/
     home.yaml  projects.yaml  …  # flat: a shape is a field, not a folder
-  .index.db  .enrich.db          # derived, gitignored
+  .index.db  .enrich.db  .intake.db  # derived · cache · cursors — all gitignored
 ```
 
 ## Card

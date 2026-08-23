@@ -6,7 +6,7 @@ document that quietly fixes itself teaches nothing about how it went wrong.
 
 ## Why this exists
 
-`DESIGN.md` names the tokens — seven hue families, a nine-step type scale, four surfaces, nine
+`DESIGN.md` names the tokens — seven hue families, a fourteen-step type scale, four surfaces, nine
 spacing steps — and `ARCHITECTURE.md` names the mechanisms. Between them is the tier that decides
 *which token, in which arrangement, for which job*, and it was never written down.
 
@@ -43,12 +43,15 @@ load-bearing after all, it is recorded in `DESIGN.md`'s **Accepted Exceptions**,
 **`✕` unlinks. The trash destroys. A `danger` word destroys many.**
 
 - **`✕` (`glyph="close"`)** — severs an association. A reference chip stops naming that record; a
-  link leaves the card; a focus is cleared; a switcher is dismissed. No file is destroyed and
-  nothing is confirmed, because nothing is lost that a second click cannot restore.
+  link leaves the card; a focus is cleared; a vault stops being tracked. No file is destroyed and
+  nothing is confirmed. The first three are lost only until a second click; the fourth is a
+  persisted write — `vaultApi.forget` drops the folder from the tracked list, so undoing it means
+  re-entering the path through the vault picker, which is why it is the one `✕` the code grew a
+  failure banner for.
 - **The trash (`glyph="trash"`)** — destroys one record. Always confirmed, always says the file is
   in git.
-- **A `danger`-toned word** — destroys many. The board's bulk bar, where the object is a selection
-  rather than a thing on screen and a glyph would have nothing to sit beside.
+- **A `danger`-toned word** — destroys many. The bulk bar, in all three shapes, where the object is
+  a selection rather than a thing on screen and a glyph would have nothing to sit beside.
 
 Audited twice now; nothing crosses these lines. The rule is a record of a distinction that already
 holds.
@@ -59,8 +62,9 @@ genuinely `disabled` button wearing the field's cursor, the only button in the a
 
 ### The One Casing Rule
 
-**A string is cased once, wherever it appears. A surface reaches the uppercase register by taking
-the Label type step, never by transforming a string at some other step.**
+**A string is cased once, wherever it appears. A surface reaches the uppercase register for a
+vocabulary string by taking the Label type step, never by transforming that string at some other
+step.**
 
 The second sentence is the whole rule, and the draft did not see it. `facets.yaml` says
 `label: Part of`; four places rendered a vocabulary string in uppercase, and only one of them was
@@ -76,8 +80,9 @@ wrong:
 The draft also claimed one facet value appeared "in 5 casings". It appears in six places in
 **two** casings, and the two uppercase ones are both legitimate. Direction right, arithmetic wrong.
 
-Still open: the rail renders a facet label in **sans** where the panel renders it in mono. The
-casing agrees now; the font does not, and The Mono Label Rule reads against the rail.
+One uppercase transform sits off the Label step and is not a vocabulary string: the panel's `kv`
+keys (`.kv dt`, at the *Meta* step, which `DESIGN.md`'s Typography Hierarchy commits by name). A
+link row's field keys were a second, at the *Micro* step and recorded nowhere; that one is gone.
 
 ### The Count Rule
 
@@ -89,7 +94,7 @@ and the four where it genuinely bites were all among them: the roll-up columns (
 read vertically — the case `DESIGN.md` names explicitly), the rail's value counts (right-aligned
 down a list of up to eight values × thirteen axes), the bulk bar (the word "selected" follows the
 digits), and the footer (changes on every keystroke of the search box). It is now one rule naming
-fifteen selectors, because the property inherits and a rule per site is a rule to forget.
+thirteen selectors, because the property inherits and a rule per site is a rule to forget.
 
 **`.quietcount`** is the extracted component: mono, `--text-micro`, `tabular-nums`, `ink-3`, no
 fill. Four classes shared that spec in three type steps — one of them at the *Label* step, whose
@@ -98,9 +103,10 @@ in its row.
 
 `.facet-badge` is the single **marked** count and the only one that may take the accent fill: it is
 the only signal that a filter is narrowing what you see. Six other numbers are deliberately not
-members, each for a reason now in `DESIGN.md`'s Accepted Exceptions — including two that declare
-only `color` so they inherit their heading's type run, and one (`.pop-count`) that is not a count
-at all, since it renders `"board"` and `"missing"` as often as a number.
+members, each for a reason now in `DESIGN.md`'s Accepted Exceptions — including two that declare no
+type of their own, so they inherit their heading's family, size, tracking and case, and one
+(`.pop-annotation`) that is not a count at all, since it renders `"board"` and `"missing"` as often
+as a number.
 
 ### The Drawn Control Rule
 
@@ -116,10 +122,15 @@ There were **three** checkboxes and **two** stray selects:
   wording missed it, and the most visually foreign of the three
 - the bulk bar's select and the canvas toolbar's select — the draft asserted "every `<select>`
   already takes `appearance: none`"; the shared field rule has none, so only `.rail-select` did.
-  Three selects, three type steps, one of them an OS control.
+  Three selects, three type steps, two of them OS controls.
 
-All five are drawn now. The select treatment is declared **on the element**, not on a class,
-because a select with no class is precisely the case that went wrong.
+All five are drawn now — and a later pass found two the rule had never reached, because the shared
+field rule declared no `appearance` at all: `input[type=search]` in the rail and `input[type=date]`
+in the panel both measured `appearance: auto`. `appearance` now sits on that shared rule rather than
+on nine classes, the select treatment stays declared **on the element**, and the search field's UA
+cancel button — the app's own Escape handler drawn twice — is hidden. The date field's picker
+indicator stays, because it is the only way to open the calendar; `color-scheme` is what themes it,
+and nothing had declared that either.
 
 Two mechanics worth keeping: `box-sizing: border-box` is global, so a `width: 0` box floors at its
 padding plus border — a hidden input needs `padding: 0; border: 0` as well. And the `font:`
@@ -143,10 +154,12 @@ out at 11.2px beside 13px text — a ratio of 0.862. Since the nudge is
 its own step and the ratio is 0.8 exactly. Sub-pixel and invisible — but a measurement applied
 against the wrong size is not a measurement.
 
-**Still unfinished:** `.reflink` (the panel's inbound lists) and the focus pill draw a record with
-no mark at all. This is not a CSS change: `blockedBy` and `children` ship as `{ id, title }` with
-no `isProject` or `childCount`, and `countChildren` lives in `src/view/` which `src/index/` may not
-import from. It needs a server DTO change across an architectural boundary.
+**Finished since:** `.reflink` (the panel's inbound lists) and the focus pill drew a record with no
+mark at all, and the reason looked structural — `blockedBy` and `children` shipped as
+`{ id, title }`, and the child count sat on the wrong side of an import boundary. Moving the inbound
+count into `src/index/refs.ts` for the `○` change dissolved it: `blockedBy` and `children` now ship
+`isProject` and `refCount`, and there are six `RecordMark` call sites for the six places a record
+appears. See **Still open**.
 
 ### The Word-or-Glyph Rule
 
@@ -178,10 +191,12 @@ Every member's metric lives beside its character in `Button.tsx`. A new glyph is
 **Two things that look alike are one component, unless the difference is written down.**
 
 The test is not "are they identical" but "is the difference load-bearing". This pass put twelve
-candidate families through an adversarial pass, and roughly half survived. What did not survive is
-now written down in `DESIGN.md`'s **Accepted Exceptions**, with what would have to change for each
-to go — which is the point: a rediscovered difference reads as drift, and a recorded one reads as a
-decision.
+candidate families through an adversarial pass, and roughly half survived. Four merges were
+rejected. Two of the four — the reference chip against the reference row, and the four group
+headings — are written down in `DESIGN.md`'s **Accepted Exceptions**, with what would have to change
+for each to go; the other two (the two disclosure heads, the five clickable rows) are so far
+recorded only in the families table below — which is the point: a rediscovered difference reads as
+drift, and a recorded one reads as a decision.
 
 ### The Shared Register Rule
 
@@ -202,7 +217,7 @@ popover, whose state comes off the input by sibling selector so neither surface 
 with the other.
 
 The corollary is that a merge which needs a variant per site has not found a component. It is why
-the two disclosure heads stayed apart — and, in the second verification pass, why four of nine
+the two disclosure heads stayed apart — and, in the second verification pass, why three of the six
 proposed consolidations were dropped rather than built.
 
 ---
@@ -211,13 +226,13 @@ proposed consolidations were dropped rather than built.
 
 | family | draft said | outcome |
 |---|---|---|
-| **Count** | 6 treatments, 7 declarations | 11 classes, 14 numbers. `.quietcount` extracted from 4; `tabular-nums` consolidated from 7 scattered declarations to one rule over 15 selectors; 6 exclusions recorded |
+| **Count** | 6 treatments, 7 declarations | 11 classes, 14 numbers. `.quietcount` extracted from 4; `tabular-nums` consolidated from 7 scattered declarations to one rule over 13 selectors; 6 exclusions recorded |
 | **Casing** | 1 defect (the panel) | 1 defect, confirmed — plus the lane head corrected onto its own documented step. Three uppercase sites are legitimate |
 | **Computed marker** | 2 classes, an accidental duplicate | 2 classes, a *deliberate* duplicate — and the panel's was painting a different letter. One class now, with `text-transform: none` as its load-bearing line |
 | **Quiet text** | 6 impls, 3 sizes, 2 jobs mixed | 9 classes, 4 steps. One real defect: the table said "no records match" in the app's *mono* voice through the loading class. `.emptystate` extracted from 5; the annotation half is below threshold and stays split |
 | **Drawn control** | 2 native checkboxes | 3 checkboxes and 2 selects. All drawn; the select treatment moved onto the element |
 | **Record mark** | 3 impls, 2 hardcoded sites | The picker's second implementation removed; the ribbon's hardcoded glyphs removed along with the trichotomy bug; the face's `0.8em` corrected to resolve against its title |
-| **Record reference** | 5 renderings, 4 classes | Merge rejected: five documented differences over two call sites, and it needs a DTO change. Two sites still carry no mark |
+| **Record reference** | 5 renderings, 4 classes | Merge rejected: five documented differences over two call sites. The DTO change it needed has since landed, and all six sites carry a mark |
 | **Disclosure** | 2 impls sharing only a caret | Merge rejected: four load-bearing differences, including that the rail's active state is the accent (a filter the user turned on) and the panel's is not (a property of the record) |
 | **Clickable row** | 5 impls, incidental differences | Merge rejected: the shared hover is `DESIGN.md`'s Ghost-hover token obeyed, the radii come off the documented ladder, and no reader can ever see two of them at once |
 | **Truncation** | *not in the draft* | 10 sites, one idiom, five different constraints. `.truncate` extracted |
@@ -279,7 +294,7 @@ and `accent` when picked — The Load-Bearing Left Border Rule's one element sil
 thing the rule protects, on the surface where hover is continuous. `:where()` on the state half of
 those selectors fixes it without naming the variants: an unstriped face still follows the ring on
 all four sides, and a striped one keeps its edge. `.reflink` had been surviving the identical
-collision only because its two rules tie and the stripe is declared eleven lines later.
+collision only because its two rules tie and the stripe is declared later in the file.
 
 Also from that sweep: the vault switcher swallowed both of its failures (`.catch(() => undefined)`
 and a list that fell back to `[]`), so "forget this vault" failing looked exactly like succeeding
@@ -287,8 +302,8 @@ and a failed list rendered as *no vaults* — a fifth register for a refused wri
 one. Three `className`s passed to `PopoverButton` had no CSS behind them at all. A comment sat on
 `.facetedit-values` describing the count in `.facetedit-head`, an element that only exists when
 that count does not. And `components.input-rail` referenced `{typography.body-compact}`, a key the
-`typography:` map does not contain — invisible to `test/theme.test.ts`, which compares key sets
-and never resolves a reference inside `components:`.
+`typography:` map does not contain — invisible to `test/theme.test.ts`, which compared key sets
+and resolved no reference inside `components:` — which is why it now has an eighth test that does.
 
 ## Still open
 
