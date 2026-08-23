@@ -953,7 +953,7 @@ Low confidence, and the cheapest of these to revisit.
 
 They were the panel's Body `read` / `edit` pair — the last two `.tab` uses in the app — and the entry
 here defended their `text-transform: none` and `letter-spacing: 0` as the one place a rule cancels an
-*explicit* ancestor uppercase. That defence still holds for `.derived`, which cancels the same
+*explicit* ancestor uppercase. That defence still holds for `.computed`, which cancels the same
 inherited uppercase so the panel's `ƒ` is not rendered as `Ƒ`, and which is now the only rule doing it.
 
 What retired the tab was not the casing but the shape. `.tab` said "you are in this mode" while the

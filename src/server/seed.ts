@@ -186,7 +186,7 @@ show: [project, priority]
   },
   {
     path: 'projects.yaml',
-    body: `# Every project, with its roll-ups. \`type\` is a pseudo-facet: nothing is stored.
+    body: `# Every project, with its roll-ups. \`type\` is a computed axis: nothing is stored.
 shape: table
 title: Projects
 filter:

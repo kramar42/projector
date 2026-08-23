@@ -37,7 +37,7 @@ export interface CardDTO {
    *
    * The number the record mark is read from. It counted the `parent` facet alone
    * and was called `childCount`, which is why the mark and the `type`
-   * pseudo-facet — which has always meant "named by *any* reference facet" —
+   * computed axis — which has always meant "named by *any* reference facet" —
    * could disagree about the same record.
    */
   refCount: number;

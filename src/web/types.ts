@@ -20,7 +20,7 @@ export type { ViewSpec } from '../view/spec.ts';
 export type { Dir, Shape } from '../schema/vocabulary.ts';
 export type { Meta, SavedViewSummary } from '../server/meta.ts';
 export type { FacetDef, FacetType, Facets, ResolvedProject } from '../schema/types.ts';
-export type { FacetCount, Focus, Group, Query, Rollup, ValueCount } from '../index/query.ts';
+export type { AxisCount, Focus, Group, Query, Rollup, ValueCount } from '../index/query.ts';
 export type { Enrichment, Tone } from '../enrich/types.ts';
 export type { Resolved } from '../server/enrich.ts';
 

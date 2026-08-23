@@ -355,19 +355,19 @@ export function CardPanel({
                     <>
                       <dt>
                         key
-                        <span className="derived" title={INHERITED}>ƒ</span>
+                        <span className="computed" title={INHERITED}>ƒ</span>
                       </dt>
                       <dd><code>{data.project.key}</code></dd>
                       <dt>
                         chain
-                        <span className="derived" title={INHERITED}>ƒ</span>
+                        <span className="computed" title={INHERITED}>ƒ</span>
                       </dt>
                       <dd>{data.project.chain.join(' → ')}</dd>
-                      {data.project.jira && (<><dt>jira<span className="derived" title={INHERITED}>ƒ</span></dt><dd><code>{data.project.jira}</code></dd></>)}
-                      {data.project.branch && (<><dt>branch<span className="derived" title={INHERITED}>ƒ</span></dt><dd><code>{data.project.branch}</code></dd></>)}
+                      {data.project.jira && (<><dt>jira<span className="computed" title={INHERITED}>ƒ</span></dt><dd><code>{data.project.jira}</code></dd></>)}
+                      {data.project.branch && (<><dt>branch<span className="computed" title={INHERITED}>ƒ</span></dt><dd><code>{data.project.branch}</code></dd></>)}
                       {data.project.repos.map((r) => (
                         <Fragment key={r.path}>
-                          <dt>repo<span className="derived" title={INHERITED}>ƒ</span></dt>
+                          <dt>repo<span className="computed" title={INHERITED}>ƒ</span></dt>
                           <dd><code>{r.path}</code>{r.base ? ` @ ${r.base}` : ''}</dd>
                         </Fragment>
                       ))}

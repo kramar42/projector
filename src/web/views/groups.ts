@@ -67,8 +67,8 @@ export function groupsFor(
 /**
  * Lane order, then value order, both as the server declared them.
  *
- * `data.lanes` and `data.axis` are the distinct values of the secondary and
- * primary axes in the order their facet declares. Comparing lane first is what
+ * `data.groupOrder` holds the values of each grouping level in the order its
+ * axis declares. Comparing lane first is what
  * makes a table's sections read down the page in the same order a board's rows
  * read across it. With one lane — or none — the first comparison is always zero,
  * so this is exactly the value ordering the board already had.
@@ -76,8 +76,8 @@ export function groupsFor(
 function inDeclaredOrder(groups: Group[], data: QueryResponse): Group[] {
   return [...groups].sort(
     (a, b) =>
-      rank(data.lanes, a.lane ?? '') - rank(data.lanes, b.lane ?? '') ||
-      rank(data.axis, a.value) - rank(data.axis, b.value),
+      rank(data.groupOrder.secondary, a.lane ?? '') - rank(data.groupOrder.secondary, b.lane ?? '') ||
+      rank(data.groupOrder.primary, a.value) - rank(data.groupOrder.primary, b.value),
   );
 }
 
@@ -99,10 +99,10 @@ function mergeLanes(groups: Group[]): Group[] {
   return [...byValue].map(([value, ids]) => ({ value, ids: [...new Set(ids)] }));
 }
 
-/** A value the axis does not declare sorts after the ones it does, in place. */
-function rank(axis: string[], value: string): number {
-  const i = axis.indexOf(value);
-  return i === -1 ? axis.length : i;
+/** A value the grouping order does not declare sorts after the ones it does. */
+function rank(order: string[], value: string): number {
+  const i = order.indexOf(value);
+  return i === -1 ? order.length : i;
 }
 
 /**

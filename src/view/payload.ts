@@ -37,8 +37,7 @@ export interface QueryPayload {
   ids: string[];
   context: string[];
   groups: ReturnType<typeof runQuery>['groups'];
-  axis: ReturnType<typeof runQuery>['axis'];
-  lanes: ReturnType<typeof runQuery>['lanes'];
+  groupOrder: ReturnType<typeof runQuery>['groupOrder'];
   counts: ReturnType<typeof runQuery>['counts'];
   total: number;
   universe: number;
@@ -107,8 +106,7 @@ export function queryPayload(
     ids: res.ids,
     context: res.context,
     groups,
-    axis: res.axis,
-    lanes: res.lanes,
+    groupOrder: res.groupOrder,
     counts: res.counts,
     total: res.total,
     universe: res.universe,

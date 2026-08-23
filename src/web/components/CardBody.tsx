@@ -247,7 +247,7 @@ export function tallyMeans(role: Role, n: number): string {
  * Tally a set of records by what their mark says.
  *
  * This exists because the collapsed rail was answering the same question from a
- * different source. It read the `type` pseudo-facet, whose `node` value means
+ * different source. It read the `type` computed axis, whose `node` value means
  * "named by **any** reference facet", while the mark was drawn from a count of the
  * `parent` facet alone — so the two disagreed on every record named only through
  * `blocks` or `project`. Measured on the 27-card fixture, the rail reported

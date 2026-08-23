@@ -79,7 +79,7 @@ test('a view naming an unknown axis is an error, in every position it can appear
   assert.equal(viaLabel.length, 1);
   assert.match(viaLabel[0]!.message, /reference facet/);
 
-  // Pseudo-facets are legitimate axes, and every real position is accepted.
+  // Computed axes are legitimate axes, and every real position is accepted.
   const good = validateViews(
     view({
       filter: { status: ['planning'], blocked: ['clear'] },
@@ -105,10 +105,9 @@ test('a view naming an unknown axis is an error, in every position it can appear
 test('grouping is one answer, and the empty-group policy is an argument', () => {
   const data = {
     ids: ['a', 'b'],
-    axis: ['now', 'month', 'backlog'],
-    lanes: [],
+    groupOrder: { primary: ['now', 'month', 'backlog'], secondary: [] },
     groups: [
-      // Deliberately out of axis order, and one empty.
+      // Deliberately out of the declared order, and one empty.
       { value: 'backlog', ids: ['b'] },
       { value: 'month', ids: [] },
       { value: 'now', ids: ['a'] },
@@ -118,7 +117,7 @@ test('grouping is one answer, and the empty-group policy is an argument', () => 
   assert.deepEqual(
     groupsFor(data, { lanes: 'all', empties: 'keep' }).map((g) => g.value),
     ['now', 'month', 'backlog'],
-    'ordered by the axis the server declared, not by arrival',
+    'ordered by the grouping order the server declared, not by arrival',
   );
   assert.deepEqual(
     groupsFor(data, { lanes: 'all', empties: 'drop' }).map((g) => g.value),
@@ -133,11 +132,10 @@ test('grouping is one answer, and the empty-group policy is an argument', () => 
   assert.deepEqual(groupsFor(flat, { lanes: 'all', empties: 'keep' }), [{ value: '', ids: ['a', 'b'] }]);
 });
 
-test('a value the axis does not declare sorts after the ones it does', () => {
+test('a value the grouping order does not declare sorts after the ones it does', () => {
   const data = {
     ids: [],
-    axis: ['now'],
-    lanes: [],
+    groupOrder: { primary: ['now'], secondary: [] },
     groups: [
       { value: 'adhoc', ids: ['x'] },
       { value: 'now', ids: ['y'] },
@@ -161,7 +159,7 @@ test('a facet may not take a reserved name, and the sort keys prove why', () => 
   const issues = validateVocabulary(declaredFacets(file), '/data/facets.yaml');
   const named = issues.map((i) => i.field).sort();
 
-  // `blocked` is a pseudo-facet and would be silently shadowed; `updated` is a
+  // `blocked` is a computed axis and would be silently shadowed; `updated` is a
   // sortable record field; `project` is built-in and this one sets its *shape*.
   // `layer` is an ordinary axis and must survive.
   assert.deepEqual(named, ['blocked', 'project', 'updated']);

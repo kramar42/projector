@@ -174,7 +174,7 @@ test('facets are ANDed, values within one are ORed', () => {
   }
 });
 
-test('pseudo-facets filter exactly like stored ones', () => {
+test('computed axes filter exactly like stored ones', () => {
   const { root, cleanup } = vault();
   try {
     assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
@@ -212,7 +212,7 @@ test('triage asks for the facets the vault says it expects, and nothing else', (
     // list used to be a literal naming three facets; a vault deciding a fourth
     // now gets it everywhere without an edit here.
     // Built-ins lead the vocabulary, so `project` leads this too.
-    assert.deepEqual(open(root)({ groupBy: ['triage'] }).axis, [
+    assert.deepEqual(open(root)({ groupBy: ['triage'] }).groupOrder.primary, [
       'needs-project',
       'needs-priority',
       'needs-status',
@@ -543,8 +543,8 @@ test('a second grouping axis makes a matrix, not a new concept', () => {
     const res = open(root)({ groupBy: ['priority', 'status'], filter: { priority: ['now', 'month'] } });
     // `backlog` is excluded by the filter on the very axis this groups by, so it
     // is not a column. `status` is unfiltered, so every lane it declares stays.
-    assert.deepEqual(res.axis, ['now', 'month']);
-    assert.deepEqual(res.lanes, ['planning', 'active', 'done']);
+    assert.deepEqual(res.groupOrder.primary, ['now', 'month']);
+    assert.deepEqual(res.groupOrder.secondary, ['planning', 'active', 'done']);
     // Every cell exists, in reading order, so an empty one still holds its place.
     assert.deepEqual(
       res.groups!.filter((g) => g.lane !== 'done').map((g) => `${g.lane}/${g.value}:${g.ids.length}`),
@@ -574,12 +574,12 @@ test('a value the filter excludes is not a column; an admitted empty one still i
     // `backlog` is declared and admitted, and no card carries it — the empty
     // column a board wants, because it is somewhere to drag to.
     const wide = run({ groupBy: ['priority'] });
-    assert.deepEqual(wide.axis, ['now', 'month', 'backlog', NONE]);
+    assert.deepEqual(wide.groupOrder.primary, ['now', 'month', 'backlog', NONE]);
 
     // Narrow the same axis and the excluded values stop being columns. `month`
     // stays at zero: admitted, and emptied by the *other* half of the filter.
     const narrow = run({ groupBy: ['priority'], filter: { priority: ['now', 'month'], status: ['active'] } });
-    assert.deepEqual(narrow.axis, ['now', 'month']);
+    assert.deepEqual(narrow.groupOrder.primary, ['now', 'month']);
     assert.deepEqual(
       narrow.groups!.map((g) => `${g.value}:${g.ids.length}`),
       ['now:2', 'month:0'],
@@ -598,8 +598,8 @@ test('the lane axis narrows on the same rule as the column axis', () => {
       groupBy: ['status', 'priority'],
       filter: { priority: ['now'] },
     });
-    assert.deepEqual(res.lanes, ['now']);
-    assert.deepEqual(res.axis, ['planning', 'active', 'done'], 'the unfiltered axis is untouched');
+    assert.deepEqual(res.groupOrder.secondary, ['now']);
+    assert.deepEqual(res.groupOrder.primary, ['planning', 'active', 'done'], 'the unfiltered axis is untouched');
   } finally {
     cleanup();
   }
@@ -611,7 +611,7 @@ test('a derived axis narrows too, having no vocabulary of its own to defend', ()
     const res = open(root)({ groupBy: ['blocked'], filter: { blocked: ['clear'] } });
     // `blocked` and `waiting` are excluded. Nothing can be dragged onto a derived
     // axis in any case, so an empty column there was decoration.
-    assert.deepEqual(res.axis, ['clear']);
+    assert.deepEqual(res.groupOrder.primary, ['clear']);
   } finally {
     cleanup();
   }
@@ -630,7 +630,7 @@ test('a range selection narrows nothing, so no card loses its column', () => {
     const res = open(root)({ groupBy: ['due'], filter: { due: ['>2026-01-01'] } });
     // Every bucket the facet declares, exactly as before: the tokens are
     // expressions, and nothing here can say which buckets they cover.
-    assert.deepEqual(res.axis, ['overdue', 'today', 'week', 'later']);
+    assert.deepEqual(res.groupOrder.primary, ['overdue', 'today', 'week', 'later']);
     // And the invariant itself, for the name case: every hit is placed somewhere.
     const named = open(root)({ groupBy: ['priority'], filter: { priority: ['now'] } });
     const placed = new Set(named.groups!.flatMap((g) => g.ids));
@@ -651,10 +651,10 @@ test('narrowing a multi-valued axis drops extra placements but never a card', ()
     const run = open(root);
     const both = { tech: ['kafka', 'keycloak'] };
     const wide = run({ groupBy: ['tech'], filter: both });
-    assert.deepEqual(wide.axis, ['keycloak', 'kafka']);
+    assert.deepEqual(wide.groupOrder.primary, ['keycloak', 'kafka']);
 
     const one = run({ groupBy: ['tech'], filter: { tech: ['kafka'] } });
-    assert.deepEqual(one.axis, ['kafka']);
+    assert.deepEqual(one.groupOrder.primary, ['kafka']);
     // The cards themselves are untouched — only the column they also sat in went.
     assert.equal(one.total, 1);
     assert.equal(one.placements, 1);
@@ -674,8 +674,8 @@ test('grouping options read the same on either axis', () => {
     const res = run({ groupBy: ['status', 'priority'] });
     // `project-a-eventing` is a node with no facets at all, so both axes have a
     // (none), and it trails on both.
-    assert.deepEqual(res.axis, ['planning', 'active', 'done', NONE]);
-    assert.deepEqual(res.lanes, ['now', 'month', 'backlog', NONE]);
+    assert.deepEqual(res.groupOrder.primary, ['planning', 'active', 'done', NONE]);
+    assert.deepEqual(res.groupOrder.secondary, ['now', 'month', 'backlog', NONE]);
   } finally {
     cleanup();
   }
@@ -991,7 +991,7 @@ test('the linked axis makes external references askable', () => {
     assert.deepEqual(ids(root, { filter: { linked: ['url'] } }), ['keycloak']);
     const axis = open(root)({}).counts.find((c) => c.facet === 'linked');
     assert.ok(axis);
-    assert.equal(axis.pseudo, true);
+    assert.equal(axis.computed, true);
   } finally {
     cleanup();
   }

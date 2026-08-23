@@ -62,7 +62,7 @@ export function Sidebar({
    * What the collapsed ribbon reports: the records on screen, tallied by what
    * their own mark says.
    *
-   * It used to read the `type` pseudo-facet and name three of its values, which
+   * It used to read the `type` computed axis and name three of its values, which
    * was wrong twice over: it named a facet in the UI (C4), and it answered the
    * question from a different source than the marks did — `type`'s `node` counts a
    * record named by *any* reference facet, where a drawn `○` then meant the

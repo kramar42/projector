@@ -146,14 +146,14 @@ function InboundRow({
   const shown = all ? records : records.slice(0, INBOUND_CUTOFF);
 
   return (
-    <div className="facetrow is-derived">
+    <div className="facetrow is-computed">
       <span className="facetrow-label">
         {label}
         {/* The same `ƒ` the filter rail puts on an axis it computed rather than
             read — there is no edit here because the edit lives on the other card.
             Marker then count, in that order and pushed to the column's inner
             edge, because that is the order and the position the rail uses. */}
-        <span className="derived" title={means}>
+        <span className="computed" title={means}>
           ƒ
         </span>
         {records.length > 1 && <span className="quietcount">{records.length}</span>}

@@ -1,4 +1,4 @@
-import { PSEUDO } from '../index/query.ts';
+import { COMPUTED } from '../index/query.ts';
 import { HUES, isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
 import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
@@ -10,7 +10,7 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * choice of *names*, and a saved view.
  *
  * Beside `ViewSpec` rather than in `src/schema/`, because neither is a schema
- * concern: both check against the facet vocabulary *and* against `PSEUDO`, so
+ * concern: both check against the facet vocabulary *and* against `COMPUTED`, so
  * putting them in `schema/` made the lowest layer import both `index/` and
  * `view/` — the floor reaching up two storeys. `src/schema/` is where a card's
  * shape is decided; a view is a query over cards, which is one level out.
@@ -19,9 +19,9 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
 /**
  * Names a facet may not take.
  *
- * Two of these are *correctness* collisions rather than confusion. A pseudo-facet
+ * Two of these are *correctness* collisions rather than confusion. A computed axis
  * shares the facet namespace outright and wins it — `valuesOf` reaches for
- * `PSEUDO[facet]` first — so a facet named `type` or `blocked` would store
+ * `COMPUTED[facet]` first — so a facet named `type` or `blocked` would store
  * values, validate writes, draw a row in the panel, and then be ignored by every
  * query: writes succeeding while reads lie. And `title`, `updated` and `created`
  * are sortable record fields, so a facet wearing one of those names is either
@@ -36,7 +36,7 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * declare one — to label it, colour it, or ask for it in triage. What it may not
  * do is change its shape, which is the separate check below.
  */
-export const RESERVED: readonly string[] = [...KEY_ORDER, 'body', ...Object.keys(PSEUDO)].filter(
+export const RESERVED: readonly string[] = [...KEY_ORDER, 'body', ...Object.keys(COMPUTED)].filter(
   // `project` names both a frontmatter block and a built-in facet, so it reaches
   // this list through `KEY_ORDER` and has to be lifted back out: the structural
   // check below is the one that judges it, and it judges it more precisely.
@@ -158,7 +158,7 @@ export function validateViews(
   const issues: Issue[] = [];
   // A stored axis or a computed one: `blocked` is no less askable than `status`
   // for being derived (C4), and a view may name either.
-  const known = (name: string) => !!facets[name] || !!PSEUDO[name];
+  const known = (name: string) => !!facets[name] || !!COMPUTED[name];
 
   for (const { spec, file, raw } of views) {
     const at = (field: string, message: string) =>

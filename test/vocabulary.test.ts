@@ -14,7 +14,7 @@ import { declaredFacets } from '../src/schema/facets.ts';
 import { loadViews, viewFiles } from '../src/server/views.ts';
 import { queryPayload } from '../src/view/payload.ts';
 import { parseSpec } from '../src/view/spec.ts';
-import { PSEUDO } from '../src/index/query.ts';
+import { COMPUTED } from '../src/index/query.ts';
 import { LINK_KINDS } from '../src/schema/links.ts';
 import { channelNames } from '../src/intake/run.ts';
 
@@ -83,7 +83,7 @@ test('no facet a vault declares is named in the code that serves every vault', (
   const ours = new Set<string>([
     ...LINK_KINDS,
     ...channelNames(),
-    ...Object.values(PSEUDO).flatMap((p) => p.values(seeded)),
+    ...Object.values(COMPUTED).flatMap((p) => p.values(seeded)),
   ]);
 
   const words = new Set<string>();

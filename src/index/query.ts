@@ -9,7 +9,7 @@ import { blockedSet, blockingFacets } from './blocking.ts';
  * One query compiler, for the server and the CLI.
  *
  * Filtering runs in memory over the record map rather than in SQL. That is not a
- * performance trade — at this scale both are free — it is what lets a pseudo-facet
+ * performance trade — at this scale both are free — it is what lets a computed axis
  * be indistinguishable from a real one. `blocked` and `triage` have no row
  * in the `facets` table, so in SQL each would need its own expression in the
  * filter, in the grouping and in the histogram; in JS they need one function and
@@ -41,7 +41,7 @@ export interface Focus {
 }
 
 export interface Query {
-  /** facet or pseudo-facet → any of these values. `NONE` matches absence. */
+  /** facet or computed axis → any of these values. `NONE` matches absence. */
   filter?: Record<string, string[]>;
   q?: string;
   focus?: Focus;
@@ -61,10 +61,10 @@ export interface ValueCount {
   selected: boolean;
 }
 
-export interface FacetCount {
+export interface AxisCount {
   facet: string;
   label: string;
-  pseudo: boolean;
+  computed: boolean;
   values: ValueCount[];
 }
 
@@ -83,11 +83,19 @@ export interface QueryResult {
   /** Ancestors pulled in for connectivity. Disjoint from `ids`. */
   context: string[];
   groups: Group[] | null;
-  /** Distinct values of the primary axis, in order — a board's columns. */
-  axis: string[];
-  /** Distinct values of the secondary axis, in order — a board's lanes. */
-  lanes: string[];
-  counts: FacetCount[];
+  /**
+   * The values each grouping level presents, in the order its axis declares.
+   *
+   * A board reads `primary` as its columns and `secondary` as its lanes; a table
+   * as sections and sub-sections; a canvas as bands. Named for the grouping
+   * rather than for any of those, because all three read the same two lists.
+   *
+   * These were `axis` and `lanes` — one field named after the concept and its
+   * twin after a board's rendering, and `axis` meaning a *list of values* while
+   * the same word everywhere else means the thing you group by.
+   */
+  groupOrder: { primary: string[]; secondary: string[] };
+  counts: AxisCount[];
   total: number;
   /**
    * Records left by focus and search, before the facet filter — so
@@ -100,7 +108,7 @@ export interface QueryResult {
   placements: number;
 }
 
-// ---------------------------------------------------------------- pseudo-facets
+// ---------------------------------------------------------------- computed axes
 
 interface Ctx {
   /** Records named by another record through any declared reference facet. */
@@ -111,7 +119,7 @@ interface Ctx {
   today: string;
 }
 
-interface Pseudo {
+interface Computed {
   label: string;
   /**
    * The values this axis admits, in order.
@@ -167,7 +175,7 @@ export function triageGaps(rec: Rec, facets: Facets): string[] {
  * app-written `updated` field. `due` used to sit here bucketing a stored value —
  * that is what an ordered facet's own `buckets` do now, so it left.
  */
-export const PSEUDO: Record<string, Pseudo> = {
+export const COMPUTED: Record<string, Computed> = {
   type: {
     label: 'Type',
     values: () => ['project', 'node', 'plain'],
@@ -233,8 +241,8 @@ export const PSEUDO: Record<string, Pseudo> = {
  * one place the two representations differ, and `rankOf` is the other side of it.
  */
 function valuesOf(rec: Rec, facet: string, ctx: Ctx): string[] {
-  const pseudo = PSEUDO[facet];
-  if (pseudo) return pseudo.of(rec, ctx);
+  const computed = COMPUTED[facet];
+  if (computed) return computed.of(rec, ctx);
   const raw = rec.facets[facet] ?? [];
   const def = ctx.facets[facet];
   if (!def?.buckets?.length) return raw;
@@ -325,10 +333,10 @@ function comparator(sort: string[] | undefined, ctx: Ctx): Comparator {
     const def = ctx.facets[name];
     const values = valuesOf(rec, name, ctx);
     if (!values.length) return Number.MAX_SAFE_INTEGER;
-    const pseudo = PSEUDO[name];
+    const computed = COMPUTED[name];
     // A facet's own declared order is its sort order; `priority:asc` means
     // now → month → backlog, which is the whole point of declaring it.
-    const order = pseudo ? pseudo.values(ctx.facets) : def?.values;
+    const order = computed ? computed.values(ctx.facets) : def?.values;
     return Math.min(...values.map((v) => (order ? indexOrLast(order, v) : facetRank(def, v))));
   };
 
@@ -461,13 +469,13 @@ function admitted(selection: string[] | undefined): Set<string> | null {
  * other one. Count against the fully filtered set instead and every unselected
  * value reads 0, so a selection could be narrowed but never widened.
  */
-function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): FacetCount[] {
-  const names = [...Object.keys(ctx.facets), ...Object.keys(PSEUDO)];
-  const out: FacetCount[] = [];
+function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): AxisCount[] {
+  const names = [...Object.keys(ctx.facets), ...Object.keys(COMPUTED)];
+  const out: AxisCount[] = [];
 
   for (const facet of names) {
     const selected = filter[facet] ?? [];
-    const pseudo = PSEUDO[facet];
+    const computed = COMPUTED[facet];
 
     // Offered? Ask the universe, ignoring the facet filter entirely.
     let anywhere = false;
@@ -481,7 +489,7 @@ function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): Fac
 
     // The axis's vocabulary: what it declares, plus any value the data holds that
     // it did not. For an open facet with no `values:` this is just the data.
-    const declared = pseudo ? pseudo.values(ctx.facets) : orderValues(ctx.facets[facet], seen);
+    const declared = computed ? computed.values(ctx.facets) : orderValues(ctx.facets[facet], seen);
 
     // An axis the *query mentions* stays offered, even with nothing selected on
     // it. `f.due=` is the query saying "explicitly nothing here", which is a
@@ -519,8 +527,8 @@ function histogram(base: Rec[], filter: Record<string, string[]>, ctx: Ctx): Fac
     if (values.some((v) => v.value !== NONE || v.selected)) {
       out.push({
         facet,
-        label: pseudo?.label ?? ctx.facets[facet]?.label ?? facet,
-        pseudo: Boolean(pseudo),
+        label: computed?.label ?? ctx.facets[facet]?.label ?? facet,
+        computed: Boolean(computed),
         values,
       });
     }
@@ -590,8 +598,8 @@ export function runQuery(
 
   const grouping = (query.groupBy ?? []).filter(Boolean);
   let groups: Group[] | null = null;
-  let axis: string[] = [];
-  let lanes: string[] = [];
+  let primary: string[] = [];
+  let secondary: string[] = [];
   let placements = ids.length;
 
   if (grouping.length) {
@@ -614,7 +622,7 @@ export function runQuery(
           else buckets.set(v, [rec.id]);
         }
       }
-      const pseudo = PSEUDO[facet];
+      const computed = COMPUTED[facet];
       // Every value the query *admits* gets a group, empty or not: a priority
       // board missing its `now` column reads as though the column did not exist,
       // and an empty admitted column is somewhere to drag a card to. A value the
@@ -625,7 +633,7 @@ export function runQuery(
       // stays a subset of what the facet declares. A selection naming a value no
       // card carries and no vocabulary declares is a broken URL, not a column.
       const admit = admitted(filter[facet]);
-      const order = (pseudo ? pseudo.values(facets) : orderValues(facets[facet], seen)).filter(
+      const order = (computed ? computed.values(facets) : orderValues(facets[facet], seen)).filter(
         (v) => admit === null || admit.has(v),
       );
       // `(none)` needs no test of its own, and no policy either. A card with no
@@ -646,27 +654,27 @@ export function runQuery(
       return { order, buckets };
     };
 
-    const primary = spread(grouping[0]!);
-    axis = primary.order;
+    const first = spread(grouping[0]!);
+    primary = first.order;
 
     if (grouping.length === 1) {
-      groups = axis.map((value) => ({ value, ids: primary.buckets.get(value) ?? [] }));
+      groups = primary.map((value) => ({ value, ids: first.buckets.get(value) ?? [] }));
     } else {
-      const secondary = spread(grouping[1]!);
-      lanes = secondary.order;
+      const second = spread(grouping[1]!);
+      secondary = second.order;
       const laneOf = new Map<string, Set<string>>();
-      for (const lane of lanes) laneOf.set(lane, new Set(secondary.buckets.get(lane) ?? []));
+      for (const lane of secondary) laneOf.set(lane, new Set(second.buckets.get(lane) ?? []));
       // Every cell of the matrix, in reading order. A card multi-valued on both
       // axes lands in every cell it belongs to, exactly as it lands in every
       // column on a one-axis board.
       groups = [];
-      for (const lane of lanes) {
+      for (const lane of secondary) {
         const inLane = laneOf.get(lane)!;
-        for (const value of axis) {
+        for (const value of primary) {
           groups.push({
             value,
             lane,
-            ids: (primary.buckets.get(value) ?? []).filter((id) => inLane.has(id)),
+            ids: (first.buckets.get(value) ?? []).filter((id) => inLane.has(id)),
           });
         }
       }
@@ -678,8 +686,7 @@ export function runQuery(
     ids,
     context,
     groups,
-    axis,
-    lanes,
+    groupOrder: { primary, secondary },
     counts: histogram(universe, filter, ctx),
     total: ids.length,
     universe: universe.length,
@@ -732,7 +739,7 @@ export function projectRollups(
       const member = records.get(id);
       if (!member) continue;
       if (waitedOn.has(id)) blocked++;
-      // `triageGaps` directly: reaching through the pseudo-facet needed a `Ctx`,
+      // `triageGaps` directly: reaching through the computed axis needed a `Ctx`,
       // and it is the same answer one layer less indirect.
       if (triageGaps(member, facets).length) untriaged++;
       if (member.updated && (!touched || member.updated > touched)) touched = member.updated;

@@ -272,7 +272,7 @@ body {
  *
  * Italic because that is what italic already means throughout this stylesheet:
  * no real value here. `.facet-name.is-none`, `.togglechip.is-none`,
- * `.togglechip.is-extra`, `.derived`, `.picker-item.is-clear` and the editor's
+ * `.togglechip.is-extra`, `.computed`, `.picker-item.is-clear` and the editor's
  * placeholder all carry it for the same reason, and an empty state is the same
  * statement about a whole surface rather than one row.
  *
@@ -1842,7 +1842,7 @@ input:focus-visible + .checkbox {
   padding-top: 1px;
 }
 
-.kv dt .derived {
+.kv dt .computed {
   margin-left: auto;
 }
 
@@ -1856,11 +1856,11 @@ input:focus-visible + .checkbox {
  * part of the number. The annotation belongs to the label; the count is the thing
  * with a right edge to sit on.
  */
-.facetrow.is-derived .facetrow-label .derived {
+.facetrow.is-computed .facetrow-label .computed {
   margin-left: 3px;
 }
 
-.facetrow.is-derived .facetrow-label .quietcount {
+.facetrow.is-computed .facetrow-label .quietcount {
   margin-left: auto;
 }
 
@@ -2428,7 +2428,7 @@ textarea { resize: vertical; font-family: inherit; }
  *
  * One mark, four places: the filter rail's pseudo-facet head, the panel's two
  * inbound lists, and the panel's Inherited block. It was two classes with five
- * identical declarations — `.facet-pseudo` and `.derived`, the second added
+ * identical declarations — `.facet-computed` and `.computed`, the second added
  * deliberately and with a comment naming the first, stating the intent as "one
  * mark means one thing in both places".
  *
@@ -2445,7 +2445,7 @@ textarea { resize: vertical; font-family: inherit; }
  * the panel has no notion of a "pseudo-facet", and the rail's axis is derived in
  * exactly the sense the panel's list is.
  */
-.derived {
+.computed {
   font-family: var(--mono);
   font-size: var(--text-title);
   line-height: 1;
@@ -2459,7 +2459,7 @@ textarea { resize: vertical; font-family: inherit; }
 /* Spacing belongs to the container, not the mark. The rail's facet head is a flex
    row that already gaps its children; a panel heading is inline flow, so it is the
    one that has to say so. */
-.panel-section h3 .derived {
+.panel-section h3 .computed {
   margin-left: 5px;
 }
 
@@ -2579,14 +2579,14 @@ textarea { resize: vertical; font-family: inherit; }
  * `display: flex` overrides the `display: contents` every other row takes, which is
  * how one class can be both a grid participant and a block that spans it.
  */
-.facetrow.is-derived {
+.facetrow.is-computed {
   display: flex;
   flex-direction: column;
   gap: 4px;
   grid-column: 1 / -1;
 }
 
-.facetrow.is-derived .facetrow-values {
+.facetrow.is-computed .facetrow-values {
   flex-direction: column;
   align-items: stretch;
   gap: 3px;

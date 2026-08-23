@@ -174,7 +174,9 @@ export function BoardView({
   // A board keeps an empty declared column: it is somewhere to drag a card to.
   const columns = (lane: string | undefined): Group[] => groupsFor(data, { lane, empties: 'keep' });
 
-  const lanes = data.lanes.length ? data.lanes : [undefined];
+  const lanes: (string | undefined)[] = data.groupOrder.secondary.length
+    ? data.groupOrder.secondary
+    : [undefined];
 
   // What the bar writes: the selection narrowed to what this board draws, so a
   // card carried in the URL from another shape is remembered without being

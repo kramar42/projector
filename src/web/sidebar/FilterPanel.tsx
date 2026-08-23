@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NONE } from '../../schema/vocabulary.ts';
 import { labelFor } from '../views/groups.ts';
 import { toggleFilterValue } from '../../view/intents.ts';
-import type { FacetCount } from '../types.ts';
+import type { AxisCount } from '../types.ts';
 import type { Edit } from '../types.ts';
 
 /**
@@ -22,7 +22,7 @@ import type { Edit } from '../types.ts';
  * - **Selected facets come first**, so an active refinement is never scrolled
  *   out of sight.
  */
-export function FilterPanel({ counts, edit }: { counts: FacetCount[]; edit: Edit }) {
+export function FilterPanel({ counts, edit }: { counts: AxisCount[]; edit: Edit }) {
   const active = counts.filter((c) => c.values.some((v) => v.selected));
   const rest = counts.filter((c) => !c.values.some((v) => v.selected));
 
@@ -54,7 +54,7 @@ const CUTOFF = 8;
  * keeps the column the eye scans down, which is what a filter rail is for.
  */
 
-function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
+function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
   const selected = facet.values.filter((v) => v.selected);
   /**
    * A facet you are using is open; one you are not is collapsed, or ten facets of
@@ -79,8 +79,8 @@ function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
       <button className="facet-head" onClick={() => setManual(!open)}>
         <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
         <span className="truncate facet-label">{facet.label}</span>
-        {facet.pseudo && (
-          <span className="derived" title="computed from the cards, not stored on them">
+        {facet.computed && (
+          <span className="computed" title="computed from the cards, not stored on them">
             ƒ
           </span>
         )}
@@ -126,7 +126,7 @@ function Value({
   value,
   onToggle,
 }: {
-  value: FacetCount['values'][number];
+  value: AxisCount['values'][number];
   onToggle: () => void;
 }) {
   const label = labelFor(value.value);

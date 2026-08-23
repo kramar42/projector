@@ -40,7 +40,7 @@ export function BulkBar({
   const container = Object.entries(facets).find(([, d]) => d.type === 'ref' && d.single)?.[0];
   const [pickRelation, setPickRelation] = useState(false);
   const [facet, setFacet] = useState('');
-  const editable = counts.filter((c) => !c.pseudo);
+  const editable = counts.filter((c) => !c.computed);
   const chosen = editable.find((c) => c.facet === facet);
   const hue = useHue(facet);
 

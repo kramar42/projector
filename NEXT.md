@@ -37,6 +37,20 @@ needs to be part of two things.
 
   Revisit when a numeric facet exists or deadlines are in use, i.e. when there is a question on screen
   that cannot be answered.
+- **`created` and `updated` as axes.** They are note fields rather than facets, so `sort` accepts them
+  and `filter` and `groupBy` do not — `validateViews` exempts exactly those three names, `title`
+  included. The asymmetry is real and will not stay comfortable: "everything I touched this week" is a
+  `staleness` question the computed axis answers only in four fixed buckets, and "opened in August" has
+  no answer at all.
+
+  What they need is what an ordered facet already has. `updated` is a date; give it buckets and it
+  filters and groups exactly as `due` does, with the same `(none)`-free axis because every note has one.
+  The obstacle is not the query engine — `valuesOf` reads a facet map and these are not in it — so it is
+  a question of where a note field's *axis definition* lives, given that `facets.yaml` is for what a
+  vault declares and these two are the app's.
+
+  Not now because `staleness` covers the common case and nothing has asked for the rest.
+
 - **`container: true`, when the proxy breaks.** Three semantics are inferred from `single: true` on a
   reference facet: which records are siblings, which relation the bulk bar's "set …" button writes, and
   — for `single` alone, any type — which axes `pj log` narrates. `single` is a *structural* property
