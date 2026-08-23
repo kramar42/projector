@@ -10,12 +10,11 @@
  * *disagrees* still shows as two edges pointing at different records — the case
  * worth seeing.
  *
- * **Hierarchy edges flip.** They are stored child → parent and member →
- * container; drawn the other way, so the arrow points the way the graph opens.
- * Which relations are hierarchies is the server's answer, arriving as
- * `hierarchies` — a property of the relation. It used to arrive as `layout`,
- * which is a property of the *view*, so a canvas laid out by `blocks` drew every
- * arrow backwards and a `parent`+`project` pair refused to collapse.
+ * **Every edge flips.** A reference facet is stored on the record that depends —
+ * child, member, the card that is stuck — and points at what it depends on; drawn
+ * the other way, so the arrow points the way the graph opens. This was once a
+ * per-relation question answered by the server, because `blocks` was stored
+ * backwards from the other two. It is not a question any more.
  *
  * **The most structural type leads.** A pair joined by several relations is
  * styled by one of them, and the order is fixed rather than incidental.
@@ -37,19 +36,13 @@ export interface EdgeSpec {
 /** Structural before incidental: containment explains a layout, blocking does not. */
 const LEAD_ORDER = ['parent', 'project', 'blocked_by'];
 
-export function edgesFor(
-  raw: { src: string; dst: string; type: string }[],
-  hierarchy: readonly string[],
-): EdgeSpec[] {
+export function edgesFor(raw: { src: string; dst: string; type: string }[]): EdgeSpec[] {
   const byPair = new Map<string, { src: string; dst: string; types: string[] }>();
   for (const e of raw) {
-    const flip = hierarchy.includes(e.type);
-    const src = flip ? e.dst : e.src;
-    const dst = flip ? e.src : e.dst;
-    const key = `${src}\u0000${dst}`;
+    const key = `${e.dst}\u0000${e.src}`;
     const found = byPair.get(key);
     if (found) found.types.push(e.type);
-    else byPair.set(key, { src, dst, types: [e.type] });
+    else byPair.set(key, { src: e.dst, dst: e.src, types: [e.type] });
   }
 
   return [...byPair.values()].map((pair) => ({

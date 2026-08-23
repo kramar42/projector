@@ -100,11 +100,8 @@ const DASH: Record<string, string | undefined> = {
  * Turn the decided edges into React Flow's shape. The decisions — pairing,
  * direction, which type leads — are `edgesFor`; everything here is appearance.
  */
-function buildEdges(
-  raw: { src: string; dst: string; type: string }[],
-  hierarchy: string[],
-): Edge[] {
-  return edgesFor(raw, hierarchy).map(({ src, dst, types, lead }) => {
+function buildEdges(raw: { src: string; dst: string; type: string }[]): Edge[] {
+  return edgesFor(raw).map(({ src, dst, types, lead }) => {
     const colour = RELATION_COLOUR[lead] ?? 'var(--rel-parent)';
     return {
       id: `${types.join('+')}:${src}->${dst}`,
@@ -162,19 +159,17 @@ export function CanvasView({
     // Stored positions only ever come from a saved view. An ad-hoc query has no
     // file to hold arrangement, so it is auto-laid-out — naming a view is what
     // buys manual positioning (C9).
-    // Both computed by the server, not here. `layout` is the relation this canvas
-    // lays out by — the same one `connect` walked for context, and two
-    // computations of that could disagree. `hierarchies` is which relations point
-    // at their container.
+    // Computed by the server, not here: `layout` is the relation this canvas lays
+    // out by, and it is the same one `connect` walked for context — two
+    // computations of that could disagree.
     //
-    // One value used to serve both, and they are different questions: a canvas
-    // laid out by `blocks` flipped every blocks edge, so the chain read "is
-    // blocked by" while the label said `blocks`, and dagre put the blocker on the
-    // right. It also meant a record inside a project drew two lines instead of
-    // one, because the `parent` edge flipped and the `project` edge beside it did
-    // not — defeating the collapse `edgesFor` exists to do.
+    // It used to answer a second question too, "which relations point at their
+    // container", which is a property of the *relation* rather than the view. So
+    // a canvas laid out by `blocks` flipped every blocks edge and dagre put the
+    // blocker on the right, while a record inside a project drew two lines
+    // instead of one. Every reference points at what it depends on now, so
+    // nothing has to say which do.
     const layoutBy = data.layout ? [data.layout] : [];
-    const inward = data.hierarchies;
     // `groupBy` used to be accepted and ignored here, so switching shape never
     // dropped the parameter. It draws now: one band per value of the primary
     // axis, in the order the facet declares.
@@ -183,10 +178,10 @@ export function CanvasView({
     const groups = data.groups ? groupsFor(data, { lanes: 'merged', empties: 'drop' }) : [];
     const clustered = groups.length > 0;
     const auto = clustered
-      ? clusteredLayout(shown, data.relations, layoutBy, groups, inward)
-      : treeLayout(shown, data.relations, 'LR', layoutBy, inward);
+      ? clusteredLayout(shown, data.relations, layoutBy, groups)
+      : treeLayout(shown, data.relations, 'LR', layoutBy);
     const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.relations, stored, layoutBy, inward, auto)
+      ? manualLayout(shown, data.relations, stored, layoutBy, auto)
       : auto;
 
     const rfNodes: Node[] = shown.map((card) => {
@@ -231,7 +226,7 @@ export function CanvasView({
       : [];
 
     // Bands first, so a record is always drawn over its own background.
-    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, inward) };
+    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations) };
   }, [data, onOpen]);
 
   useEffect(() => {

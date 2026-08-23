@@ -4,7 +4,6 @@ import { loadCard, } from '../src/schema/card.ts';
 import { createCard, deleteCard, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, treeLayout } from '../src/web/views/layout.ts';
-import { INWARD_REFS } from '../src/schema/vocabulary.ts';
 import type { CardDTO } from '../src/web/types.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
@@ -207,8 +206,9 @@ test('an empty declared value gets no band', () => {
  */
 test('the root sits left whichever relation the canvas lays out by', () => {
   const nodes = [face('blocker'), face('blocked')];
-  const chain = [{ src: 'blocker', dst: 'blocked', type: 'blocks' }];
-  const placed = treeLayout(nodes, chain, 'LR', ['blocks'], INWARD_REFS);
+  // Stored on the card that is stuck, like every other reference.
+  const chain = [{ src: 'blocked', dst: 'blocker', type: 'blocked_by' }];
+  const placed = treeLayout(nodes, chain, 'LR', ['blocked_by']);
   assert.ok(
     placed.get('blocker')!.x < placed.get('blocked')!.x,
     'the blocker is the root of a dependency chain, so it is drawn first',
@@ -218,18 +218,18 @@ test('the root sits left whichever relation the canvas lays out by', () => {
 test('a container sits left of its member', () => {
   const nodes = [face('child'), face('box')];
   const tree = [{ src: 'child', dst: 'box', type: 'parent' }];
-  const placed = treeLayout(nodes, tree, 'LR', ['parent'], INWARD_REFS);
+  const placed = treeLayout(nodes, tree, 'LR', ['parent']);
   assert.ok(placed.get('box')!.x < placed.get('child')!.x, 'stored child → parent, drawn parent → child');
 });
 
 /**
  * The relation a canvas lays out by is the only one that positions anything. A
- * `blocks` edge on a canvas laid out by `parent` still draws — `edgesFor` decides
- * that — but it must not drag a node into another rank.
+ * A `blocked_by` edge on a canvas laid out by `parent` still draws — `edgesFor`
+ * decides that — but it must not drag a node into another rank.
  */
 test('only the layout relation feeds the layout', () => {
   const nodes = [face('a'), face('b')];
-  const edges = [{ src: 'a', dst: 'b', type: 'blocks' }];
-  const placed = treeLayout(nodes, edges, 'LR', ['parent'], INWARD_REFS);
+  const edges = [{ src: 'a', dst: 'b', type: 'blocked_by' }];
+  const placed = treeLayout(nodes, edges, 'LR', ['parent']);
   assert.equal(placed.get('a')!.x, placed.get('b')!.x, 'unranked nodes share a column');
 });

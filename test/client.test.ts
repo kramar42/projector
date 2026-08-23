@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
-import { INWARD_REFS } from '../src/schema/vocabulary.ts';
 import { blankQuery } from '../src/view/intents.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { apiSearch, paramsOf, patchSearch } from '../src/web/query.ts';
@@ -63,39 +62,38 @@ test('agreeing relations collapse to one edge, and the structural type leads', (
   const edges = edgesFor(
     [
       { src: 'x', dst: 'p', type: 'project' },
-      { src: 'x', dst: 'p', type: 'blocks' },
+      { src: 'x', dst: 'p', type: 'blocked_by' },
     ],
-    [],
   );
   assert.equal(edges.length, 1, 'two relations, one line');
-  assert.deepEqual(edges[0]!.types, ['project', 'blocks']);
+  assert.deepEqual(edges[0]!.types, ['project', 'blocked_by']);
   assert.equal(edges[0]!.lead, 'project');
 });
 
-test('a hierarchy edge points the way the graph opens', () => {
-  // The second argument is which relations point at their *container*, which
-  // arrives as `hierarchies` and is a property of the relation. It used to be the
-  // canvas's layout relation, from `data.layout` — a property of the view.
-  const [flipped] = edgesFor([{ src: 'child', dst: 'parent', type: 'parent' }], INWARD_REFS);
+test('every edge points the way the graph opens', () => {
+  // A reference is stored on the record that depends and points at what it
+  // depends on, so drawing it means turning it round — all of them, with nothing
+  // to consult. This took a list of which relations to flip while `blocks` was
+  // stored backwards from the other two.
+  const [flipped] = edgesFor([{ src: 'child', dst: 'parent', type: 'parent' }]);
   assert.deepEqual([flipped!.src, flipped!.dst], ['parent', 'child'], 'drawn parent → child');
 
-  const [kept] = edgesFor([{ src: 'a', dst: 'b', type: 'blocks' }], INWARD_REFS);
-  assert.deepEqual([kept!.src, kept!.dst], ['a', 'b'], 'a non-hierarchy keeps its direction');
+  const [blocking] = edgesFor([{ src: 'stuck', dst: 'gate', type: 'blocked_by' }]);
+  assert.deepEqual([blocking!.src, blocking!.dst], ['gate', 'stuck'], 'and blocker → blocked');
 });
 
 /**
- * The regression. `blocks` stores *a must finish before b*, so it already points
- * away from the root of the dependency tree and must never flip — including when
- * it is the relation the canvas lays out by, which is exactly the query that asks
- * "what does finishing this unblock".
+ * The regression, in its inverted form. A dependency chain has to read from its
+ * root outward whichever relation the canvas lays out by — which is exactly the
+ * query that asks "what does finishing this unblock".
  *
- * While the flip was keyed on the layout relation these two calls disagreed, and
- * the graph read "is blocked by" under a label saying `blocks`.
+ * While the flip was keyed on the *layout relation* rather than on the relation
+ * itself, these two calls disagreed and the graph read backwards under its label.
  */
-test('a blocks edge keeps its direction whatever the canvas lays out by', () => {
-  const chain = [{ src: 'blocker', dst: 'blocked', type: 'blocks' }];
-  for (const label of ['laid out by parent', 'laid out by blocks']) {
-    const [edge] = edgesFor(chain, INWARD_REFS);
+test('a blocking edge reads from the blocker outward, whatever the canvas lays out by', () => {
+  const chain = [{ src: 'blocked', dst: 'blocker', type: 'blocked_by' }];
+  for (const label of ['laid out by parent', 'laid out by blocked_by']) {
+    const [edge] = edgesFor(chain);
     assert.deepEqual([edge!.src, edge!.dst], ['blocker', 'blocked'], label);
   }
 });
@@ -105,7 +103,7 @@ test('a blocks edge keeps its direction whatever the canvas lays out by', () => 
  * record, and both point at their container — so both flip, land on one pair, and
  * collapse. This is the case the module's docstring calls the *expected* shape.
  *
- * It used to draw two lines. `hierarchy` held only the layout relation, so the
+ * It used to draw two lines. The flip list held only the layout relation, so the
  * `parent` edge flipped and the `project` edge beside it did not, and the pair
  * described as collapsing was the one pair that could not. The old test asserted
  * that outcome and said in its own comment that it was surprising rather than
@@ -117,7 +115,6 @@ test('parent and project naming the same record collapse to one edge', () => {
       { src: 'child', dst: 'p', type: 'parent' },
       { src: 'child', dst: 'p', type: 'project' },
     ],
-    INWARD_REFS,
   );
   assert.equal(edges.length, 1, 'agreeing containment reads as one relationship');
   assert.deepEqual([edges[0]!.src, edges[0]!.dst], ['p', 'child'], 'drawn container → member');
@@ -131,7 +128,6 @@ test('a pair that disagrees stays two edges', () => {
       { src: 'x', dst: 'p1', type: 'parent' },
       { src: 'x', dst: 'p2', type: 'project' },
     ],
-    INWARD_REFS,
   );
   assert.equal(edges.length, 2, 'different targets are the case worth seeing');
 });
@@ -139,12 +135,11 @@ test('a pair that disagrees stays two edges', () => {
 test('lead order is fixed, not incidental', () => {
   const [only] = edgesFor(
     [
-      { src: 'a', dst: 'b', type: 'blocks' },
+      { src: 'a', dst: 'b', type: 'blocked_by' },
       { src: 'a', dst: 'b', type: 'project' },
     ],
-    [],
   );
-  assert.equal(only!.lead, 'project', 'project outranks blocks whatever the order in');
+  assert.equal(only!.lead, 'project', 'project outranks blocked_by whatever the order in');
 });
 
 // ---------------------------------------------------------------- clearing

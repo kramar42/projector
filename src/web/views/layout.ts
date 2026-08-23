@@ -1,6 +1,5 @@
 import dagre from '@dagrejs/dagre';
 import type { CardDTO } from '../types.ts';
-import { INWARD_REFS } from '../../schema/vocabulary.ts';
 
 export interface Placed {
   id: string;
@@ -39,7 +38,6 @@ export function treeLayout(
   edges: { src: string; dst: string; type: string }[],
   direction: 'LR' | 'TB' = 'LR',
   layoutBy: string[] = ['parent'],
-  inward: readonly string[] = INWARD_REFS,
 ): Map<string, Placed> {
   const g = new dagre.graphlib.Graph();
   g.setGraph({
@@ -57,18 +55,16 @@ export function treeLayout(
   }
   const ids = new Set(nodes.map((n) => n.id));
   const feeds = new Set(layoutBy);
-  const points = new Set(inward);
   for (const e of edges) {
     if (!feeds.has(e.type) || !ids.has(e.src) || !ids.has(e.dst)) continue;
-    // Which relation defines the tree and which way that relation is stored are
-    // two questions, and one parameter used to answer both. `parent` and
-    // `project` point child → parent and member → container, and dagre wants
-    // container → member so the roots sit on the left and the tree opens
-    // outward. `blocks` already points away from its root, so flipping it laid
-    // the chain out backwards — which only showed once a canvas was laid out by
-    // something other than `parent`.
-    if (points.has(e.type)) g.setEdge(e.dst, e.src);
-    else g.setEdge(e.src, e.dst);
+    // Always the other way round. A reference is stored on the record that
+    // depends and points at what it depends on; dagre wants container → member,
+    // so the roots sit on the left and the tree opens outward.
+    //
+    // This used to take a list of which relations to flip, because `blocks` was
+    // stored pointing away from its own root and laying a canvas out by it
+    // produced a backwards chain. Inverting that relation retired the list.
+    g.setEdge(e.dst, e.src);
   }
 
   dagre.layout(g);
@@ -99,10 +95,9 @@ export function manualLayout(
   edges: { src: string; dst: string; type: string }[],
   stored: Record<string, { x?: number; y?: number }>,
   layoutBy: string[] = ['parent'],
-  inward: readonly string[] = INWARD_REFS,
   computed?: Map<string, Placed>,
 ): Map<string, Placed> {
-  const fallback = computed ?? treeLayout(nodes, edges, 'LR', layoutBy, inward);
+  const fallback = computed ?? treeLayout(nodes, edges, 'LR', layoutBy);
   const out = new Map<string, Placed>();
   for (const n of nodes) {
     const s = stored[n.id];
@@ -183,7 +178,6 @@ export function clusteredLayout(
   edges: { src: string; dst: string; type: string }[],
   layoutBy: string[],
   groups: { value: string; ids: string[] }[],
-  inward: readonly string[] = INWARD_REFS,
 ): Map<string, Placed> {
   const assign = assignClusters(nodes, groups);
   const placed = new Map<string, Placed>();
@@ -198,7 +192,6 @@ export function clusteredLayout(
       edges.filter((e) => ids.has(e.src) && ids.has(e.dst)),
       'LR',
       layoutBy,
-      inward,
     );
     const xs = [...inner.values()].map((p) => p.x);
     const ys = [...inner.values()].map((p) => p.y);

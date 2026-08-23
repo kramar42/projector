@@ -28,23 +28,25 @@ export function isOrdered(def: FacetDef | undefined): boolean {
 }
 
 /**
- * Reference facets whose value names the **container**.
+ * There is no list of which relations point at their container, because they all
+ * do.
  *
- * A record stores `parent: [x]` and `project: [x]` meaning *I am part of x*, so
- * both point inward, toward the root of the tree they belong to. A canvas draws
- * them the other way round — the arrow points the way the graph opens — and dagre
- * needs the same orientation or the roots come out on the right.
+ * A reference facet is stored on the record that *depends* — `parent` on the
+ * child, `project` on the member, `blocked_by` on the card that is stuck — and
+ * points at what it depends on. So a canvas flips every reference edge to draw
+ * it, and dagre gets every one the same way round, roots on the left.
  *
- * `blocks` is not one of them. It stores *I must finish before x*, which already
- * points away from the root of the dependency tree. That distinction cannot be
- * derived from storage: all three are `type: ref`, and `single` does not separate
- * `project` from `blocks`. It has to be declared, and this is the declaration.
+ * It used to be a declared list, and had to be: `blocks` was stored on the
+ * blocker and pointed *away* from the root of its own dependency tree, so no
+ * property of the storage separated it from the other two. Inverting that
+ * relation is what turned a list of exceptions into a rule, and a rule needs no
+ * key in `facets.yaml` and no field in the payload.
  *
- * It is a property of the **relation**, never of the view. Keying the flip on
- * *which relation the canvas lays out by* looks identical while `parent` leads,
- * and reverses every arrow the moment anything else does.
+ * A vault whose own relation genuinely points outward — `supersedes`, say — draws
+ * its arrows the other way on the canvas and is otherwise unaffected. That is a
+ * cosmetic wrong answer for a case nobody has yet, and `points: out` is the
+ * escape hatch to add on the day somebody does, rather than in advance.
  */
-export const INWARD_REFS: readonly string[] = ['parent', 'project', 'blocked_by'];
 
 /**
  * The absence refinement, as it travels.
