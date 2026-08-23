@@ -27,6 +27,29 @@ hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
 
 ---
 
+# Glossary
+
+Every word below means one thing throughout this document, the code and the CLI.
+
+| | |
+|---|---|
+| **note** | one markdown file in `notes/`, and the only kind of thing a vault holds. It becomes work by carrying a lifecycle facet; most never do |
+| **facet** | an axis a note carries a value on, declared in `facets.yaml`. Every value is an array |
+| **axis** | anything a query can filter, group or sort by: a facet, or a computed axis. `created`, `updated` and `title` are note fields the sort accepts, and are not axes |
+| **computed axis** | an axis with no stored value, worked out per query and marked `ƒ`: `type`, `blocked`, `triage`, `linked`, `staleness` |
+| **value** | one entry on an axis. `(none)` is not a value but a *refinement* — "carries nothing here" |
+| **bucket** | the named range an ordered facet presents itself as, so a date filters as `overdue` and sorts as `2026-09-01` |
+| **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
+| **ref** | one value of a relation — a pointer *inside* the vault, traversable |
+| **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
+| **project** | a note carrying a `project:` block of configuration, which its members inherit. The one built-in facet points at them |
+| **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
+| **vault** | a folder holding `notes/`, `facets.yaml` and `views/` |
+| **view** | a saved query in `views/*.yaml`, with a name and a shape |
+| **shape** | how a query is drawn: `board`, `canvas` or `table` |
+| **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a canvas a **band**; a second grouping axis gives a board **lanes** |
+| **mark** | the glyph before a note's title: `▣` a project, `○` something references it, `•` neither |
+
 # The model
 
 ## Facets, not lists
@@ -81,10 +104,10 @@ is what makes it cheap — the engine reads a facet in exactly two places.
 
 ## Computed axes
 
-Five axes are computed rather than stored, and appear in the filter panel alongside the real facets,
-marked `ƒ` for computed:
+Five axes are computed rather than stored. They appear in the filter panel alongside the facets and
+behave identically — filter, group, sort, count — and carry `ƒ` to say nothing stores them:
 
-| | Values | Derived from |
+| | Values | Computed from |
 |---|---|---|
 | `type` | `project`, `node`, `plain` | a `project:` block · being named through any reference facet |
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
@@ -103,7 +126,7 @@ Two of them take their *values* from your vocabulary. `blocked` names one value 
 gives it a value on the filter, the grouping and the sort, and a vault that declares none has a
 `blocked` axis reading `clear` for everything.
 
-**Every one of them computes.** Nothing derivable is also storable, which is why there is no
+**Every one of them computes.** Nothing computable is also stored, which is why there is no
 `status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
 `waiting_on` — `status` is lifecycle alone. A note with no `due` has no value on that axis rather
 than an `undated` bucket of its own, so "no deadline" is the same `(none)` refinement every other
@@ -185,7 +208,7 @@ is recorded there rather than on the other note.
 
 `blocked_by` is the relation neither Trello nor Jira gives usefully. Its transitive closure is what
 "unblocked now" is built from. It is the one relation not worth grouping a board by, because the
-question is always the inverse — which the derived `blocked` axis answers, and which the panel draws
+question is always the inverse — which the computed `blocked` axis answers, and which the panel draws
 beside it under whatever `inverse:` calls it.
 
 **Not every association wants to be a relation.** A reference facet is poor at one shape: an
@@ -754,7 +777,7 @@ line, so `open` is implied and a declared list is dropped rather than half-honou
 
 The five keys past `type` are where a facet's *behaviour* is declared. `closed` defines finished, for
 the blocked axis and for `pj log`; `blocking` puts an axis on the blocked axis under its own name;
-`expected` puts it on the triage axis; `inverse` names the derived row the panel draws beside a
+`expected` puts it on the triage axis; `inverse` names the computed row the panel draws beside a
 relation; `hue` picks a family from the app's palette. All five are optional — declare none and the
 axis is an ordinary one you can filter, group and sort by.
 
