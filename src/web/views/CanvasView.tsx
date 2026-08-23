@@ -82,40 +82,48 @@ function ClusterNode({ data }: NodeProps) {
 const nodeTypes = { record: RecordNode, cluster: ClusterNode };
 
 /**
- * How each relation draws. "Edge" below is React Flow's word for a line — the
- * model has only facets, and a *reference* facet is what puts one on screen.
- */
-const RELATION_COLOUR: Record<string, string> = {
-  parent: 'var(--rel-parent)',
-  blocked_by: 'var(--rel-blocks)',
-  project: 'var(--rel-project)',
-};
-
-const DASH: Record<string, string | undefined> = {
-  blocked_by: '6 4',
-  project: '1 3',
-};
-
-/**
  * Turn the decided edges into React Flow's shape. The decisions — pairing,
  * direction, which type leads — are `edgesFor`; everything here is appearance.
+ *
+ * No relation is named. Colour is the leading facet's own `hue`, the same one its
+ * chips draw in, so a line and a chip for one axis are one colour by
+ * construction; there used to be a second three-entry map here, keyed by facet
+ * name, which a rename silently emptied.
+ *
+ * Solid for the relation the canvas is laid out by, dashed for the rest — a
+ * property of the *view*, which is what a dash should say, and derivable rather
+ * than declared.
+ *
+ * Text goes on every relation except the layout one, generalising the rule that
+ * gave `blocks` a label: the layout relation is the one you can read off the
+ * arrangement, and any other line is one you cannot. The words are the facet's
+ * `label`, so a vault names its own edges.
  */
-function buildEdges(raw: { src: string; dst: string; type: string }[]): Edge[] {
-  return edgesFor(raw).map(({ src, dst, types, lead }) => {
-    const colour = RELATION_COLOUR[lead] ?? 'var(--rel-parent)';
+function buildEdges(
+  raw: { src: string; dst: string; type: string }[],
+  facets: Meta['facets'],
+  layout: string | null,
+): Edge[] {
+  return edgesFor(raw, facets).map(({ src, dst, types, lead }) => {
+    const hue = facets[lead]?.hue;
+    const colour = hue && hue !== 'none' ? `var(--hue-${hue})` : 'var(--ink-3)';
+    const named = types.filter((t) => t !== layout);
     return {
       id: `${types.join('+')}:${src}->${dst}`,
       source: src,
       target: dst,
       type: 'smoothstep',
-      style: { stroke: colour, strokeWidth: lead === 'parent' ? 1.6 : 1.4, strokeDasharray: DASH[lead] },
+      style: {
+        stroke: colour,
+        strokeWidth: lead === layout ? 1.6 : 1.4,
+        strokeDasharray: lead === layout ? undefined : '6 4',
+      },
       // An arrowhead per type, so direction is legible without reading a label.
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: colour },
-      // Only `blocks` earns text: it is the one relationship you cannot infer
-      // from the layout. Its fill and step live in `.react-flow__edge-text`, not
-      // here — an inline `fontSize` is a type decision the scale test cannot see.
-      ...(types.includes('blocked_by')
-        ? { label: types.length > 1 ? types.join(' + ') : 'blocked by' }
+      // Its fill and step live in `.react-flow__edge-text`, not here — an inline
+      // `fontSize` is a type decision the scale test cannot see.
+      ...(named.length
+        ? { label: named.map((t) => facets[t]?.label ?? t).join(' + ') }
         : {}),
       labelBgStyle: { fillOpacity: 0.9 },
       labelBgPadding: [4, 2] as [number, number],
@@ -226,7 +234,7 @@ export function CanvasView({
       : [];
 
     // Bands first, so a record is always drawn over its own background.
-    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations) };
+    return { nodes: [...bands, ...rfNodes], edges: buildEdges(data.relations, meta.facets, data.layout) };
   }, [data, onOpen]);
 
   useEffect(() => {

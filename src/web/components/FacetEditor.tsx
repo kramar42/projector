@@ -4,7 +4,8 @@ import { PopoverButton } from './Popover.tsx';
 import type { CardDetail, FacetDef } from '../types.ts';
 import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
-import { FACET_TONE, RecordMark } from './CardBody.tsx';
+import { RecordMark } from './CardBody.tsx';
+import { useHue } from '../vocabulary.tsx';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -93,7 +94,7 @@ export function FacetEditor({
   // The axis's family, which the chips wear rather than the accent. Hueless for
   // a hint axis and for anything the map does not name, exactly as a card face
   // resolves it — one map, so the two cannot disagree.
-  const tone = FACET_TONE[name] ?? 'facet-muted';
+  const tone = useHue(name);
 
   const body = () => {
     if (def.type === 'ref') {

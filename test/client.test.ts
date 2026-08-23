@@ -132,14 +132,28 @@ test('a pair that disagrees stays two edges', () => {
   assert.equal(edges.length, 2, 'different targets are the case worth seeing');
 });
 
-test('lead order is fixed, not incidental', () => {
+test('lead order is the vocabulary\'s, not incidental and not a list here', () => {
+  // Declaration order decides, which is the same order the filter rail and the
+  // panel read. It was a three-name list in this module, so a vault's own
+  // relation could never lead and a renamed one silently stopped leading.
+  const facets = { project: {}, blocked_by: {} };
   const [only] = edgesFor(
     [
       { src: 'a', dst: 'b', type: 'blocked_by' },
       { src: 'a', dst: 'b', type: 'project' },
     ],
+    facets,
   );
-  assert.equal(only!.lead, 'project', 'project outranks blocked_by whatever the order in');
+  assert.equal(only!.lead, 'project', 'project is declared first, so it styles the line');
+
+  const [flipped] = edgesFor(
+    [
+      { src: 'a', dst: 'b', type: 'blocked_by' },
+      { src: 'a', dst: 'b', type: 'project' },
+    ],
+    { blocked_by: {}, project: {} },
+  );
+  assert.equal(flipped!.lead, 'blocked_by', 'and a vault that declares it first gets it first');
 });
 
 // ---------------------------------------------------------------- clearing

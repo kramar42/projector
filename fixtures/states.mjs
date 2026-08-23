@@ -71,6 +71,7 @@ status:
   # on-hold does not. A closed record stops blocking whatever waits on it.
   closed: [done, archived]
   expected: true
+  hue: green
 
 priority:
   label: Priority
@@ -78,12 +79,13 @@ priority:
   open: false
   single: true
   expected: true
+  hue: orange
 
 due:
   label: Due
   type: date
   single: true
-  buckets: { overdue: -1, today: 0, week: 7 }
+  buckets: { overdue: {upTo: -1, hue: red}, today: {upTo: 0, hue: yellow}, week: 7 }
   overflow: later
 
 waiting_on:
@@ -91,6 +93,7 @@ waiting_on:
   values: [person-a, person-b, person-c, person-d, person-e, person-g, person-f]
   open: true
   blocking: true
+  hue: yellow
 
 energy:
   label: Energy
@@ -107,6 +110,7 @@ tech:
   label: Tech
   values: [k8s, aws, github, kafka, keycloak, quarkus, temporal, mongodb, devops]
   open: true
+  hue: pink
 
 layer:
   label: Layer
@@ -128,11 +132,13 @@ parent:
   label: Part of
   type: ref
   single: true
+  hue: purple
 
 blocked_by:
   label: blocked by
   type: ref
   blocking: true
+  hue: red
 `;
 
 // ---------------------------------------------------------------- cards

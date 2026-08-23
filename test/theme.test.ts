@@ -1,8 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { loadFacets } from '../src/schema/facets.ts';
+import { SEED_FACETS } from '../src/server/seed.ts';
+
+/** The seeded vocabulary, on disk, so the real loader parses it. */
+function seededFacetsFile(): string {
+  const f = join(mkdtempSync(join(tmpdir(), 'projector-seed-')), 'facets.yaml');
+  writeFileSync(f, SEED_FACETS, 'utf8');
+  return f;
+}
 
 /**
  * The stylesheet is the design system, so these are the invariants that keep it
@@ -299,18 +309,38 @@ test('there are no breakpoints', () => {
  * before its text is — and it dies quietly the first time two axes share a
  * family. The two hueless classes are the documented Hints Are Hueless case.
  */
-test('one hue family per facet axis', () => {
-  const HUELESS = new Set(['.facet-energy', '.facet-muted']);
-  const byFamily = new Map<string, string[]>();
-  for (const r of rules()) {
-    if (!/^\.facet-[a-z]+$/.test(r.sel) || HUELESS.has(r.sel)) continue;
-    const hue = r.body.match(/color:\s*var\(--(hue-[a-z]+)\)/);
-    if (!hue) continue;
-    byFamily.set(hue[1]!, [...(byFamily.get(hue[1]!) ?? []), r.sel]);
+test('every hue a vocabulary names is a family the stylesheet defines', () => {
+  // The mapping moved out of here. It was nine rules named after nine facets, so
+  // the stylesheet decided which axis was orange; `facets.yaml` decides now, and
+  // this is the seam where the two halves have to agree — a `hue:` naming a
+  // family with no rule behind it fails silently and looks exactly like grey.
+  const defined = new Set(
+    rules()
+      .map((r) => r.sel.match(/^\.facet-hue-([a-z]+)$/)?.[1])
+      .filter(Boolean) as string[],
+  );
+  assert.ok(defined.size >= 5, 'the stylesheet should offer a palette worth choosing from');
+
+  const seeded = loadFacets(seededFacetsFile());
+  const claimed = new Map<string, string[]>();
+  for (const [name, def] of Object.entries(seeded)) {
+    for (const hue of [def.hue, ...(def.buckets ?? []).map((b) => b.hue)]) {
+      if (!hue || hue === 'none') continue;
+      assert.ok(defined.has(hue), `"${name}" asks for hue "${hue}", which no rule defines`);
+      if (def.hue === hue) claimed.set(hue, [...(claimed.get(hue) ?? []), name]);
+    }
   }
-  assert.ok(byFamily.size >= 5, 'the facet chip classes should each claim a hue');
-  const shared = [...byFamily].filter(([, sels]) => sels.length > 1);
-  assert.deepEqual(shared, [], `a hue family serving two axes: ${shared.map(([h, s]) => `${h} <- ${s.join(', ')}`).join('; ')}`);
+
+  // One family per axis *in the seed*, so a chip's colour still says which facet
+  // it is before you read it. Only the seed: the palette has seven families and
+  // a vault may have twenty axes, so uniqueness is a property of what is shipped
+  // rather than something the app can enforce — anything past seven recedes, and
+  // a vault deliberately colouring two related axes alike is its business.
+  //
+  // A *bucket* hue is exempt either way: it is emphasis within an axis, and
+  // `overdue` borrowing red from `blocked_by` says the right thing.
+  const shared = [...claimed].filter(([, names]) => names.length > 1);
+  assert.deepEqual(shared, [], `a hue family serving two axes: ${shared.map(([h, n]) => `${h} <- ${n.join(', ')}`).join('; ')}`);
 });
 
 /**

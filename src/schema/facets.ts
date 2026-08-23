@@ -25,7 +25,7 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * pushing it off the rail.
  */
 export const BUILTIN_FACETS: Facets = {
-  project: { label: 'Project', type: 'ref', values: [], open: true, single: false },
+  project: { label: 'Project', type: 'ref', values: [], open: true, single: false, hue: 'blue' },
 };
 
 /**
@@ -72,11 +72,18 @@ export function loadFacets(file: string): Facets {
     // half-honoured.
     const declared = type === 'label' && Array.isArray(d.values) ? d.values.map(String) : [];
     const raw = d.buckets as Record<string, unknown> | undefined;
+    // Two shapes, because `buckets: { overdue: -1, today: 0 }` reads as the
+    // ordered number line it is and must stay that terse. A bucket that wants a
+    // hue of its own spells itself out instead; the rest keep the shorthand.
     const buckets =
       raw && typeof raw === 'object'
-        ? Object.entries(raw)
-            .filter(([, v]) => typeof v === 'number')
-            .map(([name, v]) => ({ name, upTo: v as number }))
+        ? Object.entries(raw).flatMap(([name, v]) => {
+            if (typeof v === 'number') return [{ name, upTo: v }];
+            if (!v || typeof v !== 'object') return [];
+            const b = v as Record<string, unknown>;
+            if (typeof b.upTo !== 'number') return [];
+            return [{ name, upTo: b.upTo, ...(typeof b.hue === 'string' ? { hue: b.hue } : {}) }];
+          })
         : undefined;
     out[name] = {
       label: typeof d.label === 'string' ? d.label : name,
@@ -89,6 +96,7 @@ export function loadFacets(file: string): Facets {
       ...(Array.isArray(d.closed) ? { closed: d.closed.map(String) } : {}),
       ...(d.expected === true ? { expected: true } : {}),
       ...(d.blocking === true ? { blocking: true } : {}),
+      ...(typeof d.hue === 'string' ? { hue: d.hue } : {}),
     };
   }
   // Built-ins lead the order, and win their structural keys. A vault may still

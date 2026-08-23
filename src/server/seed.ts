@@ -15,6 +15,10 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   closed:  values meaning no further work is expected, whatever the outcome
 #   expected: true  → a well-filed card carries this; the triage axis is built
 #            from it
+#   hue:     which family this axis draws in — orange green purple blue pink red
+#            yellow, or omitted for no colour at all. A bucket may declare one
+#            too, and it wins for a chip in that bucket, drawn filled rather than
+#            tinted. The palette is the app's; the choice is yours
 #   blocking: true  → while this axis is unsatisfied the card cannot proceed, and
 #            the blocked axis says so by this facet's name. A ref blocks while
 #            something it names is not closed; anything else blocks while it
@@ -60,6 +64,7 @@ status:
   # on-hold does not. A closed record stops blocking whatever waits on it.
   closed: [done, archived]
   expected: true
+  hue: green
 
 priority:
   label: Priority
@@ -67,6 +72,7 @@ priority:
   open: false
   single: true
   expected: true
+  hue: orange
 
 # A deadline. priority says what you intend to do next; due says what the
 # world expects regardless of intent, so it is compared against today rather than
@@ -76,7 +82,7 @@ due:
   label: Due
   type: date
   single: true
-  buckets: { overdue: -1, today: 0, week: 7 }
+  buckets: { overdue: {upTo: -1, hue: red}, today: {upTo: 0, hue: yellow}, week: 7 }
   overflow: later
 
 # Somebody else's move. A blocking facet, so it lands on the blocked axis beside
@@ -88,6 +94,7 @@ waiting_on:
   values: []
   open: true
   blocking: true
+  hue: yellow
 
 energy:
   label: Energy
@@ -104,6 +111,7 @@ tech:
   label: Tech
   values: []
   open: true
+  hue: pink
 
 source:
   label: Source
@@ -124,6 +132,7 @@ parent:
   label: Part of
   type: ref
   single: true
+  hue: purple
 
 # What must finish before this card can move. Stored on the card that is stuck,
 # pointing at what it is stuck on — the same direction as parent and project, and
@@ -136,6 +145,7 @@ blocked_by:
   label: blocked by
   type: ref
   blocking: true
+  hue: red
 `;
 
 export const SEED_VIEWS: { path: string; body: string }[] = [

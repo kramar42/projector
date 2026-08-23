@@ -110,7 +110,7 @@ export interface FacetDef {
    * value itself for a `number` — and anything past the last one falls in
    * `overflow`.
    */
-  buckets?: { name: string; upTo: number }[];
+  buckets?: { name: string; upTo: number; hue?: string }[];
   /** What a value past the last bucket is called. */
   overflow?: string;
   /**
@@ -155,6 +155,25 @@ export interface FacetDef {
    * `blocked` axis was already saying with two values hardcoded into it.
    */
   blocking?: boolean;
+  /**
+   * Which hue family this axis draws in, from the app's palette.
+   *
+   * The palette is the app's and the choice is the vault's, which is the only
+   * arrangement in which no facet is named in code: a chip's colour used to come
+   * from a nine-entry map of facet names, and a canvas edge from a second map of
+   * three, so a vault's own vocabulary was permanently grey and a renamed
+   * relation lost its colour without saying so.
+   *
+   * A **bucket** may declare one too, and it wins for a chip drawn in that
+   * bucket — which is how `overdue` gets to be loud on an axis that is otherwise
+   * quiet. Its direction cannot be derived: `due` runs urgent-at-the-low-end and
+   * an `effort` axis runs trivial-at-the-low-end, and nothing in the numbers says
+   * which.
+   *
+   * Absent means no hue: the chip recedes, which is right for a hint like
+   * `source` and is what any undeclared axis gets.
+   */
+  hue?: string;
 }
 
 export type Facets = Record<string, FacetDef>;

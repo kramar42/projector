@@ -1,5 +1,6 @@
 import { useEnrichment } from '../enrichment.tsx';
 import { plural } from '../plural.ts';
+import { useHue } from '../vocabulary.tsx';
 import type { CardDTO } from '../types.ts';
 
 /**
@@ -21,17 +22,6 @@ import type { CardDTO } from '../types.ts';
  * exact drift that would let the same axis be orange on a card face and green in
  * the editor, and the axis is the only thing either of them knows.
  */
-export const FACET_TONE: Record<string, string> = {
-  priority: 'facet-priority',
-  status: 'facet-status',
-  layer: 'facet-layer',
-  project: 'facet-project',
-  tech: 'facet-tech',
-  waiting_on: 'facet-waiting',
-  source: 'facet-muted',
-  energy: 'facet-energy',
-  domain: 'facet-domain',
-};
 
 const LINK_GLYPH: Record<string, string> = {
   jira: 'J',
@@ -49,8 +39,13 @@ const LINK_GLYPH: Record<string, string> = {
  *
  * An ordered facet draws its **bucket** rather than its value: a chip saying
  * `2026-09-01` tells you nothing a chip saying `overdue` does not, and the
- * bucket is also a class, so a deadline can colour itself. The bucket is
- * computed on the server (C8), so nothing here knows any facet by name.
+ * bucket is also what picks the colour, so a deadline can be loud on an axis
+ * that is otherwise quiet.
+ *
+ * The hue comes from the vocabulary, so nothing here knows any facet by name.
+ * It used to come from a map of nine facet names, with everything else falling
+ * to grey — which meant a vault's own axes could not have a colour and a renamed
+ * one lost it silently.
  */
 export function FacetChip({
   facet,
@@ -61,11 +56,7 @@ export function FacetChip({
   value: string;
   bucket?: string;
 }) {
-  return (
-    <span className={`chip ${FACET_TONE[facet] ?? 'facet-muted'} ${bucket ? `is-${bucket}` : ''}`}>
-      {value}
-    </span>
-  );
+  return <span className={`chip ${useHue(facet, bucket)}`}>{value}</span>;
 }
 
 /**

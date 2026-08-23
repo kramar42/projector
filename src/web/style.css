@@ -29,9 +29,6 @@
   --accent-soft: #ebebf7;
   --dot: #dcdcdc;
 
-  --rel-parent: #7676c4;
-  --rel-blocks: #b06060; /* between red1 and red3, legible on white */
-  --rel-project: #5a7fa8;
   --minimap-node: #a6a6e7;
   --minimap-mask: rgba(50, 50, 50, 0.12);
 
@@ -112,9 +109,6 @@
     --accent-soft: #2a2a3c; /* purple4 */
     --dot: #323232;       /* shadow */
 
-    --rel-parent: #a6a6e7; /* purple1 */
-    --rel-blocks: #df8787; /* red1 — xoria's Special */
-    --rel-project: #87afdf; /* blue1 — xoria's Statement */
     --minimap-node: #373762; /* purple3 */
     --minimap-mask: rgba(4, 4, 4, 0.62); /* darkest */
 
@@ -1350,60 +1344,28 @@ input:focus-visible + .checkbox {
 }
 
 /* One hue family per axis, so a chip's colour says which facet it is before you
-   read it. Taken straight from xoria's syntax mapping where there is an obvious
-   fit: priority is Number (orange), status is PreProc (green), project is Type
-   (purple), tech is Statement (blue), layer is Identifier (pink). */
-.facet-priority {
-  --tone: var(--hue-orange);
-  background: color-mix(in srgb, var(--hue-orange-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-orange);
-  border-color: color-mix(in srgb, var(--hue-orange) 30%, transparent);
+   read it. Which axis takes which is `facets.yaml`'s to say — these are the
+   families it may name, and nothing here knows a facet.
+
+   They were nine rules named after nine facets, taken from xoria's syntax
+   mapping. That map is now the seeded vocabulary's `hue:` keys, so a vault's own
+   axes can have a colour and a renamed one keeps it. */
+.facet-hue-orange { --tone: var(--hue-orange); --tone-bg: var(--hue-orange-bg); --tone-edge: 30%; }
+.facet-hue-green  { --tone: var(--hue-green);  --tone-bg: var(--hue-green-bg);  --tone-edge: 30%; }
+.facet-hue-purple { --tone: var(--hue-purple); --tone-bg: var(--hue-purple-bg); --tone-edge: 32%; }
+.facet-hue-blue   { --tone: var(--hue-blue);   --tone-bg: var(--hue-blue-bg);   --tone-edge: 30%; }
+.facet-hue-pink   { --tone: var(--hue-pink);   --tone-bg: var(--hue-pink-bg);   --tone-edge: 34%; }
+.facet-hue-red    { --tone: var(--hue-red);    --tone-bg: var(--hue-red-bg);    --tone-edge: 32%; }
+.facet-hue-yellow { --tone: var(--hue-yellow); --tone-bg: var(--hue-yellow-bg); --tone-edge: 30%; }
+
+[class*='facet-hue-'] {
+  background: color-mix(in srgb, var(--tone-bg) var(--chip-tint), var(--surface));
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) var(--tone-edge), transparent);
 }
-.facet-status {
-  --tone: var(--hue-green);
-  background: color-mix(in srgb, var(--hue-green-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-green);
-  border-color: color-mix(in srgb, var(--hue-green) 30%, transparent);
-}
-.facet-project {
-  --tone: var(--hue-purple);
-  background: color-mix(in srgb, var(--hue-purple-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-purple);
-  border-color: color-mix(in srgb, var(--hue-purple) 32%, transparent);
-}
-.facet-tech {
-  --tone: var(--hue-blue);
-  background: color-mix(in srgb, var(--hue-blue-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-blue);
-  border-color: color-mix(in srgb, var(--hue-blue) 30%, transparent);
-}
-.facet-layer {
-  --tone: var(--hue-pink);
-  background: color-mix(in srgb, var(--hue-pink-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-pink);
-  border-color: color-mix(in srgb, var(--hue-pink) 34%, transparent);
-  font-weight: 600;
-}
-.facet-waiting {
-  --tone: var(--hue-red);
-  background: color-mix(in srgb, var(--hue-red-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-red);
-  border-color: color-mix(in srgb, var(--hue-red) 32%, transparent);
-}
-.facet-domain {
-  --tone: var(--hue-yellow);
-  background: color-mix(in srgb, var(--hue-yellow-bg) var(--chip-tint), var(--surface));
-  color: var(--hue-yellow);
-  border-color: color-mix(in srgb, var(--hue-yellow) 30%, transparent);
-}
-/* Energy and source are hints, not identity: no hue, so they recede. */
-.facet-energy {
-  --tone: var(--ink-2);
-  background: transparent;
-  color: var(--ink-3);
-  border-color: var(--rule);
-  font-style: italic;
-}
+
+/* No hue declared: the chip recedes. Right for a hint like `source`, and what
+   any axis the vocabulary says nothing about gets. */
 .facet-muted {
   --tone: var(--ink-2);
   background: transparent;
@@ -1471,14 +1433,16 @@ input:focus-visible + .checkbox {
    Inverting to the ground colour is 7.6:1 at worst, which is what `.btn.primary`
    already does with the accent. Nothing had seen it because no record carries a
    `due` date yet. */
-.chip.is-overdue {
-  background: var(--bad);
+/* A bucket that declares a hue draws filled rather than tinted: that is the
+   point of declaring one — `overdue` loud on an axis that is otherwise quiet.
+   A filled state takes `--ground`, not `--ink`: both semantic hues follow the
+   theme in the same direction the text does, so ink-on-red was 1.9:1 in light
+   and ink-on-yellow 1.03:1 in dark. Inverting to the ground colour is 7.6:1 at
+   worst, which is what `.btn.primary` already does with the accent. */
+.chip.is-filled {
+  background: var(--tone);
   color: var(--ground);
-}
-
-.chip.is-today {
-  background: var(--warn);
-  color: var(--ground);
+  border-color: transparent;
 }
 
 .dateinput {
@@ -1587,7 +1551,7 @@ input:focus-visible + .checkbox {
   opacity: 0;
 }
 
-/* The `blocks` edge label. Neutral rather than `rel-blocks`, because a label
+/* A canvas edge label. Neutral rather than the edge's own hue, because a label
    inherits its edge's colour as a fill otherwise and a red word floating over a
    graph reads as an error — `buildEdges` used to say this inline, where the type
    step was invisible to the scale test. */

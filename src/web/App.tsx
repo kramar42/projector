@@ -7,6 +7,7 @@ import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
 import { CardPanel } from './panel/CardPanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
+import { VocabularyProvider } from './vocabulary.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
@@ -178,6 +179,10 @@ export function App() {
 
   return (
     <EnrichmentProvider>
+      {/* Every surface that *draws* a facet value reads its hue from here, so a
+          chip on a card face, a table cell, a canvas node and the bulk bar
+          cannot disagree about what colour an axis is. */}
+      <VocabularyProvider facets={meta.facets}>
       <div className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
         <Sidebar
           meta={meta}
@@ -206,6 +211,7 @@ export function App() {
           />
         )}
       </div>
+      </VocabularyProvider>
     </EnrichmentProvider>
   );
 }

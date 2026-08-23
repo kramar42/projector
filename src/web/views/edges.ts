@@ -17,7 +17,9 @@
  * backwards from the other two. It is not a question any more.
  *
  * **The most structural type leads.** A pair joined by several relations is
- * styled by one of them, and the order is fixed rather than incidental.
+ * styled by one of them, and the vocabulary's own order decides which — the same
+ * order the filter rail and the panel read. It was a three-name list here, so a
+ * vault's own relation could never lead and a renamed one silently stopped.
  *
  * Kept apart from the styling it feeds so the decision is testable without React
  * Flow, and so the colours and dash patterns stay one edit away from the
@@ -33,10 +35,16 @@ export interface EdgeSpec {
   lead: string;
 }
 
-/** Structural before incidental: containment explains a layout, blocking does not. */
-const LEAD_ORDER = ['parent', 'project', 'blocked_by'];
-
-export function edgesFor(raw: { src: string; dst: string; type: string }[]): EdgeSpec[] {
+export function edgesFor(
+  raw: { src: string; dst: string; type: string }[],
+  /** Declaration order is lead order; anything undeclared sorts last. */
+  facets: Record<string, unknown> = {},
+): EdgeSpec[] {
+  const order = Object.keys(facets);
+  const rank = (t: string) => {
+    const i = order.indexOf(t);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
   const byPair = new Map<string, { src: string; dst: string; types: string[] }>();
   for (const e of raw) {
     const key = `${e.dst}\u0000${e.src}`;
@@ -47,6 +55,6 @@ export function edgesFor(raw: { src: string; dst: string; type: string }[]): Edg
 
   return [...byPair.values()].map((pair) => ({
     ...pair,
-    lead: LEAD_ORDER.find((t) => pair.types.includes(t)) ?? pair.types[0]!,
+    lead: [...pair.types].sort((a, b) => rank(a) - rank(b))[0]!,
   }));
 }
