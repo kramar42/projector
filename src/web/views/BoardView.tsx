@@ -11,7 +11,7 @@ import { useRequestEnrichment } from '../enrichment.tsx';
 import { groupsFor, labelFor } from './groups.ts';
 import { IconButton } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
-import { useSelection } from '../selection.ts';
+import { visibleSelection, type Selection } from '../selection.ts';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -25,14 +25,15 @@ import { useSelection } from '../selection.ts';
 export function BoardView({
   data,
   onOpen,
+  selection,
   reload,
 }: {
   data: QueryResponse;
   onOpen: (id: string) => void;
+  /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
+  selection: Selection;
   reload: () => void;
 }) {
-  // Shared with the table, which asks the same question of the same records.
-  const selection = useSelection();
   const selected = selection.ids;
   const [problem, setProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -175,6 +176,11 @@ export function BoardView({
 
   const lanes = data.lanes.length ? data.lanes : [undefined];
 
+  // What the bar writes: the selection narrowed to what this board draws, so a
+  // card carried in the URL from another shape is remembered without being
+  // written to behind your back.
+  const acting = visibleSelection(selected, data.ids);
+
   return (
     <div className="board-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
@@ -216,9 +222,9 @@ export function BoardView({
         ))}
       </div>
 
-      {selected.size > 0 && (
+      {acting.length > 0 && (
         <BulkBar
-          ids={[...selected]}
+          ids={acting}
           counts={data.counts}
           onDone={() => {
             selection.clear();

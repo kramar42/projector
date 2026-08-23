@@ -9,14 +9,71 @@ import type { Meta, Shape, ViewSpec } from './types.ts';
  * adjust survives unless you name it and it becomes a file.
  *
  * `?card=` is deliberately untouched by all of this: it is where you are looking,
- * not what you are looking at, and it predates the query model.
+ * not what you are looking at, and it predates the query model. `?sel=` joined it
+ * for the same reason.
  */
 
 export const CARD_PARAM = 'card';
 
+/**
+ * Which records are picked out.
+ *
+ * The app's, not the query's — what you have singled out rather than what you
+ * asked for — and keeping it out of `isQueryParam` is load-bearing twice. A
+ * saved view must not record a selection, and `useLive` blanks its data before
+ * refetching: a selection that counted as part of the query would flash the whole
+ * pane to "loading…" on every click.
+ *
+ * It lives in the URL rather than in a component so that it survives a change of
+ * shape — the same records are the same records whether you are looking at a
+ * board, a table or a canvas — and a reload.
+ */
+export const SEL_PARAM = 'sel';
+
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
   return key.startsWith('f.') || (SPEC_PARAMS as readonly string[]).includes(key);
+}
+
+/**
+ * Every key the app writes: the query, which panel is open, and what is selected.
+ *
+ * A key missing from here is deleted from the address bar by `strippedOfStrays`,
+ * so this list is what keeps `?sel=` alive rather than treating it as the fossil
+ * `?filterstyle=` became.
+ *
+ * The vault is not here and is not missing — it lives in `localStorage`, because
+ * it is which library you opened rather than what you are looking at.
+ */
+function isOwnParam(key: string): boolean {
+  return key === CARD_PARAM || key === SEL_PARAM || isQueryParam(key);
+}
+
+/**
+ * The same search with keys the app does not own dropped — or `null` when it
+ * carries none, which is the overwhelmingly common case and the caller's signal
+ * that there is nothing to rewrite.
+ *
+ * If the URL is the view (C9), a key nothing reads is not part of it. `patchSearch`
+ * preserves what it does not recognise, on purpose — it writes what it is told —
+ * so a parameter that stops existing keeps riding along in any URL that was
+ * bookmarked, shared or left open while it did. `?filterstyle=box|chip|edge` was
+ * one: three filter-value treatments compared at real repetition, of which two
+ * and the parameter were deleted, and it was still in the address bar long after
+ * the code that read it was gone.
+ *
+ * Returning `null` rather than an unchanged string is what keeps the caller's
+ * rewrite from looping: `URLSearchParams` re-encodes as it serialises, so a
+ * round-trip is not guaranteed to be a fixed point and "unchanged" cannot be
+ * decided by comparing the output.
+ */
+export function strippedOfStrays(search: string): string | null {
+  const params = paramsOf(search);
+  const strays = [...params.keys()].filter((k) => !isOwnParam(k));
+  if (strays.length === 0) return null;
+  for (const key of strays) params.delete(key);
+  const s = params.toString();
+  return s ? `?${s}` : '';
 }
 
 export function paramsOf(search: string): URLSearchParams {
@@ -34,6 +91,20 @@ export function apiSearch(search: string): string {
 // ---------------------------------------------------------------- writing
 
 export type Patch = Record<string, string | null>;
+
+/** The picked-out ids, as the URL carries them. */
+export function selectionOf(search: string): Set<string> {
+  const raw = paramsOf(search).get(SEL_PARAM);
+  return new Set(raw ? raw.split(',').filter(Boolean) : []);
+}
+
+/**
+ * The patch that writes a selection. Empty removes the key rather than writing an
+ * empty one, so a cleared selection leaves no trace in a shared URL.
+ */
+export function selectionPatch(ids: ReadonlySet<string>): Patch {
+  return { [SEL_PARAM]: ids.size ? [...ids].join(',') : null };
+}
 
 /**
  * Apply a patch to the current search string. `null` removes a key; `''` keeps it

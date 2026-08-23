@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ranged, toggled } from '../src/web/selection.ts';
+import { ranged, toggled, visibleSelection } from '../src/web/selection.ts';
 
 /**
  * What a selection gesture means.
@@ -82,4 +82,27 @@ test('a shift-click with no anchor is just that row', () => {
 
 test('a shift-click on a row that is not there changes nothing', () => {
   assert.deepEqual(sorted(ranged(set('a'), ROWS, 1, 99)), ['a']);
+});
+
+// ---------------------------------------------------------------- visibleSelection
+
+/**
+ * The URL keeps the whole selection so that switching to a shape which filters
+ * some of it out and back again restores it. What the bulk bar counts and writes
+ * is the part on screen: "3 selected" has to mean three you can see, and a bulk
+ * write must not reach a record the query never returned.
+ */
+test('the bar acts on the part of the selection this shape draws', () => {
+  const drawn = ['a', 'b', 'c'];
+  assert.deepEqual(visibleSelection(set('a', 'c'), drawn), ['a', 'c']);
+  // `d` was picked on another shape and is remembered by the URL, not written to.
+  assert.deepEqual(visibleSelection(set('a', 'd'), drawn), ['a']);
+  assert.deepEqual(visibleSelection(set('d', 'e'), drawn), [], 'none of it is here');
+  assert.deepEqual(visibleSelection(new Set(), drawn), []);
+});
+
+test('it reads in the shape\'s order, not the selection\'s', () => {
+  // The bar's ids follow what is on screen, so a delete confirm lists them the
+  // way they are drawn rather than the way they were clicked.
+  assert.deepEqual(visibleSelection(set('c', 'a', 'b'), ['a', 'b', 'c']), ['a', 'b', 'c']);
 });

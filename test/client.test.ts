@@ -4,7 +4,14 @@ import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { blankQuery } from '../src/view/intents.ts';
 import { specFromFile } from '../src/view/spec.ts';
-import { apiSearch, paramsOf, patchSearch } from '../src/web/query.ts';
+import {
+  apiSearch,
+  paramsOf,
+  patchSearch,
+  selectionOf,
+  selectionPatch,
+  strippedOfStrays,
+} from '../src/web/query.ts';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -182,8 +189,63 @@ test('clearing drops the fixed keys and every facet override, from either source
 
 // ---------------------------------------------------------------- the location
 
+/**
+ * A key the app does not own is not part of the view.
+ *
+ * `patchSearch` preserves what it does not recognise — it writes what it is told —
+ * so nothing ever took a retired parameter back out of the URL. `?filterstyle=`
+ * switched between three filter-value treatments; two of them and the parameter
+ * were deleted, and it sat in bookmarked and open URLs afterwards regardless.
+ * `null` means "nothing to rewrite", which is what keeps the caller from looping
+ * on `URLSearchParams`'s own re-encoding.
+ */
+test('a parameter the app does not own is dropped from the URL', () => {
+  assert.equal(strippedOfStrays('?view=home&f.status=planning&card=x'), null);
+  assert.equal(strippedOfStrays(''), null, 'no params is nothing to rewrite');
+  assert.equal(strippedOfStrays('?filterstyle=chip&view=home'), '?view=home');
+  assert.equal(strippedOfStrays('?filterstyle=chip'), '', 'a search that was only a stray');
+  assert.equal(
+    strippedOfStrays('?card=x&filterstyle=chip'),
+    '?card=x',
+    'which panel is open is the app\'s, and survives',
+  );
+  // And so is what you have picked out. Left off the owned list it would be
+  // deleted from the address bar on load, exactly as `filterstyle` now is.
+  assert.equal(strippedOfStrays('?sel=a,b&view=home'), null, 'sel is owned, not a stray');
+});
+
+/**
+ * A selection round-trips through the URL, because that is where it lives: a
+ * change of shape unmounts the view, and picking the same twelve cards again is
+ * the work you were trying to avoid.
+ */
+test('a selection survives the URL, and an empty one leaves no trace', () => {
+  assert.deepEqual([...selectionOf('?sel=a,b,c')], ['a', 'b', 'c']);
+  assert.deepEqual([...selectionOf('?view=home')], [], 'no key is no selection');
+  assert.deepEqual([...selectionOf('?sel=')], [], 'an empty key is no selection');
+  assert.deepEqual([...selectionOf('?sel=a,,b')], ['a', 'b'], 'a stray comma is not an id');
+
+  assert.deepEqual(selectionPatch(new Set(['a', 'b'])), { sel: 'a,b' });
+  // `null` removes rather than writing `sel=`, so a cleared selection is not a
+  // fossil in a shared link.
+  assert.deepEqual(selectionPatch(new Set()), { sel: null });
+  assert.equal(patchSearch('?view=home&sel=a,b', selectionPatch(new Set())), '?view=home');
+
+  // The whole point: changing shape is a patch of spec keys, and it leaves the
+  // selection alone.
+  assert.equal(
+    patchSearch('?view=home&sel=a,b', { shape: 'table' }),
+    '?view=home&sel=a%2Cb&shape=table',
+  );
+  assert.deepEqual([...selectionOf(patchSearch('?sel=a,b', { shape: 'table' }))], ['a', 'b']);
+});
+
 test('only query parameters reach the server, and the rest survive a patch', () => {
   assert.equal(apiSearch('?view=home&card=abc&f.status=planning'), '?view=home&f.status=planning');
+  // The selection is the app's, not the query's. Both halves matter: a saved view
+  // must not record one, and `useLive` blanks its data before refetching — so a
+  // `sel` that counted as a query param would flash the pane on every click.
+  assert.equal(apiSearch('?view=home&sel=a,b&f.status=planning'), '?view=home&f.status=planning');
   assert.equal(paramsOf('?a=1').get('a'), '1');
   assert.equal(paramsOf('a=1').get('a'), '1', 'with or without the leading ?');
 

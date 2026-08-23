@@ -34,6 +34,7 @@ import { useRequestEnrichment } from '../enrichment.tsx';
 import type { CardDTO, QueryResponse, Meta } from '../types.ts';
 import { Button } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
+import { visibleSelection, type Selection } from '../selection.ts';
 import { CommitInput } from '../components/CommitInput.tsx';
 
 /**
@@ -137,6 +138,7 @@ export function CanvasView({
   meta,
   data,
   onOpen,
+  selection,
   reload,
   wire,
   onSaved,
@@ -144,6 +146,8 @@ export function CanvasView({
   meta: Meta;
   data: QueryResponse;
   onOpen: (id: string) => void;
+  /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
+  selection: Selection;
   reload: () => void;
   /** The query half of the page URL — what a save records. */
   wire: string;
@@ -244,30 +248,65 @@ export function CanvasView({
     setDirty(false);
   }, [built.nodes]);
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((cur) => applyNodeChanges(changes, cur));
-    // Only a finished drag counts as a change worth offering to save.
-    if (changes.some((c) => c.type === 'position' && c.dragging === false)) setDirty(true);
-  }, []);
+  /**
+   * Node changes, with `select` teed off to the URL.
+   *
+   * React Flow owns the *gesture* — cmd/ctrl-click adds, a marquee rewrites the
+   * lot — and it reports each as a `select` change. Those go to `?sel=`, so the
+   * selection outlives this component and a change of shape. One write per batch,
+   * so a marquee over nine nodes is one history entry rather than nine.
+   *
+   * The changes are still applied to the nodes as well, rather than waiting for
+   * the URL to come back round: React Flow reads `selected` off the nodes we hand
+   * it, and routing the click through a navigation first puts a render between the
+   * click and the ring.
+   */
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((cur) => applyNodeChanges(changes, cur));
+      // Only a finished drag counts as a change worth offering to save.
+      if (changes.some((c) => c.type === 'position' && c.dragging === false)) setDirty(true);
+
+      const picks = changes.filter(
+        (c): c is NodeChange & { type: 'select'; id: string; selected: boolean } =>
+          c.type === 'select',
+      );
+      if (!picks.length) return;
+      const next = new Set(selection.ids);
+      for (const p of picks) {
+        if (p.selected) next.add(p.id);
+        else next.delete(p.id);
+      }
+      selection.replace(next);
+    },
+    [selection],
+  );
 
   /**
-   * The selection, read off the nodes rather than kept beside them.
+   * The other direction: the URL onto the nodes.
    *
-   * React Flow owns `node.selected` — cmd/ctrl-click adds to it, a shift-drag
-   * marquee rewrites it wholesale — and it already flows through
-   * `applyNodeChanges` above. A `Set` of our own would be a second answer that a
-   * marquee never updated, so the board's `useSelection` deliberately has no place
-   * here: `BulkBar` wants ids, and these are the ids.
+   * This is what makes a selection made on a board arrive here, and it is kept
+   * out of `built` deliberately — folding `selected` into that memo re-seeds React
+   * Flow's store, which is the cost the note on `onOpen` above is about. Returning
+   * `cur` unchanged when nothing moved is what stops it fighting the handler above.
    */
-  const selected = useMemo(
-    () => nodes.filter((n) => n.type === 'record' && n.selected).map((n) => n.id),
-    [nodes],
-  );
+  useEffect(() => {
+    setNodes((cur) => {
+      let moved = false;
+      const next = cur.map((n) => {
+        if (n.type !== 'record') return n;
+        const want = selection.ids.has(n.id);
+        if (Boolean(n.selected) === want) return n;
+        moved = true;
+        return { ...n, selected: want };
+      });
+      return moved ? next : cur;
+    });
+  }, [selection.ids, built.nodes]);
 
-  const clearSelection = useCallback(
-    () => setNodes((cur) => cur.map((n) => (n.selected ? { ...n, selected: false } : n))),
-    [],
-  );
+  // What the bar writes: `data.ids` is the matched set, so a context node — which
+  // is not selectable in any case — could never be written to through it.
+  const acting = visibleSelection(selection.ids, data.ids);
 
   /**
    * Positions go to the view file, never to a card: views own arrangement, so the
@@ -408,15 +447,15 @@ export function CanvasView({
           <MiniMap pannable zoomable nodeColor="var(--minimap-node)" maskColor="var(--minimap-mask)" />
         </ReactFlow>
 
-        {selected.length > 0 && (
+        {acting.length > 0 && (
           <BulkBar
-            ids={selected}
+            ids={acting}
             counts={data.counts}
             onDone={() => {
-              clearSelection();
+              selection.clear();
               reload();
             }}
-            onClear={clearSelection}
+            onClear={selection.clear}
             onProblem={setProblem}
           />
         )}

@@ -11,7 +11,16 @@ import { VocabularyProvider } from './vocabulary.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
-import { CARD_PARAM, apiSearch, patchSearch, type Patch } from './query.ts';
+import {
+  CARD_PARAM,
+  apiSearch,
+  patchSearch,
+  selectionOf,
+  selectionPatch,
+  strippedOfStrays,
+  type Patch,
+} from './query.ts';
+import { useSelection } from './selection.ts';
 import { specToPatch } from '../view/intents.ts';
 import type { ViewSpec } from './types.ts';
 import type { Meta, QueryResponse } from './types.ts';
@@ -37,6 +46,9 @@ export function App() {
   const search = useSearch();
 
   const openCard = new URLSearchParams(search).get(CARD_PARAM);
+  // Memoised on the search string, so the set's identity only changes when the
+  // selection does — a canvas effect keys off it.
+  const selectedIds = useMemo(() => selectionOf(search), [search]);
 
   // `onOpen` reaches React Flow through a memoised node array, so its identity
   // must never change: a new function per render re-seeds the store, node
@@ -44,6 +56,25 @@ export function App() {
   // Reading the current location from a ref keeps the deps genuinely empty.
   const nav = useRef({ search, location, navigate });
   nav.current = { search, location, navigate };
+
+  /**
+   * The URL is the view, so a key nothing reads is not part of it.
+   *
+   * Every control writes through `patchSearch`, which preserves what it does not
+   * recognise — so a parameter that is deleted from the code keeps riding along in
+   * any URL that was bookmarked or left open while it existed, and there is
+   * nothing that would ever take it out. `?filterstyle=` outlived the three filter
+   * treatments it switched between by exactly that route.
+   *
+   * `replace`, because this is a normalisation and not a navigation: a fossil in
+   * the address bar should not become a place the back button can return to.
+   */
+  useEffect(() => {
+    const cleaned = strippedOfStrays(search);
+    if (cleaned === null) return;
+    const { location: loc, navigate: go } = nav.current;
+    go(`${loc}${cleaned}`, { replace: true });
+  }, [search]);
 
   /**
    * Every sidebar control funnels through here. `replace` for anything you drag
@@ -75,6 +106,38 @@ export function App() {
     },
     [patch],
   );
+
+  /**
+   * Selection is written like `?card=` and never like a query: `replace` always,
+   * because a twelve-card selection is twelve clicks and the back button is for
+   * views rather than for undoing a pick.
+   */
+  const commitSelection = useCallback((next: ReadonlySet<string>) => {
+    const { search: s, location: loc, navigate: go } = nav.current;
+    go(`${loc}${patchSearch(s, selectionPatch(next))}`, { replace: true });
+  }, []);
+
+  const selection = useSelection(selectedIds, commitSelection);
+
+  /**
+   * Escape clears the selection — the counterpart to the bulk bar's button, and
+   * the only way out that does not involve aiming at anything.
+   *
+   * Not while the panel is open: `CardPanel` listens for the same key on the same
+   * window to close itself, and one keystroke should mean one thing. Not while
+   * something is being typed into either, where Escape belongs to the field.
+   */
+  useEffect(() => {
+    if (!selectedIds.size || openCard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      commitSelection(new Set());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedIds, openCard, commitSelection]);
 
   const setOpenCard = useCallback((id: string | null) => {
     const { search: s, location: loc, navigate: go } = nav.current;
@@ -145,14 +208,16 @@ export function App() {
           meta={meta}
           data={data}
           onOpen={setOpenCard}
+          selection={selection}
           reload={reload}
           wire={wire}
           onSaved={(name) => patch({ view: name })}
         />
       );
-    if (shape === 'table') return <TableView data={data} onOpen={setOpenCard} reload={reload} />;
-    return <BoardView data={data} onOpen={setOpenCard} reload={reload} />;
-  }, [data, meta, queryError, shape, setOpenCard, reload, patch, wire]);
+    if (shape === 'table')
+      return <TableView data={data} onOpen={setOpenCard} selection={selection} reload={reload} />;
+    return <BoardView data={data} onOpen={setOpenCard} selection={selection} reload={reload} />;
+  }, [data, meta, queryError, shape, setOpenCard, selection, reload, patch, wire]);
 
   if (gate) {
     return (

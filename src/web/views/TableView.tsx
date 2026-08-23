@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
-import { useSelection } from '../selection.ts';
+import { visibleSelection, type Selection } from '../selection.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
 
@@ -21,14 +21,16 @@ import type { CardDTO, QueryResponse, Rollup } from '../types.ts';
 export function TableView({
   data,
   onOpen,
+  selection,
   reload,
 }: {
   data: QueryResponse;
   onOpen: (id: string) => void;
+  /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
+  selection: Selection;
   reload: () => void;
 }) {
   const chips = data.spec.show;
-  const selection = useSelection();
   const [problem, setProblem] = useState<string | null>(null);
   // A project row earns the roll-up columns; a table of ordinary cards has
   // nothing to put in them.
@@ -53,6 +55,10 @@ export function TableView({
    * one. That is why a row carries its index rather than its id alone.
    */
   const rows = sections.flatMap((section) => section.ids);
+
+  // What the bar writes — see `visibleSelection`. Rows can repeat a card, so this
+  // is taken against the result set rather than the drawn rows.
+  const acting = visibleSelection(selection.ids, data.ids);
 
   /** Where each section starts in `rows`, so a row can name its own place in it. */
   const offsets: Record<string, number> = {};
@@ -127,9 +133,9 @@ export function TableView({
       {!data.ids.length && <div className="emptystate table-empty">no records match</div>}
       </div>
 
-      {selection.ids.size > 0 && (
+      {acting.length > 0 && (
         <BulkBar
-          ids={[...selection.ids]}
+          ids={acting}
           counts={data.counts}
           onDone={() => {
             selection.clear();
