@@ -102,7 +102,7 @@ test('every seeded file parses as what it claims to be', () => {
   // would be inert, which is why the name is reserved.
   assert.equal(facets.project, undefined, 'project is built-in, not seeded');
   // Reference facets declare no values, and every relation is one.
-  for (const name of ['parent', 'blocks']) {
+  for (const name of ['parent', 'blocked_by']) {
     assert.equal(facets[name]!.type, 'ref', `${name} should be a reference facet`);
     assert.equal(facets[name]!.values, undefined, `${name} should declare no values`);
   }

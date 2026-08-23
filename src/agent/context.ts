@@ -51,10 +51,10 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
 
   // Both directions of the same relation: what this record blocks, and what
   // names it as a blocker.
-  const adj = adjacency('blocks', records);
+  const adj = adjacency('blocked_by', records);
   const along = (m: Map<string, string[]>) =>
     (m.get(id) ?? []).map((n) => records.get(n)).filter((r): r is Rec => !!r);
-  const blockers = along(adj.in);
+  const blockers = along(adj.out);
 
   const siblings = parentIds.length
     ? [...records.values()].filter(
@@ -75,7 +75,7 @@ export function cardContext(id: string, dataRoot: string): CardContext | null {
       .filter((r) => parentsOf(r).includes(id))
       .map((r) => ({ id: r.id, title: r.title })),
     blockedBy: blockers.map((r) => ({ ...brief(r), done: isClosed(r, facets) })),
-    blocks: along(adj.out).map(brief),
+    blocks: along(adj.in).map(brief),
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
     siblings: siblings.map(brief),
   };

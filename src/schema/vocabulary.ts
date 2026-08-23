@@ -44,7 +44,7 @@ export function isOrdered(def: FacetDef | undefined): boolean {
  * *which relation the canvas lays out by* looks identical while `parent` leads,
  * and reverses every arrow the moment anything else does.
  */
-export const INWARD_REFS: readonly string[] = ['parent', 'project'];
+export const INWARD_REFS: readonly string[] = ['parent', 'project', 'blocked_by'];
 
 /**
  * The absence refinement, as it travels.

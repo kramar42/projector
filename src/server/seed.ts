@@ -116,11 +116,15 @@ parent:
   type: ref
   single: true
 
-# What must finish before the target. Its transitive closure is what the blocked
-# axis and views/unblocked.yaml are built from. Not worth grouping a board by — the
-# question is always the inverse, which the derived blocked axis answers.
-blocks:
-  label: Blocks
+# What must finish before this card can move. Stored on the card that is stuck,
+# pointing at what it is stuck on — the same direction as parent and project, and
+# the card you open when you are stuck is the card you record it on. The inverse,
+# what this card holds up, is derived and drawn beside it.
+#
+# Its transitive closure is what the blocked axis and views/unblocked.yaml are
+# built from. Not worth grouping a board by.
+blocked_by:
+  label: blocked by
   type: ref
 `;
 
@@ -186,7 +190,7 @@ show: [project, priority]
     body: `# Every record as a graph, laid out from the roots.
 shape: canvas
 title: Everything
-show: [parent, blocks]
+show: [parent, blocked_by]
 `,
   },
 ];

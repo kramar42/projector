@@ -40,15 +40,18 @@ const INBOUND_CUTOFF = 3;
  * Which derived list is the other end of which reference facet.
  *
  * Named facets, in a file that otherwise names none — and deliberately, because
- * the inverse of a relation is not vocabulary. The server already hardcodes both
- * pairs (`children` is built by walking `parentsOf`, `blockedBy` by walking
- * `blocks`), so this is that same fact reaching the surface that draws it rather
+ * the inverse of a relation is not vocabulary. The server computes exactly these
+ * two pairs, so this is that same fact reaching the surface that draws it rather
  * than a second decision. A new reference facet gets an editable row for free and
  * no inverse row, which is correct: nothing computes its inverse either.
+ *
+ * `blocked_by` changed ends with the relation. The editable row is now what this
+ * card is waiting on — recorded on the card that is stuck, which is the one you
+ * open when you are — and the derived row is what it holds up.
  */
-const INVERSE: Record<string, 'children' | 'blockedBy'> = {
+const INVERSE: Record<string, 'children' | 'blocks'> = {
   parent: 'children',
-  blocks: 'blockedBy',
+  blocked_by: 'blocks',
 };
 
 /**
@@ -293,11 +296,14 @@ export function Refs({
       records: data.children,
       stripe: (r: { done?: boolean }) => (r.done ? 'is-done' : ''),
     },
-    blockedBy: {
-      label: 'Blocked by',
-      means: "computed from other cards' blocks, not stored on this one",
-      records: card.blockedBy,
-      stripe: (r: { done?: boolean }) => (r.done ? 'is-done' : 'is-open'),
+    blocks: {
+      label: 'Blocks',
+      means: "computed from other cards' blocked by, not stored on this one",
+      records: data.blocks,
+      // An unfinished record this one holds up is not a problem with *this*
+      // card — the same reason a child is not striped. `is-open` in `bad` means
+      // "in your way", and these are in nobody's way but their own.
+      stripe: (r: { done?: boolean }) => (r.done ? 'is-done' : ''),
     },
   };
 

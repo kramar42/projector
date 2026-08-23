@@ -64,7 +64,7 @@ const FACETS = `# Fixture vocabulary — a copy of the work vault's, so this vau
 
 status:
   label: Status
-  values: [planning, active, frozen, done, archived]
+  values: [planning, active, on-hold, done, archived]
   open: false
   single: true
   # No further work expected, whatever the outcome — abandonment counts,
@@ -128,8 +128,8 @@ parent:
   type: ref
   single: true
 
-blocks:
-  label: Blocks
+blocked_by:
+  label: blocked by
   type: ref
 `;
 
@@ -253,7 +253,7 @@ const CARDS = [
   {
     id: 'blocker-open',
     title: 'An unfinished blocker',
-    facets: { status: ['active'], priority: ['now'], blocks: ['blocked-once'], energy: ['deep'] },
+    facets: { status: ['active'], priority: ['now'], energy: ['deep'] },
     updated: UPDATED.fresh,
     body:
       'Renders: the `unblocks` glyph in the accent, and a transitive count — finishing this\n' +
@@ -262,7 +262,10 @@ const CARDS = [
   {
     id: 'blocked-once',
     title: 'Blocked by something unfinished',
-    facets: { status: ['planning'], priority: ['now'], blocks: ['blocked-twice'], project: ['platform'] },
+    facets: {
+      status: ['planning'], priority: ['now'], project: ['platform'],
+      blocked_by: ['blocker-open'],
+    },
     updated: UPDATED.week,
     body:
       'Renders: the 3px `--bad` left border, `blocked` on the derived axis, and a blocker\n' +
@@ -271,28 +274,34 @@ const CARDS = [
   {
     id: 'blocked-twice',
     title: 'Blocked two steps back',
-    facets: { status: ['planning'], priority: ['month'], project: ['platform'] },
+    facets: {
+      status: ['planning'], priority: ['month'], project: ['platform'],
+      blocked_by: ['blocked-once'],
+    },
     updated: UPDATED.week,
     body: 'Renders: the far end of a chain. Directly blocked by one record, transitively by two.\n',
   },
   {
     id: 'blocker-done',
     title: 'A blocker that is finished',
-    facets: { status: ['done'], priority: ['month'], blocks: ['clear-despite-blocker'] },
+    facets: { status: ['done'], priority: ['month'], },
     updated: UPDATED.month,
     body:
       'Renders: `status: done`, and the *absence* of an effect. A finished blocker blocks\n' +
-      'nothing, so its target must read `clear` — the one rule in `isDone` that a naive\n' +
-      'implementation gets wrong by counting edges instead of reading them.\n',
+      'nothing, so whatever names it must read `clear` — the one rule in `isClosed` that a\n' +
+      'naive implementation gets wrong by counting edges instead of reading them.\n',
   },
   {
     id: 'clear-despite-blocker',
-    title: 'Named as blocked, but by something finished',
-    facets: { status: ['active'], priority: ['now'], tech: ['kafka'] },
+    title: 'Blocked, but by something finished',
+    facets: {
+      status: ['active'], priority: ['now'], tech: ['kafka'],
+      blocked_by: ['blocker-done'],
+    },
     updated: UPDATED.fresh,
     body:
-      'Renders: no left border and `blocked: clear`, despite carrying an inbound `blocks`\n' +
-      'edge. If this one draws a red border, `isDone` is being ignored somewhere.\n',
+      'Renders: no left border and `blocked: clear`, despite naming a blocker. If this\n' +
+      'one draws a red border, `closed` is being ignored somewhere.\n',
   },
   {
     id: 'waiting-on-someone',
@@ -446,11 +455,11 @@ const CARDS = [
 
   // -------------------------------------------------- lifecycle tail
   {
-    id: 'frozen-work',
-    title: 'Frozen',
-    facets: { status: ['frozen'], priority: ['backlog'], project: ['platform'], layer: ['layer-4'] },
+    id: 'on-hold-work',
+    title: 'On hold',
+    facets: { status: ['on-hold'], priority: ['backlog'], project: ['platform'], layer: ['layer-4'] },
     updated: UPDATED.older,
-    body: 'Renders: `status: frozen`, and `staleness: older` — nothing has touched it in over a year.\n',
+    body: 'Renders: `status: on-hold`, and `staleness: older` — nothing has touched it in over a year.\n',
   },
   {
     id: 'archived-work',
@@ -508,7 +517,7 @@ shape: board
 title: Blocked
 groupBy: [blocked]
 sort: [priority:asc]
-show: [priority, blocks, waiting_on]
+show: [priority, blocked_by, waiting_on]
 `,
   triage: `# All four triage values, including \`complete\`.
 shape: board
@@ -544,7 +553,7 @@ show: [status, priority]
   map: `# The decomposition tree, plus blocking edges. Two relation colours on one canvas.
 shape: canvas
 title: Map
-show: [parent, blocks]
+show: [parent, blocked_by]
 `,
   bands: `# A grouped canvas: bands behind the nodes, drawn from the grouping axis.
 shape: canvas

@@ -42,7 +42,13 @@ export function isClosed(rec: Rec | undefined, facets: Facets): boolean {
 }
 
 /**
- * Records that name this one as blocked, with whether each is finished.
+ * The records this one is waiting on, with whether each is finished.
+ *
+ * A *local* read now. The relation used to be stored the other way round — a
+ * blocker naming what it held up — so answering "what am I waiting on" meant
+ * inverting the whole graph, and recording it meant editing the other card. Both
+ * are gone: the edge lives on the card that is stuck, which is the card you open
+ * when you are stuck.
  *
  * Direct, not transitive: a blocker's own blockers are its problem, and the card
  * face draws this list.
@@ -61,9 +67,11 @@ export function blockedBy(
    */
   facets: Facets,
 ): { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[] {
-  const inward = adjacency('blocks', records).in.get(id) ?? [];
+  // Through `adjacency` rather than the raw facet, so a self-reference and a
+  // value naming no record are dropped here exactly as they are everywhere else.
+  const blockers = adjacency('blocked_by', records).out.get(id) ?? [];
   const inbound = inboundCounts(records, facets);
-  return inward.flatMap((src) => {
+  return blockers.flatMap((src) => {
     const rec = records.get(src);
     return rec
       ? [
@@ -87,23 +95,26 @@ export function blockedBy(
  * by construction. The origin is excluded: "what this unblocks" is not itself.
  */
 export function unblocks(id: string, records: Map<string, Rec>): string[] {
-  const reached = walk(id, adjacency('blocks', records).out);
+  const reached = walk(id, adjacency('blocked_by', records).in);
   reached.delete(id);
   return [...reached];
 }
 
 /**
- * Every record something unfinished is waiting on.
+ * Every record still waiting on something unfinished.
  *
- * `src blocks dst`, so an unfinished record blocks each of its targets. The
- * `blocked` pseudo-facet reads this; it used to compute it inline, which is how
- * the rule came to have two spellings.
+ * One local rule since the relation was inverted: a record is blocked when any
+ * record it names is not closed. It used to walk every *other* record's outward
+ * edges and mark their targets — the same answer, arrived at backwards, because
+ * the edge was stored on the wrong end.
+ *
+ * The `blocked` pseudo-facet reads this; it used to compute it inline, which is
+ * how the rule came to have two spellings.
  */
 export function blockedSet(records: Map<string, Rec>, facets: Facets): Set<string> {
   const out = new Set<string>();
-  for (const [src, targets] of adjacency('blocks', records).out) {
-    if (isClosed(records.get(src), facets)) continue;
-    for (const dst of targets) out.add(dst);
+  for (const [src, blockers] of adjacency('blocked_by', records).out) {
+    if (blockers.some((b) => !isClosed(records.get(b), facets))) out.add(src);
   }
   return out;
 }

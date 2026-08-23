@@ -35,7 +35,7 @@ export interface EdgeSpec {
 }
 
 /** Structural before incidental: containment explains a layout, blocking does not. */
-const LEAD_ORDER = ['parent', 'project', 'blocks'];
+const LEAD_ORDER = ['parent', 'project', 'blocked_by'];
 
 export function edgesFor(
   raw: { src: string; dst: string; type: string }[],

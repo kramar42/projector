@@ -58,10 +58,16 @@ export interface CardDetail {
    * Keyed by id, because that is what a reference facet stores and therefore
    * what the editor has in hand. It replaces a `parents` list that answered the
    * same question for one facet only — which is what let `parent` acquire a
-   * second, better-looking control while `blocks` and `project` kept drawing
+   * second, better-looking control while `blocked_by` and `project` kept drawing
    * raw ids.
    */
   refs: Record<string, { title: string; isProject: boolean; refCount: number }>;
+  /**
+   * The other end of the two relations that have a name for one: `children`
+   * inverts `parent`, `blocks` inverts `blocked_by`. Same shape, so the panel
+   * draws them with one component.
+   */
   children: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
+  blocks: { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[];
   project: ResolvedProject | null;
 }

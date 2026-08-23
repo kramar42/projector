@@ -19,9 +19,10 @@ import { split } from '../schema/frontmatter.ts';
 import { join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
+import type { Facets, Rec } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
 import { cached, invalidate } from '../index/cache.ts';
-import { resolveProject, parentsOf, isProject } from '../index/project.ts';
+import { resolveProject, isProject } from '../index/project.ts';
 import { blockedBy, isClosed, unblocks } from '../index/blocking.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
@@ -311,18 +312,50 @@ app.get('/api/card/:id', (c) => {
     // It does not follow that both lists draw the same *states*. Only a blocker
     // may draw `is-open` in `bad`, because there "open" means in your way; an
     // unfinished child is a child. The panel decides that per list.
-    children: [...records.values()]
-      .filter((r) => parentsOf(r).includes(rec.id))
+    //
+    // One shape, two relations. `children` is the inverse of `parent`; `blocks`
+    // is the inverse of `blocked_by`, and it changed ends when that relation did
+    // — the edge is stored on the card that is stuck, so what a card *holds up*
+    // is now the derived half.
+    ...inverseOf(rec, records, facets, inbound),
+    project,
+  });
+});
+
+/**
+ * The records naming this one, per relation that has a name for its other end.
+ *
+ * Two relations have one: `parent` is answered by `children`, `blocked_by` by
+ * `blocks`. Nothing computes an inverse for any other reference facet, and the
+ * panel draws exactly what arrives — so a new relation gets an editable row and
+ * no derived one, which is correct rather than missing.
+ */
+function inverseOf(
+  rec: Rec,
+  records: Map<string, Rec>,
+  facets: Facets,
+  inbound: Map<string, number>,
+): { children: Inbound[]; blocks: Inbound[] } {
+  const naming = (via: string) =>
+    [...records.values()]
+      .filter((r) => (r.facets[via] ?? []).includes(rec.id))
       .map((r) => ({
         id: r.id,
         title: r.title,
         done: isClosed(r, facets),
         isProject: isProject(r),
         refCount: inbound.get(r.id) ?? 0,
-      })),
-    project,
-  });
-});
+      }));
+  return { children: naming('parent'), blocks: naming('blocked_by') };
+}
+
+interface Inbound {
+  id: string;
+  title: string;
+  done: boolean;
+  isProject: boolean;
+  refCount: number;
+}
 
 // ---------------------------------------------------------------- writes
 //

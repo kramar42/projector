@@ -87,12 +87,12 @@ const nodeTypes = { record: RecordNode, cluster: ClusterNode };
  */
 const RELATION_COLOUR: Record<string, string> = {
   parent: 'var(--rel-parent)',
-  blocks: 'var(--rel-blocks)',
+  blocked_by: 'var(--rel-blocks)',
   project: 'var(--rel-project)',
 };
 
 const DASH: Record<string, string | undefined> = {
-  blocks: '6 4',
+  blocked_by: '6 4',
   project: '1 3',
 };
 
@@ -117,7 +117,9 @@ function buildEdges(
       // Only `blocks` earns text: it is the one relationship you cannot infer
       // from the layout. Its fill and step live in `.react-flow__edge-text`, not
       // here — an inline `fontSize` is a type decision the scale test cannot see.
-      ...(types.includes('blocks') ? { label: types.length > 1 ? types.join(' + ') : 'blocks' } : {}),
+      ...(types.includes('blocked_by')
+        ? { label: types.length > 1 ? types.join(' + ') : 'blocked by' }
+        : {}),
       labelBgStyle: { fillOpacity: 0.9 },
       labelBgPadding: [4, 2] as [number, number],
       labelBgBorderRadius: 3,

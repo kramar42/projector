@@ -194,20 +194,21 @@ test('refsOf drops a self-reference rather than making a loop of one', () => {
 });
 
 
-test('a self-reference and a dangling one are dropped by every blocks answer', () => {
+test('a self-reference and a dangling one are dropped by every blocking answer', () => {
+  // Stored on the card that is stuck: `target` names both of its blockers.
   const records = new Map(
     [
-      recordOf('---\nid: loop\ntitle: Loops\nfacets: { blocks: [loop], status: [planning] }\n---\n'),
-      recordOf('---\nid: ghost\ntitle: Ghost\nfacets: { blocks: [nowhere], status: [planning] }\n---\n'),
-      recordOf('---\nid: real\ntitle: Real\nfacets: { blocks: [target], status: [planning] }\n---\n'),
-      recordOf('---\nid: target\ntitle: Target\nfacets: { status: [planning] }\n---\n'),
-      recordOf('---\nid: fin\ntitle: Finished\nfacets: { blocks: [target], status: [done] }\n---\n'),
+      recordOf('---\nid: loop\ntitle: Loops\nfacets: { blocked_by: [loop], status: [planning] }\n---\n'),
+      recordOf('---\nid: ghost\ntitle: Ghost\nfacets: { blocked_by: [nowhere], status: [planning] }\n---\n'),
+      recordOf('---\nid: real\ntitle: Real\nfacets: { status: [planning] }\n---\n'),
+      recordOf('---\nid: target\ntitle: Target\nfacets: { blocked_by: [real, fin], status: [planning] }\n---\n'),
+      recordOf('---\nid: fin\ntitle: Finished\nfacets: { status: [done] }\n---\n'),
     ].map((r) => [r.id, r]),
   );
 
   // `closed` is where "finished" is declared, so the vocabulary has to be here.
   const facets = loadFacets(
-    facetsFile('status: { values: [planning, done], closed: [done] }\nblocks: { type: ref }\n'),
+    facetsFile('status: { values: [planning, done], closed: [done] }\nblocked_by: { type: ref }\n'),
   );
 
   assert.deepEqual(unblocks('loop', records), [], 'a self-loop unblocks nothing, and terminates');
@@ -225,7 +226,7 @@ test('a self-reference and a dangling one are dropped by every blocks answer', (
 
   // And a vault that declares no `closed` value has no finished records: the
   // rule is the vocabulary's, not a literal in the engine.
-  const noRule = loadFacets(facetsFile('status: { values: [planning, done] }\nblocks: { type: ref }\n'));
+  const noRule = loadFacets(facetsFile('status: { values: [planning, done] }\nblocked_by: { type: ref }\n'));
   assert.deepEqual(
     blockedBy('target', records, noRule).map((b) => b.done),
     [false, false],

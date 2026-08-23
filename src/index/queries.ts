@@ -42,7 +42,7 @@ export function counts(db: DatabaseSync): Record<string, number> {
     containers: one("SELECT count(DISTINCT value) AS n FROM facets WHERE facet = 'parent'"),
     // Relations are facet values, so there is no separate table to count.
     relations: one(
-      "SELECT count(*) AS n FROM facets WHERE facet IN ('parent', 'blocks', 'project')",
+      "SELECT count(*) AS n FROM facets WHERE facet IN ('parent', 'blocked_by', 'project')",
     ),
     links: one('SELECT count(*) AS n FROM links'),
     facetValues: one('SELECT count(*) AS n FROM facets'),

@@ -17,7 +17,7 @@ import { parse } from 'yaml';
  *
  *   project-b ──member─ keycloak ──member─ kc-realms          (project chain)
  *   project-a ──parent── project-a-eventing ──parent── kafka-schema  (decomposition)
- *   blocker ──blocks──> blocked-card
+ *   blocked-card ──blocked_by──> blocker
  */
 const CARDS: Record<string, string> = {
   project-b: `---
@@ -70,14 +70,14 @@ updated: 2026-08-20
   blocker: `---
 id: blocker
 title: Must land first
-facets: { status: [active], priority: [now], blocks: [blocked-card] }
+facets: { status: [active], priority: [now] }
 updated: 2026-08-20
 ---
 `,
   'blocked-card': `---
 id: blocked-card
 title: Waits on the blocker
-facets: { status: [planning], priority: [now], project: [project-a] }
+facets: { status: [planning], priority: [now], project: [project-a], blocked_by: [blocker] }
 updated: 2026-08-20
 ---
 `,
@@ -92,7 +92,7 @@ updated: 2026-01-01
 
 const FACETS = `
 parent:     { label: Part of,  type: ref, single: true }
-blocks:     { label: Blocks,   type: ref }
+blocked_by: { label: blocked by, type: ref }
 due:        { label: Due, type: date, single: true, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }
 priority:   { label: Priority, values: [now, month, backlog], open: false, single: true, expected: true }
 status:     { label: Status,   values: [planning, active, done], open: false, single: true, closed: [done], expected: true }
@@ -179,8 +179,8 @@ test('pseudo-facets filter exactly like stored ones', () => {
   try {
     assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['project'] } }), ['project-b', 'keycloak', 'project-a']);
-    assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocked-card', 'project-a-eventing']);
-    assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocker', 'kafka-schema', 'kc-realms', 'loose']);
+    assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocker', 'project-a-eventing']);
+    assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked'] } }), ['blocked-card']);
     // A card missing two axes lands in both buckets. `project-b` and `project-a` are project
     // records and appear here too: the engine no longer exempts them, the triage
@@ -261,9 +261,10 @@ test('focus walks references transitively, in the direction asked for', () => {
     assert.deepEqual(set({ id: 'kafka-schema', via: 'parent', dir: 'out' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
     // The project reference reaches the grandchild that `project=project-b` could not.
     assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in' }), ['project-b', 'kc-realms', 'keycloak']);
-    // Downstream of a blocker is what finishing it unblocks.
-    assert.deepEqual(set({ id: 'blocker', via: 'blocks', dir: 'out' }), ['blocked-card', 'blocker']);
-    assert.deepEqual(set({ id: 'blocked-card', via: 'blocks', dir: 'in' }), ['blocked-card', 'blocker']);
+    // The relation is stored on the card that is stuck, so `out` from it reaches
+    // its blockers and `in` from a blocker reaches what it holds up.
+    assert.deepEqual(set({ id: 'blocked-card', via: 'blocked_by', dir: 'out' }), ['blocked-card', 'blocker']);
+    assert.deepEqual(set({ id: 'blocker', via: 'blocked_by', dir: 'in' }), ['blocked-card', 'blocker']);
     // depth caps the walk one hop short of the grandchild.
     assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in', depth: 1 }), ['project-b', 'keycloak']);
   } finally {
@@ -753,14 +754,14 @@ updated: 2026-08-19
   someday: `---
 id: someday
 title: No deadline
-facets: { status: [planning] }
+facets: { status: [planning], blocked_by: [gate] }
 updated: 2026-08-19
 ---
 `,
   blocker: `---
 id: gate
 title: Gate
-facets: { status: [active], blocks: [someday] }
+facets: { status: [active] }
 updated: 2026-08-19
 ---
 `,
