@@ -19,10 +19,13 @@ export const CARD_PARAM = 'card';
  * Which records are picked out.
  *
  * The app's, not the query's — what you have singled out rather than what you
- * asked for — and keeping it out of `isQueryParam` is load-bearing twice. A
- * saved view must not record a selection, and `useLive` blanks its data before
- * refetching: a selection that counted as part of the query would flash the whole
- * pane to "loading…" on every click.
+ * asked for — and keeping it out of `isQueryParam` is load-bearing twice. A saved
+ * view must not record a selection, and a click must not re-ask the server: the
+ * result set cannot have changed, so a selection inside the query would spend a
+ * round trip per pick to be told the same answer. It used to cost more than that —
+ * `useLive` blanked its payload before refetching, so every click flashed the
+ * pane to "loading…" — and the parameter has stayed out of the query for the
+ * reason that outlived the flash.
  *
  * It lives in the URL rather than in a component so that it survives a change of
  * shape — the same records are the same records whether you are looking at a

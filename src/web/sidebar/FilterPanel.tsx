@@ -56,16 +56,27 @@ const CUTOFF = 8;
 
 function Facet({ facet, edit }: { facet: FacetCount; edit: Edit }) {
   const selected = facet.values.filter((v) => v.selected);
-  // A facet you are using stays open; one you are not starts collapsed, or ten
-  // facets of vocabulary bury the two you care about.
-  const [open, setOpen] = useState(selected.length > 0);
+  /**
+   * A facet you are using is open; one you are not is collapsed, or ten facets of
+   * vocabulary bury the two you care about. A facet you have opened or closed
+   * yourself stays where you put it.
+   *
+   * That second half used to come for free from `useState(selected.length > 0)`:
+   * the panel was thrown away and rebuilt on every change of query, so the
+   * initialiser ran again each time and the derived answer was never stale for
+   * longer than a frame. The panel survives a change of query now, so the
+   * derivation has to be stated rather than captured — otherwise picking a value
+   * in the rail is the last time a section ever reconsiders whether to be open.
+   */
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? selected.length > 0;
   const [all, setAll] = useState(false);
 
   const shown = all ? facet.values : facet.values.slice(0, CUTOFF);
 
   return (
     <section className={`facet ${open ? 'is-open' : ''} ${selected.length ? 'is-active' : ''}`}>
-      <button className="facet-head" onClick={() => setOpen((v) => !v)}>
+      <button className="facet-head" onClick={() => setManual(!open)}>
         <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
         <span className="truncate facet-label">{facet.label}</span>
         {facet.pseudo && (

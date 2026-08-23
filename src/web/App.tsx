@@ -191,9 +191,18 @@ export function App() {
   }, [meta, search, navigate]);
 
   const wire = apiSearch(search);
+  /**
+   * The query, and the two different things a change to it can mean.
+   *
+   * A new `wire` is a new question about the same vault, so the answer on screen
+   * stays up until the new one lands — that is the whole of "no blink" (see
+   * `useLive`). A new vault is a different library, and holding its predecessor's
+   * board up for even a frame would be showing cards that are not there.
+   */
   const { data, error: queryError, reload } = useLive<QueryResponse>(
     () => api.query(wire),
-    [wire, meta?.vault],
+    [wire],
+    [meta?.vault],
   );
 
   const shape = data?.spec.shape ?? 'board';
@@ -201,6 +210,8 @@ export function App() {
   editRef.current = data ? { spec: data.spec, savedSpec: data.savedSpec } : null;
   const content = useMemo(() => {
     if (queryError) return <div className="pane-error">{queryError}</div>;
+    // First paint only. A change of query holds the previous payload, so nothing
+    // that is already on screen ever passes back through here.
     if (!data || !meta) return <div className="pane-loading">loading…</div>;
     if (shape === 'canvas')
       return (
