@@ -37,6 +37,30 @@ needs to be part of two things.
 
   Revisit when a numeric facet exists or deadlines are in use, i.e. when there is a question on screen
   that cannot be answered.
+- **`container: true`, when the proxy breaks.** Three semantics are inferred from `single: true` on a
+  reference facet: which records are siblings, which relation the bulk bar's "set …" button writes, and
+  — for `single` alone, any type — which axes `pj log` narrates. `single` is a *structural* property
+  doing semantic work, and it is a good proxy: one value is what makes a container a container, and a
+  card holding one value on an axis is a card whose change to it is a transition.
+
+  It has one failure that is easy to state. A vault declaring **two** single-valued reference facets
+  gets the first for the button, by declaration order, arbitrarily — and siblings from both at once,
+  which may be right or may be two unrelated senses of *beside*. Nothing in the seeded vault hits this,
+  because `parent` is the only single-valued relation it has.
+
+  The fix is a fifth relation key, and it is deliberately not written yet: adding a declaration to
+  express something no vault has needed is how the vocabulary grows keys nobody sets. Add it the first
+  time a vault has two containers and the wrong one wins.
+
+- **`subtitle: true`, and the last two per-facet affordances.** `RecordPicker` draws a record's project
+  under its title, and the projects table has a column of them; both read the built-in `project` facet
+  directly. They are legal — being known by name is what built-in means — but they are the only two
+  places left where one axis has UI no other axis can have.
+
+  A `subtitle: true` key would generalise both: the picker draws whichever facets ask for it, the table
+  gets a column per asking facet. Small, and worth doing the moment a second axis wants it. Until then
+  it would be a key with exactly one setter, which is the shape of a thing that drifts.
+
 - **Keyboard operation.** The largest thing the app cannot do. Structure is edited by gesture on
   purpose — drag, the bulk bar, canvas handles — and content through the panel, so there is no keyboard
   path to either: eight `aria`/`role` attributes in the whole client, and a board you can only
