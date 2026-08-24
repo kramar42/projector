@@ -27,6 +27,19 @@
   --rule-2: #c4c4c4;
   --accent: #373762;      /* purple3 */
   --accent-soft: #ebebf7;
+  /*
+   * The flush a note gets when it changed and the reader did not change it.
+   *
+   * Derived rather than picked, and derived from `--ink` rather than from a hue: it
+   * has to say *look here* without saying *and this is a priority / a status / the
+   * app speaking*, which every hue in this palette already says. Mixing the ink
+   * means it inverts on its own — near-white over the dark ground, near-black over
+   * the light one — so one declaration serves both themes and there is no second
+   * value to keep in step. The only interpolated value in the file that is not a
+   * chip tint, and the reason is the same reason: a wash of an existing token, not
+   * a new colour.
+   */
+  --flush: color-mix(in srgb, var(--ink) 9%, transparent);
   --dot: #dcdcdc;
 
   --minimap-node: #a6a6e7;
@@ -2183,6 +2196,85 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .banner.is-bad { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .banner.is-conflict { border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+/*
+ * The one animation in this app, and the whole of it.
+ *
+ * DESIGN.md's **The Something Moved Rule** is the argument: a note changing while
+ * the reader looks at it is the single event stillness cannot express, because it is
+ * the one thing on this surface the reader did not cause. Everything else the Don't
+ * list forbids is the app decorating something they already know they did.
+ *
+ * **A flush that decays, not a row that announces.** The first attempt drew a line
+ * naming the fields that moved, which was wrong twice: it cost a layout shift in a
+ * fixed head, and it asked the reader to read a sentence about a value already on
+ * screen. Washing the region the value lives in puts their eye on the new value and
+ * says nothing — what a live trading readout does when a figure ticks.
+ *
+ * **An overlay whose opacity animates, and that is the second attempt.** The first
+ * animated `background-image` between two flat gradients, to avoid replacing a card
+ * face's own fill. It does avoid that and it does not animate: a gradient carrying a
+ * `color-mix()` is not interpolated here, so it held at full and snapped to nothing
+ * at the end — a flash with no decay, which is exactly what it looked like. `opacity`
+ * on a pseudo-element interpolates properly, eases properly, and composes over any
+ * host without needing to know what that host's background is. It also leaves
+ * `box-shadow` alone, which on a card face is already the selected ring, the reorder
+ * drop line and the state stripe (The Stroke-As-Shadow Rule) — so a selected note an
+ * agent touches keeps its ring and gets the flush.
+ *
+ * **Neutral, not the accent.** Every hue here means something — an axis, a state, the
+ * app speaking — and a wash that means *look here* must not also read as one of
+ * those. `--flush` is `--ink` at 9%, which inverts on its own: near-white over the
+ * dark ground, near-black over the light one, one declaration for both.
+ *
+ * **`ease-out` over 2.6s, held for the first tenth** so the flush registers as an
+ * event before it starts to go. Once, never looping: a thing that keeps moving is a
+ * thing you stop seeing.
+ */
+@keyframes touched {
+  0%, 8% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.cardface.is-touched,
+.table tr.is-touched > td,
+.panel-title.is-touched,
+.panel-section.is-touched,
+.facetrow.is-touched > .facetrow-label,
+.facetrow.is-touched > .facetrow-values {
+  position: relative;
+}
+
+.cardface.is-touched::after,
+.table tr.is-touched > td::after,
+.panel-title.is-touched::after,
+.panel-section.is-touched::after,
+.facetrow.is-touched > .facetrow-label::after,
+.facetrow.is-touched > .facetrow-values::after {
+  content: '';
+  position: absolute;
+  /* `-1px` vertically on a facet row so consecutive changed rows read as one band
+     rather than as stripes with hairlines of ground between them. */
+  inset: 0;
+  background: var(--flush);
+  border-radius: inherit;
+  /* The chips underneath are still the thing being clicked. */
+  pointer-events: none;
+  animation: touched 2600ms ease-out 1;
+}
+
+/* A reader who asked for less motion gets the flush and not the decay: the wash is
+   the information, the easing is only how it arrives. It still clears, because the
+   class comes off when the hold expires. */
+@media (prefers-reduced-motion: reduce) {
+  .cardface.is-touched::after,
+  .table tr.is-touched > td::after,
+  .panel-title.is-touched::after,
+  .panel-section.is-touched::after,
+  .facetrow.is-touched > .facetrow-label::after,
+  .facetrow.is-touched > .facetrow-values::after {
+    animation: none;
+  }
+}
 
 
 
@@ -2519,10 +2611,19 @@ textarea { resize: vertical; font-family: inherit; }
  * on the row is what lets two sections' rows each align internally while the
  * markup still nests a row as a row.
  */
+/*
+ * No column gap — the label's own padding is the gutter instead.
+ *
+ * A `.facetrow` is `display: contents`, so it has no box: anything painted per row
+ * is painted on the two cells it becomes, and a 10px gap between them showed through
+ * as two rectangles with a stripe of ground between. Moving the gutter into the
+ * label's padding leaves the layout identical to the pixel and makes the row one
+ * continuous band, which is what a row-level wash needs. The row gap stays a gap.
+ */
 .facetgrid {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 5px 10px;
+  gap: 5px 0;
   align-items: start;
 }
 
@@ -2544,6 +2645,8 @@ textarea { resize: vertical; font-family: inherit; }
   font-family: var(--sans);
   font-size: var(--text-body-sm);
   color: var(--ink-3);
+  /* The grid's old `column-gap`, moved here so the row can be painted as one. */
+  padding-right: 10px;
   padding-top: 2px;
   display: flex;
   align-items: center;

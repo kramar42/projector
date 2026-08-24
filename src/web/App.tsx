@@ -8,6 +8,7 @@ import { TableView } from './views/TableView.tsx';
 import { NotePanel } from './panel/NotePanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { VocabularyProvider } from './vocabulary.tsx';
+import { TouchedProvider } from './touched.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
@@ -255,6 +256,7 @@ export function App() {
 
   return (
     <EnrichmentProvider>
+     <TouchedProvider>
       {/* Every surface that *draws* a facet value reads its hue from here, so a
           chip on a card face, a table cell, a canvas node and the bulk bar
           cannot disagree about what colour an axis is. */}
@@ -288,6 +290,7 @@ export function App() {
         )}
       </div>
       </VocabularyProvider>
+     </TouchedProvider>
     </EnrichmentProvider>
   );
 }

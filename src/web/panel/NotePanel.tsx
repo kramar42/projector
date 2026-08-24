@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { ProjectMark } from '../components/CardBody.tsx';
@@ -6,7 +6,9 @@ import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
-import type { NoteDetail, Meta } from '../types.ts';
+import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
+import { useTouched } from '../touched.tsx';
+import { whatMoved } from '../changed.ts';
 
 /**
  * The open note.
@@ -55,6 +57,16 @@ function Instructions({ blocks }: { blocks: string[] }) {
   );
 }
 
+/**
+ * How long a changed region stays washed.
+ *
+ * Longer than the animation on purpose, so the class is never pulled out from under
+ * a running one — the wash decays to nothing on its own and the class coming off
+ * afterwards is invisible. The rule it serves is DESIGN.md's The Something Moved
+ * Rule; `changed.ts` holds the two decisions it rests on.
+ */
+const HOLD_MS = 2600;
+
 export function NotePanel({
   id,
   meta,
@@ -67,6 +79,7 @@ export function NotePanel({
   onOpen: (id: string) => void;
 }) {
   const { data, error, reload } = useLive<NoteDetail>(() => api.card(id), [id]);
+  const { touched } = useTouched();
   const [editTitle, setEditTitle] = useState<string | null>(null);
 
   /**
@@ -127,6 +140,48 @@ export function NotePanel({
   const card = data?.card;
 
   /**
+   * Which parts of this note moved without you, held long enough to see.
+   *
+   * `useLive` keeps the outgoing payload until the next one lands, so both sides of
+   * a change exist for exactly one commit — the ref catches the outgoing one. What
+   * the diff *is* used for is the point: not a sentence, a set of keys, so the parts
+   * that changed can light up and the reader's eye goes to the new value instead of
+   * to a line of prose about it.
+   *
+   * **In state with a timer, not derived per render.** Derived was a bug with a
+   * shape: the ref catches up in the very effect that reads it, so the diff was
+   * non-empty for one render pass and empty on every render after — a single frame,
+   * which reads as a blink rather than as a signal.
+   *
+   * The ordering it depends on: the provider's subscription runs synchronously in
+   * the SSE handler while `reload()` is a fetch, so `touched(id)` is already true by
+   * the time a new `card` arrives. Deps are `[card]` alone for that reason — this
+   * asks its question at the moment the payload swaps, and nothing else.
+   */
+  const seen = useRef<NoteDTO | null>(null);
+  const [moved, setMoved] = useState<string[]>([]);
+  useEffect(() => {
+    if (!card) return;
+    const before = seen.current;
+    seen.current = card;
+    if (!before || !touched(card.id)) return;
+    const keys = whatMoved(before, card);
+    if (keys.length) setMoved(keys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card]);
+
+  // Long enough to notice, short enough that the surface goes still again on its
+  // own. `HOLD_MS` outlives the wash so the class is never removed mid-animation.
+  useEffect(() => {
+    if (!moved.length) return;
+    const t = setTimeout(() => setMoved([]), HOLD_MS);
+    return () => clearTimeout(t);
+  }, [moved]);
+
+  /** Did this key just move? What the wash hangs off. */
+  const lit = (key: string) => moved.includes(key);
+
+  /**
    * Stop being a project, or start being one — and only one of those asks.
    *
    * The mark is a 15px glyph seven pixels from a title whose whole row opens the
@@ -174,7 +229,11 @@ export function NotePanel({
           <div className="panel-head">
           {card &&
             (editTitle === null ? (
-              <h2 className="panel-title" onClick={() => setEditTitle(card.title)} title="Rename">
+              <h2
+                className={`panel-title ${lit('title') ? 'is-touched' : ''}`}
+                onClick={() => setEditTitle(card.title)}
+                title="Rename"
+              >
                 <ProjectMark card={card} onToggle={() => toggleProject()} />
                 <span className="panel-title-text">{card.title}</span>
               </h2>
@@ -306,19 +365,19 @@ export function NotePanel({
            */
           <div className="panel-body">
             <div className="panel-tier">
-              <Facets defs={meta.facets} values={card.facets} write={write} />
+              <Facets defs={meta.facets} values={card.facets} write={write} lit={lit} />
             </div>
 
             <div className="panel-tier">
-              <Body card={card} write={write} onDirtyChange={setBodyDirty} />
+              <Body card={card} write={write} onDirtyChange={setBodyDirty} lit={lit('body')} />
             </div>
 
             <div className="panel-tier">
-              <Links card={card} write={write} />
+              <Links card={card} write={write} lit={lit('links')} />
             </div>
 
             <div className="panel-tier">
-              <Refs defs={meta.facets} card={card} data={data} write={write} onOpen={onOpen} />
+              <Refs defs={meta.facets} card={card} data={data} write={write} onOpen={onOpen} lit={lit} />
             </div>
 
             {/*

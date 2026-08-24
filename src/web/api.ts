@@ -1,6 +1,7 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
 import type { NoteDetail, Meta, QueryResponse, Resolved } from './types.ts';
+import { foreignOf } from './changed.ts';
 
 /**
  * A thin typed fetch. No client-side cache: the server owns the cache and
@@ -80,6 +81,30 @@ export interface PatchCard {
   baseMtime: number;
 }
 
+/**
+ * Which notes *this tab* just wrote, and when.
+ *
+ * The change stream cannot tell us apart from anyone else — the file moved, and a
+ * watcher sees a path. But this module is the only way this tab writes anything, so
+ * it is the one place that knows. Stamping here and filtering on the way back in is
+ * what makes "changed outside this app" mean it.
+ *
+ * The rule itself is in `changed.ts`, with no clock and no module state, because it
+ * is the whole of this feature's correctness and everything around it needs a
+ * browser to run. This holds the state; that decides.
+ */
+const selfWrites = new Map<string, number>();
+
+function stampSelfWrite(ids: string | string[]): void {
+  const now = Date.now();
+  for (const id of Array.isArray(ids) ? ids : [ids]) selfWrites.set(id, now);
+}
+
+/** Of these changed notes, which were not changed by this tab. */
+export function foreignIds(ids: readonly string[]): string[] {
+  return foreignOf(ids, selfWrites, Date.now());
+}
+
 export const api = {
   meta: () => get<Meta>('/api/meta'),
   /**
@@ -90,8 +115,10 @@ export const api = {
   query: (search: string) => get<QueryResponse>(`/api/query${search}`),
   card: (id: string) => get<NoteDetail>(`/api/note/${encodeURIComponent(id)}`),
 
-  patchNote: (id: string, patch: PatchCard) =>
-    req<{ mtime: number }>('PATCH', `/api/note/${encodeURIComponent(id)}`, patch),
+  patchNote: (id: string, patch: PatchCard) => (
+    stampSelfWrite(id),
+    req<{ mtime: number }>('PATCH', `/api/note/${encodeURIComponent(id)}`, patch)
+  ),
 
   createNote: (input: {
     title: string;
@@ -99,8 +126,10 @@ export const api = {
     facets?: Record<string, string[]>;
   }) => req<{ id: string }>('POST', '/api/note', input),
 
-  deleteNote: (id: string) =>
-    req<{ removedEdges: number }>('DELETE', `/api/note/${encodeURIComponent(id)}`),
+  deleteNote: (id: string) => (
+    stampSelfWrite(id),
+    req<{ removedEdges: number }>('DELETE', `/api/note/${encodeURIComponent(id)}`)
+  ),
 
   bulk: (input: {
     ids: string[];
@@ -112,7 +141,10 @@ export const api = {
     dragMode?: DragMode;
     mode?: 'set' | 'add' | 'remove';
     parent?: string | null;
-  }) => req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input),
+  }) => (
+    stampSelfWrite(input.ids),
+    req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input)
+  ),
 
   enrich: (refs: string[], force = false) =>
     req<{ items: Resolved[] }>('POST', '/api/enrich', { refs, force }),
@@ -120,12 +152,14 @@ export const api = {
   clearEnrichment: (refs?: string[]) =>
     req<{ cleared: number }>('POST', '/api/enrich/clear', { refs }),
 
-  putFrontmatter: (id: string, yaml: string, baseMtime?: number) =>
+  putFrontmatter: (id: string, yaml: string, baseMtime?: number) => (
+    stampSelfWrite(id),
     req<{ mtime: number; warnings: string[] }>(
       'PUT',
       `/api/note/${encodeURIComponent(id)}/frontmatter`,
       { yaml, baseMtime },
-    ),
+    )
+  ),
 
   /**
    * Arrangement for a saved view. Merged server-side, never replaced: the client
@@ -169,19 +203,32 @@ export const api = {
  * enrichment fetch landed, and is deliberately separate so a chip resolving does
  * not make a board rebuild itself.
  */
-export function onDataChange(fn: () => void, event: 'change' | 'enriched' = 'change'): () => void {
+export function onDataChange(
+  /**
+   * `ids` is which notes moved, when the server could say — the watcher can, a
+   * route cannot be bothered to (see its `bump`). Empty means "something changed
+   * and it is not attributable", which is a reload and nothing more.
+   */
+  fn: (ids: string[]) => void,
+  event: 'change' | 'enriched' = 'change',
+): () => void {
   const es = new EventSource('/api/events');
   es.addEventListener(event, (e) => {
     // Events carry the vault they came from: a change in another vault is none
     // of this tab's business.
+    let ids: string[] = [];
     try {
-      const { vault } = JSON.parse((e as MessageEvent<string>).data) as { vault?: string };
+      const data = JSON.parse((e as MessageEvent<string>).data) as {
+        vault?: string;
+        ids?: string[];
+      };
       const mine = currentVault();
-      if (vault && mine && vault !== mine) return;
+      if (data.vault && mine && data.vault !== mine) return;
+      ids = data.ids ?? [];
     } catch {
       /* older payload shape; fall through and refresh */
     }
-    fn();
+    fn(ids);
   });
   return () => es.close();
 }

@@ -1,4 +1,5 @@
 import { useEnrichment } from '../enrichment.tsx';
+import { useTouched } from '../touched.tsx';
 import { plural } from '../plural.ts';
 import { useHue } from '../vocabulary.tsx';
 import { LINK_KINDS, linkHue } from '../links.ts';
@@ -112,11 +113,18 @@ export function CardBody({
   showFacets: string[];
   onOpen?: (id: string) => void;
 }) {
+  const { touched } = useTouched();
   const blocked = card.blockedBy.filter((b) => !b.done);
   const facetKeys = showFacets.filter((f) => card.facets[f]?.length);
 
   return (
-    <div className={cls(card, 'cardface')} onDoubleClick={() => onOpen?.(card.id)}>
+    <div
+      // `is-touched` is the app's one animation, and it is here rather than on a
+      // wrapper because a board tile, a canvas node and a table cell all render
+      // this face — one mark, three shapes, no shape knowing about it.
+      className={`${cls(card, 'cardface')} ${touched(card.id) ? 'is-touched' : ''}`}
+      onDoubleClick={() => onOpen?.(card.id)}
+    >
       <div className="cardface-head">
         <RecordMark card={card} />
         <span className="cardface-title">{card.title}</span>

@@ -7,6 +7,8 @@ import { specFromFile } from '../src/view/spec.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
 import type { FacetDef } from '../src/schema/types.ts';
+import type { NoteDTO } from '../src/web/types.ts';
+import { SELF_WRITE_TTL_MS, foreignOf, whatMoved } from '../src/web/changed.ts';
 import {
   apiSearch,
   paramsOf,
@@ -304,4 +306,144 @@ test("a reference draws as a note, and the app's own axis in the app's colour", 
   assert.equal(edgeColour(axis({ type: 'ref', hue: 'purple' })), 'var(--hue-purple)');
   assert.equal(edgeColour(BUILTIN_FACETS.project), 'var(--accent)', "no hue declared, so the app's");
   assert.equal(edgeColour(axis({ type: 'ref' })), 'var(--ink-3)');
+});
+
+// ------------------------------------------- something changed, and whose change
+
+/**
+ * The two decisions behind the foreign-change mark.
+ *
+ * Neither the `EventSource`, the watcher nor the pseudo-element that flushes can be
+ * wrong in a way a reader notices if these are right, and none of them is testable
+ * without a DOM this repo does not have. So the rules moved into `changed.ts` and
+ * the wiring stayed thin — which is the same trade the rest of this file makes.
+ */
+
+const note = (over: Partial<NoteDTO> = {}): NoteDTO =>
+  ({
+    id: 'n',
+    title: 'A note',
+    body: 'prose',
+    facets: {},
+    links: [],
+    blockedBy: [],
+    buckets: {},
+    isProject: false,
+    refCount: 0,
+    ...over,
+  }) as NoteDTO;
+
+/**
+ * The property the whole feature rests on: **your own edit never flashes at you.**
+ *
+ * Get this wrong in the generous direction and the app pulses on every chip click,
+ * because the server announces a route's write immediately and the watcher announces
+ * the same bytes again when its write-finish settles — the same id, twice, the second
+ * time late. That is why the window exists rather than a request handshake.
+ */
+test('a change this tab caused is not a foreign change', () => {
+  // Every time below is measured from the stamp, because that is what the rule
+  // measures from. Writing them against a separate "now" is how the first draft of
+  // this test asserted a 2100ms gap was inside a 2000ms window.
+  const wroteAt = 10_000;
+  const mine = () => new Map([['a', wroteAt]]);
+
+  assert.deepEqual(foreignOf(['a'], mine(), wroteAt + 100), [], 'our own write, announced back');
+  assert.deepEqual(foreignOf(['b'], mine(), wroteAt + 100), ['b'], 'a note we never wrote');
+  assert.deepEqual(
+    foreignOf(['a', 'b'], mine(), wroteAt + 100),
+    ['b'],
+    'one batch, both kinds — only the other writer’s survives',
+  );
+
+  // The late half of the double announcement: the watcher's copy arrives after the
+  // route's, and it is still ours.
+  assert.deepEqual(
+    foreignOf(['a'], mine(), wroteAt + SELF_WRITE_TTL_MS),
+    [],
+    'still ours at the last moment of the window',
+  );
+
+  // Past it, an agent editing the same note is news again — and the stamp is dropped
+  // on the way past, so the map cannot grow without bound.
+  const aged = mine();
+  assert.deepEqual(
+    foreignOf(['a'], aged, wroteAt + SELF_WRITE_TTL_MS + 1),
+    ['a'],
+    'past the window it is somebody else',
+  );
+  assert.equal(aged.has('a'), false, 'an expired stamp is pruned as it is read');
+});
+
+/**
+ * What moved, as keys — never as a sentence. The caller lights the regions these
+ * name, so the reader's eye lands on the new value with nothing to read.
+ */
+test('a diff names the parts that moved, and only those', () => {
+  const before = note({
+    title: 'Before',
+    body: 'one',
+    facets: { status: ['active'], tech: ['kafka'] },
+    links: [{ raw: 'jira:A' }] as NoteDTO['links'],
+  });
+
+  assert.deepEqual(whatMoved(before, before), [], 'nothing moved');
+  assert.deepEqual(whatMoved(null, before), [], 'the first read of a note is not a change');
+
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, facets: { status: ['done'], tech: ['kafka'] } })),
+    ['status'],
+    'one axis, and not the one beside it',
+  );
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, title: 'After' })),
+    ['title'],
+  );
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, body: 'two' })),
+    ['body'],
+  );
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, links: [] })),
+    ['links'],
+  );
+
+  // An axis the other side does not have at all, in both directions — an agent
+  // clearing a facet is the case that would otherwise go unmarked.
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, facets: { tech: ['kafka'] } })),
+    ['status'],
+    'an axis removed',
+  );
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, facets: { ...before.facets, owner: ['person-e'] } })),
+    ['owner'],
+    'an axis added',
+  );
+
+  // Order within an axis is a change: a board reads the first value as the primary.
+  assert.deepEqual(
+    whatMoved(
+      note({ ...before, facets: { status: ['a', 'b'] } }),
+      note({ ...before, facets: { status: ['b', 'a'] } }),
+    ),
+    ['status'],
+    'reordered values are a change',
+  );
+
+  // And the separator cannot make two values look like one.
+  assert.deepEqual(
+    whatMoved(
+      note({ ...before, facets: { status: ['a b'] } }),
+      note({ ...before, facets: { status: ['a', 'b'] } }),
+    ),
+    ['status'],
+    'one value split into two',
+  );
+
+  assert.deepEqual(
+    whatMoved(before, note({ ...before, title: 'After', body: 'two', facets: {} })),
+    ['title', 'status', 'tech', 'body'],
+    'several at once, in the order the panel draws them',
+  );
 });

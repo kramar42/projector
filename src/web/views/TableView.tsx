@@ -5,6 +5,7 @@ import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
+import { useTouched } from '../touched.tsx';
 
 /**
  * The third shape.
@@ -171,9 +172,15 @@ function Row({
   onSelect: (additive: boolean) => void;
   onExtend: () => void;
 }) {
+  const { touched } = useTouched();
   return (
     <tr
-      className={`${card.isProject ? 'is-project' : ''} ${isSelected ? 'is-selected' : ''}`}
+      // The table draws its own row rather than a `.cardface`, so the mark has to
+      // be applied twice in the app — here and on the face. Same class, so the
+      // keyframe and the reason live in one place.
+      className={`${card.isProject ? 'is-project' : ''} ${isSelected ? 'is-selected' : ''} ${
+        touched(card.id) ? 'is-touched' : ''
+      }`}
       aria-selected={isSelected}
       data-row={index}
       onClick={(e) => {

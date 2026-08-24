@@ -285,23 +285,56 @@ test('every field is drawn by the app, not the browser', () => {
  * A surface that sits open on a second monitor all day is a readout, and one
  * transition added in sympathy is how a readout stops being one.
  */
-test('the surface is still', () => {
-  assert.deepEqual([...CODE.matchAll(/@keyframes/g)].map((m) => m[0]), [], 'a keyframe animation');
-  assert.deepEqual([...CODE.matchAll(/(?<!-)\banimation:/g)].map((m) => m[0]), [], 'an animation declaration');
+test('the surface is still, apart from the one thing stillness cannot say', () => {
+  // The sanctioned exception, named. DESIGN.md's The Something Moved Rule is the
+  // argument; this is the enforcement. A second keyframe, a second animated
+  // property, or this one spreading to a fourth selector all fail here — which is
+  // the difference between an exception and a hole.
+  assert.deepEqual(
+    [...CODE.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]!),
+    ['touched'],
+    'a keyframe animation that is not the foreign-change mark',
+  );
+  // The set, not the sequence: the mark is declared on several selectors and
+  // cancelled on several more, and how many of each is a layout detail. What must
+  // not grow is the number of distinct animations, which is one.
+  assert.deepEqual(
+    [...new Set([...CODE.matchAll(/(?<!-)\banimation:\s*([^;]+);/g)].map((m) => m[1]!.trim()))].sort(),
+    ['none', 'touched 2600ms ease-out 1'],
+    'an animation declaration that is not the mark, or its reduced-motion opt-out',
+  );
+  // It fires once and it does not loop: a thing that keeps moving is a thing you
+  // stop seeing, and this has to still be legible on the hundredth change.
+  assert.doesNotMatch(CODE, /animation:[^;]*infinite/, 'an animation that never stops');
+
   const slow = [...CODE.matchAll(/transition:[^;]*?(\d+)ms/g)].filter((m) => Number(m[1]) > 140).map((m) => m[0]);
   assert.deepEqual(slow, [], `a transition longer than 140ms: ${slow.join(', ')}`);
 });
 
 /**
- * The Desktop-Only Rule. One `@media`, and it is the theme.
+ * The Desktop-Only Rule. Every `@media` asks about the reader, never about the
+ * viewport.
  *
  * Stated as an imperative — "Do not add breakpoints; if something must fit a
  * narrower window, clamp it" — which is precisely the kind of instruction that
  * needs an enforcer rather than a reader.
+ *
+ * Two queries now, and they are the same kind of thing: a system preference the
+ * reader set, which is not a layout decision. `prefers-reduced-motion` arrived with
+ * the one animation this app has, and it exists so that the reader gets the mark
+ * without the movement — the information is the point and the motion is only how it
+ * arrives. A width query would still fail, which is what the rule is about.
  */
-test('there are no breakpoints', () => {
+test('every media query asks about the reader, not the viewport', () => {
   const queries = [...CODE.matchAll(/@media([^{]*)\{/g)].map((m) => m[1]!.trim());
-  assert.deepEqual(queries, ['(prefers-color-scheme: dark)'], `an @media that is not the theme: ${queries.join(' | ')}`);
+  assert.deepEqual(
+    queries,
+    ['(prefers-color-scheme: dark)', '(prefers-reduced-motion: reduce)'],
+    `an @media that is not a reader preference: ${queries.join(' | ')}`,
+  );
+  for (const q of queries) {
+    assert.doesNotMatch(q, /width|height|orientation|aspect-ratio/, `a viewport query: ${q}`);
+  }
   assert.deepEqual([...CODE.matchAll(/@container/g)].map((m) => m[0]), [], 'a container query');
 });
 

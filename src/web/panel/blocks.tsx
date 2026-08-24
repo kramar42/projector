@@ -25,6 +25,17 @@ import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
  */
 
 /**
+ * Which of this block's parts just moved without the reader.
+ *
+ * A predicate rather than a set, so a block asks about the key it is drawing and
+ * nothing has to know how the answer is computed. Absent means "nothing is lit",
+ * which is what every caller outside the panel wants — the wash is a panel thing.
+ */
+export type Lit = (key: string) => boolean;
+
+const nothingLit: Lit = () => false;
+
+/**
  * Past this, an inbound list stops being a list and becomes the page.
  *
  * Three, matching the link list, and for the same reason: these are full-width
@@ -196,10 +207,12 @@ export function Facets({
   defs,
   values,
   write,
+  lit = nothingLit,
 }: {
   defs: Meta['facets'];
   values: NoteDTO['facets'];
   write: Pick<NoteWriter, 'facet'>;
+  lit?: Lit;
 }) {
   const props = Object.keys(defs).filter((n) => defs[n]!.type !== 'ref');
   const { show, hidden, reveal } = useRevealed(props, (n) => (values[n] ?? []).length > 0);
@@ -216,6 +229,7 @@ export function Facets({
             <FacetEditor
               key={name}
               name={name}
+              lit={lit(name)}
               def={defs[name]!}
               values={values[name] ?? []}
               // One axis, named, and the editor says whether it replaced the axis
@@ -253,12 +267,14 @@ export function Refs({
   data,
   write,
   onOpen,
+  lit = nothingLit,
 }: {
   defs: Meta['facets'];
   card: NoteDTO;
   data: NoteDetail;
   write: Pick<NoteWriter, 'facet'>;
   onOpen: (id: string) => void;
+  lit?: Lit;
 }) {
   const rels = Object.keys(defs).filter((n) => defs[n]!.type === 'ref');
   const { show, hidden, reveal } = useRevealed(rels, (n) => (card.facets[n] ?? []).length > 0);
@@ -274,6 +290,7 @@ export function Refs({
               <FacetEditor
                 key={name}
                 name={name}
+                lit={lit(name)}
                 def={def}
                 values={card.facets[name] ?? []}
                 refs={data.refs}
@@ -309,12 +326,20 @@ export function Refs({
   );
 }
 
-export function Links({ card, write }: { card: NoteDTO; write: Pick<NoteWriter, 'links'> }) {
+export function Links({
+  card,
+  write,
+  lit = false,
+}: {
+  card: NoteDTO;
+  write: Pick<NoteWriter, 'links'>;
+  lit?: boolean;
+}) {
   const { refresh } = useEnrichment();
   useRequestEnrichment(card.links.map((l) => l.raw));
 
   return (
-    <section className="panel-section">
+    <section className={`panel-section ${lit ? 'is-touched' : ''}`}>
       <h3>
         Links
         {/* An action, so it is a button — and a glyph, not a word. "refresh"
@@ -401,10 +426,12 @@ export function Body({
   card,
   write,
   onDirtyChange,
+  lit = false,
 }: {
   card: NoteDTO;
   write: Pick<NoteWriter, 'body'>;
   onDirtyChange: (dirty: boolean) => void;
+  lit?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -413,7 +440,7 @@ export function Body({
     onDirtyChange(d);
   };
   return (
-    <section className="panel-section">
+    <section className={`panel-section ${lit ? 'is-touched' : ''}`}>
       <h3>
         Body
         {/*

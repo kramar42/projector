@@ -775,7 +775,7 @@ Used for a project's roll-up. It is the only bar in the system.
 
 - **Don't** animate a note, chip, column, panel or table. There are no keyframes in this system and no
   transition longer than 140ms, and both existing ones animate a width. A surface that sits open all
-  day must be still. **One exception is sanctioned and not yet built — see The Something Moved Rule.**
+  day must be still. **One exception, and one only — see The Something Moved Rule.**
 - **Don't** drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii,
   gradients, illustrated empty states, spring easing. The working type size here is 12.5px and the
   largest radius is 10px, on purpose.
@@ -802,9 +802,9 @@ Used for a project's roll-up. It is the only bar in the system.
   than a fill.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
 - **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `bad` at
-  `#b06060` in light, the `chip-tint` and state-wash mixes, the derived light neutrals, the five
-  shadow `rgba()` values and the scrim, and the two minimap masks — are documented where they occur
-  and each has a stated reason.
+  `#b06060` in light, the `chip-tint` and state-wash mixes, `--flush` at `--ink` 9%, the derived light
+  neutrals, the five shadow `rgba()` values and the scrim, and the two minimap masks — are documented
+  where they occur and each has a stated reason.
 - **Don't** give a hint facet a diluted hue. It gets no hue — transparent fill, `rule` border, `ink-3`
   text — or it earns a family of its own.
 - **Don't** nest a scroll inside a scroll. One region scrolls per axis.
@@ -822,8 +822,24 @@ The bound is what makes it an exception rather than a hole. It fires on **a fore
 on the reader's own — the panel can tell them apart, because `wrote` is set only by this client's
 writes while `read` moves for anything, and `heldBase` already depends on that distinction being
 correct. It fires **once per change**, not as a resting state; a thing that keeps moving is a thing you
-learn to stop seeing. And the register is the accent, because The App Voice Rule already reserves it
-for live state and the app speaking, which is precisely what this is.
+learn to stop seeing.
+
+**It says nothing.** It washes the region the changed value lives in and lets that value be read — a
+facet row for an axis, the section for the body or the links, the title for a rename. The first build of
+this drew a line naming the fields that had moved, and it was wrong twice over: it cost a layout shift
+in a fixed header, and it asked the reader to read a sentence about a value already on screen in front
+of them. The eye going to the right place is the entire message.
+
+**And it is neutral, not the accent.** That is a correction to this rule as first written. Every hue
+here already means something — an axis, a state, the app speaking — so a wash that means *look here*
+must not also read as one of those; the accent would have said "the app is speaking about live state"
+on top of a chip already coloured by its axis. `--flush` is `--ink` at 9%, which inverts on its own and
+is the only paint available that says *lit* rather than *classified*.
+
+The shape is a flush that decays: full for the first tenth so it registers as an event, then `ease-out`
+to nothing over 2.6s. It is drawn as the opacity of a pseudo-element rather than as a background,
+because a background would replace a card face's own fill and a gradient carrying a `color-mix()` is
+not interpolated at all — which is how the first attempt came out as a flash with no decay.
 
 Two things it may not become. Not an animated *transition* of the value itself — a chip that slides or
 cross-fades to its new text makes the reader watch the app work rather than read the result. And not
@@ -831,10 +847,15 @@ attribution: the watcher sees a path change and cannot know whether an agent, a 
 sync client did it, so the honest register is "changed outside this app", which is the hedge the
 conflict banner already gets right with *"probably a Claude session"*.
 
-`test/theme.test.ts`'s stillness assertions are deliberately **left strict** until this ships. An
-exception recorded in a document and pre-approved in a test is an exception nobody has to make on
-purpose — the same reason adding a type step has to be a deliberate edit. Whoever builds this edits
-that test, and the diff is where the decision shows up.
+`test/theme.test.ts` pins it to exactly one keyframe and one animation value, so a second animation
+fails there rather than being noticed later. Its stillness assertions were deliberately left strict
+while this was only a recorded intention, and building it meant editing them — which is where the
+decision shows up in the history, the same way adding a type step has to be a deliberate edit.
+
+What is *not* tested is the animation, because what would be asserted is a number this document already
+states. What is tested is the pair of decisions the mark rests on, in `test/client.test.ts`: that a
+change this tab caused is never reported back to it, and that a diff names the parts that moved and
+only those.
 
 ## Accepted Exceptions
 

@@ -628,3 +628,96 @@ test('the write paths that carry a guard are the ones the document names', () =>
     assert.ok(doc.includes(row), `the write-path table should still say "${row}"`);
   }
 });
+
+// ------------------------------------------------------- two writers, interleaved
+
+/**
+ * The write gate, exercised the way it is actually used: one file, two writers.
+ *
+ * `guard`'s window is not slack, it is the panel's own overlapping writes — `press`
+ * is fire-and-forget on purpose, so two chip clicks inside a second carry bases
+ * computed before either returned. These assert both halves of that: a base this
+ * app just produced is accepted, and a base from before somebody else's write is
+ * not.
+ */
+test('a base from our own preceding write is accepted; one from before a foreign write is not', () => {
+  const v = vault({ shared: card('shared', 'priority: [now]') });
+  try {
+    const file = join(v.root, 'notes', 'shared.md');
+    const first = mtimeOf(file);
+
+    // Our write, carrying the mtime we read. Accepted, and it returns the new one.
+    const { mtime: afterOurs } = patchNote(v.root, 'shared', {
+      facet: { name: 'priority', values: ['month'], mode: 'set' },
+      baseMtime: first,
+    });
+    assert.deepEqual(facetsOf(v.root, 'shared').priority, ['month']);
+
+    // The base we now hold is the one that write returned, so the next write lands.
+    patchNote(v.root, 'shared', {
+      facet: { name: 'tech', values: ['kafka'], mode: 'add' },
+      baseMtime: afterOurs,
+    });
+    assert.deepEqual(facetsOf(v.root, 'shared').tech, ['kafka']);
+    assert.deepEqual(facetsOf(v.root, 'shared').priority, ['month'], 'and did not revert the first');
+
+    // Now somebody else — an agent, a `pj set`, a `git checkout` — writes the file
+    // with no gate at all, which is the only thing an agent can do. Far enough back
+    // that the window cannot absorb it.
+    const foreign = mtimeOf(file) + 5_000;
+    assert.throws(
+      () =>
+        patchNote(v.root, 'shared', {
+          facet: { name: 'priority', values: ['backlog'], mode: 'set' },
+          baseMtime: foreign - 10_000,
+        }),
+      Conflict,
+      'a base from before a foreign write is refused rather than merged',
+    );
+    assert.deepEqual(
+      facetsOf(v.root, 'shared').priority,
+      ['month'],
+      'and the refusal wrote nothing',
+    );
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * A delta does not need the gate, and that is the point of having one.
+ *
+ * `add` and `remove` name a value rather than asserting an axis, and the server folds
+ * them into whatever it finds on disk — so a value another writer added between this
+ * caller's read and its write survives. This is the one write in the app that
+ * *merges*, and it is why the panel's chips are safe even inside the window the gate
+ * cannot see into.
+ */
+test('a delta folds into what is on disk, so a concurrent value survives it', () => {
+  const v = vault({ shared: card('shared', 'tech: [kafka]') });
+  try {
+    // Somebody else adds a value we never saw.
+    writeFileSync(
+      join(v.root, 'notes', 'shared.md'),
+      card('shared', 'tech: [kafka, aws]'),
+      'utf8',
+    );
+
+    // Our write, computed from the read that did not have it, and deliberately
+    // passing no base — the CLI and the bulk bar both do this.
+    patchNote(v.root, 'shared', { facet: { name: 'tech', values: ['github'], mode: 'add' } });
+
+    assert.deepEqual(
+      facetsOf(v.root, 'shared').tech,
+      ['kafka', 'aws', 'github'],
+      'the value we never read is still there',
+    );
+
+    // Where `set` would have taken it out, which is why the panel restricts `set` to
+    // axes on which replacing is the honest meaning.
+    patchNote(v.root, 'shared', { facet: { name: 'tech', values: ['github'], mode: 'set' } });
+    assert.deepEqual(facetsOf(v.root, 'shared').tech, ['github'], 'set replaces, as it says');
+  } finally {
+    v.cleanup();
+  }
+});

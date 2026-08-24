@@ -43,6 +43,7 @@ import { isAppAxis } from '../hue.ts';
  */
 export function FacetEditor({
   name,
+  lit = false,
   def,
   values,
   refs,
@@ -60,6 +61,14 @@ export function FacetEditor({
    * note's axis's family.
    */
   name: string;
+  /**
+   * This axis just moved and the reader did not move it — wash the row.
+   *
+   * The row and not the chip: which value is new is exactly what the reader should
+   * find for themselves, and lighting the changed chip would be the app reading it
+   * out to them. Lighting the row puts their eye in the right place and stops.
+   */
+  lit?: boolean;
   def: FacetDef;
   values: string[];
   /** Titles for reference values. Absent for a label or date axis. */
@@ -228,7 +237,7 @@ export function FacetEditor({
   };
 
   return (
-    <div className="facetrow">
+    <div className={`facetrow ${lit ? 'is-touched' : ''}`}>
       <span className="facetrow-label">{def.label}</span>
       <div className="facetrow-values">{body()}</div>
     </div>

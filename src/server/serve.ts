@@ -16,7 +16,8 @@ import {
 } from '../vault.ts';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
-import { join, relative } from 'node:path';
+import { loadNote } from '../schema/note.ts';
+import { basename, join, relative } from 'node:path';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import type { Facets, Note } from '../schema/types.ts';
@@ -604,15 +605,29 @@ app.post('/api/enrich/clear', async (c) => {
 // up in the open app without a manual refresh.
 
 let revision = 0;
-type Send = (event: 'change' | 'enriched', rev: number, vault: string) => void;
+type Send = (event: 'change' | 'enriched', rev: number, vault: string, ids?: string[]) => void;
 const listeners = new Set<Send>();
 
-function bump(vault: string) {
+/**
+ * `ids` is which notes moved, when we know — and we only know from the watcher.
+ *
+ * A route calls this having just written a file it can name, but naming it here
+ * would buy nothing: the client filters its own writes by what it just sent, so an
+ * id from a route it called is an id it is about to discard. The watcher is the
+ * only caller whose ids are news, because it is the only one that fires for a
+ * write this app did not make — an agent's `Write`, a `pj set` in a terminal, a
+ * `git checkout`. So the route path stays as it was and the watcher gained an
+ * argument.
+ *
+ * A client that cannot attribute a change still reloads on it. `ids` refines what
+ * the app can *say* about a change; it is not what makes it notice one.
+ */
+function bump(vault: string, ids?: string[]) {
   // Our own writes do not wait to be noticed: a rename inside the same
   // millisecond as the previous one would leave the stamp unchanged.
   invalidate(vault);
   revision++;
-  for (const fn of [...listeners]) fn('change', revision, vault);
+  for (const fn of [...listeners]) fn('change', revision, vault, ids);
 }
 
 /**
@@ -631,6 +646,26 @@ function bumpEnriched(vault: string) {
  */
 const watched = new Map<string, ReturnType<typeof watch>>();
 
+/**
+ * Which note a changed path is, when the path is a note at all.
+ *
+ * The id is read out of the file rather than off its name, because the two are
+ * allowed to differ — `fileFor` scans for exactly that reason. A deletion has no
+ * file left to read, so the stem is the only answer available and is the right
+ * guess: a rename away from the stem is rare and a deleted note's pulse has
+ * nowhere to land anyway.
+ *
+ * `undefined` for a change to `facets.yaml` or a view, which moves everything and
+ * so names nothing.
+ */
+function notesTouched(root: string, changed?: string): string[] | undefined {
+  if (!changed) return undefined;
+  const dir = paths(root).notes;
+  if (!changed.startsWith(dir) || !changed.endsWith('.md')) return undefined;
+  const res = loadNote(changed);
+  return [res.ok ? res.rec.id : basename(changed, '.md')];
+}
+
 function ensureWatched(root: string): void {
   if (watched.has(root)) return;
   const p = paths(root);
@@ -639,15 +674,15 @@ function ensureWatched(root: string): void {
     ignored: (path: string) =>
       path.includes('.tmp-') || path.endsWith('.index.db') || path.endsWith('.enrich.db'),
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
-  }).on('all', () => bump(root));
+  }).on('all', (_event: string, changed?: string) => bump(root, notesTouched(root, changed)));
   watched.set(root, w);
 }
 
 app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {
     let alive = true;
-    const send: Send = (event, rev, vault) => {
-      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault }) });
+    const send: Send = (event, rev, vault, ids) => {
+      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault, ids }) });
     };
     listeners.add(send);
     await stream.writeSSE({ event: 'hello', data: JSON.stringify({ rev: revision }) });
