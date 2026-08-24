@@ -1,12 +1,12 @@
 ---
 name: pj-capture
-description: Sweep Claude sessions, git branches, Jira, Slack and Gmail for things that should become projector cards — or links onto cards that already exist — then apply what is approved and move the watermarks. Use when asked to capture, sweep, do an inbox pass, collect what's outstanding, or check what has come in; and when the user dumps several things at once that should become cards. Do not use to fill in facets on cards that already exist; that is the pj-triage skill.
+description: Sweep Claude sessions, git branches, Jira, Slack and Gmail for things that should become projector cards — or links and new facts onto cards that already exist — then apply what is approved and move the watermarks. Use when asked to capture, sweep, do an inbox pass, collect what's outstanding, or check what has come in; and when the user dumps several things at once that should become cards. Do not use to fill in a card's missing project, priority or status; that is the pj-triage skill.
 ---
 
 # Capture
 
-Turn what has accumulated elsewhere into cards — or into links on the cards that already cover it.
-Read the `projector` skill first.
+Turn what has accumulated elsewhere into cards — or into links and new facts on the cards that already
+cover it. Read the `projector` skill first.
 
 **You propose. You do not apply.** Present the candidates, stop, wait.
 
@@ -51,15 +51,35 @@ pj intake known slack:D01234567/1784119823.993869 gmail:<message-id>
 It prints the cards carrying each ref, or `—`. `pj add --fingerprint` refuses a duplicate regardless,
 but checking first is what makes the proposal honest.
 
-## 2. Three answers, not one
+**A fingerprint is not enough on its own, and for Slack and Gmail it is all you have.** `pj` computes
+`evidence.matches` for the three channels it fetches; the two you fetch yourself arrive with none. A
+fingerprint is per-message, so a standing chore — an expense reminder, a recruiting queue, a weekly
+report — emits a fresh id every time and can *never* collide with the card already tracking it. That
+is where duplicates come from, and they come from these two channels. So before proposing a **new
+card** from Slack or Gmail, search the vault by hand for what `pj` would have matched:
+
+```bash
+pj search pleo
+pj search "overdue candidates"
+```
+
+Read the hits. If one of them already describes this standing thing, the answer is **extend**, below.
+
+## 2. Four answers, not one
 
 Most of what a sweep returns is not a new card. For each candidate:
 
 | | when | do |
 |---|---|---|
 | **link** | it is more work on something already tracked | `pj link <card> <ref>` |
+| **extend** | it says something a tracked card does not yet know | `pj link <card> <ref> --fingerprint <fp>`, plus the writes below |
 | **card** | work nobody has filed | `pj add … --fingerprint` |
 | **neither** | a question asked and answered, a status, something already done | list under "noticed, not captured" |
+
+**Extend is the one that keeps the vault true.** A link records that a message exists; extending
+records what it *said* — the deadline it named, the channel it came from, the paragraph worth keeping.
+Without it the only two ways to capture a mail about existing work are a link that loses its content
+or a second card that duplicates the first.
 
 `pj` decides only what is decidable: a ref already on a card, a fingerprint already captured, a
 session too short to be work. Everything else is yours, and the evidence is in `evidence.matches` —
@@ -73,14 +93,58 @@ each with the mechanical reason it matched:
 
 When linking, say which reason you are relying on, so a wrong call is visible before it lands. A
 session linked to the wrong card puts its history somewhere nobody will look for it — move it with
-`pj link <wrong-card> --remove <ref>` then `pj link <right-card> <ref>`, rather than leaving it.
+`pj link <wrong-card> --remove <ref>` then `pj link <right-card> <ref>`, rather than leaving it. When
+the ref carried a fingerprint, move that too: `--fingerprint <fp> --remove`, then re-add it on the
+right card, or the message stays consumed by a card that never mentioned it.
+
+### What extend may write, and what it may only flag
+
+The line is **facts against judgments**, not a list of safe fields. An external source is authoritative
+about the world; it is never authoritative about what he intends to do next.
+
+| capture may write | capture may only flag |
+|---|---|
+| links, refs, fingerprints | `priority`, `status`, `energy` |
+| the body — **appended**, dated, never rewritten | `project`, `parent` |
+| `source` — add the channel that just spoke, keep the ones already there | `blocked_by`, `waiting_on` |
+| `due` — **only onto a card that has none** | |
+
+`due` sits on the left for the reason the `projector` skill gives: "`priority` says what you intend to
+do next; `due` says what the world expects regardless of intent." A mail saying AWS stops the instance
+on 5 Sep *is* the world speaking, and it knows the date better than the vault does. But **fill an empty
+`due`, never overwrite a set one** — a stored deadline that disagrees with a message is a flag, not
+something to resolve. Silently moving a date is exactly the failure `pj-triage` warns about: the Due
+board will believe it.
+
+`project` stays on the right even when it looks obvious. Capture's whole seam is that it does not
+decide where work lives, and on a card that already exists the project is nearly always set — if it is
+not, the triage view catches it the same day.
+
+`waiting_on` is the tempting one. "I mailed Person D and he has not replied" reads like a fact; it is an
+inference about whether he is actually blocked. Flag it.
+
+### Flags
+
+A flag is an observation about a card, never a write. Give them their own section in the proposal —
+they are not candidates, so they do not belong in the candidate table:
+
+| card | facet | holds | the evidence says | source |
+|---|---|---|---|---|
+| `ship-the-thing` | status | `active` | Person E's mail of 22 Aug thanks him for shipping it | `gmail:<id>` |
+
+**Every flag ships with a link.** This is not politeness, it is the only thing that makes a flag
+durable: committing forgets the declines, and unlike a declined card a declined flag leaves no
+fingerprint behind either. Put the evidence on the card first, then flag it. If he does nothing, the
+mail is still on the card and the next person to open it can see why somebody thought it was done.
 
 ## 3. Propose, then stop
 
-One table:
+One table — `do` is one of link, extend, card, neither:
 
 | do | title | channel | ref / fingerprint | why, and on what evidence |
 |---|---|---|---|---|
+
+Then the flag table, if anything earned one, and then "noticed, not captured".
 
 Rules:
 
@@ -90,6 +154,10 @@ Rules:
 - **Title in his voice, imperative where it is an action.** Keep his phrasing when he wrote it; do not
   tidy `clean-up ecr` into `Clean up Amazon ECR`. A Claude session's title is its opening prompt; a
   branch's is its first commit subject. Both are already his words.
+- **Never put a moving number in a title.** "Review the 29 overdue candidates" and "the 2 flagged
+  expenses" are wrong by next week, and worse, they read as *different work* from the card already
+  tracking them — which is how a duplicate gets proposed with a straight face. Name the thing, put the
+  count in the body where a later sweep can update it.
 - **Carry the provenance as a link**, always. `pj` supplies them: `claude:<uuid>`,
   `gh:branch:ORG/repo@name`, `gh:commit:ORG/repo@sha`, `jira:KEY`. Add `slack:<permalink>` yourself.
 - **Do not assign a project.** Capture gets it into the system; `triage` decides where it lives. Set
@@ -100,13 +168,26 @@ Then **stop**.
 ## 4. Apply, then move the cursors
 
 ```bash
+# card
 pj add "<title>" \
   --facet source=claude --facet status=planning \
   --link "claude:<uuid>" \
   --fingerprint "claude:<uuid>"
 
+# link
 pj link <existing-card> "claude:<uuid>"
+
+# extend — the fingerprint is what stops the message coming back for ever
+pj link <existing-card> "gmail:<id>" --fingerprint "gmail:<message-id>"
+pj set  <existing-card> --add source=gmail --facet due=2026-09-05
 ```
+
+The fingerprint lands in `absorbed_fingerprints`, never on `source_fingerprint`: the card did not come
+from this message, it merely answers for it now. `pj` refuses a fingerprint another card already holds
+and names the holder — if that fires, you are looking at the duplicate you were about to create.
+
+Appending to a body has no flag; edit the file under `<vault>/notes/`, adding to the end and leaving
+what is there alone.
 
 Then, **and only once the proposal is resolved** — approved, or explicitly declined:
 

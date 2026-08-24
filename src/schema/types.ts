@@ -49,12 +49,19 @@ export interface Note {
   project?: ProjectBlock;
   source_fingerprint?: string;
   /**
-   * The fingerprints of notes merged into this one.
+   * The fingerprints this note answers for besides its own origin.
    *
    * A note's fingerprint is what stops a capture sweep proposing it twice, and
    * merging destroys the file that held it — so the surviving note carries them,
    * or every note ever folded into another comes back on the next sweep as new.
    * Its own `source_fingerprint` is never repeated here.
+   *
+   * A merge is not the only way one arrives. When a swept message extends a note
+   * that already exists rather than becoming a note of its own, the message has
+   * no file to leave its fingerprint on — and `source_fingerprint` is the wrong
+   * home, because the note did not come from it. It lands here, which is what
+   * makes "extend" a third outcome a sweep can actually record: without it the
+   * message is proposed again on every sweep, for ever.
    */
   absorbed_fingerprints?: string[];
   created?: string;

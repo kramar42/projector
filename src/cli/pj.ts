@@ -348,9 +348,9 @@ function cmdAdd(argv: string[]): void {
  * the wrong card looks exactly like a link on the right one.
  */
 function cmdLink(argv: string[]): void {
-  const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd'], ['remove']);
+  const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd', 'fingerprint'], ['remove']);
   const [id, ...given] = rest;
-  if (!id) fail('pj link <id> <ref>... [--remove] [--session [id]] [--cwd dir]');
+  if (!id) fail('pj link <id> <ref>... [--fingerprint fp] [--remove] [--session [id]] [--cwd dir]');
 
   const refs = [...given];
   if (flags.has('session')) {
@@ -380,12 +380,30 @@ function cmdLink(argv: string[]): void {
     }
     refs.push(`claude:${pick.found.sessionId}`);
   }
-  if (!refs.length) fail('pj link <id> <ref>... — nothing to add or remove');
+  const prints = flags.get('fingerprint') ?? [];
+  if (!refs.length && !prints.length) fail('pj link <id> <ref>... — nothing to add or remove');
 
   const { notes } = readAll(p.notes);
   const rec = notes.get(id);
   if (!rec) fail(`no note with id "${id}"`);
   const existing = rec.links.map((l) => l.raw);
+
+  // A swept message that extends a card instead of becoming one has no file to
+  // leave its fingerprint on, so it leaves it here. Written before the links so
+  // a refused fingerprint — one another card already answers for — stops the
+  // whole command rather than leaving a link behind that says the message was
+  // handled when the sweep will hand it to you again tomorrow.
+  if (prints.length) {
+    const mode = flags.has('remove') ? 'remove' : 'add';
+    try {
+      patchNote(root, id, { absorb: { values: prints, mode } });
+    } catch (e) {
+      fail(e instanceof Error ? e.message : String(e));
+    }
+    const verb = mode === 'remove' ? 'no longer answers for' : 'answers for';
+    console.log(`${id}: ${verb} ${prints.join(', ')}`);
+    if (!refs.length) return;
+  }
 
   if (flags.has('remove')) {
     const missing = refs.filter((r) => !existing.includes(r));

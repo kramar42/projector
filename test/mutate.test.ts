@@ -10,6 +10,7 @@ import {
   bulkFacet,
   bulkMove,
   checkFacets,
+  createNote,
   deleteNote,
   mergeNotes,
   mtimeOf,
@@ -828,6 +829,77 @@ test('a merge carries the fingerprints of what it absorbed', () => {
     const rec = readAll(join(v.root, 'notes')).notes.get('keep')!;
     assert.deepEqual(rec.absorbed_fingerprints, ['slack:C1/1']);
     assert.equal(rec.source_fingerprint, 'jira:PROJ-1');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * A merge is not the only way a card comes to answer for a fingerprint.
+ *
+ * Most of what a sweep turns up is neither a new card nor a link on one — it is
+ * *more* about a card that already exists, and a standing chore emits a fresh
+ * message id every time, so its fingerprint can never collide with the one
+ * already captured. Without somewhere to record that the message was consumed,
+ * the sweep proposes it again for ever, and the same card gets created weekly.
+ */
+test('a card can answer for a message that extended it, without claiming to have come from it', () => {
+  const v = vault({ chore: noteFile('chore', 'source_fingerprint: gmail:ORIGIN\n') });
+  try {
+    patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'] } });
+    const rec = readAll(join(v.root, 'notes')).notes.get('chore')!;
+    assert.deepEqual(rec.absorbed_fingerprints, ['gmail:LATER']);
+    // Where it came from is not what extended it: overwriting the origin would
+    // lose the only record of which sweep first found this work.
+    assert.equal(rec.source_fingerprint, 'gmail:ORIGIN');
+    // The point of all of it — the next sweep converges instead of re-creating.
+    assert.deepEqual(createNote(v.root, { title: 'Again', fingerprint: 'gmail:LATER' }), {
+      id: 'chore',
+      existed: true,
+    });
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * Two cards answering for one fingerprint means whichever the sweep reads first
+ * decides, and the other quietly stops being re-proposed — the same failure as
+ * a link on the wrong card, except nothing ever surfaces it. So it is refused,
+ * and the refusal names the holder, because the fix is to go and look at it.
+ */
+test('a fingerprint answers for exactly one card', () => {
+  const v = vault({
+    chore: noteFile('chore', 'source_fingerprint: gmail:ORIGIN\nabsorbed_fingerprints: [gmail:LATER]\n'),
+    other: noteFile('other'),
+  });
+  try {
+    assert.throws(
+      () => patchNote(v.root, 'other', { absorb: { values: ['gmail:LATER'] } }),
+      (e: unknown) => e instanceof Invalid && /already answered for by chore/.test((e as Error).message),
+    );
+    assert.throws(
+      () => patchNote(v.root, 'chore', { absorb: { values: ['gmail:ORIGIN'] } }),
+      (e: unknown) => e instanceof Invalid && /already came from/.test((e as Error).message),
+    );
+    // Refused means unwritten, not half-written.
+    assert.equal(readAll(join(v.root, 'notes')).notes.get('other')!.absorbed_fingerprints, undefined);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** Symmetric with `pj link --remove`: a removal that did nothing must say so. */
+test('a fingerprint can be handed back, and handing back one that is not held is an error', () => {
+  const v = vault({ chore: noteFile('chore', 'absorbed_fingerprints: [gmail:LATER]\n') });
+  try {
+    patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'], mode: 'remove' } });
+    // Dropped to nothing, rather than left as an empty list nobody can read.
+    assert.equal(readAll(join(v.root, 'notes')).notes.get('chore')!.absorbed_fingerprints, undefined);
+    assert.throws(
+      () => patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'], mode: 'remove' } }),
+      (e: unknown) => e instanceof Invalid && /does not answer for/.test((e as Error).message),
+    );
   } finally {
     v.cleanup();
   }

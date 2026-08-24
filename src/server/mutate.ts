@@ -253,6 +253,19 @@ export interface PatchCardInput {
    * `add`/`remove` name the delta instead, and a toggle *is* a delta.
    */
   facet?: { name: string; values: string[]; mode?: FacetMode };
+  /**
+   * Fingerprints this card answers for beyond its own origin, as a delta.
+   *
+   * The delta form rather than the whole list for the same reason `facet` takes
+   * one: a caller adding the fingerprint of a message it just linked knows that
+   * one fingerprint, not the set, and asserting the set would drop whatever a
+   * merge put there in the meantime.
+   *
+   * They land in `absorbed_fingerprints`, never in `source_fingerprint` — a card
+   * extended by a message did not come from it, and overwriting its origin would
+   * lose where it actually came from.
+   */
+  absorb?: { values: string[]; mode?: 'add' | 'remove' };
   links?: string[];
   body?: string;
   project?: Record<string, unknown> | null;
@@ -284,6 +297,39 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
     const merged = withFacet(current, name, next);
     checkFacets(root, id, next.length ? { [name]: next } : {}, notes);
     patch.facets = Object.keys(merged).length ? merged : undefined;
+  }
+  if (input.absorb) {
+    const { notes } = readAll(paths(root).notes);
+    const rec = notes.get(id);
+    if (!rec) throw new Invalid(`no note with id "${id}"`);
+    const { values, mode = 'add' } = input.absorb;
+    const held = rec.absorbed_fingerprints ?? [];
+
+    if (mode === 'remove') {
+      // Symmetric with `pj link --remove`, and for the same reason: a removal
+      // that reports success while doing nothing is how you find out a month
+      // later that the fingerprint is still on the other card, silently keeping
+      // it out of every sweep.
+      const missing = values.filter((v) => !held.includes(v));
+      if (missing.length) throw new Invalid(`${id} does not answer for ${missing.join(', ')}`);
+      const kept = held.filter((v) => !values.includes(v));
+      patch.absorbed_fingerprints = kept.length ? kept : undefined;
+    } else {
+      for (const v of values) {
+        if (rec.source_fingerprint === v) throw new Invalid(`${id} already came from ${v}`);
+        // A fingerprint answers for exactly one card. Letting two claim it means
+        // whichever the sweep asks about first decides, and the other silently
+        // stops being re-proposed — so refuse and name the holder instead.
+        for (const other of notes.values()) {
+          if (other.id === id) continue;
+          const otherHeld = [other.source_fingerprint, ...(other.absorbed_fingerprints ?? [])];
+          if (otherHeld.includes(v)) throw new Invalid(`${v} is already answered for by ${other.id}`);
+        }
+      }
+      const next = [...held];
+      for (const v of values) if (!next.includes(v)) next.push(v);
+      patch.absorbed_fingerprints = next.length ? next : undefined;
+    }
   }
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
   if (input.project !== undefined) patch.project = input.project ?? undefined;
