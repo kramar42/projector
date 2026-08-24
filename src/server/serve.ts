@@ -657,13 +657,22 @@ const watched = new Map<string, ReturnType<typeof watch>>();
  *
  * `undefined` for a change to `facets.yaml` or a view, which moves everything and
  * so names nothing.
+ *
+ * The read is guarded rather than merely checked-for-existence: between the
+ * watcher's event and this line the file may already be gone, and a deleted note
+ * must still name itself so the client can drop it.
  */
 function notesTouched(root: string, changed?: string): string[] | undefined {
   if (!changed) return undefined;
   const dir = paths(root).notes;
   if (!changed.startsWith(dir) || !changed.endsWith('.md')) return undefined;
-  const res = loadNote(changed);
-  return [res.ok ? res.rec.id : basename(changed, '.md')];
+  const stem = basename(changed, '.md');
+  try {
+    const res = loadNote(changed);
+    return [res.ok ? res.rec.id : stem];
+  } catch {
+    return [stem];
+  }
 }
 
 function ensureWatched(root: string): void {
