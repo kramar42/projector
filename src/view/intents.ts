@@ -1,4 +1,4 @@
-import { DIRS, NONE, type Dir, type Shape } from '../schema/vocabulary.ts';
+import { DIRS, NONE, type Dir, type Shape, negate } from '../schema/vocabulary.ts';
 import { SPEC_PARAMS, specToParams, type ViewSpec } from './spec.ts';
 
 /**
@@ -55,19 +55,52 @@ export function setSearch(spec: ViewSpec, q: string): ViewSpec {
 }
 
 /**
- * Toggle one value of one facet.
+ * Put one value of one axis into one of the three states it has: in, out, or
+ * neither.
  *
- * Reads the values off the spec it is given, which is the whole fix: the old
- * version read them off the URL while the checkbox rendered from the resolved
- * spec, so on `?view=home` a *checked* `planning` had an empty current list and
- * toggling it produced "only planning" — silently dropping `active`.
+ * A gesture names the state it *wants*, so both forms of the value are removed
+ * first and at most one is put back. Toggling on a value that was excluded is
+ * therefore one click rather than two, and — the part worth the function — two
+ * clicks can never leave the axis holding `project-a` and `-project-a` at once, which is a
+ * query that matches nothing and that neither click asked for.
+ *
+ * The wire can still carry that contradiction if a URL is written by hand, and
+ * `splitSelection` says why it is answered rather than refused. What is ruled out
+ * here is *arriving* at it by clicking.
+ *
+ * The values come off the spec this is given, which was the whole of the earlier
+ * fix here: the old version read them off the URL while the checkbox rendered from
+ * the resolved spec, so on `?view=home` a *checked* `planning` had an empty
+ * current list and toggling it produced "only planning" — silently dropping
+ * `active`.
  */
-export function toggleFilterValue(spec: ViewSpec, facet: string, value: string): ViewSpec {
+function pickFilterValue(
+  spec: ViewSpec,
+  facet: string,
+  value: string,
+  want: 'in' | 'out',
+): ViewSpec {
   const current = spec.query.filter?.[facet] ?? [];
-  const next = current.includes(value)
-    ? current.filter((v) => v !== value)
-    : [...current, value];
-  return replaceQuery(spec, { filter: { ...spec.query.filter, [facet]: next } });
+  const token = want === 'in' ? value : negate(value);
+  const held = current.includes(token);
+  const without = current.filter((v) => v !== value && v !== negate(value));
+  return replaceQuery(spec, {
+    filter: { ...spec.query.filter, [facet]: held ? without : [...without, token] },
+  });
+}
+
+export function toggleFilterValue(spec: ViewSpec, facet: string, value: string): ViewSpec {
+  return pickFilterValue(spec, facet, value, 'in');
+}
+
+/**
+ * Filter a value *out* — the gesture a high-cardinality axis needs.
+ *
+ * Excluding one project is not selecting the other twelve: it keeps every note
+ * with no project at all, and it stays true when a thirteenth arrives. See `NOT`.
+ */
+export function excludeFilterValue(spec: ViewSpec, facet: string, value: string): ViewSpec {
+  return pickFilterValue(spec, facet, value, 'out');
 }
 
 /** Every facet filter emptied, plus the text search. Focus is its own control. */

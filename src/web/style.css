@@ -1021,6 +1021,36 @@ input:checked + .checkbox::before {
   transform: rotate(-45deg) translate(1px, -1px);
 }
 
+/*
+ * Filtered *out*.
+ *
+ * The same accent fill, because the query names this value either way, and the
+ * same drawn-mark technique as the tick above — a bar, from one border, with no
+ * rotation. The glyph carries the direction, so this needs no colour of its own:
+ * red is not available for it, since red means a failure, and a second accent
+ * would say the two directions were two kinds of thing.
+ */
+.facet-value.is-out .checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.facet-value.is-out .checkbox::before {
+  content: '';
+  width: 5px;
+  height: 0;
+  border-left: 0;
+  border-bottom: 1.5px solid var(--ground);
+  transform: none;
+}
+
+/* Struck through, and conspicuously: a value ruled out an hour ago is the reason
+   notes are missing, and this panel is where you come to find out why. */
+.facet-value.is-out .facet-name {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+
 /* The ring the hidden input can no longer draw for itself. */
 input:focus-visible + .checkbox {
   outline: 2px solid var(--accent);

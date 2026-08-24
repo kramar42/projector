@@ -304,6 +304,14 @@ context, with a one-click *clear* — so a note that is missing is never a myste
 Multi-select over every facet and computed axis, plus **`(none)`** for absence — "notes with no project"
 is a click, not a search. Values within a facet are ORed; facets are ANDed.
 
+**Alt-click filters a value out** instead of in, and the box draws a bar rather than a tick:
+`?f.project=-project-a` is "everything except Project A". It is deliberately not the same query as ticking every
+other project. It keeps the notes with no project at all — which on a real vault is most of them, and
+the whole point when you are working a backlog — and it stays true the next time a project is created,
+where a list of the others silently stops including the new one. On a multi-valued axis the two
+compose: `?f.project=project-a,-project-b` is the Project A work that is not also Project B, which no positive selection can
+express.
+
 Counts are **disjunctive**: an unselected value tells you how many notes adding it would bring in,
 rather than reading 0 — so a selection can always be widened, not just narrowed. Refining one facet
 never removes another from the panel, and a facet nothing in view carries is not offered at all.

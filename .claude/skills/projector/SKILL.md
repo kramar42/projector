@@ -78,12 +78,19 @@ pj ls --group parent                        # or filter parent=X, or parent=(non
 pj ls --filter linked=jira                  # which notes carry a Jira link
                                             # out = follows references, in = referenced by
 pj ls --filter status=active,planning
+pj ls --filter project=-project-a                 # everything *except* Project A — see below
 pj ls --view unblocked       # actionable now: open, nobody waited on, no unfinished blocker
 pj ls --view triage --json   # notes missing project/priority/status, grouped by what is missing
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
 pj enrich <ref> --force      # resolve a link's live state
 ```
+
+**A filter value may be negated with `-`.** `--filter project=-project-a` is "everything except Project A", and it
+is not the same query as naming every other project: it keeps the notes with no project at all, and it
+stays true when a new project is created. Both halves apply on a multi-valued axis, so
+`--filter project=project-a,-project-b` is the Project A work that is not also Project B. A bare `-` is a value, not a
+negation.
 
 `pj context` is the right first move for almost any question about a note. It already resolves the
 project chain, the inherited repos and instructions, and the cached link enrichment — do not

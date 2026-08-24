@@ -355,6 +355,14 @@ that ran into its value; `edge` was quietest and gave up the affordance with the
 in the left column the rows read as a readout. The box keeps the column the eye scans down, which
 is what a filter rail is for. The two losers and the URL parameter are gone.
 
+It has three states now rather than two, which the box absorbed without a fourth treatment: a value
+can be filtered *out* as well as in, and the mark says which — the tick, and a bar drawn from one
+border by the same technique. Both fill with the accent, because the accent means "the query names
+this value" and the direction is the glyph's to carry; red was not available for it, since red means
+a failure. Not `aria-checked="mixed"`, either: mixed means *partly* checked and this is the opposite
+of checked, so the fact goes into the accessible name and the control stays the two-state checkbox it
+looks like.
+
 **A retired parameter used to outlive its code.** `?filterstyle=` was deleted from the app and kept
 appearing in the address bar, because `patchSearch` preserves keys it does not recognise — correctly,
 since it writes what it is told — and nothing else ever looked. If the URL is the view, a key nothing

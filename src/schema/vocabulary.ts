@@ -69,6 +69,69 @@ export const HUES: readonly string[] = ['orange', 'green', 'purple', 'blue', 'pi
  */
 export const NONE = '(none)';
 
+/**
+ * Filtering something *out*.
+ *
+ * A filter value is already not only a value: `(none)` is a refinement and
+ * `>2026-09-01` is a range. This is the third — a negation, living beside `NONE`
+ * for the same reason, that the URL, a `views/*.yaml` file, `pj --filter` and the
+ * browser all have to read it the same way.
+ *
+ * It is **not** "select every other value", which is what it replaces, and it
+ * differs from that twice over. It keeps the notes that carry *no* value on the
+ * axis — most notes carry no project, so "hide this project" has to leave them
+ * where they are — and it stays true when the vocabulary grows a value nobody has
+ * ticked. Both are the reason a high-cardinality axis needs it at all: selecting
+ * the other twelve projects is not the same query, and it stops being even close
+ * on the day a thirteenth appears.
+ *
+ * `-` rather than `!` because the URL is the view (C9): `URLSearchParams`
+ * percent-encodes `!`, and `?f.project=%21tos` is not something you can read in an
+ * address bar. The cost is a collision with a literal negative number on a
+ * `type: number` facet — no vault declares one, the seed does not offer one, and
+ * numeric filtering goes through ranges, which is where a negative bound is
+ * already spelled `>=-1`.
+ */
+export const NOT = '-';
+
+/** A bare `-` is a value, not a negation of nothing. */
+export function isNegated(value: string): boolean {
+  return value.startsWith(NOT) && value.length > NOT.length;
+}
+
+export function negate(value: string): string {
+  return `${NOT}${value}`;
+}
+
+/** The value a negation names, or the value itself. */
+export function negated(value: string): string {
+  return isNegated(value) ? value.slice(NOT.length) : value;
+}
+
+/**
+ * One axis's selection, split into what it admits and what it rules out.
+ *
+ * Both halves apply, and that is the point: `f.project=project-a,-project-b` is "in project-a and
+ * not in project-b", which a multi-valued axis can hold and which no positive selection
+ * can express at any length. On a single-valued axis the negation is redundant
+ * beside a positive and harmless — the same value cannot be both.
+ *
+ * A value named on both sides is a contradiction the wire can carry. Its honest
+ * answer is an empty result rather than an error, so nothing here refuses it.
+ */
+export function splitSelection(selection: readonly string[]): {
+  wanted: string[];
+  unwanted: string[];
+} {
+  const wanted: string[] = [];
+  const unwanted: string[] = [];
+  for (const value of selection) {
+    if (isNegated(value)) unwanted.push(negated(value));
+    else wanted.push(value);
+  }
+  return { wanted, unwanted };
+}
+
 /** The three projections of one card database. */
 export type Shape = 'board' | 'canvas' | 'table';
 

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
-import { blankQuery } from '../src/view/intents.ts';
-import { specFromFile } from '../src/view/spec.ts';
+import { blankQuery, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
+import { specFromFile, type ViewSpec } from '../src/view/spec.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
 import type { FacetDef } from '../src/schema/types.ts';
@@ -446,4 +446,41 @@ test('a diff names the parts that moved, and only those', () => {
     ['title', 'status', 'tech', 'body'],
     'several at once, in the order the panel draws them',
   );
+});
+
+// ---------------------------------------------------------------- negation
+
+/**
+ * A filter value has three states, and a click names the one it wants.
+ *
+ * The property worth pinning is that no sequence of clicks can leave an axis
+ * holding a value and its negation at once: that query matches nothing, and
+ * neither click asked for nothing.
+ */
+test('a value is in, out, or neither — never both', () => {
+  const spec = specFromFile('t', { shape: 'board' });
+  const filterOf = (s: ViewSpec) => s.query.filter?.project ?? [];
+
+  const on = toggleFilterValue(spec, 'project', 'project-a');
+  assert.deepEqual(filterOf(on), ['project-a']);
+
+  // Alt-clicking a selected value moves it across rather than adding a second
+  // claim about it.
+  const out = excludeFilterValue(on, 'project', 'project-a');
+  assert.deepEqual(filterOf(out), ['-project-a']);
+
+  // And plain-clicking an excluded one brings it back the same way.
+  assert.deepEqual(filterOf(toggleFilterValue(out, 'project', 'project-a')), ['project-a']);
+
+  // Either gesture, twice, is off.
+  assert.deepEqual(filterOf(excludeFilterValue(out, 'project', 'project-a')), []);
+  assert.deepEqual(filterOf(toggleFilterValue(on, 'project', 'project-a')), []);
+});
+
+test('excluding one value leaves the rest of the axis alone', () => {
+  const spec = toggleFilterValue(specFromFile('t', { shape: 'board' }), 'project', 'project-a');
+  const both = excludeFilterValue(spec, 'project', 'project-b');
+  // "in project-a, and not in project-b" — the query a multi-valued axis needs and no
+  // positive selection can express.
+  assert.deepEqual(both.query.filter?.project, ['project-a', '-project-b']);
 });

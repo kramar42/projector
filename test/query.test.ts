@@ -470,7 +470,7 @@ test('an axis absent from the universe is not offered; a selected one always is'
     const priority = stuck.counts.find((c) => c.facet === 'priority')!;
     assert.deepEqual(
       priority.values.find((v) => v.value === 'backlog'),
-      { value: 'backlog', count: 0, selected: true },
+      { value: 'backlog', count: 0, selected: true, excluded: false },
     );
   } finally {
     cleanup();
@@ -1089,6 +1089,127 @@ test('grouping and the panel agree about a declared value nobody carries', () =>
     assert.ok(columns.includes('backlog'), 'grouping draws the empty column');
     assert.ok(offered.includes('backlog'), 'and the panel offers the same value');
     assert.deepEqual(columns, offered, 'one answer, not two');
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- negation
+
+/**
+ * Filtering something *out*.
+ *
+ * The reason it exists rather than being spelled "select every other value" is
+ * that the two are different queries, and the difference is what a backlog sweep
+ * needs: a note with no value on the axis at all survives the negation, and there
+ * are far more of those than there are values.
+ */
+test('a negation keeps every note the axis says nothing about', () => {
+  const { root, cleanup } = vault();
+  try {
+    // `keycloak` is the only note in project `project-b`. Excluding it keeps the other
+    // six — including the five that carry no project whatsoever.
+    const out = ids(root, { filter: { project: ['-project-b'] } });
+    assert.equal(out.includes('keycloak'), false);
+    assert.deepEqual(out, [
+      'blocked-card',
+      'blocker',
+      'project-b',
+      'kafka-schema',
+      'kc-realms',
+      'loose',
+      'project-a',
+      'project-a-eventing',
+    ]);
+
+    // Which is what naming every other value cannot do. `project-b`, `blocker` and
+    // `loose` carry no project at all, so no positive selection reaches them
+    // short of adding `(none)` — and adding it would also have to be redone the
+    // next time a project is created.
+    assert.deepEqual(ids(root, { filter: { project: ['keycloak', 'project-a'] } }), [
+      'blocked-card',
+      'kafka-schema',
+      'kc-realms',
+    ]);
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * The case that makes negation more than a shorthand: on a multi-valued axis a
+ * positive and a negative compose, and no positive selection can say it.
+ */
+test('a positive and a negative on one axis are both applied', () => {
+  const { root, cleanup } = vault();
+  try {
+    const both = join(root, 'notes', 'both.md');
+    writeFileSync(
+      both,
+      `---\nid: both\ntitle: Both\nfacets: { project: [project-b, keycloak] }\nupdated: 2026-08-19\n---\n`,
+      'utf8',
+    );
+    // `keycloak` is in project-b; `both` is in project-b and keycloak. "In project-b but not in
+    // keycloak" separates them, and selecting values alone cannot.
+    assert.deepEqual(ids(root, { filter: { project: ['project-b'] } }), ['both', 'keycloak']);
+    assert.deepEqual(ids(root, { filter: { project: ['project-b', '-keycloak'] } }), ['keycloak']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a negated value loses its column, and the rest of the axis keeps theirs', () => {
+  const { root, cleanup } = vault();
+  try {
+    const run = open(root);
+    const values = (q: Query) => run(q).groups!.map((g) => g.value);
+    assert.deepEqual(values({ groupBy: ['priority'] }), ['now', 'month', 'backlog', NONE]);
+    // Not a column called `-now`: the token is an expression, and the axis is the
+    // whole vocabulary less what it names.
+    assert.deepEqual(values({ groupBy: ['priority'], filter: { priority: ['-now'] } }), [
+      'month',
+      'backlog',
+      NONE,
+    ]);
+  } finally {
+    cleanup();
+  }
+});
+
+test('an excluded value is reported as excluded, and still counts what it would bring back', () => {
+  const { root, cleanup } = vault();
+  try {
+    const res = open(root)({ filter: { project: ['-project-b'] } });
+    const project = res.counts.find((c) => c.facet === 'project')!;
+    const project-b = project.values.find((v) => v.value === 'project-b')!;
+    assert.deepEqual(project-b, { value: 'project-b', count: 1, selected: false, excluded: true });
+    // Counted with this axis's own filter lifted, like every other value — so the
+    // row says what un-excluding it would restore rather than reading 0.
+    assert.equal(project.values.find((v) => v.value === 'keycloak')!.count, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+/** A negation is stripped before the token is read, so a range negates too. */
+test('a range can be negated', () => {
+  const { root, cleanup } = vault();
+  try {
+    const dated = (id: string, due: string) =>
+      writeFileSync(
+        join(root, 'notes', `${id}.md`),
+        `---\nid: ${id}\ntitle: ${id}\nfacets: { due: [${due}] }\nupdated: 2026-08-19\n---\n`,
+        'utf8',
+      );
+    dated('soon', '2026-08-19');
+    dated('late', '2026-09-30');
+
+    assert.deepEqual(ids(root, { filter: { due: ['>2026-08-20'] } }), ['late']);
+    const not = ids(root, { filter: { due: ['->2026-08-20'] } });
+    assert.equal(not.includes('late'), false);
+    // And it keeps `soon` *and* every note with no date at all: a note the range
+    // cannot describe is not a note the range excludes.
+    assert.ok(not.includes('soon') && not.includes('loose'));
   } finally {
     cleanup();
   }

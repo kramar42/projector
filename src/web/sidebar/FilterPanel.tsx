@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NONE } from '../../schema/vocabulary.ts';
 import { labelFor } from '../views/groups.ts';
-import { toggleFilterValue } from '../../view/intents.ts';
+import { excludeFilterValue, toggleFilterValue } from '../../view/intents.ts';
 import type { AxisCount } from '../types.ts';
 import type { Edit } from '../types.ts';
 
@@ -22,9 +22,12 @@ import type { Edit } from '../types.ts';
  * - **Selected facets come first**, so an active refinement is never scrolled
  *   out of sight.
  */
+/** In use, either way round: a value ruled out is a refinement like any other. */
+const inUse = (c: AxisCount) => c.values.some((v) => v.selected || v.excluded);
+
 export function FilterPanel({ counts, edit }: { counts: AxisCount[]; edit: Edit }) {
-  const active = counts.filter((c) => c.values.some((v) => v.selected));
-  const rest = counts.filter((c) => !c.values.some((v) => v.selected));
+  const active = counts.filter(inUse);
+  const rest = counts.filter((c) => !inUse(c));
 
   return (
     <div className="filters">
@@ -55,7 +58,11 @@ const CUTOFF = 8;
  */
 
 function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
-  const selected = facet.values.filter((v) => v.selected);
+  // Both states count as using the axis: the badge, the open-by-default and the
+  // `is-active` treatment all answer "am I filtering on this", and ruling a value
+  // out is filtering on it. An exclusion you cannot see is one you spend the
+  // afternoon looking for.
+  const selected = facet.values.filter((v) => v.selected || v.excluded);
   /**
    * A facet you are using is open; one you are not is collapsed, or ten facets of
    * vocabulary bury the two you care about. A facet you have opened or closed
@@ -94,6 +101,7 @@ function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
               key={v.value}
               value={v}
               onToggle={() => edit((s) => toggleFilterValue(s, facet.facet, v.value))}
+              onExclude={() => edit((s) => excludeFilterValue(s, facet.facet, v.value))}
             />
           ))}
           {/* One button, not two that swap places. Rendering `more` and `less` in
@@ -125,19 +133,56 @@ function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
 function Value({
   value,
   onToggle,
+  onExclude,
 }: {
   value: AxisCount['values'][number];
   onToggle: () => void;
+  /** Alt-click: filter this value *out*. See `NOT` in `schema/vocabulary.ts`. */
+  onExclude: () => void;
 }) {
   const label = labelFor(value.value);
   const none = value.value === NONE;
   // A selected value whose count fell to zero is still shown, or it could never
   // be unselected — so it dims rather than disappearing.
-  const cls = `${value.selected ? 'is-on' : ''} ${value.count ? '' : 'is-empty'}`;
+  //
+  // `is-out` wins over `is-on` when a hand-written URL says both, because that is
+  // what the query does with it: a negation vetoes. One class rather than two, so
+  // the two treatments cannot both paint the same box.
+  const state = value.excluded ? 'is-out' : value.selected ? 'is-on' : '';
+  const cls = `${state} ${value.count ? '' : 'is-empty'}`;
 
   return (
-    <label className={`facet-value ${cls}`}>
-      <input type="checkbox" checked={value.selected} onChange={onToggle} />
+    <label
+      className={`facet-value ${cls}`}
+      /*
+       * Alt rather than ⌘ or ⇧: both of those already mean something in this app's
+       * gesture grammar — ⌘-click adds to a selection, ⇧-click extends a range —
+       * and a modifier meaning two things on two surfaces is one you have to
+       * remember rather than know.
+       *
+       * `preventDefault` because this is a `<label>`, whose default is to forward
+       * the click to the checkbox — which would select the value on the way to
+       * ruling it out.
+       */
+      onClick={(e) => {
+        if (!e.altKey) return;
+        e.preventDefault();
+        onExclude();
+      }}
+      title={value.excluded ? 'filtered out — alt-click to stop' : 'alt-click to filter out'}
+    >
+      <input
+        type="checkbox"
+        checked={value.selected}
+        onChange={onToggle}
+        /*
+         * Not `aria-checked="mixed"`. Mixed means *partly* checked, and this is
+         * the opposite of checked — so the fact goes into the accessible name,
+         * where it is read out as what it is, and the control stays the honest
+         * two-state checkbox it looks like.
+         */
+        aria-label={value.excluded ? `${label} — filtered out` : undefined}
+      />
       {/* The box is a sibling span rather than the input restyled, for the same
           reason `.facet-caret` is: a span drawn with borders is the technique this
           app already has for a mark it draws itself, and generated content on a

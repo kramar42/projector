@@ -36,6 +36,20 @@ test('a spec survives the round trip through URL parameters', () => {
   assert.deepEqual(specToParams(spec), params);
 });
 
+/**
+ * A negation is a filter token like `(none)` and a range, so it needs nothing of
+ * its own on the wire: it round-trips through the URL, a view file and `pj
+ * --filter` because it is carried inside the value list rather than beside it.
+ */
+test('a negated value round-trips as itself', () => {
+  const params = { shape: 'board' as const, 'f.project': 'project-a,-project-b' };
+  const spec = parseSpec(params);
+  assert.deepEqual(spec.query.filter, { project: ['project-a', '-project-b'] });
+  assert.deepEqual(specToParams(spec), params);
+  // A bare `-` is a value, not a negation of nothing.
+  assert.deepEqual(parseSpec({ 'f.tech': '-' }).query.filter, { tech: ['-'] });
+});
+
 test('(none) travels as itself so a literal value cannot collide with absence', () => {
   assert.deepEqual(parseSpec({ 'f.project': '(none)' }).query.filter, { project: [NONE] });
   assert.deepEqual(specToParams(parseSpec({ 'f.project': '(none),project-a' }))['f.project'], '(none),project-a');

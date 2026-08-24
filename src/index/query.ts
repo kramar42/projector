@@ -19,7 +19,7 @@ import { blockedSet, blockingFacets } from './blocking.ts';
 
 /** Absence of any value for a facet. Also the trailing group's label, as in P0. */
 export { NONE } from '../schema/vocabulary.ts';
-import { NONE } from '../schema/vocabulary.ts';
+import { NONE, splitSelection } from '../schema/vocabulary.ts';
 
 export type { Dir } from './refs.ts';
 import type { Dir } from './refs.ts';
@@ -59,6 +59,15 @@ export interface ValueCount {
   value: string;
   count: number;
   selected: boolean;
+  /**
+   * Named by the axis's *negative* selection — filtered out rather than in.
+   *
+   * A second boolean rather than one three-state field, because the two are
+   * independent facts about the query and not three states of one: a hand-written
+   * `f.project=project-a,-project-a` says both, and its answer is an empty result rather than
+   * an error (see `splitSelection`). The panel draws the veto.
+   */
+  excluded: boolean;
 }
 
 export interface AxisCount {
@@ -408,18 +417,34 @@ function inRange(rec: Note, facet: string, op: string, bound: string, ctx: Ctx):
   });
 }
 
+/**
+ * Whether one filter token describes this note: a value, `(none)`, or a range.
+ *
+ * Extracted so that the positive and the negative halves of a selection are
+ * answered by the same reading of a token — which is also what makes a negated
+ * range (`-<2026-08-01`) work without a line of its own, since the negation is
+ * stripped before the token is read.
+ *
+ * `(none)` is a selectable refinement, not a value — most cards carry no project,
+ * and reaching them is the point of having it.
+ */
+function hits(rec: Note, facet: string, token: string, have: string[], ctx: Ctx): boolean {
+  const range = RANGE.exec(token);
+  if (range) return inRange(rec, facet, range[1]!, range[2]!, ctx);
+  return have.length ? have.includes(token) : token === NONE;
+}
+
 function matches(rec: Note, filter: Record<string, string[]>, ctx: Ctx): boolean {
-  for (const [facet, wanted] of Object.entries(filter)) {
-    if (!wanted.length) continue;
+  for (const [facet, selection] of Object.entries(filter)) {
+    if (!selection.length) continue;
     const have = valuesOf(rec, facet, ctx);
-    // `(none)` is a selectable refinement, not a value — most cards carry no
-    // project, and reaching them is the point of having it.
-    const ok = wanted.some((w) => {
-      const range = RANGE.exec(w);
-      if (range) return inRange(rec, facet, range[1]!, range[2]!, ctx);
-      return have.length ? have.includes(w) : w === NONE;
-    });
-    if (!ok) return false;
+    const { wanted, unwanted } = splitSelection(selection);
+    // A negation is a veto, so it is asked first and asked alone: it does not
+    // matter what else the axis says. This is what makes `-project-a` different from
+    // selecting every other project — a note with no project at all reaches here
+    // with nothing to veto and no positive to satisfy, and stays.
+    if (unwanted.some((w) => hits(rec, facet, w, have, ctx))) return false;
+    if (wanted.length && !wanted.some((w) => hits(rec, facet, w, have, ctx))) return false;
   }
   return true;
 }
@@ -447,10 +472,18 @@ function matches(rec: Note, filter: Record<string, string[]>, ctx: Ctx): boolean
  * in, because to match a name selection a card must carry one of the names. A
  * card admitted by a range need not.
  */
-function admitted(selection: string[] | undefined): Set<string> | null {
-  if (!selection?.length) return null;
-  if (selection.some((v) => RANGE.test(v))) return null;
-  return new Set(selection);
+function admits(selection: string[] | undefined): (value: string) => boolean {
+  if (!selection?.length) return () => true;
+  const { wanted, unwanted } = splitSelection(selection);
+  if (wanted.some((v) => RANGE.test(v))) return () => true;
+  const out = new Set(unwanted);
+  // A negation alone is the whole axis minus what it names: "every project but
+  // this one" is still a column per project, less one. Returning every column
+  // here instead would draw a `-project-a` column, since the token is not a value name
+  // and nothing downstream would know it was an expression.
+  if (!wanted.length) return (value) => !out.has(value);
+  const only = new Set(wanted);
+  return (value) => only.has(value) && !out.has(value);
 }
 
 /**
@@ -475,6 +508,9 @@ function histogram(base: Note[], filter: Record<string, string[]>, ctx: Ctx): Ax
 
   for (const facet of names) {
     const selected = filter[facet] ?? [];
+    // `selected` stays the raw selection wherever the question is "does the query
+    // mention this axis at all", which a negation answers yes to.
+    const { wanted, unwanted } = splitSelection(selected);
     const computed = COMPUTED[facet];
 
     // Offered? Ask the universe, ignoring the facet filter entirely.
@@ -512,7 +548,11 @@ function histogram(base: Note[], filter: Record<string, string[]>, ctx: Ctx): Ax
       for (const v of values) tally.set(v, (tally.get(v) ?? 0) + 1);
     }
 
-    const withNone = tally.has(NONE) || selected.includes(NONE) || base.some((rec) => !valuesOf(rec, facet, ctx).length);
+    const withNone =
+      tally.has(NONE) ||
+      wanted.includes(NONE) ||
+      unwanted.includes(NONE) ||
+      base.some((rec) => !valuesOf(rec, facet, ctx).length);
     // Every declared value is listed, at zero if need be: the panel says what the
     // axis *is*, not what happens to be matching. There used to be a filter here
     // keeping only values the data held or the query had selected, which is what
@@ -521,10 +561,11 @@ function histogram(base: Note[], filter: Record<string, string[]>, ctx: Ctx): Ax
     const values = [...declared, ...(withNone ? [NONE] : [])].map((v) => ({
       value: v,
       count: tally.get(v) ?? 0,
-      selected: selected.includes(v),
+      selected: wanted.includes(v),
+      excluded: unwanted.includes(v),
     }));
 
-    if (values.some((v) => v.value !== NONE || v.selected)) {
+    if (values.some((v) => v.value !== NONE || v.selected || v.excluded)) {
       out.push({
         facet,
         label: computed?.label ?? ctx.facets[facet]?.label ?? facet,
@@ -632,9 +673,9 @@ export function runQuery(
       // Intersected with the vocabulary rather than replacing it, so the axis
       // stays a subset of what the facet declares. A selection naming a value no
       // card carries and no vocabulary declares is a broken URL, not a column.
-      const admit = admitted(filter[facet]);
+      const admit = admits(filter[facet]);
       const order = (computed ? computed.values(facets) : orderValues(facets[facet], seen)).filter(
-        (v) => admit === null || admit.has(v),
+        (v) => admit(v),
       );
       // `(none)` needs no test of its own, and no policy either. A card with no
       // value here is a hit only when the selection names `(none)`, so the column
