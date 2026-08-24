@@ -824,6 +824,11 @@ writes while `read` moves for anything, and `heldBase` already depends on that d
 correct. It fires **once per change**, not as a resting state; a thing that keeps moving is a thing you
 learn to stop seeing.
 
+It is called a **flush**, and never a mark: *the Note Mark* is the `•` / `○` / `▣` glyph this
+document already defines, and a second thing wearing that word would be the exact failure the One Word
+Per Idea discipline exists to prevent. The state a region is in is *touched*; the thing drawn is the
+flush.
+
 **It says nothing.** It washes the region the changed value lives in and lets that value be read — a
 facet row for an axis, the section for the body or the links, the title for a rename. The first build of
 this drew a line naming the fields that had moved, and it was wrong twice over: it cost a layout shift
@@ -853,7 +858,7 @@ while this was only a recorded intention, and building it meant editing them —
 decision shows up in the history, the same way adding a type step has to be a deliberate edit.
 
 What is *not* tested is the animation, because what would be asserted is a number this document already
-states. What is tested is the pair of decisions the mark rests on, in `test/client.test.ts`: that a
+states. What is tested is the pair of decisions the flush rests on, in `test/client.test.ts`: that a
 change this tab caused is never reported back to it, and that a diff names the parts that moved and
 only those.
 

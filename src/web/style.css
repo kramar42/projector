@@ -2252,13 +2252,28 @@ textarea { resize: vertical; font-family: inherit; }
 .facetrow.is-touched > .facetrow-values::after {
   content: '';
   position: absolute;
-  /* `-1px` vertically on a facet row so consecutive changed rows read as one band
-     rather than as stripes with hairlines of ground between them. */
   inset: 0;
   background: var(--flush);
   border-radius: inherit;
   /* The chips underneath are still the thing being clicked. */
   pointer-events: none;
+  /*
+   * Transparent at rest, and that is load-bearing rather than tidy.
+   *
+   * A CSS animation *releases* when it ends and the element returns to its own
+   * style — so with no `opacity` here the base was 1, and the sequence a reader
+   * actually saw was: flush, ease out to nothing, snap back to fully lit, sit there
+   * until the class came off, vanish. Two flushes and a hard cut, from one
+   * animation that was correct on its own.
+   *
+   * Declaring the rest state fixes it without `animation-fill-mode`, which would
+   * work equally and say less: the honest statement is that this overlay is
+   * invisible unless something is driving it.
+   */
+  opacity: 0;
+  /* 2600ms is `FLUSH_MS` in `src/web/changed.ts`, which owns it because the class
+     that hosts this animation is removed on the same clock. `test/theme.test.ts`
+     asserts the two agree. */
   animation: touched 2600ms ease-out 1;
 }
 
@@ -2273,6 +2288,10 @@ textarea { resize: vertical; font-family: inherit; }
   .facetrow.is-touched > .facetrow-label::after,
   .facetrow.is-touched > .facetrow-values::after {
     animation: none;
+    /* The rest state is transparent, so without the animation there would be
+       nothing at all — this reader gets the flush, held, and it disappears when the
+       class comes off rather than by easing. */
+    opacity: 1;
   }
 }
 

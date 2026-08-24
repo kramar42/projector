@@ -2,6 +2,7 @@ import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
 import type { NoteDetail, Meta, QueryResponse, Resolved } from './types.ts';
 import { foreignOf } from './changed.ts';
+export { FLUSH_MS } from './changed.ts';
 
 /**
  * A thin typed fetch. No client-side cache: the server owns the cache and

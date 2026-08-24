@@ -27,6 +27,22 @@ import type { NoteDTO } from './types.ts';
 export const SELF_WRITE_TTL_MS = 2000;
 
 /**
+ * How long the flush lasts, and therefore how long a region stays touched.
+ *
+ * One number for both, because they are one thing: the class exists so the flush
+ * can run, so keeping it after the animation ends is not a longer signal, it is a
+ * released animation sitting on its base style. That was a real bug — the overlay
+ * had no resting `opacity`, so on release it snapped back to fully lit and stayed
+ * there until the class came off three seconds later. Reading as: flush, ease out,
+ * flush again, vanish.
+ *
+ * `test/theme.test.ts` asserts the stylesheet's animation is this many milliseconds,
+ * because CSS cannot read this file and the two silently disagreeing is exactly the
+ * failure above.
+ */
+export const FLUSH_MS = 2600;
+
+/**
  * Of these changed notes, which were changed by somebody else.
  *
  * Takes its state and its clock rather than reaching for either, because this is

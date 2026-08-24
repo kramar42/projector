@@ -8,7 +8,7 @@ import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
 import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
 import { useTouched } from '../touched.tsx';
-import { whatMoved } from '../changed.ts';
+import { FLUSH_MS, whatMoved } from '../changed.ts';
 
 /**
  * The open note.
@@ -58,14 +58,11 @@ function Instructions({ blocks }: { blocks: string[] }) {
 }
 
 /**
- * How long a changed region stays washed.
- *
- * Longer than the animation on purpose, so the class is never pulled out from under
- * a running one — the wash decays to nothing on its own and the class coming off
- * afterwards is invisible. The rule it serves is DESIGN.md's The Something Moved
- * Rule; `changed.ts` holds the two decisions it rests on.
+ * How long a changed region stays washed: exactly as long as the flush, which is
+ * `FLUSH_MS`. See it for why the two cannot differ. DESIGN.md's The Something Moved
+ * Rule is what this serves; `changed.ts` holds the decisions it rests on.
  */
-const HOLD_MS = 2600;
+const HOLD_MS = FLUSH_MS;
 
 export function NotePanel({
   id,

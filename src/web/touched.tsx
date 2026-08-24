@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { foreignIds, onDataChange } from './api.ts';
+import { FLUSH_MS, foreignIds, onDataChange } from './api.ts';
 
 /**
  * Which notes changed just now, and not because of you.
@@ -14,16 +14,15 @@ import { foreignIds, onDataChange } from './api.ts';
  * Three properties, and each one is a decision rather than a detail.
  *
  * **Foreign only.** `wasSelfWrite` filters the ids this tab just sent. Without it
- * the mark fires on every chip you click, because the server announces a route's
+ * the flush fires on every chip you click, because the server announces a route's
  * write immediately and the watcher announces the same bytes again when its
  * write-finish settles — your own edit, twice. A signal that fires on your own
  * actions is noise inside a minute.
  *
- * **It expires.** A pulse is an event, not a state: a note that stays marked is a
- * note you stop seeing marked. `TTL_MS` is how long the mark is worth having, and
- * it is deliberately longer than the animation — the animation says *just now*, the
- * mark says *recently*, and a reader who looks up from a terminal after four
- * seconds should still find out.
+ * **It expires.** A flush is an event, not a state: a note that stays lit is a note
+ * you stop seeing lit. `TTL_MS` is the flush's own duration, because the class
+ * exists so the flush can run — see `FLUSH_MS` for why holding it longer is not a
+ * longer signal but a released animation resting on its base style.
  *
  * **It is a Set of ids, not a diff.** What *changed* would need the previous
  * payload, and `useLive` holds one at the moment it swaps — so that is available
@@ -31,7 +30,12 @@ import { foreignIds, onDataChange } from './api.ts';
  * by diffing what it already has, and a face has no room to say more than that
  * something did.
  */
-const TTL_MS = 6000;
+/**
+ * The touched state lasts exactly as long as the flush that draws it — see
+ * `FLUSH_MS`. It used to outlive it by three seconds, which is not a longer signal;
+ * it is an ended animation resting on its base style.
+ */
+const TTL_MS = FLUSH_MS;
 
 interface Ctx {
   /** Did this note change outside this app, recently enough to say so? */
@@ -79,7 +83,7 @@ function useForeignChange(): Ctx {
   );
 
   /**
-   * A timer, and only while something is marked.
+   * A timer, and only while something is lit.
    *
    * Without it the last mark on screen never clears, because nothing re-renders
    * after the change that set it — the map prunes on the *next* event and there may

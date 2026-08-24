@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { FLUSH_MS } from '../src/web/changed.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 import { SEED_FACETS } from '../src/server/seed.ts';
 import { HUES } from '../src/schema/vocabulary.ts';
@@ -287,25 +288,47 @@ test('every field is drawn by the app, not the browser', () => {
  */
 test('the surface is still, apart from the one thing stillness cannot say', () => {
   // The sanctioned exception, named. DESIGN.md's The Something Moved Rule is the
-  // argument; this is the enforcement. A second keyframe, a second animated
-  // property, or this one spreading to a fourth selector all fail here — which is
-  // the difference between an exception and a hole.
+  // argument; this is the enforcement. A second keyframe or a second animated
+  // property fails here, which is the difference between an exception and a hole.
   assert.deepEqual(
     [...CODE.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]!),
     ['touched'],
-    'a keyframe animation that is not the foreign-change mark',
+    'a keyframe animation that is not the foreign-change flush',
   );
-  // The set, not the sequence: the mark is declared on several selectors and
+  // The set, not the sequence: the flush is declared on several selectors and
   // cancelled on several more, and how many of each is a layout detail. What must
   // not grow is the number of distinct animations, which is one.
   assert.deepEqual(
     [...new Set([...CODE.matchAll(/(?<!-)\banimation:\s*([^;]+);/g)].map((m) => m[1]!.trim()))].sort(),
     ['none', 'touched 2600ms ease-out 1'],
-    'an animation declaration that is not the mark, or its reduced-motion opt-out',
+    'an animation declaration that is not the flush, or its reduced-motion opt-out',
   );
   // It fires once and it does not loop: a thing that keeps moving is a thing you
   // stop seeing, and this has to still be legible on the hundredth change.
   assert.doesNotMatch(CODE, /animation:[^;]*infinite/, 'an animation that never stops');
+
+  // The stylesheet and the client agree on how long it lasts. They cannot read each
+  // other, and disagreeing is not a cosmetic drift: the class is removed on the
+  // client's clock, so a shorter class than animation cuts the flush off mid-decay
+  // and a longer one leaves a released animation sitting on its base style — which
+  // was a real bug, seen as two flushes and a hard cut.
+  const declared = CODE.match(/animation:\s*touched\s+(\d+)ms/);
+  assert.ok(declared, 'the flush should still declare its duration in ms');
+  assert.equal(
+    Number(declared![1]),
+    FLUSH_MS,
+    'the stylesheet and FLUSH_MS in src/web/changed.ts disagree about the flush',
+  );
+
+  // Transparent at rest, or the animation ending is a second flush. The overlay is
+  // only ever visible while something is driving it.
+  const overlay = rules().find((r) => r.sel.includes('.is-touched::after'));
+  assert.ok(overlay, 'the flush overlay should still exist');
+  assert.match(
+    overlay!.body,
+    /opacity:\s*0/,
+    'the flush overlay must rest transparent — a CSS animation releases to its base style',
+  );
 
   const slow = [...CODE.matchAll(/transition:[^;]*?(\d+)ms/g)].filter((m) => Number(m[1]) > 140).map((m) => m[0]);
   assert.deepEqual(slow, [], `a transition longer than 140ms: ${slow.join(', ')}`);
@@ -321,8 +344,8 @@ test('the surface is still, apart from the one thing stillness cannot say', () =
  *
  * Two queries now, and they are the same kind of thing: a system preference the
  * reader set, which is not a layout decision. `prefers-reduced-motion` arrived with
- * the one animation this app has, and it exists so that the reader gets the mark
- * without the movement — the information is the point and the motion is only how it
+ * the one animation this app has, and it exists so that the reader gets the flush
+ * without the decay — the information is the point and the motion is only how it
  * arrives. A width query would still fail, which is what the rule is about.
  */
 test('every media query asks about the reader, not the viewport', () => {
