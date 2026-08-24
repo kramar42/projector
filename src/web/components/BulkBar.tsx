@@ -3,6 +3,7 @@ import { ApiError, api } from '../api.ts';
 import { plural } from '../plural.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { RecordPicker } from './RecordPicker.tsx';
+import { RecordMark } from './CardBody.tsx';
 import { Button } from './Button.tsx';
 import { useHue, useVocabulary } from '../vocabulary.tsx';
 import type { QueryResponse } from '../types.ts';
@@ -16,12 +17,18 @@ import type { QueryResponse } from '../types.ts';
  */
 export function BulkBar({
   ids,
+  notes,
   counts,
   onDone,
   onClear,
   onProblem,
 }: {
   ids: string[];
+  /**
+   * The notes on screen, for the one action here that has to name them: choosing
+   * which of a selection survives a merge. Every other control works on ids alone.
+   */
+  notes: QueryResponse['notes'];
   counts: QueryResponse['counts'];
   onDone: () => void;
   onClear: () => void;
@@ -39,6 +46,12 @@ export function BulkBar({
   const facets = useVocabulary();
   const container = Object.entries(facets).find(([, d]) => d.type === 'ref' && d.single)?.[0];
   const [pickRelation, setPickRelation] = useState(false);
+  /**
+   * Merging asks one question — which note survives — and it can only be answered
+   * from inside the selection, so this lists what is selected rather than reusing
+   * the `RecordPicker` beside it. Picking any other note would not be a merge.
+   */
+  const [merging, setMerging] = useState(false);
   const [facet, setFacet] = useState('');
   const editable = counts.filter((c) => !c.computed);
   const chosen = editable.find((c) => c.facet === facet);
@@ -97,6 +110,20 @@ export function BulkBar({
         </span>
       )}
 
+      {/* Two notes are the least that can be merged, so with one selected there is
+          no question to ask and no button to ask it with. */}
+      {ids.length > 1 && (
+        <Button
+          size="small"
+          onClick={() => {
+            setPickRelation(false);
+            setMerging((v) => !v);
+          }}
+        >
+          Merge…
+        </Button>
+      )}
+
       <Button
         tone="danger" size="small"
         onClick={() => {
@@ -110,6 +137,46 @@ export function BulkBar({
       <Button tone="ghost" size="small" onClick={onClear}>
         Clear selection
       </Button>
+
+      {merging && (
+        <div className="bulkbar-picker">
+          <div className="picker">
+            <div className="picker-ask">
+              Keep which one? The others are folded into it and their files removed.
+            </div>
+            <div className="picker-list">
+              {ids.map((id) => {
+                const note = notes[id];
+                return (
+                  <button
+                    key={id}
+                    className="picker-item"
+                    onClick={() => {
+                      const others = ids.filter((other) => other !== id);
+                      if (
+                        !confirm(
+                          `Merge ${plural(others.length, 'note')} into "${note?.title ?? id}"?\n\n` +
+                            'Their bodies become sections, their links and references move across, ' +
+                            'and their files are removed. The files are in git, so this is recoverable.',
+                        )
+                      )
+                        return;
+                      setMerging(false);
+                      void run(() => api.bulk({ ids: others, op: 'merge', into: id }));
+                    }}
+                  >
+                    {/* The real mark, as the record picker draws it: it says
+                        whether anything hangs off this note, which is the fact
+                        that decides which of two notes should be the survivor. */}
+                    {note && <RecordMark card={note} />}
+                    <span className="truncate picker-title">{note?.title ?? id}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {pickRelation && container && (
         <div className="bulkbar-picker">

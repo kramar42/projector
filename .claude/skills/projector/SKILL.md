@@ -96,6 +96,7 @@ pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--bo
 pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
 pj set <id> --set 'project={}'      # this is how a note becomes a project
+pj merge <id>... --into <id>         # folds notes into one; the survivor keeps its facets
 pj rm <id>...                       # deletes, dropping every reference pointing at it
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory
@@ -118,6 +119,12 @@ refilling the inbox.
   being stored twice.
 - **`archived` is how you retire a captured note**, not deletion. Deleting it destroys the
   `source_fingerprint` too, so the next `/pj-capture` sweep creates it again.
+- **Duplicates are merged, not deleted.** `pj merge <id>... --into <id>` when two notes turn out to be
+  one thing: the survivor keeps its own facets, and the rest contribute their body (one `##` section
+  each, titled with the note's title), their links, their references, and their fingerprints — which
+  land in `absorbed_fingerprints:` on the survivor, so a sweep does not re-create what you just folded
+  in. Deleting the duplicate instead loses all four. Everything that referenced an absorbed note is
+  repointed at the survivor; a merge that would make a note reach itself is refused outright.
 - **`layer` (L2–L6) is Project A taxonomy.** Nothing enforces where it is used; do not put it on a note
   outside Project A.
 - **Never set a `project` value with no matching project note.** Either use an existing id or

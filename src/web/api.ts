@@ -134,7 +134,7 @@ export const api = {
 
   bulk: (input: {
     ids: string[];
-    op: 'facet' | 'move' | 'delete';
+    op: 'facet' | 'move' | 'delete' | 'merge';
     facet?: string;
     values?: string[];
     /** `move` only: one entry per grouping axis the drag crossed. */
@@ -142,9 +142,24 @@ export const api = {
     dragMode?: DragMode;
     mode?: 'set' | 'add' | 'remove';
     parent?: string | null;
+    /**
+     * `merge` only: the note that survives and absorbs the others.
+     *
+     * The composed body is deliberately *not* here. The server reads the notes and
+     * composes inside the write, so a merge cannot carry prose as old as this
+     * client's last render — the same reason `facet` above sends a delta rather
+     * than a map. See `mergeNotes`.
+     */
+    into?: string;
   }) => (
-    stampSelfWrite(input.ids),
-    req<{ changed?: number; deleted?: number }>('POST', '/api/bulk', input)
+    // The survivor is written too, so it is stamped too: without it, a merge run
+    // with the survivor's panel open reports itself as somebody else's edit.
+    stampSelfWrite(input.into ? [...input.ids, input.into] : input.ids),
+    req<{ changed?: number; deleted?: number; merged?: number; repointed?: number }>(
+      'POST',
+      '/api/bulk',
+      input,
+    )
   ),
 
   enrich: (refs: string[], force = false) =>

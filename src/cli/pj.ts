@@ -34,7 +34,7 @@ import { resetWatermark } from '../intake/db.ts';
 import { buildBriefing } from '../agent/briefing.ts';
 import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
-import { createNote, deleteNote, patchNote, patchFields } from '../server/mutate.ts';
+import { createNote, deleteNote, mergeNotes, patchNote, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
 /**
@@ -124,6 +124,7 @@ const HELP = `pj — projector CLI${vaultNote}
   pj context <id> [--json]                             everything known about a card, assembled
   pj set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
+  pj merge <id>... --into <id>                         fold notes into one, keeping its facets
   pj rm <id>...                                        delete, dropping references to it
   pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
 
@@ -745,6 +746,24 @@ try {
           `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}`,
         );
       }
+      break;
+    }
+
+    case 'merge': {
+      const { flags, rest } = argFlags(argv, ['into']);
+      const into = flags.get('into')?.[0];
+      if (!into || !rest.length) fail('pj merge <id>... --into <id>');
+      /**
+       * The survivor keeps its own facets; the rest bring their body, links,
+       * references and capture fingerprints across and their files are removed.
+       * One call, because the whole of it has to be checked before any of it is
+       * written — see `mergeNotes`.
+       */
+      const res = mergeNotes(root, into, rest);
+      console.log(
+        `merged ${res.merged} note(s) into ${into}` +
+          (res.repointed ? `, repointing ${res.repointed} reference(s)` : ''),
+      );
       break;
     }
 

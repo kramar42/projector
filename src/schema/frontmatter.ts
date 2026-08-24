@@ -10,6 +10,7 @@ export const KEY_ORDER = [
   'links',
   'project',
   'source_fingerprint',
+  'absorbed_fingerprints',
   'created',
   'updated',
 ];

@@ -11,8 +11,10 @@ import {
   bulkMove,
   checkFacets,
   deleteNote,
+  mergeNotes,
   mtimeOf,
   patchNote,
+  repointed,
   putFrontmatter,
   saveAsset,
 } from '../src/server/mutate.ts';
@@ -720,4 +722,166 @@ test('a delta folds into what is on disk, so a concurrent value survives it', ()
   } finally {
     v.cleanup();
   }
+});
+
+// ---------------------------------------------------------------- merging
+
+/**
+ * A merge is the one write that touches many files for one gesture and cannot
+ * put any of them back: the survivor, every note that referenced an absorbed
+ * one, and the absorbed files themselves. So what is asserted here is mostly
+ * *what else moved* — the composition itself is pure and lives in
+ * `test/note.test.ts`.
+ */
+const noteFile = (id: string, front = '', body = '') =>
+  `---\nid: ${id}\ntitle: ${id.toUpperCase()}\n${front}---\n${body}`;
+
+const bodyOf = (root: string, id: string) =>
+  readAll(join(root, 'notes')).notes.get(id)?.body ?? null;
+
+test('a merge folds bodies into sections, combines links, and removes the files', () => {
+  const v = vault({
+    keep: noteFile('keep', 'facets: { status: [planning] }\nlinks: [jira:PROJ-1]\n', '\nWhat I knew.\n'),
+    gone: noteFile('gone', 'facets: { status: [done] }\nlinks: [doc:x]\n', '\nAnd this.\n'),
+  });
+  try {
+    const res = mergeNotes(v.root, 'keep', ['gone', 'keep']);
+    assert.deepEqual(res, { merged: 1, repointed: 0 });
+    const notes = readAll(join(v.root, 'notes')).notes;
+    assert.equal(notes.has('gone'), false, 'the absorbed file is gone');
+    // The survivor's own lifecycle is untouched — it did not inherit `done`.
+    assert.deepEqual(notes.get('keep')!.facets.status, ['planning']);
+    assert.deepEqual(notes.get('keep')!.links.map((l) => l.raw), ['jira:PROJ-1', 'doc:x']);
+    assert.equal(bodyOf(v.root, 'keep'), '\nWhat I knew.\n\n## GONE\n\nAnd this.\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The whole reason a merge cannot be a delete plus an edit: everything that
+ * pointed at the absorbed note has to point at the survivor instead, or the
+ * references simply vanish.
+ */
+test('references to an absorbed note are repointed at the survivor, without duplicating', () => {
+  const v = vault({
+    keep: noteFile('keep'),
+    gone: noteFile('gone'),
+    child: noteFile('child', 'facets: { parent: [gone] }\n'),
+    both: noteFile('both', 'facets: { project: [keep, gone] }\n'),
+  });
+  try {
+    const res = mergeNotes(v.root, 'keep', ['gone']);
+    assert.equal(res.repointed, 2);
+    assert.deepEqual(facetsOf(v.root, 'child').parent, ['keep']);
+    // Two values collapsing onto one is one value, not the same id twice.
+    assert.deepEqual(facetsOf(v.root, 'both').project, ['keep']);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** "Merge this into its parent" — the ordinary case, and a self-reference if unhandled. */
+test('merging a note into the one it is part of leaves no self-reference', () => {
+  const v = vault({
+    keep: noteFile('keep'),
+    gone: noteFile('gone', 'facets: { parent: [keep] }\n'),
+  });
+  try {
+    mergeNotes(v.root, 'keep', ['gone']);
+    assert.equal(facetsOf(v.root, 'keep').parent, undefined);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * A merge can produce a graph no single write would have been allowed to make,
+ * because repointing changes references the survivor never held. It is refused,
+ * and — since a half-applied merge is a vault nobody asked for — refused before
+ * anything at all is written.
+ */
+test('a merge that would close a loop is refused, and writes nothing first', () => {
+  const v = vault({
+    keep: noteFile('keep', 'facets: { parent: [middle] }\n'),
+    middle: noteFile('middle', 'facets: { parent: [gone] }\n'),
+    gone: noteFile('gone', '', '\nprose\n'),
+  });
+  try {
+    assert.throws(() => mergeNotes(v.root, 'keep', ['gone']), /reach itself through "parent"/);
+    const notes = readAll(join(v.root, 'notes')).notes;
+    assert.equal(notes.has('gone'), true, 'the absorbed file is still there');
+    assert.deepEqual(notes.get('middle')!.facets.parent, ['gone'], 'nothing was repointed');
+    assert.equal(bodyOf(v.root, 'keep'), '', 'the survivor’s body was not composed');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a merge carries the fingerprints of what it absorbed', () => {
+  const v = vault({
+    keep: noteFile('keep', 'source_fingerprint: jira:PROJ-1\n'),
+    gone: noteFile('gone', 'source_fingerprint: slack:C1/1\n'),
+  });
+  try {
+    mergeNotes(v.root, 'keep', ['gone']);
+    const rec = readAll(join(v.root, 'notes')).notes.get('keep')!;
+    assert.deepEqual(rec.absorbed_fingerprints, ['slack:C1/1']);
+    assert.equal(rec.source_fingerprint, 'jira:PROJ-1');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * Asset paths are vault-relative and name the note they were pasted into, so a
+ * body that moves without its files keeps working right up until the absorbed
+ * note's folder is removed — which is the next thing a merge does.
+ */
+test('absorbed assets move to the survivor and the body’s paths move with them', () => {
+  const v = vault({ keep: noteFile('keep'), gone: noteFile('gone') });
+  try {
+    const { path } = saveAsset(v.root, 'gone', 'image/png', Buffer.from('pretend-png'));
+    writeFileSync(join(v.root, 'notes', 'gone.md'), noteFile('gone', '', `\n![shot](${path})\n`), 'utf8');
+    mergeNotes(v.root, 'keep', ['gone']);
+    const moved = path.replace('assets/gone/', 'assets/keep/');
+    assert.equal(existsSync(join(v.root, 'notes', moved)), true, 'the file moved');
+    assert.equal(existsSync(join(v.root, 'notes', 'assets', 'gone')), false, 'the old folder went');
+    assert.match(bodyOf(v.root, 'keep')!, new RegExp(moved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a merge needs a survivor that exists and something else to merge in', () => {
+  const v = vault({ keep: noteFile('keep') });
+  try {
+    assert.throws(() => mergeNotes(v.root, 'nonsuch', ['keep']), /no note with id "nonsuch"/);
+    assert.throws(() => mergeNotes(v.root, 'keep', ['keep']), /besides the one it merges into/);
+    assert.throws(() => mergeNotes(v.root, 'keep', ['ghost']), /no note with id "ghost"/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+// `repointed` is the rewrite both a merge and a delete perform; three ways it can
+// go wrong, none of which needs a filesystem.
+test('a repoint deduplicates, drops a self-reference, and reports nothing when nothing moved', () => {
+  const refs = ['parent', 'project'];
+  const gone = new Set(['b']);
+  assert.deepEqual(
+    repointed({ project: ['a', 'b'] }, refs, gone, 'a', 'x'),
+    { facets: { project: ['a'] }, changed: 1 },
+  );
+  assert.deepEqual(
+    repointed({ parent: ['b'] }, refs, gone, 'a', 'a'),
+    { facets: {}, changed: 1 },
+    'a note cannot be part of itself, so the axis empties and is dropped',
+  );
+  assert.equal(repointed({ parent: ['c'] }, refs, gone, 'a', 'x'), null);
+  // A delete is the same rewrite with nowhere to point.
+  assert.deepEqual(
+    repointed({ project: ['a', 'b'] }, refs, gone, null, 'x'),
+    { facets: { project: ['a'] }, changed: 1 },
+  );
 });

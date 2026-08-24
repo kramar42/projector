@@ -39,6 +39,7 @@ import {
   bulkDelete,
   bulkFacet,
   bulkMove,
+  mergeNotes,
   createNote,
   deleteNote,
   fileFor,
@@ -420,8 +421,10 @@ app.post('/api/bulk', async (c) => {
   try {
     const b = (await c.req.json()) as {
       ids: string[];
-      op: 'facet' | 'move' | 'delete';
+      op: 'facet' | 'move' | 'delete' | 'merge';
       facet?: string;
+      /** `merge` only: which of the notes survives and absorbs the rest. */
+      into?: string;
       values?: string[];
       mode?: 'set' | 'add' | 'remove';
       /**
@@ -441,6 +444,12 @@ app.post('/api/bulk', async (c) => {
       res = bulkMove(root, ids, b.moves ?? [], b.dragMode ?? 'replace');
     }
     else if (b.op === 'delete') res = bulkDelete(root, ids);
+    // The survivor is named, the rest are the selection, and the composition
+    // happens server-side — see `mergeNotes` for why the body cannot travel.
+    else if (b.op === 'merge') {
+      if (!b.into) throw new Invalid('a merge has to name the note it merges into');
+      res = mergeNotes(root, b.into, ids);
+    }
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
     bump(root);
     return c.json(res as object);

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
@@ -8,6 +8,7 @@ import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } f
 import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
 import { wouldCycle } from '../index/refs.ts';
+import { merged } from '../schema/merge.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
@@ -121,6 +122,17 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
 }
 
 // ---------------------------------------------------------------- validation
+
+/**
+ * Replace the body, leaving the frontmatter block byte-identical.
+ *
+ * Does not bump `updated`: the caller decides, because a body change is usually
+ * one half of a write and two bumps mean two writes for one edit.
+ */
+function putBody(file: string, body: string): void {
+  const { yaml } = split(readFileSync(file, 'utf8'));
+  writeNoteFile(file, `---\n${yaml}---\n${body}`);
+}
 
 /**
  * Validate facet names and values against the vocabulary before writing.
@@ -279,10 +291,9 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
   if (Object.keys(patch).length) patchAll(file, patch);
 
   if (input.body !== undefined) {
-    // The body is written verbatim; only this call path may touch it.
-    const text = readFileSync(file, 'utf8');
-    const { yaml } = split(text);
-    writeNoteFile(file, `---\n${yaml}---\n${input.body}`);
+    // The body is written verbatim; only this call path and `mergeNotes` may
+    // touch it.
+    putBody(file, input.body);
     patchAll(file, {});
   }
 
@@ -314,7 +325,11 @@ export function createNote(
 
   if (input.fingerprint) {
     for (const rec of notes.values()) {
-      if (rec.source_fingerprint === input.fingerprint) return { id: rec.id, existed: true };
+      // A fingerprint absorbed by a merge answers for the note that absorbed it.
+      // Without this half, folding a captured note into another one hands the
+      // next sweep a fingerprint nothing claims, and it creates the note again.
+      const held = [rec.source_fingerprint, ...(rec.absorbed_fingerprints ?? [])];
+      if (held.includes(input.fingerprint)) return { id: rec.id, existed: true };
     }
   }
   const id = input.id ?? uniqueId(slugify(title), new Set(notes.keys()));
@@ -344,6 +359,49 @@ export function createNote(
   return { id };
 }
 
+/** The names of every facet that holds note ids. */
+function refFacetsOf(root: string): string[] {
+  return Object.entries(loadDefs(paths(root).facets))
+    .filter(([, def]) => isRef(def))
+    .map(([name]) => name);
+}
+
+/**
+ * How one note's references change when a set of ids stops existing separately.
+ *
+ * `onto` is where they went — the survivor of a merge — or `null` when they went
+ * nowhere, which is a delete. Both are one rewrite, which is why this is one
+ * function: a value naming a departed id becomes `onto` or disappears, the result
+ * is deduplicated, and a value that would end up naming the holder itself is
+ * dropped, because a note cannot reference itself and `checkFacets` refuses to
+ * let it say so.
+ *
+ * `null` when nothing changed, so a caller writes only the files it must. Pure,
+ * so the three ways this can go wrong are asserted without a filesystem.
+ */
+export function repointed(
+  facets: Record<string, string[]>,
+  refFacets: readonly string[],
+  gone: ReadonlySet<string>,
+  onto: string | null,
+  holder: string,
+): { facets: Record<string, string[]>; changed: number } | null {
+  const out = { ...facets };
+  let changed = 0;
+  for (const name of refFacets) {
+    const before = out[name] ?? [];
+    const moving = before.filter((v) => gone.has(v)).length;
+    if (!moving) continue;
+    changed += moving;
+    const after = [
+      ...new Set(before.map((v) => (gone.has(v) ? onto : v)).filter((v): v is string => v !== null)),
+    ].filter((v) => v !== holder);
+    if (after.length) out[name] = after;
+    else delete out[name];
+  }
+  return changed ? { facets: out, changed } : null;
+}
+
 /**
  * Delete a card file, and drop every reference that pointed at it so the graph
  * does not keep dangling values. The files are in git, so this is recoverable.
@@ -352,9 +410,8 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
   const p = paths(root);
   const { notes } = readAll(p.notes);
-  const refFacets = Object.entries(loadDefs(p.facets))
-    .filter(([, def]) => isRef(def))
-    .map(([name]) => name);
+  const refFacets = refFacetsOf(root);
+  const gone = new Set([id]);
   let removedEdges = 0;
 
   for (const rec of notes.values()) {
@@ -362,17 +419,10 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
     // These are files the caller never named and never read, and the write below
     // replaces the whole `facets:` key on each of them — so the map has to be the
     // one on disk. See `facetsNow`.
-    const facets = { ...facetsNow(rec) };
-    let touched = false;
-    for (const name of refFacets) {
-      const kept = (facets[name] ?? []).filter((v) => v !== id);
-      if (kept.length === (facets[name] ?? []).length) continue;
-      removedEdges += (facets[name] ?? []).length - kept.length;
-      touched = true;
-      if (kept.length) facets[name] = kept;
-      else delete facets[name];
-    }
-    if (touched) patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
+    const plan = repointed(facetsNow(rec), refFacets, gone, null, rec.id);
+    if (!plan) continue;
+    removedEdges += plan.changed;
+    patchAll(rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
   }
 
   rmSync(file);
@@ -380,6 +430,153 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   const assets = join(p.assets, id);
   if (existsSync(assets)) rmSync(assets, { recursive: true });
   return { removedEdges };
+}
+
+/**
+ * Move an absorbed note's assets into the survivor's folder.
+ *
+ * Filenames are content hashes, so a name already present is the same bytes and
+ * the absorbed copy is simply dropped. `schema/merge.ts` rewrote the body's paths
+ * to match — that rewrite and this move are one decision in two places, and
+ * neither is correct alone.
+ */
+function adoptAssets(root: string, from: string, to: string): void {
+  const p = paths(root);
+  const src = join(p.assets, from);
+  if (!existsSync(src)) return;
+  const dst = join(p.assets, to);
+  mkdirSync(dst, { recursive: true });
+  for (const name of readdirSync(src)) {
+    const at = join(dst, name);
+    if (existsSync(at)) rmSync(join(src, name));
+    else renameSync(join(src, name), at);
+  }
+  rmSync(src, { recursive: true });
+}
+
+/**
+ * Fold several notes into one and remove them.
+ *
+ * The composition is `schema/merge.ts`'s. What happens here is everything that
+ * needs the vault: repointing every reference that named an absorbed note,
+ * checking the graph the merge *would* produce, and only then writing.
+ *
+ * **Nothing is written until every check has passed.** A merge touches the
+ * survivor, every note that referenced an absorbed one, and the absorbed files
+ * themselves — so a refusal halfway through leaves a vault in a state nobody
+ * asked for, and unlike a single-note write there is no one file to point at. The
+ * plan is built in full, checked against a projection of the result, and applied
+ * last.
+ *
+ * There is no `baseMtime`, for the same reason `bulkMove` has none: a caller
+ * holding twelve notes has no single mtime to offer. What stands in for it is that
+ * the *composition* happens here, from a read taken inside this call. A client
+ * that composed the body itself would be sending prose as old as its last render,
+ * and would quietly revert whatever an agent wrote in between — which is the
+ * failure `PatchCardInput.facet` exists to make unrepresentable, and a body is
+ * worth more than an axis.
+ */
+export function mergeNotes(
+  root: string,
+  into: string,
+  from: readonly string[],
+): { merged: number; repointed: number } {
+  const p = paths(root);
+  const { notes } = readAll(p.notes);
+  const target = notes.get(into);
+  if (!target) throw new Invalid(`no note with id "${into}"`);
+
+  const sources: Note[] = [];
+  for (const id of new Set(from)) {
+    // The survivor is picked *out of* the selection, so finding it in the list is
+    // the ordinary case rather than a mistake.
+    if (id === into) continue;
+    const rec = notes.get(id);
+    if (!rec) throw new Invalid(`no note with id "${id}"`);
+    sources.push(rec);
+  }
+  if (!sources.length) throw new Invalid('a merge needs a note to merge in besides the one it merges into');
+
+  const refFacets = refFacetsOf(root);
+  const out = merged(target, sources, loadDefs(p.facets));
+  const gone = new Set(sources.map((s) => s.id));
+
+  const plans: { rec: Note; facets: Record<string, string[]>; changed: number }[] = [];
+  for (const rec of notes.values()) {
+    if (rec.id === into || gone.has(rec.id)) continue;
+    const plan = repointed(rec.facets, refFacets, gone, into, rec.id);
+    if (plan) plans.push({ rec, ...plan });
+  }
+
+  /**
+   * The vault as this merge would leave it.
+   *
+   * Every reference rule is a question about the whole graph, and repointing
+   * changes it in places the survivor cannot see: `A → C → B`, merging B into A,
+   * leaves `C → A` beside `A → C` — a cycle no single write would ever have been
+   * allowed to make. Asking the notes as they stand now would miss it entirely.
+   */
+  const after = new Map<string, Note>();
+  for (const rec of notes.values()) {
+    if (gone.has(rec.id)) continue;
+    after.set(rec.id, rec.id === into ? { ...rec, facets: out.facets } : rec);
+  }
+  for (const plan of plans) after.set(plan.rec.id, { ...plan.rec, facets: plan.facets });
+
+  // Only the axes the merge moved, following `bulkMove`: a survivor already
+  // carrying a value the vocabulary has since dropped is not this write's doing,
+  // and refusing the merge over it would be a dead end with no way out of it.
+  const touched: Record<string, string[]> = {};
+  for (const name of refFacets) {
+    const next = out.facets[name] ?? [];
+    if (next.length && !same(target.facets[name] ?? [], next)) touched[name] = next;
+  }
+  checkFacets(root, into, touched, after);
+
+  for (const plan of plans) {
+    for (const name of refFacets) {
+      for (const value of plan.facets[name] ?? []) {
+        if (wouldCycle(plan.rec.id, value, (cur) => after.get(cur)?.facets[name] ?? [])) {
+          throw new Invalid(
+            `merging into "${into}" would make "${plan.rec.id}" reach itself through "${name}" — ` +
+              'clear that reference first, or merge the other way round',
+          );
+        }
+      }
+    }
+  }
+
+  // Checked. From here it writes.
+  for (const plan of plans) {
+    // Re-planned against the file rather than the snapshot, for the reason
+    // `facetsNow` gives: this loop writes the whole `facets:` key on notes the
+    // caller never named. The transform is the same one just validated; only its
+    // input is fresher.
+    const fresh = repointed(facetsNow(plan.rec), refFacets, gone, into, plan.rec.id);
+    if (!fresh) continue;
+    patchAll(plan.rec.file, { facets: Object.keys(fresh.facets).length ? fresh.facets : undefined });
+  }
+
+  const file = fileFor(root, into);
+  // The body first, so the frontmatter write is what stamps `updated` — one bump
+  // for one merge, rather than one per field it happens to touch.
+  putBody(file, out.body);
+  patchAll(file, {
+    facets: Object.keys(out.facets).length ? out.facets : undefined,
+    links: out.links.length ? out.links : undefined,
+    absorbed_fingerprints: out.absorbed.length ? out.absorbed : undefined,
+    ...(out.project ? { project: out.project } : {}),
+  });
+
+  for (const s of sources) {
+    adoptAssets(root, s.id, into);
+    // Not `deleteNote`: its reference sweep would strip the very values this
+    // merge just repointed at the survivor, and its asset sweep would delete the
+    // files just adopted. What is left of a delete here is removing the file.
+    rmSync(s.file);
+  }
+
+  return { merged: sources.length, repointed: plans.reduce((n, plan) => n + plan.changed, 0) };
 }
 
 /**

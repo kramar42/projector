@@ -95,7 +95,7 @@ the two are expected to be editing the same note at the same time.
 
 | | |
 |---|---|
-| `src/schema/` | note and facet types, frontmatter read/write, validation |
+| `src/schema/` | note and facet types, frontmatter read/write, validation, how notes fold together |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, and `dropOutcome.ts`, what a drag means |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
@@ -424,7 +424,8 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
 | `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
-| `POST /api/bulk` ops `facet`, `move`, `parent` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed, `parent` is `bulkFacet` under the name the bulk bar uses | one write per note whatever the op; the `delete` op is the row below |
+| `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
+| `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one, and `notes/assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten |
 | `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block | never touches the body |
 | `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside `notes/` |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |

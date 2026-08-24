@@ -458,7 +458,19 @@ exactly the code path that changes its priority.
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
 
 **Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set a parent, set or
-clear one facet, or delete, across all of it.
+clear one facet, merge, or delete, across all of it.
+
+**Merging is the other half of capture.** Four notes about one thing is what a sweep from four
+channels produces, and splitting them apart again by hand is work nobody does. Select them, press
+**Merge…**, and pick which one survives — the rest are folded into it and their files removed.
+
+The survivor keeps its own classification entire: its priority, status, energy, every label it
+carries. What the absorbed notes bring is only what nothing else could recover — their prose, as a
+`##` section titled with each note's title; their links; their references, so a project or a blocker
+survives the collapse; and the `source_fingerprint` of wherever each was captured from, without which
+the next sweep would propose it all over again. Everything that pointed *at* an absorbed note is
+repointed at the survivor. A merge that would leave some note referencing itself, or reaching itself
+through a chain, is refused before anything is written rather than half applied.
 
 **Conflicts are refused, not merged.** If a file changed since the panel read it the write is refused
 and the panel says so, rather than one of you silently losing an edit — which matters when an agent may
@@ -661,6 +673,7 @@ one.
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |
+| `pj merge <id>… --into <id>` | fold notes into one. The survivor keeps its facets; the rest bring their body, links, references and capture fingerprints, and their files go |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
 | `pj context <id> [--json]` | everything known about a note, assembled |

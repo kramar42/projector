@@ -2991,6 +2991,12 @@ textarea { resize: vertical; font-family: inherit; }
 /* 7px matches `.picker-item`'s inset, so the message starts where a row does. */
 .picker-empty { padding: 6px 7px; }
 
+/* The question a picker is asking, when its rows cannot say it themselves — the
+   merge chooser's rows are notes, and "which of these survives" is not a fact
+   about any one of them. `7px` matches `.picker-item`'s inset, so the words start
+   where a row does. */
+.picker-ask { padding: 2px 7px 5px; color: var(--ink-3); font-size: var(--text-label); }
+
 /* Outside the picker's scroller and aligned to its right edge. */
 .picker-capped {
   text-align: right;

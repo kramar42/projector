@@ -48,6 +48,15 @@ export interface Note {
   links: Link[];
   project?: ProjectBlock;
   source_fingerprint?: string;
+  /**
+   * The fingerprints of notes merged into this one.
+   *
+   * A note's fingerprint is what stops a capture sweep proposing it twice, and
+   * merging destroys the file that held it — so the surviving note carries them,
+   * or every note ever folded into another comes back on the next sweep as new.
+   * Its own `source_fingerprint` is never repeated here.
+   */
+  absorbed_fingerprints?: string[];
   created?: string;
   updated?: string;
   /** Everything below the frontmatter, byte-preserved. */

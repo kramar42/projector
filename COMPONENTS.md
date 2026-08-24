@@ -56,6 +56,12 @@ load-bearing after all, it is recorded in `DESIGN.md`'s **Accepted Exceptions**,
 Audited twice now; nothing crosses these lines. The rule is a note of a distinction that already
 holds.
 
+The bulk bar's **Merge…** is the case that looks like it crosses one and does not. It removes files,
+several of them — but the word opens a chooser, exactly as *Set part of…* does, and a control that
+asks a question is not the act. What destroys is the row you pick inside it, behind the same confirm
+the trash uses. The ellipsis is doing real work here: it is the difference between a button that acts
+and a button that asks, and both of the bulk bar's are spelled with one.
+
 The adjacent distinction it is easy to break: **a disabled button takes `cursor: default`, a
 disabled field takes `not-allowed`.** The pass found one violation — `.pop-pick.is-missing`, a
 genuinely `disabled` button wearing the field's cursor, the only button in the app doing so.

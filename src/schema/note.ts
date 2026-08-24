@@ -29,6 +29,7 @@ export const frontmatterSchema = z.object({
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
   source_fingerprint: z.string().optional(),
+  absorbed_fingerprints: z.array(z.string()).optional(),
   created: z.union([z.string(), z.date()]).optional(),
   updated: z.union([z.string(), z.date()]).optional(),
 });
@@ -92,6 +93,7 @@ export function parseNote(file: string, text: string): ParseResult {
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
       source_fingerprint: fm.source_fingerprint,
+      absorbed_fingerprints: fm.absorbed_fingerprints,
       created: asDate(fm.created),
       updated: asDate(fm.updated),
       body,
@@ -134,6 +136,7 @@ export function renderNote(rec: Omit<Note, 'file'>): string {
   if (rec.links.length) fm.links = rec.links.map((l) => l.raw);
   if (rec.project) fm.project = rec.project;
   if (rec.source_fingerprint) fm.source_fingerprint = rec.source_fingerprint;
+  if (rec.absorbed_fingerprints?.length) fm.absorbed_fingerprints = rec.absorbed_fingerprints;
   if (rec.created) fm.created = rec.created;
   if (rec.updated) fm.updated = rec.updated;
 

@@ -137,6 +137,7 @@ export function TableView({
       {acting.length > 0 && (
         <BulkBar
           ids={acting}
+          notes={data.notes}
           counts={data.counts}
           onDone={() => {
             selection.clear();

@@ -46,8 +46,11 @@ function readVault(root: string): VaultRead {
   const links = new Map<string, string[]>();
 
   for (const rec of notes.values()) {
-    if (rec.source_fingerprint) {
-      fingerprints.set(rec.source_fingerprint, [...(fingerprints.get(rec.source_fingerprint) ?? []), rec.id]);
+    // A note's own fingerprint and every one it absorbed in a merge, which count
+    // the same here: both mean "this candidate is already in the vault", and the
+    // note that answers for it is this one.
+    for (const fp of [rec.source_fingerprint, ...(rec.absorbed_fingerprints ?? [])]) {
+      if (fp) fingerprints.set(fp, [...(fingerprints.get(fp) ?? []), rec.id]);
     }
     for (const l of rec.links) {
       links.set(l.raw, [...(links.get(l.raw) ?? []), rec.id]);

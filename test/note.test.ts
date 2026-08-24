@@ -6,7 +6,8 @@ import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
 import { LINK_KINDS, fallbackHref, parseLink } from '../src/schema/links.ts';
 import { validate } from '../src/schema/validate.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
-import type { Note } from '../src/schema/types.ts';
+import { demoted, merged } from '../src/schema/merge.ts';
+import type { Facets, Note } from '../src/schema/types.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -289,3 +290,143 @@ test('an ordered facet orders by its buckets, not alphabetically', () => {
   assert.equal(bucketOf(plain, '2026-08-19', '2026-08-21'), '2026-08-19');
 });
 
+
+// ---------------------------------------------------------------- merging
+
+/**
+ * Folding notes together.
+ *
+ * The composition only — `mergeNotes` in `test/mutate.test.ts` covers what it
+ * takes a vault to do. What is asserted here is the asymmetry that makes a merge
+ * a merge: the survivor keeps its classification, and what the absorbed notes
+ * bring is what nothing else can recover.
+ */
+const MERGE_FACETS: Facets = {
+  priority: { label: 'Priority', type: 'label', values: ['now', 'month'], open: false, single: true },
+  tech: { label: 'Tech', type: 'label', values: [], open: true, single: false },
+  parent: { label: 'Part of', type: 'ref', values: [], open: true, single: true },
+  project: { label: 'Project', type: 'ref', values: [], open: true, single: false },
+};
+
+const note = (id: string, extra: Partial<Note> = {}): Note => ({
+  id,
+  title: id.toUpperCase(),
+  facets: {},
+  links: [],
+  body: '',
+  file: `/tmp/${id}.md`,
+  ...extra,
+});
+
+test('a merge keeps the survivor’s labels and combines only its references', () => {
+  const out = merged(
+    note('keep', { facets: { priority: ['now'], tech: ['kafka'], project: ['project-a'] } }),
+    [note('gone', { facets: { priority: ['month'], tech: ['temporal'], project: ['project-b'] } })],
+    MERGE_FACETS,
+  );
+  // The absorbed note's own answers to "how urgent" and "what stack" are gone,
+  // because two answers is not one note.
+  assert.deepEqual(out.facets.priority, ['now']);
+  assert.deepEqual(out.facets.tech, ['kafka']);
+  // Its memberships are not answers, they are edges, and edges add up.
+  assert.deepEqual(out.facets.project, ['project-a', 'project-b']);
+});
+
+test('a single-valued reference keeps the survivor’s, and adopts one only where it had none', () => {
+  const held = merged(
+    note('keep', { facets: { parent: ['a'] } }),
+    [note('gone', { facets: { parent: ['b'] } })],
+    MERGE_FACETS,
+  );
+  assert.deepEqual(held.facets.parent, ['a']);
+
+  const adopted = merged(
+    note('keep'),
+    [note('gone', { facets: { parent: ['b'] } })],
+    MERGE_FACETS,
+  );
+  // Merging a note into one with no container should leave the result where the
+  // absorbed note was, rather than nowhere.
+  assert.deepEqual(adopted.facets.parent, ['b']);
+});
+
+/**
+ * The case every "merge this into its parent" hits, and the one that would
+ * otherwise be refused by `checkFacets` at the moment of writing: a reference
+ * naming a note that is being collapsed names the result, and the result cannot
+ * reference itself.
+ */
+test('a reference naming a collapsed note is dropped, not rewritten', () => {
+  const out = merged(
+    note('keep', { facets: { project: ['keep', 'project-a'] } }),
+    [note('gone', { facets: { project: ['keep', 'gone'] } })],
+    MERGE_FACETS,
+  );
+  assert.deepEqual(out.facets.project, ['project-a']);
+});
+
+test('a merge combines links without repeating one', () => {
+  const out = merged(
+    note('keep', { links: [parseLink('jira:PROJ-1'), parseLink('doc:x')] }),
+    [note('gone', { links: [parseLink('jira:PROJ-1'), parseLink('slack:https://s/1')] })],
+    MERGE_FACETS,
+  );
+  assert.deepEqual(out.links, ['jira:PROJ-1', 'doc:x', 'slack:https://s/1']);
+});
+
+test('a merged body is the survivor’s prose, then one section per absorbed note', () => {
+  const out = merged(
+    note('keep', { title: 'Keep', body: '\nWhat I knew.\n' }),
+    [
+      note('one', { title: 'First thing', body: '\nSomething else.\n' }),
+      note('two', { title: 'Second thing' }),
+    ],
+    MERGE_FACETS,
+  );
+  assert.equal(
+    out.body,
+    '\nWhat I knew.\n\n## First thing\n\nSomething else.\n\n## Second thing\n',
+  );
+});
+
+/**
+ * An absorbed note's headings belong *under* the section that names it. A note
+ * with an empty body still gets its heading: most notes in a real vault are a
+ * title and nothing else, and the heading is then the whole record that anything
+ * was folded in at all.
+ */
+test('an absorbed note’s own headings are pushed one level deeper', () => {
+  const out = merged(
+    note('keep', { body: '' }),
+    [note('gone', { title: 'Gone', body: '\n## Its own section\n\ntext\n' })],
+    MERGE_FACETS,
+  );
+  assert.equal(out.body, '\n## Gone\n\n### Its own section\n\ntext\n');
+});
+
+test('a fenced block is not a heading, however many hashes it starts with', () => {
+  const body = ['# real', '```bash', '# a comment', '```', '###### floor'].join('\n');
+  assert.equal(
+    demoted(body),
+    ['## real', '```bash', '# a comment', '```', '###### floor'].join('\n'),
+  );
+  // `#tag` is not a heading either — CommonMark wants the space.
+  assert.equal(demoted('#tag'), '#tag');
+});
+
+/**
+ * A note's fingerprint is what stops a capture sweep proposing it twice, and a
+ * merge deletes the file that held it. The survivor answers for it instead, or
+ * everything ever merged comes back on the next sweep as new.
+ */
+test('the survivor answers for every fingerprint it absorbs, and never for its own twice', () => {
+  const out = merged(
+    note('keep', { source_fingerprint: 'jira:PROJ-1' }),
+    [
+      note('gone', { source_fingerprint: 'slack:C1/1', absorbed_fingerprints: ['todo:old'] }),
+      note('also', { source_fingerprint: 'jira:PROJ-1' }),
+    ],
+    MERGE_FACETS,
+  );
+  assert.deepEqual(out.absorbed, ['slack:C1/1', 'todo:old']);
+});
