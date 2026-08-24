@@ -140,7 +140,7 @@ parent:
   inverse: Children
 
 blocked_by:
-  label: blocked by
+  label: Blocked by
   type: ref
   blocking: true
   hue: red

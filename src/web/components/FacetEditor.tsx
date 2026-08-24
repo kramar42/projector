@@ -156,12 +156,12 @@ export function FacetEditor({
             minWidth={320}
             fitContent
             label="+ note"
-            title={`add a note to ${def.label.toLowerCase()}`}
+            title={`add a note to ${def.label}`}
             render={(close) => (
               <RecordPicker
                 exclude={selfId ? [...values, selfId] : values}
-                placeholder={`${def.label.toLowerCase()}…`}
-                clearLabel={def.single && values.length ? `— no ${def.label.toLowerCase()} —` : undefined}
+                placeholder={`${def.label}…`}
+                clearLabel={def.single && values.length ? `— no ${def.label} —` : undefined}
                 onCancel={close}
                 onPick={(id) => {
                   close();

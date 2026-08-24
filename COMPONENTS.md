@@ -60,7 +60,7 @@ The bulk bar's **Merge…** is the case that looks like it crosses one and does 
 several of them — but the word opens a chooser, and a control that asks a question is not the act.
 What destroys is the row you pick inside it, behind the same confirm the trash uses. The ellipsis is
 doing the work: it is the difference between a button that acts and a button that asks, which is also
-why *set a facet…* wears one and `Delete` does not.
+why *Set a facet…* wears one and `Delete` does not.
 
 The adjacent distinction it is easy to break: **a disabled button takes `cursor: default`, a
 disabled field takes `not-allowed`.** The pass found one violation — `.pop-pick.is-missing`, a
@@ -89,6 +89,41 @@ The draft also claimed one facet value appeared "in 5 casings". It appears in si
 One uppercase transform sits off the Label step and is not a vocabulary string: the panel's `kv`
 keys (`.kv dt`, at the *Meta* step, which `DESIGN.md`'s Typography Hierarchy commits by name). A
 link row's field keys were a second, at the *Micro* step and recorded nowhere; that one is gone.
+
+#### And the case a string is *in* is its author's
+
+The rule above says a string is cased once. This says who does the casing: **the app's own words
+take a capital, a vocabulary string is rendered exactly as whatever declared it cased it, and a
+readout of a condition is lowercase.** Nothing is re-cased on the way to the screen in either
+direction.
+
+| what | case | why |
+|---|---|---|
+| a control the app names — `Merge…`, `Delete`, `Clear selection`, `Save current as…`, `Set a facet…` | capital | the app is naming a thing it offers |
+| a heading — `Facets`, `Focus`, `Group by`, `Saved views`, `Recent` | capital | same, one rung up |
+| a sentence — `Not a vault, and not empty.` `Empty. Switch to edit to write something.` | capital, with a full stop | it is prose |
+| a vocabulary string — `Part of`, `Blocked by`, `now`, `jira`, `created`, `notes/` | whatever declared it | the vault owns its axes and the format owns its keys; the app quotes them |
+| a state readout — `loading…`, `starting…`, `unsaved`, `stale`, `drawn`, `blocked by 2` | lower | a condition is not a name. These sit in the quiet registers, beside numbers |
+| an empty state — `nothing here`, `no notes match`, `nothing to filter on` | lower | same: it reports, it does not label |
+| a field placeholder — `search title and body`, `view name`, `title, ⏎ to create` | lower | it is a hint inside a control, not the control's name |
+
+The sweep that wrote this found the app breaking it in both directions at once, on the same string.
+`facets.yaml` says `Part of`; three call sites in the panel's reference editor and two in the bulk
+bar rendered `def.label.toLowerCase()`, to fit a label into a sentence — so one axis appeared as
+`Part of` in the rail and `part of` in the picker directly under it. That is the first rule's second
+sentence in the other direction, and the fix is the same shape: build the sentence around the string
+(`set Part of on all selected…`) rather than over it.
+
+It also found the reason the vocabulary looked ragged: `blocked_by` declared `label: blocked by`
+while its own `inverse:` said `Blocks` and every other axis was capitalised — and it came from
+`server/seed.ts`, so **every vault the app had ever created** started with one lowercase axis. The
+card face's `blocked by 2` is a different string, hardcoded, and correctly lowercase: it is the
+readout row, not the label.
+
+One control is a genuine coin-toss and is worth recording: a `<select>`'s empty option. It behaves
+like a placeholder, which would make it lowercase, and it is also the control's only name, which
+makes it a label. It is a label — `Set a facet…` — because a placeholder sits inside a field the
+user is about to type into, and nobody types into a select.
 
 ### The Count Rule
 

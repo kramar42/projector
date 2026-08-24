@@ -148,7 +148,7 @@ parent:
 # Its transitive closure is what the blocked axis and views/unblocked.yaml are
 # built from. Not worth grouping a board by.
 blocked_by:
-  label: blocked by
+  label: Blocked by
   type: ref
   blocking: true
   hue: red

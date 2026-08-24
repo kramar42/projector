@@ -90,7 +90,7 @@ export function BulkBar({
           setFacet(e.target.value);
         }}
       >
-        <option value="">set a facet…</option>
+        <option value="">Set a facet…</option>
         {editable.map((c) => (
           <option key={c.facet} value={c.facet}>
             {c.label}
@@ -199,10 +199,11 @@ export function BulkBar({
             // A note in the selection would be pointing at itself, which no
             // reference facet may say.
             exclude={ids}
+            // The label is the vault's string and arrives already cased, so the
+            // sentence is built around it rather than over it: a verb first, and
+            // the axis named as what it is.
             placeholder={
-              def.single
-                ? `${def.label.toLowerCase()} for all selected…`
-                : `add ${def.label.toLowerCase()} to all selected…`
+              def.single ? `set ${def.label} on all selected…` : `add ${def.label} to all selected…`
             }
             onCancel={() => setFacet('')}
             onPick={(pid) => {
