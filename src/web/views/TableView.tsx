@@ -201,9 +201,14 @@ function Row({
       }}
     >
       <td className="col-title">
-        <RecordMark card={card} />
-        {card.title}
-        {card.refCount > 0 && <span className="count">{card.refCount}</span>}
+        {/* Same reason the chip row below has a holder: a flex `<td>` stops being
+            a table cell, and the anonymous cell the table wraps around it is not
+            the box the border is drawn on — see the rule in `style.css`. */}
+        <span className="titlerow">
+          <RecordMark card={card} />
+          {card.title}
+          {card.refCount > 0 && <span className="count">{card.refCount}</span>}
+        </span>
       </td>
       {chips.map((facet) => (
         <td key={facet}>

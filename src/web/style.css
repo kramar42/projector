@@ -3555,9 +3555,25 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   flex-wrap: nowrap;
 }
 
-/* The kind mark and the child count are styled for a flex row, which is what a
-   card face is. In a table cell they sat flush against the title. */
-.table td.col-title {
+/*
+ * The kind mark and the child count are styled for a flex row, which is what a
+ * card face is. In a table cell they sat flush against the title.
+ *
+ * The row is a wrapper *inside* the cell for the same reason `.chiprow` is: a
+ * `display: flex` on the `<td>` itself replaces the table-cell box with a block
+ * flex container, and the table wraps that in an anonymous cell to hold the
+ * column. The anonymous cell stretches to the row's height; the flex box only
+ * grows to its own content — and the flex box is the thing carrying the shared
+ * `border-bottom`. So the title column's divider was drawn at the bottom of the
+ * title text while every other column drew it at the bottom of the row, and the
+ * rule stepped down where column one met column two. Measured on a row whose
+ * chips made it taller than its title: 56.07 against 56.95, a 0.88px jog visible
+ * the whole width of the table.
+ *
+ * Keeping the cell a cell also gives the selected row's accent edge
+ * (`is-selected > td:first-child`) the full row height to draw down.
+ */
+.table td.col-title > .titlerow {
   display: flex;
   align-items: baseline;
   gap: 7px;
