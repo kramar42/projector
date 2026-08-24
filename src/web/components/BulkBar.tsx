@@ -34,18 +34,7 @@ export function BulkBar({
   onClear: () => void;
   onProblem: (m: string) => void;
 }) {
-  /**
-   * Pointing a selection at one note: the vault's first *single-valued*
-   * relation, which is what "put all of these under one thing" means.
-   *
-   * The button said "Set parent…" and posted a bulk op named `parent`, which was
-   * an ordinary facet write wearing a facet's name — so a vault that calls its
-   * containment relation something else had a button for a facet it does not
-   * have, and no button for the one it does.
-   */
   const facets = useVocabulary();
-  const container = Object.entries(facets).find(([, d]) => d.type === 'ref' && d.single)?.[0];
-  const [pickRelation, setPickRelation] = useState(false);
   /**
    * Merging asks one question — which note survives — and it can only be answered
    * from inside the selection, so this lists what is selected rather than reusing
@@ -55,6 +44,30 @@ export function BulkBar({
   const [facet, setFacet] = useState('');
   const editable = counts.filter((c) => !c.computed);
   const chosen = editable.find((c) => c.facet === facet);
+  /**
+   * **Every facet is edited through the control its type picks** — the rule the
+   * note panel has always followed, arriving here.
+   *
+   * A reference facet's values are notes, so the thing that picks one is the note
+   * picker. Drawn as value chips they were ids, and only the ids that happened to
+   * occur in the current result set: on a board of 27 notes the histogram offered
+   * `parent` exactly one pickable value. That is what the bar had a *second*
+   * control for — a "Set part of…" button, hard-wired to the vault's first
+   * single-valued relation, which searched every note and did the same write. So
+   * the generic path was unusable for references and the usable path reached
+   * exactly one of them: `project` and `blocked_by` had neither.
+   *
+   * `single` decides what a pick *means*, because cardinality is vocabulary. One
+   * slot can only be replaced. An axis that holds several would silently drop the
+   * memberships nobody mentioned, so a pick adds to it and the `clear` chip beside
+   * it is how you empty one — which is also the answer to "and how do I undo
+   * that", and the reason `clear` is drawn for every facet rather than only the
+   * ones with chips.
+   */
+  const def = facets[facet];
+  const picksANote = def?.type === 'ref';
+  /** A reference facet's values are drawn by the picker below, never as chips. */
+  const chips = chosen && !picksANote ? chosen.values.filter((v) => v.value !== NONE) : [];
   const hue = useHue(facet);
 
   const run = (fn: () => Promise<unknown>) =>
@@ -66,13 +79,17 @@ export function BulkBar({
     <div className="bulkbar">
       <span className="bulkbar-count">{ids.length} selected</span>
 
-      {container && (
-        <Button size="small" onClick={() => setPickRelation((v) => !v)}>
-          Set {facets[container]!.label.toLowerCase()}…
-        </Button>
-      )}
-
-      <select className="bulkbar-select" value={facet} onChange={(e) => setFacet(e.target.value)}>
+      {/* One picker floats above the bar at a time: choosing an axis to write and
+          choosing which note survives a merge are different questions, and the
+          two would land on top of each other. */}
+      <select
+        className="bulkbar-select"
+        value={facet}
+        onChange={(e) => {
+          setMerging(false);
+          setFacet(e.target.value);
+        }}
+      >
         <option value="">set a facet…</option>
         {editable.map((c) => (
           <option key={c.facet} value={c.facet}>
@@ -82,25 +99,23 @@ export function BulkBar({
       </select>
       {chosen && (
         <span className="bulkbar-values">
-          {chosen.values
-            .filter((v) => v.value !== NONE)
-            .map((v) => (
-              <button
-                key={v.value}
-                // The axis's own family, from the same vocabulary the card face
-                // and the panel read. These chips name values of the facet
-                // chosen in the select beside them, so they are properties of
-                // notes exactly as the panel's are — a hueless chip here would
-                // put the same value in two colours on one screen, which is the
-                // drift one source is shared to prevent.
-                className={`togglechip ${hue}`}
-                onClick={() =>
-                  void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
-                }
-              >
-                {v.value}
-              </button>
-            ))}
+          {chips.map((v) => (
+            <button
+              key={v.value}
+              // The axis's own family, from the same vocabulary the card face and
+              // the panel read. These chips name values of the facet chosen in the
+              // select beside them, so they are properties of notes exactly as the
+              // panel's are — a hueless chip here would put the same value in two
+              // colours on one screen, which is the drift one source is shared to
+              // prevent.
+              className={`togglechip ${hue}`}
+              onClick={() =>
+                void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
+              }
+            >
+              {v.value}
+            </button>
+          ))}
           <button
             className="togglechip is-clear"
             onClick={() => void run(() => api.bulk({ ids, op: 'facet', facet, values: [], mode: 'set' }))}
@@ -116,7 +131,7 @@ export function BulkBar({
         <Button
           size="small"
           onClick={() => {
-            setPickRelation(false);
+            setFacet('');
             setMerging((v) => !v);
           }}
         >
@@ -178,16 +193,28 @@ export function BulkBar({
         </div>
       )}
 
-      {pickRelation && container && (
+      {chosen && picksANote && (
         <div className="bulkbar-picker">
           <RecordPicker
+            // A note in the selection would be pointing at itself, which no
+            // reference facet may say.
             exclude={ids}
-            placeholder={`${facets[container]!.label.toLowerCase()} for all selected…`}
-            onCancel={() => setPickRelation(false)}
+            placeholder={
+              def.single
+                ? `${def.label.toLowerCase()} for all selected…`
+                : `add ${def.label.toLowerCase()} to all selected…`
+            }
+            onCancel={() => setFacet('')}
             onPick={(pid) => {
-              setPickRelation(false);
+              setFacet('');
               void run(() =>
-                api.bulk({ ids, op: 'facet', facet: container, values: pid ? [pid] : [], mode: 'set' }),
+                api.bulk({
+                  ids,
+                  op: 'facet',
+                  facet,
+                  values: pid ? [pid] : [],
+                  mode: def.single || !pid ? 'set' : 'add',
+                }),
               );
             }}
           />

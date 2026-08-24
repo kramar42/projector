@@ -57,10 +57,10 @@ Audited twice now; nothing crosses these lines. The rule is a note of a distinct
 holds.
 
 The bulk bar's **Merge…** is the case that looks like it crosses one and does not. It removes files,
-several of them — but the word opens a chooser, exactly as *Set part of…* does, and a control that
-asks a question is not the act. What destroys is the row you pick inside it, behind the same confirm
-the trash uses. The ellipsis is doing real work here: it is the difference between a button that acts
-and a button that asks, and both of the bulk bar's are spelled with one.
+several of them — but the word opens a chooser, and a control that asks a question is not the act.
+What destroys is the row you pick inside it, behind the same confirm the trash uses. The ellipsis is
+doing the work: it is the difference between a button that acts and a button that asks, which is also
+why *set a facet…* wears one and `Delete` does not.
 
 The adjacent distinction it is easy to break: **a disabled button takes `cursor: default`, a
 disabled field takes `not-allowed`.** The pass found one violation — `.pop-pick.is-missing`, a

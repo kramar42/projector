@@ -457,8 +457,12 @@ exactly the code path that changes its priority.
 | Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
 
-**Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set a parent, set or
-clear one facet, merge, or delete, across all of it.
+**Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set or clear any one
+facet, merge, or delete, across all of it. The facet control follows the same rule as the panel —
+**the control its type picks** — so choosing a reference axis opens the note picker over every note in
+the vault rather than offering the handful of ids that happen to be on screen. An axis holding one
+value is replaced by a pick; an axis holding several is added to, since dropping the memberships
+nobody mentioned is not what "set the project" means.
 
 **Merging is the other half of capture.** Four notes about one thing is what a sweep from four
 channels produces, and splitting them apart again by hand is work nobody does. Select them, press
