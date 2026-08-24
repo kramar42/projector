@@ -22,6 +22,7 @@ import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import type { Facets, Note } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
+import { computedReader } from '../index/query.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, isProject } from '../index/project.ts';
 import { blockedBy, isClosed, unblocks } from '../index/blocking.ts';
@@ -274,6 +275,10 @@ app.get('/api/note/:id', (c) => {
   return c.json({
     card: toDTO(rec, {
       facets,
+      // The panel edits `facets` and never `computed`, but a DTO that reports no
+      // computed values at all is a DTO that lies about this card — and it is the
+      // same card the board just drew.
+      computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10))(rec),
       refCount: inbound.get(rec.id) ?? 0,
       blockedBy: blockedBy(rec.id, notes, facets),
       unblocks: unblocks(rec.id, notes, facets),

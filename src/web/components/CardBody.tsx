@@ -38,6 +38,22 @@ import type { NoteDTO } from '../types.ts';
  * to grey — which meant a vault's own axes could not have a colour and a renamed
  * one lost it silently.
  */
+/**
+ * A note's values on one axis, wherever they live.
+ *
+ * A face does not care whether an axis is stored or computed — `show` names an
+ * axis and the face draws what it says — but the payload has to keep the two
+ * apart (see `NoteDTO.computed`), so exactly one place joins them and this is it.
+ * Every surface that draws `show` goes through here: a card face, a table cell.
+ *
+ * Stored wins a tie. Nothing can currently produce one — `RESERVED` stops a vault
+ * naming a facet after a computed axis — but if that check is ever relaxed, the
+ * file on disk is the answer that a person can see and edit.
+ */
+export function axisValues(card: NoteDTO, facet: string): string[] {
+  return card.facets[facet] ?? card.computed[facet] ?? [];
+}
+
 export function FacetChip({
   facet,
   value,
@@ -115,7 +131,7 @@ export function CardBody({
 }) {
   const { touched } = useTouched();
   const blocked = card.blockedBy.filter((b) => !b.done);
-  const facetKeys = showFacets.filter((f) => card.facets[f]?.length);
+  const facetKeys = showFacets.filter((f) => axisValues(card, f).length);
 
   return (
     <div
@@ -133,7 +149,7 @@ export function CardBody({
       {facetKeys.length > 0 && (
         <div className="chiprow">
           {facetKeys.map((f) =>
-            card.facets[f]!.map((v, i) => (
+            axisValues(card, f).map((v, i) => (
               <FacetChip key={`${f}:${v}`} facet={f} value={v} bucket={card.buckets[f]?.[i]} />
             )),
           )}

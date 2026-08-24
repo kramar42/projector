@@ -159,11 +159,29 @@ export function FacetsSection({
   edit: Edit;
 }) {
   const show = data?.spec.show ?? [];
-  const available = Object.entries(meta.facets).map(([name, def]) => ({
-    name,
-    label: def.label,
-    ref: def.type === 'ref',
-  }));
+  /**
+   * The vault's axes, then the app's computed ones.
+   *
+   * The picker offered only `meta.facets`, so the five computed axes were the one
+   * thing you could filter, group and sort by and not *see* — while `show` already
+   * accepted them everywhere else: `validateViews` passed them, the table read
+   * their label off `counts` and drew the header, and every cell came out empty
+   * because a face reads stored values. The gap was in this list and in the DTO,
+   * never in the model.
+   *
+   * Computed last and marked, rather than mixed in: a vault's own vocabulary is
+   * what you reach for, and `ƒ` is the mark the filter rail already uses for the
+   * same fact.
+   */
+  const available = [
+    ...Object.entries(meta.facets).map(([name, def]) => ({
+      name,
+      label: def.label,
+      ref: def.type === 'ref',
+      computed: false,
+    })),
+    ...meta.computed.map((c) => ({ ...c, ref: false, computed: true })),
+  ];
   const table = data?.spec.shape === 'table';
   const canvas = data?.spec.shape === 'canvas';
 
@@ -197,6 +215,11 @@ export function FacetsSection({
                     markup as a filter row, so it takes the same drawn box. */}
                 <span className="checkbox" aria-hidden="true" />
                 {f.label}
+                {f.computed && (
+                  <span className="computed" title="computed from the cards, not stored on them">
+                    ƒ
+                  </span>
+                )}
                 {/* Only a canvas can act on the difference, so only a canvas
                     says it: order decides which relation lays the graph out. */}
                 {f.ref && canvas && <span className="pop-note">drawn</span>}

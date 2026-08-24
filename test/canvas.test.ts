@@ -121,7 +121,7 @@ test('deleting a note drops every reference pointing at it', () => {
 // ---------------------------------------------------------------- clusters
 
 const face = (id: string): NoteDTO =>
-  ({ id, title: id, isProject: false, facets: {}, buckets: {}, links: [], progress: null,
+  ({ id, title: id, isProject: false, facets: {}, buckets: {}, computed: {}, links: [], progress: null,
      excerpt: '', body: '', updated: null, refCount: 0, blockedBy: [], unblocks: [] }) as NoteDTO;
 
 test('a note in several groups is clustered into the first the axis declares', () => {

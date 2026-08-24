@@ -217,8 +217,29 @@ export const COMPUTED: Record<string, Computed> = {
       return missing.length ? missing : ['complete'];
     },
   },
+  /**
+   * How long since the note was last written — `updated`, in four buckets.
+   *
+   * Its label was `Touched`, which made one field answer to three names: the
+   * filter rail said *Touched*, the table column said *Updated*, and the axis key
+   * is `staleness`. It computes from `rec.updated` and from nothing else, so
+   * *Updated* is what it is — and the axis and the column saying the same word is
+   * the point rather than a collision, because they are the same axis at two
+   * granularities. **Show raw, filter bucketed** is already the rule an ordered
+   * facet follows (`due` draws its date and filters as `overdue`); this is that
+   * rule, stated for the one axis whose value the app writes.
+   *
+   * `Touched` also named two unrelated things — `Rollup.touched`, which is the
+   * newest `updated` across a project's *members*, and the client's `is-touched`
+   * flash for a card that just changed. Those keep the word; nothing user-facing
+   * reads them.
+   *
+   * The *key* stays `staleness`: it is in saved views and in `?f.staleness=`, and
+   * renaming it to `updated` would collide with the reserved note field — which is
+   * the change that makes `updated` a real ordered axis, and a different one.
+   */
   staleness: {
-    label: 'Touched',
+    label: 'Updated',
     values: () => ['week', 'month', 'older', 'undated'],
     of: (rec, ctx) => {
       const d = daysSince(rec.updated, ctx.today);
@@ -265,6 +286,46 @@ function rawOf(rec: Note, facet: string): string[] {
 
 function buildCtx(notes: Map<string, Note>, facets: Facets, today: string): Ctx {
   return { nodes: nodesIn(notes, facets), blocked: blockedSet(notes, facets), facets, today };
+}
+
+/**
+ * What every computed axis says about a note — the other half of `show`.
+ *
+ * A computed axis was askable everywhere except on a card. It filtered, grouped
+ * and sorted, `validateViews` accepted it in `show`, and the table read its label
+ * off `counts` and drew the column header — and then every cell in that column
+ * was empty, because a face reads `facets` and nothing computed is in there. A
+ * view could name `staleness` as a column and get a correctly labelled column of
+ * nothing, silently. This is what the DTO carries so it can't.
+ *
+ * A **reader** rather than a per-note function, because the context behind these
+ * is aggregate — `nodes` walks every reference facet and `blocked` resolves the
+ * whole blocking graph — so building it per note would be quadratic on a payload
+ * that already holds the note map. Built once, closed over, asked per note.
+ *
+ * An axis with nothing to say is left out rather than written empty, exactly as
+ * `bucketsOf` does: `(none)` is the ordinary refinement for it, and an empty
+ * array in the payload would be a value that draws a chip with no text.
+ */
+export function computedReader(
+  notes: Map<string, Note>,
+  facets: Facets,
+  today: string,
+): (rec: Note) => Record<string, string[]> {
+  const ctx = buildCtx(notes, facets, today);
+  return (rec) => {
+    const out: Record<string, string[]> = {};
+    for (const [name, axis] of Object.entries(COMPUTED)) {
+      const values = axis.of(rec, ctx);
+      if (values.length) out[name] = values;
+    }
+    return out;
+  };
+}
+
+/** The computed axes, as a picker offers them: the app's own axes, in order. */
+export function computedAxes(): { name: string; label: string }[] {
+  return Object.entries(COMPUTED).map(([name, axis]) => ({ name, label: axis.label }));
 }
 
 // ---------------------------------------------------------------- traversal

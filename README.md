@@ -113,7 +113,7 @@ behave identically — filter, group, sort, count — and carry `ƒ` to say noth
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
 | `triage` | one `needs-<facet>` per `expected:` facet, then `complete` | absence of those facets |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a note carries |
-| `staleness` | `week`, `month`, `older`, `undated` | `updated` against today |
+| `staleness` | `week`, `month`, `older`, `undated` | `updated` against today — and it reads as **Updated**, because that is the field it is |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
 absence, a note's links, or the app-written `updated` field. Each is a count, a date comparison or
@@ -341,14 +341,19 @@ It applies to every shape: `via=blocked_by dir=in` is "what does finishing this 
 
 `shape` is `board`, `canvas` or `table` — explicit, never inferred.
 
-`show` is which facets this view surfaces, and there is one list rather than two because how each is
+`show` is which axes this view surfaces, and there is one list rather than two because how each is
 drawn follows from what it is:
 
-| | label facet | reference facet |
-|---|---|---|
-| board / canvas face | a chip | a chip that opens the target |
-| canvas | — | a line between notes, and the **first** one lays the graph out |
-| table | a column | a column of links |
+| | label facet | reference facet | computed axis |
+|---|---|---|---|
+| board / canvas face | a chip | a chip that opens the target | a chip |
+| canvas | — | a line between notes, and the **first** one lays the graph out | — |
+| table | a column | a column of links | a column |
+
+A **computed axis** may be shown like any other, which is the same rule that lets one be filtered,
+grouped and sorted by (C4): `show: [staleness]` gives a column of `week · month · older`. It arrives on
+the card as `computed`, beside `facets` rather than merged into it — what the file stores is editable
+and what the app derives is not, and a face draws either.
 
 ## grouping
 

@@ -31,6 +31,17 @@ export interface NoteDTO {
    * knowing that facet by name.
    */
   buckets: Record<string, string[]>;
+  /**
+   * What each computed axis says about this note, keyed by axis.
+   *
+   * Beside `facets` rather than merged into it, and the separation is the point
+   * (C8): `facets` is what the file stores and what the panel edits, so a
+   * computed value in there would draw an editable row for something no write can
+   * change, and `changed.ts` would flash a card whose axis moved because the
+   * calendar did. Same shape, different question — a face asks both and shows
+   * either, `axisValues` in the client is the one place that joins them.
+   */
+  computed: Record<string, string[]>;
   updated: string | null;
   /**
    * How many notes name this one, across every reference facet.
@@ -96,6 +107,8 @@ export function toDTO(
     blockedBy?: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
     unblocks?: string[];
     facets?: Facets;
+    /** From `computedReader`, which builds the aggregate context once per payload. */
+    computed?: Record<string, string[]>;
     /** Overridable so a test does not depend on the day it runs. */
     today?: string;
   } = {},
@@ -114,6 +127,7 @@ export function toDTO(
     excerpt: excerptOf(rec.body),
     body: rec.body,
     buckets: bucketsOf(rec, extra.facets ?? {}, extra.today ?? new Date().toISOString().slice(0, 10)),
+    computed: extra.computed ?? {},
     updated: rec.updated ?? null,
     refCount: extra.refCount ?? 0,
     blockedBy: extra.blockedBy ?? [],

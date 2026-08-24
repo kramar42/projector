@@ -39,15 +39,38 @@ needs to be part of two things.
   that cannot be answered.
 - **`created` and `updated` as axes.** They are note fields rather than facets, so `sort` accepts them
   and `filter` and `groupBy` do not — `validateViews` exempts exactly those three names, `title`
-  included. The asymmetry is real and will not stay comfortable: "everything I touched this week" is a
-  `staleness` question the computed axis answers only in four fixed buckets, and "opened in August" has
-  no answer at all.
+  included. A `?f.updated=` matches nothing and says nothing, which is the asymmetry.
 
-  What they need is what an ordered facet already has. `updated` is a date; give it buckets and it
-  filters and groups exactly as `due` does, with the same `(none)`-free axis because every note has one.
-  The obstacle is not the query engine — `valuesOf` reads a facet map and these are not in it — so it is
-  a question of where a note field's *axis definition* lives, given that `facets.yaml` is for what a
-  vault declares and these two are the app's.
+  The obvious repair — make `updated` an app-owned ordered facet, the way `project` is an app-owned
+  reference one — was looked at properly and **rejected**. Three things it breaks, each true today:
+
+  1. **A facet's values live in `rec.facets[name]`, and these do not.** `updated` sits at the
+     frontmatter root, in `KEY_ORDER`. `valuesOf` and `rawOf` are plain map lookups, and "the engine
+     reads a facet in exactly two places" is a property `FacetType` states about itself. This would be
+     the first facet needing a branch in both.
+  2. **Every facet in the map is editable, by construction.** The panel builds its controls by
+     filtering `defs`, so a `date` facet called `updated` renders an editable date field for a stamp
+     the app rewrites on every save. `FacetDef` has no read-only key, so this needs a new one whose
+     only setter is `updated` — the shape `container:` and `subtitle:` are both waiting out.
+  3. **The name is reserved for a reason**, and `a note field outranks a facet wearing its name` pins
+     it. Un-reserving gives one axis two sources.
+
+  It also would not remove the asymmetry, only move it: `created` and `title` stand in exactly the same
+  place, so the choice is three exceptions or a new odd one out.
+
+  And the payoff shrank. Once `show` learned to draw a computed axis, `staleness` shows, filters,
+  groups and sorts; what is left is range filters on a raw date. The design already says which side
+  this belongs on — the reason the five computed axes stay computed is that each covers something a
+  facet *cannot* describe, and "the app-written `updated` field" is on that list. A facet is what a
+  person or an agent asserts about a card; `updated` is a fact about the file.
+
+  **If it is picked up, the shape is a raw value on a computed axis** — `Computed` gains an optional
+  `raw`, so `staleness` *shows* the date and *filters* the bucket. That is the rule an ordered facet
+  already follows (`due` draws `2026-08-27` and filters `overdue`), applied where `updated` already
+  lives: no facet, no new vocabulary key, no un-reserving, no editable timestamp, `valuesOf` untouched
+  — and `created` joins as a second computed axis with no new machinery. It would also retire the
+  static `Updated` column, leaving a table with no value column that `show` did not name. Range
+  filters on the raw value would be a filter-layer change on top, still without a facet.
 
   Not now because `staleness` covers the common case and nothing has asked for the rest.
 
@@ -66,14 +89,17 @@ needs to be part of two things.
   express something no vault has needed is how the vocabulary grows keys nobody sets. Add it the first
   time a vault has two containers and the wrong one wins.
 
-- **`subtitle: true`, and the last two per-facet affordances.** `RecordPicker` draws a note's project
-  under its title, and the projects table has a column of them; both read the built-in `project` facet
-  directly. They are legal — being known by name is what built-in means — but they are the only two
-  places left where one axis has UI no other axis can have.
+- **`subtitle: true`, the last per-facet affordance.** `RecordPicker` draws a note's project under its
+  title, reading the built-in `project` facet directly. It is legal — being known by name is what
+  built-in means — but it is the last place where one axis has UI no other axis can have.
 
-  A `subtitle: true` key would generalise both: the picker draws whichever facets ask for it, the table
-  gets a column per asking facet. Small, and worth doing the moment a second axis wants it. Until then
-  it would be a key with exactly one setter, which is the shape of a thing that drifts.
+  It used to be two. The projects table had a static `Member of` column reading the same facet the same
+  way, and that one is gone: a table's columns are its `show` list, so the column a view wants is the
+  one it names. What remains is the picker, where there is no `show` to name anything.
+
+  A `subtitle: true` key would generalise it: the picker draws whichever facets ask for it. Small, and
+  worth doing the moment a second axis wants it. Until then it would be a key with exactly one setter,
+  which is the shape of a thing that drifts.
 
 - **Keyboard operation.** The largest thing the app cannot do. Structure is edited by gesture on
   purpose — drag, the bulk bar, canvas handles — and content through the panel, so there is no keyboard

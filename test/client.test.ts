@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
+import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
 import { specFromFile, type ViewSpec } from '../src/view/spec.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
@@ -483,4 +484,32 @@ test('excluding one value leaves the rest of the axis alone', () => {
   // "in project-a, and not in project-b" — the query a multi-valued axis needs and no
   // positive selection can express.
   assert.deepEqual(both.query.filter?.project, ['project-a', '-project-b']);
+});
+
+
+// ---------------------------------------------------------------- table columns
+
+test('only a table of projects earns the roll-up columns', () => {
+  // `Cards`, `Blocked` and `Untriaged` are `projectRollups` numbers, and only a
+  // note with a `project:` block has one. The gate asked `some`, so one project
+  // note among ordinary cards grew three columns that were blank on every row
+  // that cannot have a number — which is width spent to say "not applicable".
+  const face = (id: string, isProject: boolean) => ({ id, isProject }) as NoteDTO;
+  const notes: Record<string, NoteDTO> = {
+    p1: face('p1', true),
+    p2: face('p2', true),
+    card: face('card', false),
+  };
+
+  assert.equal(earnsRollups(['p1', 'p2'], notes), true, 'every row a project: the numbers are the point');
+  assert.equal(earnsRollups(['p1', 'card'], notes), false, 'one project does not earn three columns for the rest');
+  assert.equal(earnsRollups(['card'], notes), false);
+
+  // `every` over nothing is vacuously true, which would draw the columns for a
+  // table that has just proved it has no rows.
+  assert.equal(earnsRollups([], notes), false, 'an empty table earns nothing');
+
+  // An id the payload does not carry is not a project. Optional chaining decides
+  // this, so it is worth stating: a stale `?sel=` must not conjure a column.
+  assert.equal(earnsRollups(['ghost'], notes), false);
 });

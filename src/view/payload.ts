@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Facets, Note } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
-import { projectRollups, runQuery } from '../index/query.ts';
+import { computedReader, projectRollups, runQuery } from '../index/query.ts';
 import { inboundCounts, refsOf } from '../index/refs.ts';
 import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
 import { toDTO, type NoteDTO } from './dto.ts';
@@ -87,12 +87,15 @@ export function queryPayload(
   const byId: Record<string, NoteDTO> = {};
   // One walk for every card on screen, rather than the same walk once per card.
   const inbound = inboundCounts(notes, facets);
+  // Same bargain, for the aggregates every computed axis stands on.
+  const computedOf = computedReader(notes, facets, today);
   for (const id of shown) {
     const rec = notes.get(id);
     if (!rec) continue;
     byId[id] = toDTO(rec, {
       facets,
       today,
+      computed: computedOf(rec),
       refCount: inbound.get(id) ?? 0,
       blockedBy: blockedBy(id, notes, facets),
       unblocks: unblocks(id, notes, facets),

@@ -2744,10 +2744,28 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 3px;
 }
 
-/* The door to an axis this card carries nothing on. A `.popbtn` by construction —
-   it opens a popover, and that machinery is the reason — but painted as the ghost
-   button it reads as, and sized to its own words rather than to a rail column. */
+/*
+ * The door to an axis this card carries nothing on. A `.popbtn` by construction —
+ * it opens a popover, and that machinery is the reason — but painted as the ghost
+ * button it reads as, and sized to its own words rather than to a rail column.
+ *
+ * `flex: none` is what actually does that, and it was the one lever missing.
+ * `.popbtn` is shaped for the sidebar, where `flex: 1` makes a popover button
+ * fill its rail column beside the selects — correct there, and wrong the moment
+ * the same button is one item in a row of chips: `.facetrow-values` is a wrapping
+ * flex row, so the button grew to the end of it, a click target several hundred
+ * pixels wide reading `+ note` at the left of a field of nothing. Measured on two
+ * axes of the same card, 230px and 319px — the width was whatever the chips left,
+ * which is the tell.
+ *
+ * `width: auto` and `align-self: start` were already here and could not do it.
+ * Neither addresses growth: `flex-grow` beats a `width` on a flex item, and
+ * `align-self` is the *cross* axis — vertical in a row. That is also why `+ ref`
+ * looked right while `+ note` did not; it sits in a flex *column*, where the same
+ * `flex: 1` spends itself on height and leaves the width alone.
+ */
 .addbtn.popbtn {
+  flex: none;
   align-self: start;
   width: auto;
   background: none;
@@ -3594,8 +3612,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   color: var(--ink-3);
 }
 
-.table .col-updated,
-.table .col-repos {
+.table .col-updated {
   font-family: var(--mono);
   font-size: var(--text-meta);
   color: var(--ink-3);

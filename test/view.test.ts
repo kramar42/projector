@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
 import { validateViews, validateVocabulary } from '../src/view/validate.ts';
-import { specFromFile } from '../src/view/spec.ts';
+import { parseSpec, specFromFile } from '../src/view/spec.ts';
 import { declaredFacets, loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { groupsFor, labelFor } from '../src/web/views/groups.ts';
 import { reindex } from '../src/index/indexer.ts';
-import { runQuery } from '../src/index/query.ts';
+import { COMPUTED, runQuery } from '../src/index/query.ts';
+import { queryPayload } from '../src/view/payload.ts';
 
 
 /**
@@ -263,4 +264,58 @@ test('a view key the reader does not know is an error, not a line that does noth
     validateViews([{ spec: specFromFile('v', { shape: 'board', nope: 1 }), file: 'f' }], facets),
     [],
   );
+});
+
+
+// ---------------------------------------------------------------- show
+
+test('every axis `show` accepts arrives on the card, computed or stored', () => {
+  // `show` took a computed axis everywhere except where it mattered. The view
+  // validated (`validateViews` checks `show` against facets *and* `COMPUTED`),
+  // the table resolved the label off `counts` and drew the header — and then
+  // every cell was empty, because a face reads `facets` and nothing computed is
+  // in there. A correctly labelled column of nothing, silently: the same failure
+  // the reserved-name check exists to prevent, one level out.
+  const root = mkdtempSync(join(tmpdir(), 'projector-show-'));
+  try {
+    mkdirSync(join(root, 'notes'), { recursive: true });
+    writeFileSync(
+      join(root, 'notes', 'a.md'),
+      '---\nid: a\ntitle: A\nfacets: {status: [active]}\nupdated: 2026-08-18\n---\n\n',
+      'utf8',
+    );
+    writeFileSync(join(root, 'facets.yaml'), 'status:\n  values: [active, done]\n  expected: true\n', 'utf8');
+
+    const facets = loadFacets(join(root, 'facets.yaml'));
+    const { db, notes } = reindex(root);
+    const payload = queryPayload(
+      { facets, db, notes, views: [], today: '2026-08-20' },
+      parseSpec({ show: 'status,staleness,triage,type' }),
+    );
+    const card = payload.notes.a!;
+
+    // Stored stays stored: `computed` is beside `facets`, never merged into it,
+    // or the panel would draw an editable row for something no write can change.
+    assert.deepEqual(card.facets.status, ['active']);
+    assert.equal(card.computed.status, undefined);
+
+    // Two days before `today`, one expected facet and it is carried, no
+    // `project:` block and nothing names it.
+    assert.deepEqual(card.computed.staleness, ['week']);
+    assert.deepEqual(card.computed.triage, ['complete']);
+    assert.deepEqual(card.computed.type, ['plain']);
+
+    // An axis with nothing to say is absent rather than empty — `(none)` is the
+    // ordinary refinement, and `[]` would draw a chip with no text.
+    assert.equal(card.computed.linked, undefined, 'a note with no links says nothing on `linked`');
+
+    // The invariant behind all of it: every computed axis is answerable for every
+    // card, so a column can never be labelled from `counts` and then come up dry.
+    for (const name of Object.keys(COMPUTED)) {
+      const values = card.facets[name] ?? card.computed[name] ?? [];
+      assert.ok(Array.isArray(values), `${name} must be readable off the card`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

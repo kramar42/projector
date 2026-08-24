@@ -187,12 +187,15 @@ show: [project, priority]
   {
     path: 'projects.yaml',
     body: `# Every project, with its roll-ups. \`type\` is a computed axis: nothing is stored.
+# A table's columns are its \`show\` list, \`project\` included: it is which project
+# this project is nested under, and the roll-ups only appear because every row here
+# is a project.
 shape: table
 title: Projects
 filter:
   type: [project]
 sort: [title:asc]
-show: [status, priority]
+show: [status, priority, project]
 `,
   },
   {

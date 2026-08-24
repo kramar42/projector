@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { FacetChip, RecordMark } from '../components/CardBody.tsx';
+import { axisValues, FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
+import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
 import { useTouched } from '../touched.tsx';
@@ -33,9 +34,8 @@ export function TableView({
 }) {
   const chips = data.spec.show;
   const [problem, setProblem] = useState<string | null>(null);
-  // A project row earns the roll-up columns; a table of ordinary cards has
-  // nothing to put in them.
-  const projects = data.ids.some((id) => data.notes[id]?.isProject);
+  // Why `every` and not `some` is `columns.ts`'s to explain.
+  const projects = earnsRollups(data.ids, data.notes);
 
   useRequestEnrichment([
     ...new Set(data.ids.flatMap((id) => data.notes[id]?.links.map((l) => l.raw) ?? [])),
@@ -87,9 +87,6 @@ export function TableView({
                 </th>
                 <th className="num">Blocked</th>
                 <th className="num">Untriaged</th>
-                <th title="the project this project itself belongs to — inheritance runs up this chain">
-                  Member of
-                </th>
               </>
             )}
             <th className="col-updated">Updated</th>
@@ -99,7 +96,8 @@ export function TableView({
           <tbody key={`${section.lane ?? ''}/${section.value}`}>
             {section.value !== '' && (
               <tr className="section">
-                <th colSpan={chips.length + (projects ? 5 : 1) + 1}>
+                {/* title + the chip columns + the three roll-ups, when earned + updated */}
+                <th colSpan={1 + chips.length + (projects ? 3 : 0) + 1}>
                   {section.lane ? `${labelFor(section.lane)} · ` : ''}
                   {labelFor(section.value)}
                   <span className="section-count">{section.ids.length}</span>
@@ -220,8 +218,12 @@ function Row({
               `display: flex` on a `<td>` takes it out of the table's formatting
               context and the column stops aligning. */}
           <span className="chiprow">
-            {(card.facets[facet] ?? []).map((v) => (
-              <FacetChip key={v} facet={facet} value={v} />
+            {/* `bucket` is what the face has always passed and the table never
+                did, so the same overdue `due` value drew loud on a board and
+                muted here. A bucket's hue is the axis's loudest statement about a
+                value; a shape does not get an opinion about it. */}
+            {axisValues(card, facet).map((v, i) => (
+              <FacetChip key={v} facet={facet} value={v} bucket={card.buckets[facet]?.[i]} />
             ))}
           </span>
         </td>
@@ -240,7 +242,6 @@ function Row({
           </td>
           <td className="num">{rollup?.blocked || ''}</td>
           <td className="num">{rollup?.untriaged || ''}</td>
-          <td className="col-repos">{(card.facets.project ?? []).join(', ')}</td>
         </>
       )}
       <td className="col-updated">{rollup?.touched ?? card.updated ?? ''}</td>
