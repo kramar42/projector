@@ -12,6 +12,7 @@ import { groupsFor, labelFor } from './groups.ts';
 import { IconButton } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
+import { useCursorFocus } from '../cursor.ts';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -26,12 +27,22 @@ export function BoardView({
   data,
   onOpen,
   selection,
+  cursor,
+  onCursor,
   reload,
 }: {
   data: QueryResponse;
   onOpen: (id: string) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
+  /**
+   * Where the keyboard is. A view only ever *draws* this: the ordering it moves
+   * along is `motion.ts`'s, built by `App` from the same payload, so there is no
+   * position to hand back up.
+   */
+  cursor: string | null;
+  /** A pointer landing somewhere is the keyboard landing there too. */
+  onCursor: (id: string) => void;
   reload: () => void;
 }) {
   const selected = selection.ids;
@@ -208,6 +219,8 @@ export function BoardView({
                   cards={cards}
                   chips={data.spec.show}
                   selected={selected}
+                  cursor={cursor}
+                  onCursor={onCursor}
                   dragging={dragging}
                   groupBy={groupBy}
                   droppable={draggableBoard}
@@ -260,6 +273,8 @@ function Column({
   cards,
   chips,
   selected,
+  cursor,
+  onCursor,
   dragging,
   groupBy,
   droppable,
@@ -281,6 +296,8 @@ function Column({
   cards: Record<string, NoteDTO>;
   chips: string[];
   selected: ReadonlySet<string>;
+  cursor: string | null;
+  onCursor: (id: string) => void;
   dragging: string | null;
   groupBy: string;
   droppable: boolean;
@@ -376,6 +393,8 @@ function Column({
               draggableTile={Boolean(groupBy)}
               orderable={orderable}
               isSelected={selected.has(id)}
+              isCursor={cursor === id}
+              onCursor={onCursor}
               isDragging={dragging === id}
               onSelect={onSelect}
               onOpen={onOpen}
@@ -396,6 +415,8 @@ function CardTile({
   draggableTile,
   orderable,
   isSelected,
+  isCursor,
+  onCursor,
   isDragging,
   onSelect,
   onOpen,
@@ -408,6 +429,8 @@ function CardTile({
   draggableTile: boolean;
   orderable: boolean;
   isSelected: boolean;
+  isCursor: boolean;
+  onCursor: (id: string) => void;
   isDragging: boolean;
   onSelect: (id: string, additive: boolean) => void;
   onOpen: (id: string) => void;
@@ -442,13 +465,29 @@ function CardTile({
     return () => cleanups.forEach((f) => f());
   }, [card.id, column, lane, index, draggableTile, orderable]);
 
+  useCursorFocus(ref, isCursor);
+
   return (
     <div
       ref={ref}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isDragging ? 'is-dragging' : ''} ${
-        edge ? `is-over-${edge}` : ''
-      }`}
+      /**
+       * A roving tabindex, which is what makes this a keyboard path to a card at
+       * all — the tile was a `div` with an `onClick`, and NEXT.md's "there is no
+       * keyboard path to open a card" was exactly this attribute being absent.
+       *
+       * Only the cursor's tile is tabbable. Sixty-eight cards each taking a tab
+       * stop is not navigation, it is a wall, and the arrow keys are the way
+       * through a grid.
+       */
+      tabIndex={isCursor ? 0 : -1}
+      data-card={card.id}
+      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${
+        isDragging ? 'is-dragging' : ''
+      } ${edge ? `is-over-${edge}` : ''}`}
       onClick={(e) => {
+        // Wherever a pointer lands, the keyboard picks up — otherwise the first
+        // `j` after a click jumps back to wherever the cursor had been left.
+        onCursor(card.id);
         // Cmd/Ctrl or Shift builds a selection for a bulk action; a plain click opens.
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
           e.preventDefault();

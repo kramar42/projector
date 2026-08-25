@@ -240,11 +240,23 @@ function SearchBox({ spec, edit }: { spec: ViewSpec | undefined; edit: Edit }) {
       <input
         type="search"
         className="field-recessed"
+        data-rail="search"
         value={text}
         placeholder="search title and body"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') setText('');
+          if (e.key !== 'Escape') return;
+          /**
+           * Clear, then leave.
+           *
+           * A field owns every key it is given, so the app's chain never sees this
+           * one — which meant Escape emptied the box and left the keyboard in it,
+           * with no way back to the cards but the mouse. Two steps rather than
+           * one because they are two different regrets: the search was wrong, or
+           * you are done searching.
+           */
+          if (text) return setText('');
+          e.currentTarget.blur();
         }}
       />
     </div>

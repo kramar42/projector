@@ -61,7 +61,14 @@ function LinkRow({ link, onRemove }: { link: NoteDTO['links'][number]; onRemove:
             family, whether it is spelled `jira` here or `J` on a card. */}
         <span className="linkkind" style={linkHue(kind)}>{kind}</span>
         {href ? (
-          <a className="linkrow-label" href={href} target="_blank" rel="noreferrer noopener" title={tip}>
+          <a
+            className="linkrow-label"
+            data-nav="link"
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={tip}
+          >
             {label}
           </a>
         ) : (
@@ -139,7 +146,7 @@ export function LinkEditor({
         />
       ))}
       {links.length > LINK_CUTOFF && (
-        <button className="facet-more" onClick={() => setAll((v) => !v)}>
+        <button className="facet-more" data-nav-more="" onClick={() => setAll((v) => !v)}>
           {all ? 'less' : `${links.length - LINK_CUTOFF} more`}
         </button>
       )}

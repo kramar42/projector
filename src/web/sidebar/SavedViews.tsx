@@ -3,6 +3,7 @@ import { ApiError, api } from '../api.ts';
 import { PopoverButton } from '../components/Popover.tsx';
 import { CommitInput } from '../components/CommitInput.tsx';
 import { IconButton } from '../components/Button.tsx';
+import { KeyHint } from '../components/KeyHint.tsx';
 import { type Patch } from '../query.ts';
 import type { ViewSpec } from '../../view/spec.ts';
 import { blankQuery, changeView, patchIsEmpty, specToPatch } from '../../view/intents.ts';
@@ -61,9 +62,13 @@ export function SavedViews({
   return (
     <>
       <div className="rail-row">
-        <label className="rail-label">View</label>
+        <label className="rail-label">
+          View
+          <KeyHint keys="v" means="comma then v — or alt-1 to alt-9 for the nth" />
+        </label>
         <PopoverButton
           minWidth={240}
+          rail="view"
           label={current?.title ?? current?.name ?? 'Ad-hoc query'}
           render={(close) => (
             <>
@@ -72,6 +77,7 @@ export function SavedViews({
                 <button
                   key={v.name}
                   className={`pop-pick ${v.name === current?.name ? 'is-current' : ''}`}
+                  data-nav="pick"
                   onClick={() => {
                     close();
                     // Picking a view replaces the query wholesale: the old
@@ -87,6 +93,7 @@ export function SavedViews({
               ))}
               <button
                 className="pop-action"
+                data-nav="pick"
                 onClick={() => {
                   close();
                   setNaming(true);
@@ -96,6 +103,7 @@ export function SavedViews({
               </button>
               <button
                 className="pop-action"
+                data-nav="pick"
                 onClick={() => {
                   close();
                   patch(blankQuery(spec, search));

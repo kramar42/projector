@@ -469,6 +469,9 @@ exactly the code path that changes its priority.
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
 | Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
+| Keyboard | the cursor, the digits, the trail, and the rail leader |
+
+See [Keyboard](#keyboard) for the whole map.
 
 **Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set or clear any one
 facet, merge, or delete, across all of it. The facet control follows the same rule as the panel —
@@ -771,6 +774,241 @@ The format is documented once, in the `projector` skill — the audience for it 
 directly, and an agent already loads that. `pj check` validates every note and reports every problem at
 once, rather than stopping at the first.
 
+## Keyboard
+
+Press `?` in the app for the same map, filled in with **this vault's** axis letters. Nothing below
+names a facet, because the client may not (C4): an axis is addressed by the `key:` it declares in
+`facets.yaml`, and `pj check` refuses one that collides with the map or with another axis.
+
+**The keys are drawn where they apply.** Every facet row in the card panel and every addressable row
+in the rail carries a small mono reminder of the key that reaches it — and an axis that declares no
+`key:` carries nothing, which is the useful half: you can see that `Layer` has no letter before
+pressing one that means something else.
+
+Three rules carry most of it:
+
+- **A digit is the Nth declared value of an axis.** A bare digit means the axis the view is grouped
+  by, so `3` is the third column — the drag, keyed.
+- **The walk follows the drawing.** `j` `k` go down what is stacked and `h` `l` go across what is
+  laid out — cards in a column and columns on a board, links and filter values down a list, a facet's
+  values across its row with `j` `k` changing axis. One rule read off the layout, not a convention
+  per surface. `⏎` takes what is under the cursor, `Esc` steps back out. Walking forward into an
+  `n more` **opens it** and carries on into what appears — the panel caps a link list at three and
+  the rail caps a facet at eight, and a walk should not stop at a rendering decision.
+- **A prefix never leaves you with nothing.** `,g` reaches Group by immediately and *then* accepts an
+  axis letter; a key that is not one falls through to meaning what it normally means.
+
+### Moving the cursor
+
+| Keys | What |
+|---|---|
+| `j` `k` | next / previous card. A board stops at a column's end; a table runs on through its section headings |
+| `h` `l` | previous / next column (board) or section (table). Empty columns are stepped over |
+| `[` `]` | previous / next swimlane, on a board with a second grouping axis |
+| `gg` | the first drawn card |
+| `G` | the last drawn card |
+| `⏎` `o` | open the panel on the cursor's card |
+| `H` `L` | back / forward through cards you have *followed* — see the trail, below |
+| `Esc` | close the cheatsheet, then leave a list, then dismiss a message, then close the panel, then clear the selection |
+
+The cursor is the only pointer: with the panel open it **is** the panel, so `j` turns the page to the
+next card. It is not stored in the URL and starts unset — the first motion key puts it on the first
+drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one down" has no answer.
+
+### Going to another note
+
+| Keys | What |
+|---|---|
+| `g` `⟨axis⟩` | go to the note this card names on that axis. One value goes straight there; several put focus on the first chip |
+| `g` `⇧⟨axis⟩` | set the view's focus to the notes naming *this* card on that axis, so `j` and `k` walk them |
+| `g` `f` | this card's facet rows — `h` `l` across a row's values, `j` `k` between axes, `⏎` toggles |
+| `g` `⇧F` | add an axis the card carries nothing on: the list opens with focus already in it |
+| `g` `l` | this card's links. `j` `k` step, `⏎` opens one in a new tab |
+| `g` `c` | edit the body. `⌘S` saves, `Esc` leaves it |
+| `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
+
+`g f` is how you reach an axis that declares **no** `key:` — walk to its row and pick a value.
+**`g ⇧F` adds one**: the list of axes the card carries nothing on opens with focus already in it, and
+picking one reveals its row *and lands on its first value*, which is the next thing you were going to
+do anyway. The same door is also the last step of the `g f` walk, and `+ ref` behaves identically one
+section down. `g` plus a *shifted* axis letter lands on that axis's `Children`-style row when the
+panel draws one, and reshapes the view when it does not.
+
+### Choosing cards
+
+| Keys | What |
+|---|---|
+| `x` | add or remove the cursor's card from the selection |
+| `J` `K` | extend the selection down / up, moving the cursor with it |
+| `*` | select everything on screen |
+| `Esc` | clear the selection |
+
+### Writing
+
+A write lands on the **selection if there is one, and the cursor's card otherwise** — the rule a drag
+already follows. The panel being open changes nothing, because the panel is the cursor's card.
+
+| Keys | What |
+|---|---|
+| `1`–`9` | set the grouped axis to its nth declared value |
+| `0` | clear the grouped axis |
+| `⟨axis⟩` `1`–`9` | set that axis to its nth value, whether or not the card carries it yet |
+| `u` `U` | undo · redo |
+
+`u` covers what the digits and the axis letters write. A value **toggled in the panel** with `⏎` is a
+panel write like a mouse click on the same chip, and is not on the stack — it needs none, since
+pressing `⏎` again is its exact inverse.
+
+Cardinality picks the verb, exactly as in the panel: a `single:` axis is **replaced**, an axis holding
+several is **added to**. A digit never removes — `0` is the gesture that clears.
+
+### The view
+
+| Keys | What |
+|---|---|
+| `,v` | saved views |
+| `,s` | shape |
+| `,g` `,G` | group by · then by |
+| `,o` | sort. The same axis twice flips the direction |
+| `,O` | flip the direction alone, without touching what is sorted by |
+| `,f` | which facets a note shows |
+| `,F` | the filter rail |
+| `,w` | focus — walk from a note |
+| `,c` | clear the filters |
+| `,\` | collapse the rail |
+| `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |
+| `/` | the search box |
+| `?` | the cheatsheet |
+
+`,g` `,G` `,o` and `,f` take an axis letter directly: `,g p` groups by that axis without opening
+anything.
+
+Each rail row draws its letter without the comma — every row in the rail is `,` plus one letter, so
+repeating the prefix seven times said nothing and made the letters different widths.
+
+### Not bound yet
+
+`bind` recognises four more commands that nothing acts on, so they are deliberately absent from `?`:
+`⟨axis⟩⟨axis⟩` to open an axis's control, `n` for a new card in the cursor's column, `⌥j` / `⌥k` to
+reorder within a column, and `.` for a command palette. NEXT.md says why each is waiting.
+
+### Checking it works
+
+Each of these starts from a fresh load of a board view — `?view=home` on a vault whose `facets.yaml`
+declares at least `status`, `priority` and `project` keys. Where a step needs a letter, `s`, `p` and
+`r` are the ones the shipped `work` vault declares; substitute your own.
+
+1. **The cursor appears.** Press `j`. A ring appears on the first card of the first column. Press `j`
+   twice more, then `k` — the ring walks down and back. Press `l` — it crosses to the next column at
+   roughly the same height, and an empty column is skipped rather than landed in.
+2. **The ends hold.** Press `G`, then `j`. The ring is on the last card and does not move. Press `gg`
+   — it returns to the first.
+3. **Selection is a wash, the cursor is a ring.** Press `x`, then `j`. The card you left has a filled
+   accent background; the card you are on has an accent outline. They must not look the same.
+4. **Opening follows the cursor.** Press `⏎`. The panel opens on the ringed card. Press `j` twice —
+   the panel turns to the next card each time, without closing.
+5. **The trail.** With the panel open on a card that has a project, press `g` then `r`. The panel is
+   now on the project. Press `H` — you are back on the first card. Press `L` — forward again. (`H`
+   before any `g` does nothing: ordinary `j`/`k` motion deliberately does not record.)
+6. **The inverse direction.** On that project, press `g` then `⇧R`. The rail's Focus row fills in and
+   the board now shows the notes that name it; `j` and `k` walk them as ordinary cards. Click the ✕
+   beside Focus to undo.
+7. **Links.** Open a card carrying two or more links and press `g` then `l`. Focus lands on the first
+   link chip; `j` and `k` step between them. Press `Esc` — focus returns to the cards, and the next
+   `j` moves the cursor rather than the link list.
+8. **A digit writes.** Close the panel. Put the cursor on a card in the first column and press `2`.
+   The card moves to the second column and washes briefly. Press `u` — it returns. Press `U` — it
+   moves again. Press `u` once more to leave it as you found it.
+9. **A digit past the end says so.** Press `9` on an axis with four values. A message appears naming
+   the axis; no card moves.
+10. **An axis by letter, on an axis the card lacks.** Find a card with no Energy (or any axis it
+    carries nothing on), open it, and press that axis's letter then `1`. The value is set and the row
+    appears in the panel — there is no equivalent of the panel's `+ facet` door to open first.
+11. **Bulk undo restores each card's own value.** Select three cards from three different columns with
+    `x`, `l`, `x`, `l`, `x`. Press `1`. All three move to the first column. Press `u` — each returns
+    to the column it came from, not to a shared one.
+12. **A saved view.** Press `,v`. The popover opens *and* focus is already on its first entry. Press
+    `j` twice, then `⏎`. The view changes and the rail's View row shows the new name. Press `,v`
+    again — it must open, not toggle shut.
+13. **A select.** Press `,s`. The Shape row takes focus. Press `j` — the board becomes a canvas. Press
+    `k` — back to a board.
+14. **An axis letter skips the walk.** Press `,g` then `p`. The board regroups by that axis
+    immediately. Press `,o` then `p` twice — it sorts by that axis, and the second press flips the
+    arrow to descending.
+15. **The filter rail.** Press `,F`. Focus lands on the first value of the first open axis, with a
+    ring around its checkbox. Press `j` to a value that is not ticked and press `⏎` — it ticks, the
+    footer count changes, and the URL gains an `f.` parameter. Press `⏎` again to untick it.
+16. **A closed axis opens.** From the filter rail, keep pressing `j` past the open axis's values until
+    focus reaches a collapsed axis's heading. Press `⏎` — it expands. Press `j` — focus is on its
+    first value.
+17. **Shifted completions.** Press `,` then `⇧G`, holding shift. The Then by row takes focus. Repeat
+    with `,` `⇧F` for the filter rail. (These are worth their own step: the `Shift` keydown arrives
+    before the letter, and it used to cancel the sequence.)
+18. **The nth view.** Press `⌥3`. You land on the third view in the `,v` list. (On macOS `⌥3` types
+    `£`; it is read from the physical key, so it must still work.)
+19. **Search.** Press `/`. The rail's search box takes focus. Type a word — the board narrows. Press
+    `Esc` — the box empties. Press `Esc` again — focus leaves the box, and the next `j` moves the
+    cursor rather than typing a letter.
+20. **Typing is never a shortcut.** With focus still in the search box, type `jjj333`. The text
+    appears in the box; the cursor does not move and no card is written.
+21. **The panel is not modal.** Open a card, then press `Tab` a few times. Focus moves through the
+    panel's own controls and out into the page behind it — there is no trap. Press `Esc` to close.
+22. **A rename is reachable.** Open a card and press `Tab` until the title has a ring, then `⏎`. The
+    rename editor opens. Press `Esc` — the rename is abandoned and **the panel stays open**.
+23. **Unsaved text is defended.** Open a card, open its raw frontmatter, type a character, then press
+    `Esc`. A prompt asks before closing. Decline — the panel stays. Press `Esc` again and accept.
+24. **The cheatsheet fits.** Press `?`. The map appears in balanced columns with no scrollbar. Every
+    axis your vault gives a `key:` is listed under *This vault*, with `set` or `add` beside it. Press
+    `?` again to close.
+25. **The cheatsheet covers an open card.** Open a card, then press `?`. The map is drawn *over* the
+    panel, not behind it. Press `Esc` — the map closes and the card stays open.
+26. **Escape leaves a rail control.** Press `,s`, then `Esc`. Focus returns to the cursor's card;
+    press `j` and the cursor moves while the Shape row stays where it was. (Without this, `j` and `k`
+    go on changing the shape and there is no way back to the cards but the mouse.)
+27. **The hints say what has a key, and what does not.** Open a card. Beside `Status` and `Priority`
+    there is a small `s` and `p`; beside an axis your vault gives no `key:` — `Layer`, say — there is
+    nothing. The rail shows `,v` `,s` `,g` `,G` `,o` `,f` `,w` in the case you actually press: only
+    the two shifted ones are capital.
+28. **A card written out of the view keeps taking writes.** On `home`, which keeps only `planning`
+    and `active`, open a card and set its status to a value outside that filter — `s3` for `on-hold`.
+    The card leaves the board and the panel stays on it. Now press `s1`. The status becomes `active`;
+    it must not be silently ignored. Press `u` twice: `on-hold`, then the value you started from.
+29. **And it can still be followed.** With that same card written out of the view and its panel still
+    open, press `g` then the Project letter. You land on its project. (It used to report "nothing on
+    Project" with the project visible on screen: the follow read the query's payload, and the payload
+    no longer mentioned the card.)
+30. **An axis with no key is still reachable.** Open a card carrying a value on an axis your vault
+    gives no `key:` — `Layer`, say. Press `g` then `f`: focus lands on the first value of the first
+    facet row. Press `j` until the ring is in the `Layer` row, `l` across to a value, and `⏎`. The
+    value toggles. Press `⏎` again to put it back. (`j` `k` change axis because the axes are stacked;
+    `h` `l` walk values because the values are laid across.)
+31. **The body and the frontmatter.** With a card open, press `g` then `c`. The body editor opens and
+    the cursor is in it. Type a character, press `⌘S` — it saves. Press `Esc` — the editor closes and
+    **the panel stays open**. Repeat with `g` then `y` for the raw frontmatter. (Press `Esc` on a
+    dirty editor and it should ask first.)
+32. **A truncated list opens as you walk into it.** Open a card carrying more than three links and
+    press `g` then `l`. Three are drawn. Press `j` three times: the fourth press expands the list and
+    lands on the fourth link, rather than stopping. Press `k` — back to the third, without the list
+    collapsing. Then do the same in the rail: `,F`, open an axis with more than eight values, walk to
+    the eighth and press `j`. It must land on the **ninth value**, not skip to the next axis.
+33. **The panel turns the page rather than blinking.** Open a card and hold `j` down a column of five
+    or six. The title and contents change each time and `loading…` must never appear between them —
+    the panel keeps the card you were reading up until the next one has arrived.
+34. **Every hint is one letter, against the thing it names.** In the panel a letter sits beside its
+    label — `s` by Status, `c` by Body, `A` by Children — and the row's *annotations* take the far
+    edge: a section's control (refresh, pencil) and an inbound row's count. In the rail the letters
+    right-align instead, because a fixed label column lets all seven form a column you read down;
+    only `G` and `F` are capital there.
+35. **Adding a facet, keyboard only.** Open a card and press `g` then `⇧F`. The list of axes the card
+    carries nothing on opens with focus already on its first entry. Press `j` to one and `⏎`: its row
+    appears in the grid **and the ring is already on that row's first value**. Press `l` to another
+    and `⏎` to set it. The same door is also where `g f` then `j` past the last row lands, and `+ ref`
+    one section down works the same way.
+36. **Flipping the sort.** Press `,O`. The arrow beside the Sort row turns over and the board
+    re-orders; the axis being sorted by does not change. Press `,O` again to put it back. (With
+    nothing sorted it says so rather than doing nothing.)
+
+
 ## Facet vocabulary
 
 ```yaml
@@ -783,6 +1021,7 @@ status:
   closed: [done, archived]                 # no further work expected, whatever the outcome
   expected: true                           # the triage axis asks for it
   hue: green                               # which family its chips draw in
+  key: s                                   # `s3` sets its third value; `,g s` groups by it
 parent:
   label: Part of
   type: ref                                # values are note ids, so it is

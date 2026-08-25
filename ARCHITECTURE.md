@@ -578,6 +578,7 @@ full of markdown attracts a README, not because the app puts one there.
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
+| `keys.test.ts` | the keyboard grammar: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging |

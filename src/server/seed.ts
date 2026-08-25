@@ -12,6 +12,11 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   open:    true  → new values accepted
 #            false → the validator rejects anything not listed
 #   single:  true  → at most one value at a time
+#   key:     the letter that addresses this axis from the keyboard — \`p3\` sets its
+#            third value, \`,g p\` groups by it, \`pp\` opens it to look. One letter
+#            a-z, and not one the keyboard already owns (\`?\` in the app lists
+#            those); \`pj check\` refuses a collision. Declare one for the axes you
+#            keep reaching for and leave the rest without — most axes want none
 #   closed:  values meaning no further work is expected, whatever the outcome
 #   expected: true  → a well-filed card carries this; the triage axis is built
 #            from it
@@ -70,6 +75,7 @@ status:
   closed: [done, archived]
   expected: true
   hue: green
+  key: s
 
 priority:
   label: Priority
@@ -78,6 +84,7 @@ priority:
   single: true
   expected: true
   hue: orange
+  key: p
 
 # A deadline. priority says what you intend to do next; due says what the
 # world expects regardless of intent, so it is compared against today rather than
@@ -89,6 +96,7 @@ due:
   single: true
   buckets: { overdue: {upTo: -1, hue: red}, today: {upTo: 0, hue: yellow}, week: 7 }
   overflow: later
+  key: d
 
 # Somebody else's move. A blocking facet, so it lands on the blocked axis beside
 # the dependency relation — while it holds any value at all, this card is parked.
@@ -100,12 +108,14 @@ waiting_on:
   open: true
   blocking: true
   hue: yellow
+  key: w
 
 energy:
   label: Energy
   values: [deep, shallow, decide, delegate]
   open: false
   single: true
+  key: e
 
 domain:
   label: Domain
@@ -139,6 +149,7 @@ parent:
   single: true
   hue: purple
   inverse: Children
+  key: a
 
 # What must finish before this card can move. Stored on the card that is stuck,
 # pointing at what it is stuck on — the same direction as parent and project, and
@@ -153,6 +164,7 @@ blocked_by:
   blocking: true
   hue: red
   inverse: Blocks
+  key: b
 `;
 
 export const SEED_VIEWS: { path: string; body: string }[] = [

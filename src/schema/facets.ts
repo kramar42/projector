@@ -103,6 +103,12 @@ export function loadFacets(file: string): Facets {
       ...(d.expected === true ? { expected: true } : {}),
       ...(d.blocking === true ? { blocking: true } : {}),
       ...(typeof d.hue === 'string' ? { hue: d.hue } : {}),
+      // Lower-cased on the way in, so `key: P` and `key: p` are the same
+      // declaration rather than one that works and one that silently does not:
+      // the dispatcher looks up the unshifted letter, and `P` would never be
+      // found. Whether it is *allowed* is `validateVocabulary`'s to say — the
+      // loader normalises, the checker judges.
+      ...(typeof d.key === 'string' ? { key: d.key.toLowerCase() } : {}),
       ...(typeof d.inverse === 'string' ? { inverse: d.inverse } : {}),
     };
   }

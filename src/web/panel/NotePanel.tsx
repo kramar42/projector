@@ -25,8 +25,14 @@ import { FLUSH_MS, whatMoved } from '../changed.ts';
  * reflink while the body editor was dirty left the scrim dead and Escape
  * prompting about text that no longer existed).
  */
-/** What the close prompt names, so it says what is actually at risk. */
-function whatIsUnsaved(u: { body: boolean; frontmatter: boolean }): string {
+/**
+ * What the close prompt names, so it says what is actually at risk.
+ *
+ * Exported because the prompt moved: Escape is answered by the shell's one key
+ * chain now, and the chain has to be able to ask this question in the panel's own
+ * words rather than inventing a second wording for it.
+ */
+export function whatIsUnsaved(u: { body: boolean; frontmatter: boolean }): string {
   if (u.body && u.frontmatter) return 'The body and the frontmatter have';
   return u.body ? 'The body has' : 'The frontmatter has';
 }
@@ -64,18 +70,73 @@ function Instructions({ blocks }: { blocks: string[] }) {
  */
 const HOLD_MS = FLUSH_MS;
 
-export function NotePanel({
+/**
+ * The load, held above the reset.
+ *
+ * `NoteCard` is keyed on the id it is *showing*, not the id that was asked for.
+ * That one word is the whole of "no blink": `useLive` keeps the outgoing payload
+ * until the next lands, and the frame stays mounted on it — so walking `j` down a
+ * list with the panel open turns the page rather than flashing `loading…` between
+ * every pair of cards. Which is the same rule the board follows for a change of
+ * query, stated in `useLive` itself.
+ *
+ * The key still does everything it did: the moment the new payload arrives the id
+ * changes, the frame remounts, and every block's state goes with it. That was the
+ * argument for keying the panel in the first place — nine pieces of state with no
+ * list to keep in step — and moving the key one level in keeps it while letting
+ * the fetch outlive it.
+ */
+export function NotePanel(props: {
+  id: string;
+  meta: Meta;
+  onClose: () => void;
+  onOpen: (id: string) => void;
+  onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
+}) {
+  const { data, error, reload } = useLive<NoteDetail>(() => api.card(props.id), [props.id]);
+  return (
+    <NoteCard
+      key={data?.card.id ?? props.id}
+      {...props}
+      // What is on screen, which during a switch is still the card you were
+      // reading. Writes follow it rather than the id being fetched, so a keystroke
+      // in the gap lands on the card under the cursor and not on one nobody has
+      // seen yet.
+      id={data?.card.id ?? props.id}
+      data={data}
+      error={error}
+      reload={reload}
+    />
+  );
+}
+
+function NoteCard({
   id,
   meta,
   onClose,
   onOpen,
+  onUnsaved,
+  data,
+  error,
+  reload,
 }: {
   id: string;
   meta: Meta;
   onClose: () => void;
   onOpen: (id: string) => void;
+  /**
+   * Tell the shell what is at risk here.
+   *
+   * The panel used to own an Escape listener of its own, which is why the title
+   * editor still had to `stopPropagation` on a key it was handling itself —
+   * backing out of a rename closed the card. There is one key chain now, and it
+   * needs this one fact from in here to ask the right question.
+   */
+  onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
+  data: NoteDetail | null;
+  error: string | null;
+  reload: () => void;
 }) {
-  const { data, error, reload } = useLive<NoteDetail>(() => api.card(id), [id]);
   const { touched } = useTouched();
   const [editTitle, setEditTitle] = useState<string | null>(null);
 
@@ -109,15 +170,12 @@ export function NotePanel({
     onGone: onClose,
   });
 
+  // Report upward rather than listening: see `onUnsaved`. Cleared on unmount, so
+  // a closed panel cannot leave the chain thinking there is text to lose.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (held && !confirm(`${whatIsUnsaved(unsaved)} unsaved changes. Close anyway?`)) return;
-      onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, held, unsaved]);
+    onUnsaved(unsaved);
+    return () => onUnsaved({ body: false, frontmatter: false });
+  }, [unsaved, onUnsaved]);
 
   /**
    * Commit the title edit. One body, called from Enter and from the button — it
@@ -215,7 +273,14 @@ export function NotePanel({
   return (
     <>
       <div className="scrim" onClick={() => (held ? undefined : onClose())} />
-      <aside className="panel" role="dialog" aria-label={card ? card.title : 'Card'}>
+      {/*
+        No `role="dialog"`, and that is the decision rather than an omission.
+        A dialog is a thing you answer and dismiss; this is a reading surface you
+        keep open while `j` and `k` walk the cursor down the list behind it, and
+        announcing it as a dialog would promise a focus trap that would break
+        exactly that. It is an `<aside>`, which is what it is.
+      */}
+      <aside className="panel" aria-label={card ? card.title : 'Card'}>
         {/*
           The one part of the panel that does not scroll, so it carries what a
           card face and a table row carry: the mark, then the title. Same glyph,
@@ -226,13 +291,30 @@ export function NotePanel({
           <div className="panel-head">
           {card &&
             (editTitle === null ? (
-              <h2
-                className={`panel-title ${lit('title') ? 'is-touched' : ''}`}
-                onClick={() => setEditTitle(card.title)}
-                title="Rename"
-              >
+              <h2 className={`panel-title ${lit('title') ? 'is-touched' : ''}`}>
                 <ProjectMark card={card} onToggle={() => toggleProject()} />
-                <span className="panel-title-text">{card.title}</span>
+                {/*
+                  The text carries the rename, not the heading.
+                  The heading already contains the project toggle — a real button —
+                  and a button inside a button is invalid, so the affordance goes on
+                  the one part of the row that is only text. It was an `onClick` on
+                  the `h2` with a tooltip: no tab stop, no key handler, and a screen
+                  reader announcing the heading as "Rename".
+                */}
+                <span
+                  className="panel-title-text"
+                  role="button"
+                  tabIndex={0}
+                  title="Rename"
+                  onClick={() => setEditTitle(card.title)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    setEditTitle(card.title);
+                  }}
+                >
+                  {card.title}
+                </span>
               </h2>
             ) : (
               <div className="titleedit">
@@ -242,14 +324,12 @@ export function NotePanel({
                   rows={2}
                   onChange={(e) => setEditTitle(e.target.value)}
                   onKeyDown={(e) => {
-                    // Stops at the control it cancels. The panel's own guard is
-                    // a `window` listener, so without this, backing out of a
-                    // rename also closes the card — and now that the guard covers
-                    // both editors, it would ask about text you were not editing.
-                    if (e.key === 'Escape') {
-                      e.stopPropagation();
-                      setEditTitle(null);
-                    }
+                    // No `stopPropagation` any more, and that is the point: the
+                    // shell's key chain treats a field's keys as the field's, so
+                    // Escape never leaves this textarea. It used to be a window
+                    // listener racing this handler, and backing out of a rename
+                    // closed the card.
+                    if (e.key === 'Escape') setEditTitle(null);
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       rename();

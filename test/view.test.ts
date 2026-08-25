@@ -12,6 +12,7 @@ import { groupsFor, labelFor } from '../src/web/views/groups.ts';
 import { reindex } from '../src/index/indexer.ts';
 import { COMPUTED, runQuery } from '../src/index/query.ts';
 import { queryPayload } from '../src/view/payload.ts';
+import { SEED_FACETS } from '../src/server/seed.ts';
 
 
 /**
@@ -223,6 +224,57 @@ test('a declaration that cannot take effect is an error, not a shrug', () => {
   assert.deepEqual(messages.filter((m) => /"fine"|"rel"/.test(m)), []);
 });
 
+
+/**
+ * The keyboard address, and the two ways a vault can ask for one that cannot work.
+ *
+ * Both are the silent failure this whole check exists for. An unshaped key is
+ * never matched; a reserved one is *shadowed*, because `bind` reads the map
+ * before the vocabulary — so the declaration sits in the file looking correct and
+ * the letter goes on moving the cursor.
+ */
+test('a keyboard key a vault may not have is refused, in both of its forms', () => {
+  const shaped = facetsFile('mood: { values: [a], key: pp }\nwhen: { type: date, key: "3" }\n');
+  const messages = validateVocabulary(declaredFacets(shaped), 'f').map((i) => i.message);
+  assert.equal(messages.filter((m) => /one letter/.test(m)).length, 2);
+
+  // `j` moves the cursor. A vault claiming it would break motion rather than
+  // gaining an axis.
+  const taken = facetsFile('mood: { values: [a], key: j }\n');
+  const clash = validateVocabulary(declaredFacets(taken), 'f');
+  assert.equal(clash.length, 1);
+  assert.match(clash[0]!.message, /the keyboard already uses/);
+  assert.equal(clash[0]!.severity, 'error');
+});
+
+test('one letter, one axis — the second claimant is named rather than silently losing', () => {
+  const file = facetsFile('mood: { values: [a], key: m }\nmeans: { values: [b], key: m }\n');
+  const issues = validateVocabulary(declaredFacets(file), 'f');
+  assert.equal(issues.length, 1, 'reported once, against the claimant that loses');
+  assert.equal(issues[0]!.field, 'means');
+  assert.match(issues[0]!.message, /"means" and "mood" both ask for key "m"/);
+});
+
+test('a key is normalised to the letter the keyboard actually sends', () => {
+  // `P` is the shifted form and is never what `bind` looks up, so a vault writing
+  // it means `p` — the loader settles that, and the checker does not complain.
+  const file = facetsFile('mood: { values: [a], key: P }\n');
+  assert.deepEqual(validateVocabulary(declaredFacets(file), 'f'), []);
+  assert.equal(loadFacets(file).mood!.key, 'p');
+});
+
+test('the seeded vault and the work vault declare keys that hold', () => {
+  // The two vocabularies that actually ship. A collision here is a `pj check`
+  // error the first time anyone opens them, which is not how a seed should read.
+  for (const file of ['work/facets.yaml', undefined]) {
+    const path = file ?? facetsFile(SEED_FACETS);
+    assert.deepEqual(
+      validateVocabulary(declaredFacets(path), path),
+      [],
+      `${path} declares a key it may not have`,
+    );
+  }
+});
 
 test('a view key the reader does not know is an error, not a line that does nothing', () => {
   const facets = loadFacets(facetsFile('status: { values: [planning, done] }\n'));

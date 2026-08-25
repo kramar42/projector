@@ -1,5 +1,6 @@
 import { PopoverButton } from '../components/Popover.tsx';
 import { Button } from '../components/Button.tsx';
+import { KeyHint } from '../components/KeyHint.tsx';
 import { SHAPES } from '../query.ts';
 import { setGroupBy, setShape, setShow, setSort } from '../../view/intents.ts';
 import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
@@ -28,9 +29,13 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
   return (
     <>
       <div className="rail-row">
-        <label className="rail-label">Shape</label>
+        <label className="rail-label">
+          Shape
+          <KeyHint keys="s" means="comma then s" />
+        </label>
         <select
           className="rail-select"
+          data-rail="shape"
           value={shape}
           onChange={(e) => edit((spec) => setShape(spec, e.target.value as Shape))}
         >
@@ -43,9 +48,13 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
       </div>
 
       <div className="rail-row">
-        <label className="rail-label">Group by</label>
+        <label className="rail-label">
+          Group by
+          <KeyHint keys="g" means="comma then g — then an axis key to set it outright" />
+        </label>
         <select
           className="rail-select"
+          data-rail="group"
           value={group[0] ?? ''}
           onChange={(e) => edit((spec) => setGroupBy(spec, 0, e.target.value || null))}
         >
@@ -61,9 +70,13 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
       {group[0] && (
         <>
           <div className="rail-row">
-            <label className="rail-label">Then by</label>
+            <label className="rail-label">
+              Then by
+              <KeyHint keys="G" means="comma then shift-G" />
+            </label>
             <select
               className="rail-select"
+              data-rail="thenBy"
               value={group[1] ?? ''}
               title="board lanes, table sub-sections. A canvas keeps the value but cannot draw it yet: a node has one position, so it cannot sit in two clusters"
               onChange={(e) => edit((spec) => setGroupBy(spec, 1, e.target.value || null))}
@@ -120,9 +133,15 @@ function SortRow({
             {dir === 'asc' ? '↑' : '↓'}
           </Button>
         )}
+        {/* After the direction, not before it: the hint is the last thing in every
+            label box in the rail, so putting it here is what keeps all seven of
+            them in one column. The arrow takes the auto margin and the hint sits
+            against the inner edge behind it. */}
+        <KeyHint keys="o" means="comma then o — the same axis twice flips the direction" />
       </div>
       <select
         className="rail-select"
+        data-rail="sort"
         value={key}
         onChange={(e) => edit((spec) => setSort(spec, e.target.value, dir))}
       >
@@ -187,9 +206,13 @@ export function FacetsSection({
 
   return (
     <div className="rail-row">
-      <label className="rail-label">Facets</label>
+      <label className="rail-label">
+        Facets
+        <KeyHint keys="f" means="comma then f" />
+      </label>
       <PopoverButton
         minWidth={210}
+        rail="show"
         label={table ? columnsLabel(show) : chipsLabel(show)}
         title="which facets this view surfaces — a reference facet also draws on a canvas, and the first one lays it out"
         render={() => (
@@ -199,6 +222,7 @@ export function FacetsSection({
               <label key={f.name} className="pop-check">
                 <input
                   type="checkbox"
+                  data-nav="tick"
                   checked={show.includes(f.name)}
                   onChange={(e) => {
                     const next = e.target.checked

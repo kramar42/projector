@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { axisValues, FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
+import { useCursorFocus } from '../cursor.ts';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
@@ -24,12 +25,18 @@ export function TableView({
   data,
   onOpen,
   selection,
+  cursor,
+  onCursor,
   reload,
 }: {
   data: QueryResponse;
   onOpen: (id: string) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
+  /** Where the keyboard is; the table only draws it. See `motion.ts`. */
+  cursor: string | null;
+  /** A pointer landing on a row is the keyboard landing there too. */
+  onCursor: (id: string) => void;
   reload: () => void;
 }) {
   const chips = data.spec.show;
@@ -120,6 +127,8 @@ export function TableView({
                   projects={projects}
                   index={index}
                   isSelected={selection.ids.has(id)}
+                  isCursor={cursor === id}
+                  onCursor={onCursor}
                   onOpen={onOpen}
                   onSelect={(additive) => selection.toggle(id, additive, index)}
                   onExtend={() => selection.extend(rows, index)}
@@ -156,6 +165,8 @@ function Row({
   projects,
   index,
   isSelected,
+  isCursor,
+  onCursor,
   onOpen,
   onSelect,
   onExtend,
@@ -167,22 +178,35 @@ function Row({
   /** Position among the drawn rows — a shift-click's endpoint. */
   index: number;
   isSelected: boolean;
+  isCursor: boolean;
+  onCursor: (id: string) => void;
   onOpen: (id: string) => void;
   onSelect: (additive: boolean) => void;
   onExtend: () => void;
 }) {
   const { touched } = useTouched();
+  const ref = useRef<HTMLTableRowElement>(null);
+  useCursorFocus(ref, isCursor);
   return (
     <tr
+      ref={ref}
+      // A roving tabindex, as on a board tile: only the cursor's row is a tab
+      // stop, because arrowing is how you cross a list and 130 tab stops is not
+      // navigation. `<tr>` takes one — the *ring* is what it cannot take, which
+      // is why the treatment below is drawn on the cells.
+      tabIndex={isCursor ? 0 : -1}
+      data-card={card.id}
       // The table draws its own row rather than a `.cardface`, so the mark has to
       // be applied twice in the app — here and on the face. Same class, so the
       // keyframe and the reason live in one place.
       className={`${card.isProject ? 'is-project' : ''} ${isSelected ? 'is-selected' : ''} ${
-        touched(card.id) ? 'is-touched' : ''
-      }`}
+        isCursor ? 'is-cursor' : ''
+      } ${touched(card.id) ? 'is-touched' : ''}`}
       aria-selected={isSelected}
       data-row={index}
       onClick={(e) => {
+        // Wherever a pointer lands, the keyboard picks up.
+        onCursor(card.id);
         // cmd/ctrl toggles, the one gesture every shape agrees on. Shift extends a
         // run, which only a shape with an order can offer — a board has columns
         // rather than rows, and shift is already its drag modifier there.

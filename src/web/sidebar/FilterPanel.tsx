@@ -30,7 +30,15 @@ export function FilterPanel({ counts, edit }: { counts: AxisCount[]; edit: Edit 
   const rest = counts.filter((c) => !inUse(c));
 
   return (
-    <div className="filters">
+    /*
+      One list, walked top to bottom.
+
+      The heads and the values are items of the *same* list rather than two nested
+      ones, which is what makes `j` from a closed axis land on the next axis and
+      `j` from an open one land on its first value — the reader's eye already
+      reads the rail that way, because a closed axis draws no values to step over.
+    */
+    <div className="filters" data-navlist="filter">
       {[...active, ...rest].map((facet) => (
         <Facet key={facet.facet} facet={facet} edit={edit} />
       ))}
@@ -83,7 +91,7 @@ function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
 
   return (
     <section className={`facet ${open ? 'is-open' : ''} ${selected.length ? 'is-active' : ''}`}>
-      <button className="facet-head" onClick={() => setManual(!open)}>
+      <button className="facet-head" data-nav="axis" aria-expanded={open} onClick={() => setManual(!open)}>
         <span className={`facet-caret ${open ? 'is-open' : ''}`} aria-hidden="true" />
         <span className="truncate facet-label">{facet.label}</span>
         {facet.computed && (
@@ -109,7 +117,7 @@ function Facet({ facet, edit }: { facet: AxisCount; edit: Edit }) {
               the list has changed, so focus falls to the document and a keyboard
               reader loses their place mid-list. */}
           {facet.values.length > CUTOFF && (
-            <button className="facet-more" onClick={() => setAll((v) => !v)}>
+            <button className="facet-more" data-nav-more="" onClick={() => setAll((v) => !v)}>
               {all ? 'less' : `${facet.values.length - CUTOFF} more`}
             </button>
           )}
@@ -173,6 +181,9 @@ function Value({
     >
       <input
         type="checkbox"
+        /* A checkbox takes no text, so `inField` hands `j` and `k` back to the
+           map and the rail can be walked with focus sitting on one. */
+        data-nav="value"
         checked={value.selected}
         onChange={onToggle}
         /*

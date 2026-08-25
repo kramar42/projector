@@ -2,11 +2,13 @@ import { useState, type ReactNode } from 'react';
 import { IconButton } from '../components/Button.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
+import { KeyHint } from '../components/KeyHint.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { LinkEditor } from '../components/LinkEditor.tsx';
 import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
+import { focusSoon } from '../cursor.ts';
 import { renderBody } from '../../view/markdown.ts';
 import type { NoteWriter } from './usePanelWriter.ts';
 import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
@@ -103,8 +105,19 @@ function AddAxis({
 }) {
   if (!hidden.length) return null;
   return (
+    /*
+     * A navlist of one, so the walk can reach the door.
+     *
+     * `gf` enters the facet grid and `j` steps down the axes; the last step lands
+     * here, which is where it should land — the door is the bottom of that list in
+     * every sense but the DOM's. Without this the only keyboard path to an axis
+     * the card carries nothing on was Tab, which is the gap the hints were
+     * supposed to make visible rather than leave.
+     */
+    <div data-navlist="add" data-nav-flow="column">
     <PopoverButton
       className="addbtn"
+      nav="add"
       minWidth={180}
       fitContent
       label={label}
@@ -115,9 +128,27 @@ function AddAxis({
             <button
               key={n}
               className="pop-pick"
+              data-nav="pick"
               onClick={() => {
                 onPick(n);
                 close();
+                /**
+                 * And land on the row that just appeared.
+                 *
+                 * Revealing an axis is never the thing you wanted — giving it a
+                 * value is, and it is the very next move every time. Leaving focus
+                 * on a popover that has just unmounted drops it to the body, so
+                 * the keyboard had to find its way back to a row it had only just
+                 * asked for.
+                 *
+                 * Not only for the keyboard: a pointer has nothing else holding
+                 * focus at this moment either, so the same landing is right.
+                 */
+                focusSoon(() =>
+                  document.querySelector<HTMLElement>(
+                    `.panel [data-axis="${CSS.escape(n)}"]:not([data-inverse]) [data-nav]`,
+                  ),
+                );
               }}
             >
               <span className="truncate pop-pick-name">{defs[n]!.label}</span>
@@ -126,6 +157,7 @@ function AddAxis({
         </>
       )}
     />
+    </div>
   );
 }
 
@@ -142,11 +174,17 @@ function AddAxis({
  * an add control, because the edit lives on the other card — which the `ƒ` says.
  */
 function InboundRow({
+  axis,
+  axisKey,
   label,
   means,
   notes,
   onOpen,
 }: {
+  /** The axis this inverts, so `g⇧⟨key⟩` can find the row. */
+  axis: string;
+  /** That axis's declared letter, if it has one, for the hint. */
+  axisKey: string | undefined;
   label: string;
   means: string;
   notes: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
@@ -157,17 +195,39 @@ function InboundRow({
   const shown = all ? notes : notes.slice(0, INBOUND_CUTOFF);
 
   return (
-    <div className="facetrow is-computed">
+    <div
+      className="facetrow is-computed"
+      data-navlist="axis"
+      /* `.reflink` is `width: 100%`, so these stack rather than wrap: `j`/`k`. */
+      data-nav-flow="column"
+      data-axis={axis}
+      data-inverse=""
+      title={means}
+    >
       <span className="facetrow-label">
         {label}
-        {/* The same `ƒ` the filter rail puts on an axis it computed rather than
-            read — there is no edit here because the edit lives on the other card.
-            Marker then count, in that order and pushed to the column's inner
-            edge, because that is the order and the position the rail uses. */}
-        <span className="computed" title={means}>
-          ƒ
-        </span>
-        {notes.length > 1 && <span className="quietcount">{notes.length}</span>}
+        {/*
+          No `ƒ` here any more.
+
+          It marks an axis computed rather than stored, and on a row headed
+          `Children` beside one headed `Part of` that is a fact the reader already
+          has — a note does not choose what names it. The mark is still earning its
+          place in the filter rail and on the workshop's inherited rows, where the
+          same value could plausibly have been stored. The sentence it carried is
+          now the row's `title`.
+        */}
+        {axisKey && (
+          <KeyHint
+            keys={axisKey.toUpperCase()}
+            means={`g then shift-${axisKey.toUpperCase()} — the notes naming this one`}
+          />
+        )}
+        {/* How many there are, at the label column's inner edge — the position the
+            rail already uses for a count, and the one place on this row that is
+            not part of the row's contents. It was inside `.facetrow-values`, which
+            wraps, and a `.reflink` is `width: 100%` — so it took a line of its own
+            under the whole list. */}
+        {notes.length > 1 && <span className="quietcount facetrow-count">{notes.length}</span>}
       </span>
       <div className="facetrow-values">
         {/* Finished says `ok`; unfinished says nothing. Only a note in *your*
@@ -175,7 +235,12 @@ function InboundRow({
             a note at this end is one you are holding up, and striping six of
             them red says a project with work left in it is broken. */}
         {shown.map((r) => (
-          <button className={`reflink ${r.done ? 'is-done' : ''}`} key={r.id} onClick={() => onOpen(r.id)}>
+          <button
+            className={`reflink ${r.done ? 'is-done' : ''}`}
+            data-nav="ref"
+            key={r.id}
+            onClick={() => onOpen(r.id)}
+          >
             {/* A note carries its mark wherever you meet it. The `' ✓'` that
                 used to sit here is gone: `.reflink.is-done` already draws that
                 state as an `ok` left edge, so the tick was the same fact twice. */}
@@ -184,10 +249,11 @@ function InboundRow({
           </button>
         ))}
         {notes.length > INBOUND_CUTOFF && (
-          <button className="facet-more" onClick={() => setAll((v) => !v)}>
+          <button className="facet-more" data-nav-more="" onClick={() => setAll((v) => !v)}>
             {all ? 'less' : `${notes.length - INBOUND_CUTOFF} more`}
           </button>
         )}
+
       </div>
     </div>
   );
@@ -306,6 +372,8 @@ export function Refs({
             def.inverse && naming.length ? (
               <InboundRow
                 key={`${name}:inverse`}
+                axis={name}
+                axisKey={def.key}
                 label={def.inverse}
                 means={`notes naming this one through "${def.label}", not stored on this one`}
                 notes={naming}
@@ -339,9 +407,10 @@ export function Links({
   useRequestEnrichment(card.links.map((l) => l.raw));
 
   return (
-    <section className={`panel-section ${lit ? 'is-touched' : ''}`}>
+    <section className={`panel-section ${lit ? 'is-touched' : ''}`} data-navlist="links">
       <h3>
         Links
+        <KeyHint keys="l" means="g then l — step the links with j and k" />
         {/* An action, so it is a button — and a glyph, not a word. "refresh"
             beside a trash can and a `✕` is the same mistake as spelling those
             two, so the set grew by one measured member rather than the rule
@@ -386,9 +455,10 @@ export function Frontmatter({
     onDirtyChange(d);
   };
   return (
-    <section className="panel-section">
+    <section className="panel-section" data-section="frontmatter">
       <h3>
         Frontmatter
+        <KeyHint keys="y" means="g then y — edit the raw frontmatter; esc leaves it" />
         {/* The same control as the Body's, doing the same thing: reveal an editor
             over a readout. It was `edit raw` / `hide` — a word that changed to a
             different word — while the Body used two pills, so one act had two
@@ -416,6 +486,7 @@ export function Frontmatter({
           yaml={yaml}
           onSave={write.frontmatter}
           onDirtyChange={report}
+          onEscape={() => mayClose(dirty, 'frontmatter') && setOpen(false)}
         />
       )}
     </section>
@@ -440,9 +511,10 @@ export function Body({
     onDirtyChange(d);
   };
   return (
-    <section className={`panel-section ${lit ? 'is-touched' : ''}`}>
+    <section className={`panel-section ${lit ? 'is-touched' : ''}`} data-section="body">
       <h3>
         Body
+        <KeyHint keys="c" means="g then c — edit the body; esc leaves it" />
         {/*
           One button, not two pills.
 
@@ -466,6 +538,9 @@ export function Body({
       </h3>
       {editing ? (
         <BodyEditor
+          // Escape closes the editor, through the same guard the toggle uses: the
+          // key and the button are one act, so they ask the same question.
+          onEscape={() => mayClose(dirty, 'body') && setEditing(false)}
           cardId={card.id}
           value={card.body}
           onDirtyChange={report}

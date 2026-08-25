@@ -23,6 +23,7 @@ export function FrontmatterEditor({
   yaml,
   onSave,
   onDirtyChange,
+  onEscape,
 }: {
   cardId: string;
   yaml: string;
@@ -34,6 +35,8 @@ export function FrontmatterEditor({
    * everything the chips cannot express.
    */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Escape: hand the document back to whoever opened it. */
+  onEscape?: () => void;
 }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -51,6 +54,7 @@ export function FrontmatterEditor({
     value: yaml,
     extensions,
     onSave,
+    onEscape,
   });
 
   /**

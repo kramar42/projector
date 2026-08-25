@@ -101,45 +101,48 @@ needs to be part of two things.
   worth doing the moment a second axis wants it. Until then it would be a key with exactly one setter,
   which is the shape of a thing that drifts.
 
-- **Keyboard operation.** The largest thing the app cannot do. Structure is edited by gesture on
-  purpose — drag, the bulk bar, canvas handles — and content through the panel, so there is no keyboard
-  path to either: eight `aria`/`role` attributes in the whole client, and a board you can only
-  rearrange with a pointer.
+- **What is left of keyboard operation.** Most of it shipped. The cursor, the trail, positional and
+  addressed facet writes, undo, the rail leader and `?` are in; `src/view/keys.ts` is the grammar and
+  `test/keys.test.ts` pins it.
 
-  It is not an accessibility item, which is why it sits here rather than being owed to anyone. This is
-  a single-user tool on one machine, and the cost is *speed*: a surface open all day beside a terminal,
-  with a Vim palette and full CLI parity, where every column is one hand on a mouse. `j`/`k` down a
-  column, `1`–`4` for priority, `/` to search, `g` to regroup, `x` to select.
+  Two of NEXT's reasons to wait turned out to be answered already. **The mode question** — "a
+  keystroke has no modifier to carry replace/add/remove" — was solved in `FacetEditor` before it was
+  asked: cardinality picks the verb, `single` replaces and everything else adds, and the frequent axes
+  are all `single`. **The evidence question** — "which motions are frequent" — became a config field.
+  `key:` in `facets.yaml` is where that evidence lands, one letter at a time, on the day you notice
+  you keep reaching for an axis.
 
-  Two reasons to wait. **The gesture semantics are the hard part, not the bindings**: a drag says
-  replace, ⌥ says add, ⇧ says remove, and a keystroke has no modifier to carry that — so a key-driven
-  facet edit needs a third way to say which of the three it means, and inventing one badly would put a
-  second write path beside the one P2 unified. And **there is no evidence yet about which motions are
-  frequent**; the honest input is a few days of noticing what the mouse keeps being reached for, which
-  is cheaper to collect than to guess. Revisit with that list in hand.
+  Still not bound, and each for its own reason rather than as a batch:
 
-  What the panel critique of 2026-08-22 added to this, and it is a shorter list than it was — the
-  markup, as distinct from the bindings. Four items, each independently doable and none of them needing
-  the gesture question answered first:
+  - **`n`, a new card in the cursor's column.** The only binding whose target is not a card. The
+    inline `<textarea>` it wants belongs to `Column`, so it needs a way to say "open that editor"
+    across a component boundary that nothing else in the map needs.
+  - **`⌥j` / `⌥k`, reordering within a column.** Cheap — the stored order is a splice through
+    `saveArrangement` — and idle until a saved view is the thing being worked in.
+  - **`⟨key⟩⟨key⟩`, opening an axis's control.** `bind` emits `openAxisControl` and nothing consumes
+    it. It wants a popover anchored to the cursor's card rendering `FacetEditor`'s body, which is the
+    same component the palette will want. Worth doing once, for both.
+  - **The palette (`.`)** is unclaimed. Its shape is known: the bulk bar's axis-then-value state
+    machine with the record picker's type-to-filter.
+  - **A view's own `key:`.** `⌥1`–`⌥9` counts along the rail's order, so adding a view renumbers the
+    ones after it. The fix is the one facets already have — let the file declare its letter — and it
+    is not worth doing until the order actually churns.
 
-  - **There is no keyboard path to open a card.** The board tile is a `div` with `onClick` and the table
-    row a `tr` with `onClick`; the canvas opens on double-click. None is focusable. Paths *do* exist —
-    the sidebar's focus pill, and the panel's own reflinks and reference chips are native buttons — so
-    the accurate statement is that the focus pill is the only cold start and the rest only switch cards
-    once a panel is already open. Making the two openers buttons is the whole of it.
-  - **The panel manages no focus.** `role="dialog"` with no `aria-modal`, nothing focused on open
-    (`activeElement` stays on `body`), no trap — Tab from the last control lands in the sidebar behind
-    the scrim — and no restore on close. The board behind it stays in the tab order with no `inert`.
-  - **Rename is pointer-only.** The title is an `h2` with `onClick` and a `title` tooltip: no
-    `tabIndex`, no `role`, no key handler, and a screen reader announces the heading as "Rename".
-  - **The filter rail's disclosure heads carry no `aria-expanded`**, so an open axis and a closed one
-    are indistinguishable to anything that is not looking at the caret. Eighteen of them.
+- **The panel is not modal, and that overrides what the panel critique asked for.** The critique of
+  2026-08-22 wanted a focus trap, `inert` on the background and focus restore on close. It got the
+  opposite, deliberately: the cursor is the only pointer, so an open panel *is* the cursor's card and
+  `j` turns the page to the next one. A trap would break the single most useful thing the keyboard
+  does.
 
-  Two things came off the list rather than onto it. The card panel's own thirteen disclosure heads are
-  gone — an axis carrying nothing is not drawn, so there is nothing to expand — and the Body and
-  Frontmatter toggles now announce their state, because `aria-pressed` arrives with the pressed
-  treatment they share. The `read`/`edit` pair had been two buttons a screen reader could not tell
-  apart.
+  What the critique asked for that did land: the panel no longer claims `role="dialog"` — it is an
+  `<aside>`, which is what a non-modal reading surface is — the rename has a keyboard path, the filter
+  rail's disclosure heads carry `aria-expanded`, and the board tile and table row are focusable with a
+  roving tabindex, which was the "no keyboard path to open a card" item.
+
+  What is genuinely still open is **focus restore**: closing the panel leaves focus wherever it was
+  rather than returning it to the card. In practice the cursor is that card and `j` picks up from it,
+  so the cost is one Tab in the rare case, which is why it is filed rather than fixed.
+
 - **Tokenizing the rest of the scale.** `font-size` and `border-radius` are `--text-*` and `--radius-*`
   now, and `test/theme.test.ts` refuses a raw one — which held through 349 lines of new panel CSS
   without a single new step. `padding`, `gap` and `letter-spacing` did not get the same treatment:

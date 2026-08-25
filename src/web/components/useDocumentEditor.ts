@@ -34,6 +34,7 @@ export function useDocumentEditor<R>({
   value,
   extensions,
   onSave,
+  onEscape,
 }: {
   /** Remount on this, and only this — the editor owns its document after mount. */
   docId: string;
@@ -41,6 +42,19 @@ export function useDocumentEditor<R>({
   /** Language, placeholder, paste handling: whatever this document is. */
   extensions: Extension[];
   onSave: (text: string) => Promise<R>;
+  /**
+   * Leave the document — Escape.
+   *
+   * It has to be a keymap entry rather than the app's key chain, because
+   * CodeMirror's content is `contentEditable` and the chain hands every key in a
+   * field back to the field. That is the right rule; this is the field agreeing
+   * to give one key back, which is the only way it can be given.
+   *
+   * Behind a ref for the same reason `onSave` is: the keymap is built once at
+   * mount and would otherwise close over the callback of the render that mounted
+   * it — the defect this module was extracted to stop happening twice.
+   */
+  onEscape?: () => void;
 }): {
   hostRef: React.RefObject<HTMLDivElement | null>;
   dirty: boolean;
@@ -82,6 +96,8 @@ export function useDocumentEditor<R>({
   // frozen at mount and reads through this, so it and the button are one function.
   const saveRef = useRef(save);
   saveRef.current = save;
+  const escapeRef = useRef(onEscape);
+  escapeRef.current = onEscape;
 
   const extRef = useRef(extensions);
   extRef.current = extensions;
@@ -96,6 +112,7 @@ export function useDocumentEditor<R>({
           history(),
           keymap.of([
             { key: 'Mod-s', run: () => (void saveRef.current(), true), preventDefault: true },
+            { key: 'Escape', run: () => (escapeRef.current?.(), true), preventDefault: true },
             { key: 'Mod-Enter', run: () => (void saveRef.current(), true), preventDefault: true },
             indentWithTab,
             ...defaultKeymap,

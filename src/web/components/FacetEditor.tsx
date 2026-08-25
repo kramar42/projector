@@ -6,6 +6,7 @@ import type { FacetMode } from '../panel/write.ts';
 import { Button, IconButton } from './Button.tsx';
 import { RecordMark } from './CardBody.tsx';
 import { useHue } from '../vocabulary.tsx';
+import { KeyHint } from './KeyHint.tsx';
 import { isAppAxis } from '../hue.ts';
 
 /**
@@ -130,7 +131,7 @@ export function FacetEditor({
                   note's identity rather than a control beside it — the same
                   order a card face and the panel title lead with, and the
                   arrangement the per-glyph optical nudges were measured for. */}
-              <button className="refchip-go" onClick={() => onOpen?.(v)} title={v}>
+              <button className="refchip-go" data-nav="ref" onClick={() => onOpen?.(v)} title={v}>
                 <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
                 <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
               </button>
@@ -210,6 +211,10 @@ export function FacetEditor({
             className={`togglechip ${tone} ${values.includes(v) ? 'is-on' : ''} ${
               def.values.includes(v) ? '' : 'is-extra'
             }`}
+            /* Walkable, which is the whole keyboard path to an axis that declares
+               no `key:`: `gf` enters the grid, `h`/`l` find the row, `j`/`k` and
+               `⏎` pick the value. */
+            data-nav="value"
             aria-pressed={values.includes(v)}
             onClick={() => toggle(v)}
           >
@@ -221,13 +226,32 @@ export function FacetEditor({
             <input
               value={adding}
               placeholder="+ new"
+              /**
+               * Walkable **only when it is the row's only control.**
+               *
+               * An axis that declares no values and accepts new ones — `owner`, in
+               * the shipped vault — draws no chips at all, so without this the row
+               * held nothing to land on: `gf` and `j` could not reach it, and
+               * adding it with `gF` left focus nowhere.
+               *
+               * Not when there are chips beside it, and that is the whole of the
+               * restraint. It is a text field, so it owns every key it is given —
+               * `j` typed at it is a `j` — and putting one in the middle of a walk
+               * that is otherwise all buttons would be a stop you have to press
+               * Escape to get out of, on rows that have a perfectly good chip to
+               * land on instead.
+               */
+              data-nav={[...def.values, ...extras].length ? undefined : 'new'}
               onChange={(e) => setAdding(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') addNew();
-                if (e.key === 'Escape') {
-                  e.stopPropagation();
-                  setAdding('');
-                }
+                if (e.key !== 'Escape') return;
+                e.stopPropagation();
+                // Clear, then leave — the rail's search box's rule, for the same
+                // reason: a field the app cannot take keys back from has to hand
+                // focus back itself, or the walk ends here.
+                if (adding) return setAdding('');
+                e.currentTarget.blur();
               }}
             />
           </span>
@@ -237,8 +261,28 @@ export function FacetEditor({
   };
 
   return (
-    <div className={`facetrow ${lit ? 'is-touched' : ''}`}>
-      <span className="facetrow-label">{def.label}</span>
+    // `data-axis` is how `g⟨key⟩` finds this row's chips. The keyboard addresses
+    // an axis by the letter the *vault* declared, and this is where that letter
+    // lands in the DOM — the client still names no facet.
+    /* `row`: a facet's values are chips laid across the row, so `h`/`l` walk them
+       and `j`/`k` step to the axis above or below — which is how they are drawn. */
+    <div
+      className={`facetrow ${lit ? 'is-touched' : ''}`}
+      data-navlist="axis"
+      data-nav-flow="row"
+      data-axis={name}
+    >
+      <span className="facetrow-label">
+        {def.label}
+        {/* The axis's own letter, from the vault. An axis that declares none draws
+            nothing, which is the half that stops you guessing at one. */}
+        {def.key && (
+          <KeyHint
+            keys={def.key}
+            means={`${def.key} then 1-9 sets ${def.label}; ${def.key}${def.key} opens it`}
+          />
+        )}
+      </span>
       <div className="facetrow-values">{body()}</div>
     </div>
   );

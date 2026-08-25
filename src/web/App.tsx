@@ -5,12 +5,13 @@ import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
-import { NotePanel } from './panel/NotePanel.tsx';
+import { NotePanel, whatIsUnsaved } from './panel/NotePanel.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { VocabularyProvider } from './vocabulary.tsx';
 import { TouchedProvider } from './touched.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
+import { Cheatsheet } from './Cheatsheet.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
 import {
   NOTE_PARAM,
@@ -21,10 +22,31 @@ import {
   strippedOfStrays,
   type Patch,
 } from './query.ts';
-import { useSelection } from './selection.ts';
-import { specToPatch } from '../view/intents.ts';
-import type { ViewSpec } from './types.ts';
-import type { Meta, QueryResponse } from './types.ts';
+import { useSelection, type Selection } from './selection.ts';
+import { focusSoon, useCursor, type Cursor } from './cursor.ts';
+import { drawn, first, gridOf, last, stepped, type Grid } from './views/motion.ts';
+import {
+  changeView,
+  clearFilters,
+  setFocus,
+  setGroupBy,
+  setShow,
+  setSort,
+  specToPatch,
+} from '../view/intents.ts';
+import { bind, inField, type Command, type Pending } from '../view/keys.ts';
+import {
+  emptyHistory,
+  inverseOf,
+  recorded,
+  redone,
+  undone,
+  type FacetWrite,
+  type History,
+  type Step,
+} from '../view/undo.ts';
+import type { Edit, ViewSpec } from './types.ts';
+import type { Meta, NoteDTO, QueryResponse } from './types.ts';
 
 /**
  * One route.
@@ -120,25 +142,38 @@ export function App() {
 
   const selection = useSelection(selectedIds, commitSelection);
 
+  const cursor = useCursor();
   /**
-   * Escape clears the selection — the counterpart to the bulk bar's button, and
-   * the only way out that does not involve aiming at anything.
+   * What a keyboard write has to say for itself.
    *
-   * Not while the panel is open: `NotePanel` listens for the same key on the same
-   * window to close itself, and one keystroke should mean one thing. Not while
-   * something is being typed into either, where Escape belongs to the field.
+   * The three views each own a `problem` banner, and none of them is reachable
+   * from here — a keystroke is dispatched by the shell, not by whichever shape
+   * happens to be mounted. So the shell gets one, in the same `banner is-bad`
+   * register, and it carries the neutral reports too: an undo that succeeded and
+   * an undo that had nothing to put back are both things the reader asked for and
+   * should be told about.
    */
-  useEffect(() => {
-    if (!selectedIds.size || openNote) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-      commitSelection(new Set());
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds, openNote, commitSelection]);
+  const [notice, setNotice] = useState<{ tone: 'bad' | 'info'; text: string } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  /**
+   * The undo stacks. A ref, because nothing renders from them — `u` consults them
+   * and they are invisible the rest of the time.
+   */
+  const history = useRef<History>(emptyHistory());
+  /**
+   * What the open panel would lose if it closed now.
+   *
+   * A ref written by the panel, because the key chain is the one thing that
+   * closes it and the chain is here. It was a second `window` listener living in
+   * `NotePanel`, which is why the title editor had to `stopPropagation` on a key
+   * it was already handling.
+   */
+  const panelUnsaved = useRef({ body: false, frontmatter: false });
+  /**
+   * The last values seen on every card, so an undo can put back what a card held
+   * even after the write moved it out of the view. See `KeyState.valuesOf`.
+   */
+  const seenFacets = useRef(new Map<string, NoteDTO['facets']>());
 
   const setOpenNote = useCallback((id: string | null) => {
     const { search: s, location: loc, navigate: go } = nav.current;
@@ -148,6 +183,41 @@ export function App() {
     const q = params.toString();
     go(`${loc}${q ? `?${q}` : ''}`, { replace: !id });
   }, []);
+
+  /**
+   * Opening a card from a view: the cursor goes where the pointer did.
+   *
+   * `step` rather than `jump`, because clicking a card you can see is not a
+   * detour — the trail is for the one move the cursor cannot walk back from,
+   * which is following a reference out of the view. See `cursor.ts`.
+   *
+   * Both dependencies are identity-stable, which the canvas requires absolutely:
+   * a new `onOpen` per render re-seeds React Flow's store and leaves fitView and
+   * every edge permanently pending. `cursor.step` is a `useCallback` with no
+   * deps for exactly this.
+   */
+  const openCard = useCallback(
+    (id: string | null) => {
+      if (id) cursor.step(id);
+      setOpenNote(id);
+    },
+    [cursor.step, setOpenNote],
+  );
+
+  /**
+   * Opening a card from *inside the panel* — a reference chip, a reflink.
+   *
+   * The one move that records, because it is the one you need bringing back
+   * from: the card it lands on may not be drawn in the current view at all, and
+   * `H` is what returns you to the card you were reading.
+   */
+  const followCard = useCallback(
+    (id: string) => {
+      cursor.jump(id);
+      setOpenNote(id);
+    },
+    [cursor.jump, setOpenNote],
+  );
 
   const loadMeta = useCallback(() => {
     api.meta().then(
@@ -209,6 +279,148 @@ export function App() {
   const shape = data?.spec.shape ?? 'board';
   // Kept in a ref so `edit` can stay identity-stable; see `nav` above for why.
   editRef.current = data ? { spec: data.spec, savedSpec: data.savedSpec } : null;
+
+  /**
+   * Where the cursor can go: the payload's cards, in the order the shape draws
+   * them.
+   *
+   * Built here rather than inside a view, because `App` already holds the payload
+   * and `gridOf` is pure — so a view's only job is to *draw* the cursor it is
+   * given, and neither of them has to hand an ordering back up the tree.
+   */
+  const grid = useMemo(() => gridOf(data), [data]);
+
+  // Remember every card the query has shown. Cheap — one entry per note in the
+  // vault at worst — and it is the only record of what a card held once the query
+  // stops returning it.
+  useEffect(() => {
+    if (!data) return;
+    for (const [id, note] of Object.entries(data.notes)) seenFacets.current.set(id, note.facets);
+  }, [data]);
+
+  /**
+   * Everything the key handler reads, in a ref.
+   *
+   * The listener registers once and never again — the same device `nav` above
+   * uses, and for a sharper reason here: re-registering a `keydown` listener on
+   * every render is how a keystroke arriving mid-teardown lands on nothing, which
+   * `Popover` has a comment about already. A ref written during render is also
+   * always current, which a dependency array is not.
+   */
+  /**
+   * Send a step, record it, and say what happened.
+   *
+   * One place, so a write and its inverse are always applied by the same code —
+   * an undo that took a different path to the server than the write it reverses
+   * is an undo that can be wrong in ways the write never was.
+   *
+   * Sequential rather than concurrent: a `set` inverse can be several writes, and
+   * the server gates each note on its mtime, so two requests touching one file in
+   * flight together is a conflict this would be manufacturing for itself.
+   */
+  /**
+   * Fold a write we just made into what we remember about those cards.
+   *
+   * Without this the memory is only as fresh as the last payload, and the case it
+   * exists for is exactly the case where payloads stop coming: a card written out
+   * of the view is never seen again, so the *second* write to it computed its
+   * inverse from the values it had two writes ago. Undo put back the wrong thing —
+   * `planning` where the card had been `on-hold`.
+   */
+  const remember = useCallback((w: FacetWrite) => {
+    for (const id of w.ids) {
+      const facets = { ...(seenFacets.current.get(id) ?? {}) };
+      const held = facets[w.facet] ?? [];
+      facets[w.facet] =
+        w.mode === 'set'
+          ? [...w.values]
+          : w.mode === 'add'
+            ? [...held, ...w.values.filter((v) => !held.includes(v))]
+            : held.filter((v) => !w.values.includes(v));
+      seenFacets.current.set(id, facets);
+    }
+  }, []);
+
+  const applyStep = useCallback(
+    async (writes: FacetWrite[], say: string) => {
+      try {
+        for (const w of writes) {
+          await api.bulk({ ids: w.ids, op: 'facet', facet: w.facet, values: w.values, mode: w.mode });
+          remember(w);
+        }
+        setNotice(null);
+        reload();
+        return true;
+      } catch (err) {
+        setNotice({ tone: 'bad', text: `${say}: ${(err as ApiError).message}` });
+        return false;
+      }
+    },
+    [reload, remember],
+  );
+
+  /** Do a step and put it on the stack. Nothing is recorded that did not land. */
+  const doStep = useCallback(
+    async (step: Step) => {
+      if (await applyStep(step.forward, step.label)) history.current = recorded(history.current, step);
+    },
+    [applyStep],
+  );
+
+  const keys = useRef<KeyState | null>(null);
+  keys.current = {
+    grid,
+    cursor,
+    selection,
+    openNote,
+    setOpenNote,
+    panelUnsaved,
+    facets: meta?.facets ?? {},
+    notes: data?.notes ?? {},
+    valuesOf: (id, facet) =>
+      data?.notes[id]?.facets[facet] ?? seenFacets.current.get(id)?.[facet] ?? [],
+    facetKeys: facetKeysOf(meta),
+    groupedAxis: data?.spec.query.groupBy?.[0] ?? null,
+    notify: setNotice,
+    notice,
+    follow: followCard,
+    edit,
+    spec: data?.spec ?? null,
+    views: data?.views ?? meta?.views ?? [],
+    land: (view) => patch(changeView(data?.spec ?? null, nav.current.search, view)),
+    toggleRail: () => setSidebarCollapsed((c) => !c),
+    helpOpen,
+    setHelpOpen,
+    doStep,
+    history,
+    applyStep,
+  };
+
+  useEffect(() => {
+    /**
+     * The half-typed sequence. A ref rather than state, because nothing renders
+     * from it: `,` and `g` are invisible until the key that completes them, and
+     * putting a prefix in state would re-render the shell twice per binding.
+     */
+    const pending = { at: null as Pending | null };
+    const onKey = (e: KeyboardEvent) => {
+      const s = keys.current;
+      if (!s) return;
+      const out = bind(pending.at, e, {
+        facetKeys: s.facetKeys,
+        groupedAxis: s.groupedAxis,
+        inField: inField(e.target as HTMLElement | null),
+      });
+      pending.at = out.pending;
+      if (!out.handled) return;
+      // Claimed keys are prevented even when they produced nothing — otherwise
+      // the abandoned second key of a `gg` scrolls the page.
+      e.preventDefault();
+      if (out.command) run(out.command, s);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const content = useMemo(() => {
     if (queryError) return <div className="pane-error">{queryError}</div>;
     // First paint only. A change of query holds the previous payload, so nothing
@@ -219,7 +431,7 @@ export function App() {
         <CanvasView
           meta={meta}
           data={data}
-          onOpen={setOpenNote}
+          onOpen={openCard}
           selection={selection}
           reload={reload}
           wire={wire}
@@ -227,9 +439,27 @@ export function App() {
         />
       );
     if (shape === 'table')
-      return <TableView data={data} onOpen={setOpenNote} selection={selection} reload={reload} />;
-    return <BoardView data={data} onOpen={setOpenNote} selection={selection} reload={reload} />;
-  }, [data, meta, queryError, shape, setOpenNote, selection, reload, patch, wire]);
+      return (
+        <TableView
+          data={data}
+          onOpen={openCard}
+          selection={selection}
+          cursor={cursor.id}
+          onCursor={cursor.step}
+          reload={reload}
+        />
+      );
+    return (
+      <BoardView
+        data={data}
+        onOpen={openCard}
+        selection={selection}
+        cursor={cursor.id}
+        onCursor={cursor.step}
+        reload={reload}
+      />
+    );
+  }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire]);
 
   if (gate) {
     return (
@@ -271,21 +501,50 @@ export function App() {
           edit={edit}
           onSwitchVault={switchVault}
           onAddVault={() => setAddingVault(true)}
-          onOpenNote={setOpenNote}
+          onOpenNote={openCard}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
-        <main className="main">{content}</main>
+        <main className="main">
+          {/*
+            What the keyboard did, when it is worth saying.
+
+            It floats over the content rather than sitting above it, for the
+            reason the bulk bar does: a banner that takes height mid-rail makes
+            the whole board jump, and this appears and vanishes several times a
+            minute once the digits are in use. Click to dismiss — the only
+            control it needs, since every message it carries is already history
+            by the time it is read.
+          */}
+          {notice && (
+            <div
+              className={`keynotice banner is-${notice.tone}`}
+              onClick={() => setNotice(null)}
+              // `aria-live` rather than `role="status"`, which says the same
+              // thing: the C4 guard reads the client for any word a vault
+              // declares as a facet, and the seeded vocabulary has one called
+              // `status`. A coincidence, but avoiding it costs nothing and the
+              // guard is worth more than the shorter attribute.
+              aria-live="polite"
+            >
+              {notice.text}
+            </div>
+          )}
+          {content}
+        </main>
+        {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
         {openNote && (
           <NotePanel
-            // Keyed on the card, so switching notes remounts the panel and
-            // every block in it. That is the reset: there is no list of state to
-            // keep in step, and so no list that can fall behind.
-            key={openNote}
+            // Not keyed here any more — `NotePanel` keys the frame on the card it
+            // is *showing*, one level in, so the fetch outlives the reset and
+            // walking `j` down a list turns the page instead of blinking.
             id={openNote}
             meta={meta}
             onClose={() => setOpenNote(null)}
-            onOpen={setOpenNote}
+            onOpen={followCard}
+            onUnsaved={(u) => {
+              panelUnsaved.current = u;
+            }}
           />
         )}
       </div>
@@ -293,4 +552,725 @@ export function App() {
      </TouchedProvider>
     </EnrichmentProvider>
   );
+}
+
+/**
+ * What a keystroke acts on.
+ *
+ * Assembled during render and read from a ref, so the listener can register once
+ * and still see the current payload — see `keys` above for why that matters.
+ */
+interface KeyState {
+  grid: Grid;
+  cursor: Cursor;
+  selection: Selection;
+  openNote: string | null;
+  setOpenNote: (id: string | null) => void;
+  panelUnsaved: { current: { body: boolean; frontmatter: boolean } };
+  /** The vocabulary, for the declared value a digit names and its cardinality. */
+  facets: Meta['facets'];
+  /** The drawn cards. */
+  notes: QueryResponse['notes'];
+  /**
+   * What an axis held before a write, for a card that may no longer be drawn.
+   *
+   * The payload is not enough on its own: a write that moves a card out of the
+   * view removes it from `notes`, and an undo computed from an empty value list
+   * would *clear* the axis rather than put back what was there. So the last
+   * values seen for every card are kept, and this asks the payload first and the
+   * memory second.
+   */
+  valuesOf: (id: string, facet: string) => readonly string[];
+  /** `key:` → facet name. The only place in the client a facet is named (C4). */
+  facetKeys: Record<string, string>;
+  groupedAxis: string | null;
+  notify: (n: { tone: 'bad' | 'info'; text: string } | null) => void;
+  notice: { tone: 'bad' | 'info'; text: string } | null;
+  helpOpen: boolean;
+  setHelpOpen: (open: boolean) => void;
+  /** Go to a note and record it on the trail — what `H` comes back from. */
+  follow: (id: string) => void;
+  /** Edit the view itself, for the traversal `g⇧⟨key⟩` sets and the rail leader. */
+  edit: Edit;
+  /** The resolved view, for the rail rows that toggle rather than replace. */
+  spec: ViewSpec | null;
+  /** Saved views in rail order, which is what `⌥1`–`⌥9` count along. */
+  views: { name: string }[];
+  land: (view: string) => void;
+  toggleRail: () => void;
+  doStep: (step: Step) => void;
+  applyStep: (writes: FacetWrite[], say: string) => Promise<boolean>;
+  history: { current: History };
+}
+
+/**
+ * What a write lands on: the selection if there is one, otherwise the cursor's
+ * card.
+ *
+ * The same rule a drag already follows — "dragging a card that is not part of the
+ * selection moves just that card" — so the pointer and the keyboard cannot
+ * disagree about what a gesture applies to. The panel being open changes nothing,
+ * because the panel *is* the cursor's card.
+ */
+function targets(s: KeyState): string[] {
+  // A selection is narrowed to what is drawn, which is the bulk bar's rule: "3
+  // selected" has to mean three you can see.
+  const picked = [...s.selection.ids].filter((id) => s.notes[id]);
+  if (picked.length) return picked;
+  /**
+   * The cursor is **not** narrowed, and that is the fix for a silent bug.
+   *
+   * It used to be, by analogy with the selection, and the analogy is wrong: a
+   * selection is a set you built out of what was on screen, while the cursor is a
+   * single card you are looking at — and it routinely sits on a card the query
+   * does not return. Two ordinary things put it there. Writing a value the view
+   * filters out (`home` keeps `planning, active`, so setting anything else drops
+   * the card), and following a reference with `g` to a card outside the view.
+   *
+   * In both cases the panel stays open on the card, the reader keeps typing at
+   * it, and every write after the first was discarded without a word.
+   */
+  return s.cursor.id ? [s.cursor.id] : [];
+}
+
+/** The vault's declared keyboard addresses, inverted for lookup. */
+function facetKeysOf(meta: Meta | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, def] of Object.entries(meta?.facets ?? {})) {
+    if (def.key) out[def.key] = name;
+  }
+  return out;
+}
+
+/**
+ * The chips in the panel that lead somewhere, in the order they are drawn.
+ *
+ * A DOM query rather than a data lookup, and deliberately: these are *native
+ * buttons and anchors already*, so walking them means moving real focus, and
+ * `⏎` follows one without anything being bound to it. Building a parallel list
+ * from the payload would mean a second cursor, a second highlight, and a second
+ * chance for the two to disagree about what is on screen — the panel's inbound
+ * rows are capped at three with an `n more`, and the data has no idea.
+ *
+ * `data-nav` rather than the styling class, so a chip can be restyled without
+ * silently leaving the keyboard behind.
+ */
+function navChips(within?: Element | null): HTMLElement[] {
+  const root = within ?? document.querySelector('.panel');
+  return root ? [...root.querySelectorAll<HTMLElement>('[data-nav]')] : [];
+}
+
+/**
+ * A control the leader landed on, driven from the keyboard.
+ *
+ * A `<select>` cannot be opened programmatically — no browser allows it — so
+ * "pick from this list" has to mean stepping its value rather than dropping it
+ * down. React tracks a control's value behind the DOM's back, so the native
+ * setter is used and a `change` is dispatched after it; assigning `.value`
+ * directly is the version of this that appears to work and then silently stops
+ * at the second press.
+ */
+function stepSelect(el: HTMLSelectElement, delta: number): void {
+  const next = el.selectedIndex + (delta > 0 ? 1 : -1);
+  if (next < 0 || next >= el.options.length) return;
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  setter?.call(el, el.options[next]!.value);
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * The chip list an element belongs to, or `null`.
+ *
+ * A row of the panel's facet grid, or the links block — the two places a card
+ * points somewhere else. Scoped to a *row* rather than to the whole panel, so
+ * `j` walks the three children under `Children` and stops, instead of running on
+ * into whatever axis happens to be drawn beneath it.
+ */
+function listOf(el: Element | null): Element | null {
+  if (!el || !(el instanceof HTMLElement) || !el.dataset.nav) return null;
+  return el.closest('[data-navlist]');
+}
+
+/** The row a `g⟨key⟩` addresses: one axis, forward or inverted. */
+function axisRow(facet: string, inverse: boolean): Element | null {
+  const rows = document.querySelectorAll(`.panel [data-axis="${CSS.escape(facet)}"]`);
+  return [...rows].find((r) => r.hasAttribute('data-inverse') === inverse) ?? null;
+}
+
+/**
+ * Doing what a keystroke meant.
+ *
+ * Deliberately the *only* impure half: `bind` decided what the key was and
+ * `motion.ts` decided where it goes, both without a DOM, so what is left here is
+ * the calls. A branch that grows a decision belongs back in one of those two.
+ */
+function run(command: Command, s: KeyState): void {
+  const { grid, cursor, selection, openNote, setOpenNote } = s;
+
+  /**
+   * Move the cursor, and take the open panel with it.
+   *
+   * This is the whole of "flat and non-modal": there is one pointer, so a panel
+   * that is open is showing wherever the cursor is, and `j` flips down the list
+   * without anything having to be kept in step. `useLive` holds the outgoing
+   * payload until the next one lands, so it reads as a page turn rather than a
+   * blink.
+   */
+  const goTo = (next: string | null) => {
+    if (!next) return;
+    cursor.step(next);
+    if (openNote) setOpenNote(next);
+  };
+
+  switch (command.kind) {
+    case 'move': {
+      /**
+       * `j` means "the next one" — of whatever you are currently in.
+       *
+       * Deciding that here rather than in `bind` is the one place a DOM fact
+       * genuinely belongs in the impure half: the question is "where is focus",
+       * which no pure function can answer. `bind` still says only "down".
+       */
+      const at = document.activeElement;
+      const list = listOf(at);
+      if (list) {
+        /**
+         * Which key walks a list, and which steps to the next one, follows how the
+         * list is *drawn*.
+         *
+         * A facet's values are chips laid across the row, and the axes stack down
+         * the panel — so `h`/`l` walk the values and `j`/`k` change axis. A link
+         * list and an inbound list are full-width rows stacked downward, so there
+         * `j`/`k` walk and `h`/`l` step between lists. One rule, read off the
+         * layout, rather than a convention the reader has to hold per surface.
+         *
+         * It is also what the board already says with the same two keys: `j` goes
+         * down what is stacked and `l` goes across what is laid out.
+         */
+        const flow = (list as HTMLElement).dataset.navFlow ?? 'column';
+        const walks = flow === 'row' ? 'column' : 'row';
+        if (command.along === walks) return run({ kind: 'listMove', delta: command.delta }, s);
+        /**
+         * The next list that has something to land on.
+         *
+         * Skipping rather than stopping: a row can draw nothing walkable — an axis
+         * with no declared values and no new-value field, or one whose only
+         * control is a field the walk deliberately leaves out — and halting in
+         * front of it reads as the keyboard breaking rather than as an empty row.
+         * The board does the same thing with an empty column.
+         */
+        const lists = [...document.querySelectorAll<HTMLElement>('.panel [data-navlist]')];
+        const step = command.delta > 0 ? 1 : -1;
+        for (let i = lists.indexOf(list as HTMLElement) + step; i >= 0 && i < lists.length; i += step) {
+          const landing = lists[i]!.querySelector<HTMLElement>('[data-nav]');
+          if (landing) return landing.focus();
+        }
+        return;
+      }
+      // A rail select is a list too, just one the browser insists on drawing.
+      if (command.along === 'row' && at instanceof HTMLSelectElement && at.dataset.rail) {
+        return stepSelect(at, command.delta);
+      }
+      return goTo(stepped(grid, cursor.id, command.along, command.delta));
+    }
+
+    /**
+     * A step within a list, which is not always a step onto something.
+     *
+     * The panel caps a link list and an inbound list at three and the filter rail
+     * caps a facet at eight, so "the next one" is routinely behind an `n more` —
+     * and a walk that treated that button as scenery either stopped dead (the
+     * links, where the remainder is at the end) or *skipped the rest of the axis*
+     * (the rail, where the remainder sits between the eighth value and the next
+     * heading). Both were the walk obeying a rendering decision.
+     *
+     * So a remainder is a step like any other, and taking it opens the list and
+     * carries on into what appears. Forward only: a list growing underneath you
+     * on the way back up is not the same gesture, so going the other way steps
+     * over it to the previous real item.
+     */
+    case 'listMove': {
+      const list = listOf(document.activeElement);
+      if (!list) return;
+      const current = document.activeElement as HTMLElement;
+      const steps = [...list.querySelectorAll<HTMLElement>('[data-nav], [data-nav-more]')];
+      const at = steps.indexOf(current);
+      if (at === -1) return;
+
+      if (command.delta < 0) {
+        for (let i = at - 1; i >= 0; i--) {
+          if (steps[i]!.dataset.navMore === undefined) return steps[i]!.focus();
+        }
+        // The top. It stops rather than wrapping: a list that cycles forever
+        // gives no signal you have seen all of it.
+        return;
+      }
+
+      const next = steps[at + 1];
+      if (!next) return;
+      if (next.dataset.navMore === undefined) return next.focus();
+
+      /**
+       * Open it, then land on the first of the items that were hidden.
+       *
+       * The `grown` test is load-bearing and was missing: `focusSoon` tries
+       * immediately, and immediately is *before* React has re-rendered — so "the
+       * item after the one I am on" still resolves to whatever followed the
+       * truncated list. At the end of a link list that is nothing, and the retry
+       * did the right thing by accident. Mid-rail it is the next axis's heading,
+       * which is a perfectly real element, so it focused that and never retried:
+       * the list expanded and the cursor jumped straight over the eight values it
+       * had just revealed.
+       */
+      const before = list.querySelectorAll('[data-nav]').length;
+      next.click();
+      focusSoon(() => {
+        const items = [...list.querySelectorAll<HTMLElement>('[data-nav]')];
+        if (items.length <= before) return null;
+        const i = items.indexOf(current);
+        return i >= 0 ? items[i + 1] : null;
+      });
+      return;
+    }
+
+    /**
+     * Follow one axis out of this card.
+     *
+     * The single-value case is the common one and is answered from the payload,
+     * so it works with the panel shut: one note, go there. It is a `jump`, which
+     * is what puts it on the trail and makes `H` mean something at last.
+     *
+     * Several values is where the chips earn their place — there is a choice to
+     * make and the panel is already drawing it, so focus lands on the first and
+     * `j`/`k` walk the rest.
+     */
+    case 'gotoRef': {
+      const def = s.facets[command.facet];
+      /**
+       * The open panel is asked first, because it is the only thing here that
+       * actually knows.
+       *
+       * It draws from the note's own detail; the query payload is a different
+       * question and routinely does not contain this card at all — you have just
+       * written it out of the view, or followed a reference into one. Reading the
+       * payload alone is what made `g r` report "nothing on Project" while the
+       * project sat on screen three rows below the cursor.
+       *
+       * Clicking the chip rather than extracting an id from it: the chip already
+       * knows which note it is and already goes there through the trail.
+       */
+      const chips = navChips(axisRow(command.facet, false));
+      if (chips.length === 1) return chips[0]!.click();
+      if (chips.length > 1) return chips[0]!.focus();
+
+      // No panel — so no chips to read. What the query knows, and failing that
+      // what it knew when it last drew this card.
+      const id = cursor.id;
+      const held = id ? s.valuesOf(id, command.facet) : [];
+      if (!held.length) {
+        return s.notify({ tone: 'info', text: `nothing on ${def?.label ?? command.facet}` });
+      }
+      if (held.length === 1) return s.follow(held[0]!);
+      // Several, and nothing drawn to choose between them. Opening the card is
+      // the honest half-step: the choice is on screen and one more `g` makes it.
+      if (id) s.setOpenNote(id);
+      return s.notify({ tone: 'info', text: `${def?.label ?? command.facet} names ${held.length}` });
+    }
+
+    /**
+     * The other end of the axis.
+     *
+     * A **view focus** rather than a jump, because the counts are different in
+     * kind: forward is one container, backward is a project's twenty children. The
+     * traversal already exists and answers it exactly — `focus` walks a reference
+     * facet — so this reshapes the query, `j`/`k` walk the result as ordinary
+     * cards, and the rail's Focus row shows what happened with a ✕ to undo it.
+     *
+     * The alternative was a chip list, and it is worse twice: the panel caps an
+     * inbound list at three, and a list you page through cannot be filtered,
+     * sorted or grouped.
+     */
+    case 'gotoInverse': {
+      const id = cursor.id;
+      if (!id) return;
+      const def = s.facets[command.facet];
+      /**
+       * The panel draws this axis's other end, so walk it.
+       *
+       * Reshaping the view is the right answer for a project with twenty children
+       * and the wrong one when the three you want are already on screen under
+       * `Children` — and the panel only draws the row when there is something in
+       * it, which is the same question the traversal would be asked. So the row
+       * wins when it exists, and the traversal is what happens when there is no
+       * panel to read.
+       */
+      const chips = navChips(axisRow(command.facet, true));
+      if (chips.length) return chips[0]!.focus();
+      s.edit((spec) => setFocus(spec, { id, via: command.facet, dir: 'in' }));
+      return s.notify({
+        tone: 'info',
+        text: `showing what names this card on ${def?.label ?? command.facet}`,
+      });
+    }
+
+    /**
+     * The rail, in two keystrokes.
+     *
+     * Two kinds of row, and the difference is whether there is anything to choose.
+     * `clear` and `collapse` are *acts* — there is one thing they do, so the
+     * leader does it rather than parking focus on a button you then have to press.
+     * The rest are choices, so the leader focuses the control and the vault's own
+     * `key:` lets you skip even that: `,g` then an axis key groups by it outright,
+     * with focusing the select as the fallback for an axis that declares no
+     * letter.
+     */
+    case 'rail': {
+      const { control, facet } = command;
+      if (control === 'clear') return s.edit(clearFilters);
+      /**
+       * The direction alone, without touching what is sorted by.
+       *
+       * `,o` then the same axis twice also flips it, but only while you are
+       * choosing an axis — this is the arrow beside the select, which is a
+       * separate control because "sort by this" and "the other way round" are
+       * separate questions.
+       */
+      if (control === 'sortDir') {
+        const [by = '', dir = 'asc'] = (s.spec?.query.sort?.[0] ?? '').split(':');
+        if (!by) return s.notify({ tone: 'info', text: 'nothing is sorted' });
+        return s.edit((spec) => setSort(spec, by, dir === 'asc' ? 'desc' : 'asc'));
+      }
+      if (control === 'collapse') return s.toggleRail();
+      /**
+       * The filter rail has no single control to focus — it *is* the list — so
+       * the leader steps into it rather than onto it. An axis you have already
+       * opened is where you want to be, so focus lands on the first *value* if
+       * there is one and on the first axis head otherwise.
+       */
+      if (control === 'filter') {
+        const rail = document.querySelector('[data-navlist="filter"]');
+        const items = navChips(rail);
+        const target = items.find((i) => i.dataset.nav === 'value') ?? items[0];
+        target?.focus();
+        return;
+      }
+      if (facet) {
+        if (control === 'group') return s.edit((spec) => setGroupBy(spec, 0, facet));
+        if (control === 'thenBy') return s.edit((spec) => setGroupBy(spec, 1, facet));
+        if (control === 'sort') {
+          // Same axis again flips the direction, which is what the ↕ button beside
+          // the select does — a second `,o p` should not be a no-op.
+          const [key = '', dir = 'asc'] = (s.spec?.query.sort?.[0] ?? '').split(':');
+          return s.edit((spec) =>
+            setSort(spec, facet, key === facet && dir === 'asc' ? 'desc' : 'asc'),
+          );
+        }
+        if (control === 'show') {
+          const shown = s.spec?.show ?? [];
+          return s.edit((spec) =>
+            setShow(spec, shown.includes(facet) ? shown.filter((f) => f !== facet) : [...shown, facet]),
+          );
+        }
+      }
+      const el = document.querySelector<HTMLElement>(`[data-rail="${control}"]`);
+      if (!el) return;
+      el.focus();
+      /**
+       * A popover opens, rather than waiting to be pressed.
+       *
+       * The leader's whole job is to get you to the choice, and a focused button
+       * you then have to press Space on is the step it was supposed to remove —
+       * which is exactly what a select does *not* need, since its list is already
+       * the thing under the cursor. So the two controls diverge here and agree
+       * everywhere after: `j`/`k` walk whichever list is now in front of you.
+       *
+       * Clicking rather than reaching for the state: `PopoverButton` owns its own
+       * `open`, and prising that out to be driven from here would mean a ref for
+       * every popover in the app to save one synthetic event.
+       */
+      /**
+       * `aria-expanded` is the test, and it does two jobs.
+       *
+       * It tells a popover button from a plain one — `,w` lands on a pill that
+       * opens a note when a focus is already set, and clicking that would go
+       * somewhere rather than offer a choice. And it makes the leader
+       * *idempotent*: pressing `,v` twice should not close the list it just
+       * opened, which is what a bare `click()` did.
+       */
+      if (!el.hasAttribute('aria-expanded')) return;
+      if (el.getAttribute('aria-expanded') === 'false') el.click();
+      // Focusing happens whether or not the click did, so the leader means "get
+      // me into this list" rather than "toggle this list".
+      focusSoon(() => document.querySelector<HTMLElement>('.popover [data-nav]'));
+      return;
+    }
+
+    /**
+     * The nth saved view.
+     *
+     * Counted along the rail's own order, which is the order the popover lists
+     * them in — so the number is something you can read off the screen rather
+     * than memorise. A `key:` in the view file is the follow-up that would make
+     * it stable as views are added; until then the popover is the reference.
+     */
+    case 'view': {
+      const view = s.views[command.ordinal - 1];
+      if (!view) return s.notify({ tone: 'info', text: `no ${command.ordinal}th saved view` });
+      return s.land(view.name);
+    }
+
+    /**
+     * A region of the open card.
+     *
+     * Everything here needs a panel, so a shut one is opened rather than
+     * refused — the reader asked to be somewhere in the card, and the honest
+     * half-step is to put the card on screen. `focusSoon` covers the gap while it
+     * loads.
+     */
+    case 'gotoRegion': {
+      if (!openNote && cursor.id) s.setOpenNote(cursor.id);
+
+      if (command.region === 'links' || command.region === 'facets') {
+        const within = command.region === 'links' ? '[data-navlist="links"]' : '.panel-tier .facetgrid';
+        return focusSoon(() => document.querySelector<HTMLElement>(`${within} [data-nav]`), 8);
+      }
+
+      /**
+       * The facets door, opened and stepped into.
+       *
+       * The same two moves the rail leader makes on a popover, for the same
+       * reason: reaching a list of choices and then having to press one more key
+       * to be *in* it is the step the shortcut was supposed to remove.
+       */
+      if (command.region === 'addFacet') {
+        return focusSoon(() => {
+          const door = document.querySelector<HTMLElement>('.panel [data-nav="add"]');
+          if (!door) return null;
+          if (door.getAttribute('aria-expanded') === 'false') {
+            door.click();
+            return null;
+          }
+          return document.querySelector<HTMLElement>('.popover [data-nav]');
+        }, 10);
+      }
+
+      /**
+       * The two document regions open their editor first.
+       *
+       * "Go to the body" can only mean *edit* it: reading needs no cursor, and the
+       * body is a rendered block until the toggle is pressed. The toggle is a
+       * real button already, so this presses it rather than reaching into the
+       * block's state — and it presses it only when it is off, so a second `gc`
+       * puts the cursor back in the editor instead of closing it and asking
+       * whether you meant to discard.
+       */
+      const section = `[data-section="${command.region}"]`;
+      return focusSoon(() => {
+        const host = document.querySelector<HTMLElement>(section);
+        if (!host) return null;
+        const toggle = host.querySelector<HTMLElement>('.section-do button');
+        if (toggle?.getAttribute('aria-pressed') === 'false') {
+          toggle.click();
+          return null;
+        }
+        return host.querySelector<HTMLElement>('.cm-content');
+      }, 10);
+    }
+
+    case 'moveTo':
+      return goTo(command.end === 'first' ? first(grid) : last(grid));
+
+    case 'trail': {
+      // `travel` reports where it landed rather than whether it moved, because
+      // the panel has to be told and `cursor.id` is a render behind.
+      const next = cursor.travel(command.delta);
+      if (next && openNote) setOpenNote(next);
+      return;
+    }
+
+    case 'open': {
+      /**
+       * Inside a chip list, `⏎` follows the chip.
+       *
+       * It has to be said explicitly because the stroke was already claimed and
+       * `preventDefault`ed by the time we get here — so the browser's own "Enter
+       * activates a button" never runs. `.click()` on an anchor follows its href,
+       * which is what a link chip wants.
+       */
+      const focused = document.activeElement as HTMLElement | null;
+      if (listOf(focused)) {
+        focused!.click();
+        // A nav item that opens a panel is a step *into* it, not a destination —
+        // the same rule the rail leader follows, and the reason `aria-expanded`
+        // is the test there too.
+        if (focused!.hasAttribute('aria-expanded')) {
+          focusSoon(() => document.querySelector<HTMLElement>('.popover [data-nav]'));
+        }
+        return;
+      }
+      const id = cursor.id ?? first(grid);
+      if (!id) return;
+      cursor.step(id);
+      setOpenNote(id);
+      return;
+    }
+
+    /**
+     * Escape, until the chain lands.
+     *
+     * `NotePanel` keeps its own listener because closing runs an unsaved-changes
+     * prompt, so this stands aside while the panel is open — which is exactly
+     * what the effect this replaced did, for the same stated reason: one
+     * keystroke should mean one thing.
+     */
+    case 'escape':
+      // The first link of the chain that stage 7 finishes: the sheet is the
+      // topmost thing on screen, so it is the first thing Escape takes off it.
+      if (s.helpOpen) return s.setHelpOpen(false);
+      /**
+       * Then whatever control focus is *in*, as distinct from what is on screen.
+       *
+       * A chip list and a rail control are the same case: the reader stepped into
+       * something, and Escape steps out. The rail half was missing, and it was the
+       * worse of the two — after `,s` the shape select kept focus, so `j` and `k`
+       * went on changing the shape and there was no way back to the cards at all
+       * short of clicking one.
+       */
+      const inControl = listOf(document.activeElement) ||
+        (document.activeElement as HTMLElement | null)?.closest?.('[data-rail]');
+      if (inControl) {
+        const card = cursor.id
+          ? document.querySelector<HTMLElement>(`[data-card="${CSS.escape(cursor.id)}"]`)
+          : null;
+        if (card) card.focus();
+        else (document.activeElement as HTMLElement).blur();
+        return;
+      }
+      if (s.notice) return s.notify(null);
+      /**
+       * Then the panel, with the prompt that used to live inside it.
+       *
+       * Ordered above the selection because it is what is in front of you: a
+       * card open over a board of twelve selected cards should close before the
+       * twelve are let go, and one keystroke should undo one thing.
+       */
+      if (openNote) {
+        const u = s.panelUnsaved.current;
+        if ((u.body || u.frontmatter) && !confirm(`${whatIsUnsaved(u)} unsaved changes. Close anyway?`)) {
+          return;
+        }
+        return setOpenNote(null);
+      }
+      if (selection.ids.size) selection.clear();
+      return;
+
+    case 'help':
+      return s.setHelpOpen(!s.helpOpen);
+
+    /**
+     * The rail, reached by attribute.
+     *
+     * A `querySelector` from the dispatcher rather than a ref threaded through
+     * `Sidebar` into `SearchBox`: the dispatcher is already this file's impure
+     * half, and the alternative is three props for one keystroke. It is also the
+     * shape the rail leader wants — eight more controls, eight more attributes,
+     * and no new mechanism.
+     */
+    case 'search': {
+      const field = document.querySelector<HTMLElement>('[data-rail="search"]');
+      field?.focus();
+      return;
+    }
+
+    case 'select': {
+      const rows = drawn(grid);
+      if (command.how === 'all') return selection.replace(new Set(rows));
+      const id = cursor.id;
+      if (!id) return;
+      if (command.how === 'toggle') return selection.toggle(id, true, rows.indexOf(id));
+      /**
+       * Extending moves the cursor and takes the row with it, which is what makes
+       * `x J J J` read as one gesture. The anchor is whatever `x` last set, so a
+       * run grows from where you started rather than from where you are.
+       */
+      const next = stepped(grid, id, 'row', command.delta);
+      if (!next) return;
+      selection.extend(rows, rows.indexOf(next));
+      return goTo(next);
+    }
+
+    /**
+     * The nth declared value of an axis — the map's one-keystroke write.
+     *
+     * **Declared** order rather than the column order on screen, which is the
+     * decision that makes a digit mean the same thing everywhere. The two agree
+     * in the ordinary case, because a board keeps an empty declared column; where
+     * they part — a filtered-out column, a value the vocabulary does not declare —
+     * the stable answer is the vocabulary's, so `2` is the same write whatever the
+     * current filter happens to be hiding.
+     *
+     * The mode is the panel's rule, which is the rule this app has always
+     * followed: **the type picks the control and the cardinality picks the verb.**
+     * One slot can only be replaced, so a single-valued axis is `set`; an axis
+     * that holds several is `add`, exactly as `FacetEditor.take` does for a value
+     * that is not on the card yet. It is deliberately never `remove` — a digit
+     * cannot destroy, and `0` is the gesture that clears.
+     */
+    case 'setAxisValue': {
+      const def = s.facets[command.facet];
+      if (!def) return;
+      const ids = targets(s);
+      if (!ids.length) return;
+
+      const clearing = command.ordinal === 0;
+      const value = clearing ? null : def.values[command.ordinal - 1];
+      if (!clearing && !value) {
+        return s.notify({
+          tone: 'info',
+          text: `${def.label} has no ${command.ordinal}${ordinalSuffix(command.ordinal)} value`,
+        });
+      }
+
+      const write: FacetWrite = {
+        ids,
+        facet: command.facet,
+        values: value ? [value] : [],
+        mode: clearing || def.single ? 'set' : 'add',
+      };
+      const back = inverseOf(write, (id) => s.valuesOf(id, command.facet));
+      return s.doStep({
+        forward: [write],
+        back,
+        label: clearing
+          ? `cleared ${def.label}`
+          : `set ${def.label} to ${value} on ${ids.length === 1 ? 'a card' : `${ids.length} cards`}`,
+      });
+    }
+
+    case 'undo':
+    case 'redo': {
+      const move = command.kind === 'undo' ? undone(s.history.current) : redone(s.history.current);
+      if (!move) {
+        return s.notify({ tone: 'info', text: `nothing to ${command.kind}` });
+      }
+      const writes = command.kind === 'undo' ? move.step.back : move.step.forward;
+      if (!writes.length) {
+        // Recorded but not reversible. Saying so beats silently undoing the step
+        // *before* it, which the reader has long since stopped thinking about.
+        return s.notify({ tone: 'info', text: `${move.step.label} cannot be undone` });
+      }
+      // The stacks move whether or not the request lands: a failed undo leaves
+      // the vault as it was, which is where the stack already says it is.
+      s.history.current = move.history;
+      void s.applyStep(writes, command.kind).then((ok) => {
+        if (ok) s.notify({ tone: 'info', text: `${command.kind}: ${move.step.label}` });
+      });
+      return;
+    }
+  }
+}
+
+/** `1st`, `2nd`, `3rd`, `4th` — for a message a reader reads once and dismisses. */
+function ordinalSuffix(n: number): string {
+  return n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
 }

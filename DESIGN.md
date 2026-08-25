@@ -603,6 +603,25 @@ has.
 **The Dashed Means Absent Rule.** Dashed is reserved for a container whose value does not exist. It
 never means "draft", "disabled" or "optional".
 
+**The Wash And Ring Rule.** Two things can be true of a note at once — *you picked it out* and *the
+keyboard is here* — and they are drawn in the same accent, so the shape is what separates them. A
+**wash** (`accent-soft` behind the content) means selected. A **ring** (2px `accent` at
+`outline-offset: 1px`) means the cursor. Never the reverse, and never the same treatment for both.
+
+Half of this the system already said: `::selection` is `accent-soft` because a wash "is exactly what
+a selection is", and a selected table row has always been a wash with an accent edge. The board was
+the one surface disagreeing — it drew a selected card as a ring, which is also what `:focus-visible`
+draws, so the two states most needing to be told apart were identical until a keyboard cursor existed
+to collide with it.
+
+Dashed was the obvious third treatment and is unavailable: see the rule above it, live at four sites.
+A dashed ring reads as *this card is missing something*.
+
+The cost is per element. A card takes an `outline`; a `<tr>` cannot — an outline on a row is drawn
+per cell in most engines and a border shifts the column grid — so the table assembles the ring from
+inset shadows, two on every cell and a third on the ends. Four declarations for what a card gets in
+one, and the reason to keep the vocabulary to exactly two.
+
 ## Components
 
 Every control is **precise and unadorned**: a hairline border, a `surface-2` fill, `ink-2` text, and

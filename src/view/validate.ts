@@ -3,6 +3,7 @@ import { HUES, isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
 import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
+import { RESERVED as RESERVED_KEYS, isKeyShaped, isReserved } from './keys.ts';
 import { VIEW_KEYS, type ViewSpec } from './spec.ts';
 
 /**
@@ -61,8 +62,31 @@ export function validateVocabulary(
   file: string,
 ): Issue[] {
   const issues: Issue[] = [];
+  /**
+   * Which axis claimed each letter, so the second claimant can be named.
+   *
+   * Cross-facet, so it cannot live in `inert` with the rest of the key checks: a
+   * declaration is only wrong here *relative to another one*, and `bind` resolves
+   * a letter through a single map — so two claims mean one axis silently wins by
+   * declaration order and the other is unreachable. Exactly the shape of failure
+   * this function is for.
+   */
+  const claimed = new Map<string, string>();
   for (const [name, def] of Object.entries(declared)) {
     if (def && typeof def === 'object') issues.push(...inert(name, def as Record<string, unknown>, file));
+    const key = (def as Record<string, unknown> | null)?.key;
+    if (typeof key === 'string' && isKeyShaped(key.toLowerCase())) {
+      const lower = key.toLowerCase();
+      const first = claimed.get(lower);
+      if (first) {
+        issues.push({
+          severity: 'error',
+          file,
+          field: name,
+          message: `"${name}" and "${first}" both ask for key "${lower}" — one letter, one axis`,
+        });
+      } else claimed.set(lower, name);
+    }
     if (RESERVED.includes(name)) {
       issues.push({
         severity: 'error',
@@ -108,6 +132,26 @@ function inert(name: string, def: Record<string, unknown>, file: string): Issue[
 
   if (typeof def.inverse === 'string' && def.type !== 'ref') {
     at(`"${name}" declares an inverse but is not a reference facet — nothing points back along it`);
+  }
+  /**
+   * A keyboard address that cannot be typed, or that the map already owns.
+   *
+   * Errors rather than warnings, on this check's own standing argument: both
+   * failures are silent. A key of `too long` is simply never matched, and a key
+   * of `j` is *shadowed* — `bind` reads the map before the vocabulary, on purpose,
+   * so the vault's declaration would sit there working everywhere except where it
+   * matters. Which is the definition of the thing this function exists to catch.
+   */
+  if (def.key !== undefined) {
+    const key = String(def.key).toLowerCase();
+    if (!isKeyShaped(key)) {
+      at(`"${name}" asks for key "${def.key}" — a key is one letter, a to z`);
+    } else if (isReserved(key)) {
+      at(
+        `"${name}" asks for key "${key}", which the keyboard already uses — ` +
+          `${RESERVED_KEYS.join(' ')} are taken, in both cases`,
+      );
+    }
   }
   for (const hue of [def.hue, ...bucketHues(def)]) {
     if (typeof hue === 'string' && hue !== 'none' && !HUES.includes(hue)) {

@@ -118,6 +118,9 @@ export function Popover({
     <div
       ref={panel}
       className={`popover ${className}`}
+      /* Every popover in the app is a list of choices, so this is the one place
+         it has to say so — `j`/`k` walk whatever `render` put inside. */
+      data-navlist="popover"
       style={{
         top: rect?.top ?? -9999,
         left: rect?.left ?? -9999,
@@ -144,6 +147,8 @@ export function PopoverButton({
   minWidth,
   fitContent,
   panelClassName,
+  rail,
+  nav,
   render,
 }: {
   label: ReactNode;
@@ -152,6 +157,16 @@ export function PopoverButton({
   minWidth?: number;
   fitContent?: boolean;
   panelClassName?: string;
+  /**
+   * The rail row this button is, so `,`-plus-a-letter can focus it.
+   *
+   * An attribute rather than a ref threaded up through `Sidebar`: there are eight
+   * of these across four files, and eight refs to reach eight controls is the
+   * kind of plumbing that gets one entry out of step and nobody notices.
+   */
+  rail?: string;
+  /** Mark the button as a step in a walk — see `data-nav`. */
+  nav?: string;
   render: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -161,6 +176,12 @@ export function PopoverButton({
       <button
         ref={ref}
         type="button"
+        data-rail={rail}
+        data-nav={nav}
+        /* A button that opens a panel says so — which a screen reader needed
+           anyway, and which is also the honest way for the key chain to ask
+           "is this already open" instead of reading a styling class. */
+        aria-expanded={open}
         title={title}
         className={`popbtn ${className} ${open ? 'is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}

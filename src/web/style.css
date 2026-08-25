@@ -2226,6 +2226,10 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .banner.is-bad { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .banner.is-conflict { border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+/* The third tone: the app reporting what it did, rather than what went wrong.
+   `accent` because that is the app's own voice — an undo confirmation is the one
+   kind of banner that is not about the vault at all. */
+.banner.is-info { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 /*
  * The one animation in this app, and the whole of it.
  *
@@ -2333,8 +2337,54 @@ textarea { resize: vertical; font-family: inherit; }
 /* board editing */
 
 .column.is-over { border-color: var(--accent); background: var(--accent-soft); }
-/* `:where()`: see the hover rule above — a selection outranked the state stripe. */
-:where(.column-card.is-selected) .cardface { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/*
+ * A wash means selected; a ring means the cursor is here.
+ *
+ * The board used to draw a selected card as an accent *ring* — which is what
+ * `:focus-visible` draws, at the same width in the same colour. That was fine
+ * while nothing else on a card could be lit, and it stops being fine the moment
+ * a keyboard cursor exists: the two states most needing to be told apart were
+ * drawing the same thing.
+ *
+ * The split is the system's own, and the board was the surface breaking it.
+ * `::selection` is `accent-soft` with the note that it "is exactly what a
+ * selection is: a wash behind text that keeps its own ink", and a selected table
+ * row has always been `accent-soft` plus an accent edge. So the board moves to
+ * the wash the other two already use and the ring is left to mean one thing.
+ *
+ * Not dashed for the cursor, which was the first idea: The Dashed Means Absent
+ * Rule reserves dashed for a container whose value does not exist, at four live
+ * sites, so a dashed ring would read as *this card is missing something*.
+ *
+ * `:where()`: see the hover rule above — a selection must not repaint a state
+ * stripe.
+ */
+:where(.column-card.is-selected) .cardface {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/*
+ * The cursor's own ring, drawn rather than borrowed from `:focus-visible`.
+ *
+ * The tile *is* focused — `useCursorFocus` puts real DOM focus on it — so the
+ * global ring appears whenever the cursor arrived by keyboard. It does not
+ * appear when the cursor arrived by *click*, because `:focus-visible` exists
+ * precisely to suppress that, and a cursor you cannot see after clicking is a
+ * cursor you have to guess at before pressing `j`. So the state is drawn from
+ * the class, and the two agree by using the same two declarations.
+ */
+.column-card.is-cursor .cardface {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* The tile itself never takes the browser ring: the face inside it is what is
+   drawn, and two rings a pixel apart is a doubled edge. */
+.column-card:focus-visible {
+  outline: none;
+}
+
 .column-card.is-dragging { opacity: 0.4; }
 .column-head .btn.tiny { margin-left: 4px; }
 
@@ -2474,16 +2524,27 @@ textarea { resize: vertical; font-family: inherit; }
   font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.3;
+}
+
+/*
+ * The rename target is the text, not the heading.
+ *
+ * The wash and the hit area moved down with it. They were on the `h2`, which also
+ * contains the project mark — so hovering the *glyph*, which is a button doing
+ * something else entirely, lit the whole row as though it were the rename. Now
+ * the two controls in this row light independently, which is what they are.
+ *
+ * `:focus-visible` needs no rule here: the span is a real tab stop now, so the
+ * app's single accent ring finds it.
+ */
+.panel-title-text {
+  overflow-wrap: anywhere;
   cursor: text;
   border-radius: var(--radius-md);
   padding: 1px 4px;
   margin-left: -4px;
 }
-.panel-title:hover { background: var(--surface-2); }
-
-.panel-title-text {
-  overflow-wrap: anywhere;
-}
+.panel-title-text:hover { background: var(--surface-2); }
 
 /*
  * In the panel the mark is also the control that changes it — a record is a
@@ -3491,6 +3552,40 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
+/*
+ * The cursor's row, drawn as the ring a `<tr>` cannot take.
+ *
+ * `outline` on a row is drawn per cell in most engines and a `border` shifts the
+ * column grid — the reason the selected row is a wash in the first place, stated
+ * above. So the ring is assembled from insets: every cell draws the top and
+ * bottom edge, and the first and last add the ends. Four declarations for what a
+ * card gets in one, which is the cost of the element.
+ *
+ * It composes with the selection rather than replacing it: a row can be both the
+ * cursor and selected, and it should say so — the wash underneath, the ring
+ * around it, exactly as on a board.
+ */
+.table tbody tr.is-cursor > td {
+  box-shadow: inset 0 2px 0 -1px var(--accent), inset 0 -2px 0 -1px var(--accent);
+}
+.table tbody tr.is-cursor > td:first-child {
+  box-shadow:
+    inset 0 2px 0 -1px var(--accent),
+    inset 0 -2px 0 -1px var(--accent),
+    inset 2px 0 0 0 var(--accent);
+}
+.table tbody tr.is-cursor > td:last-child {
+  box-shadow:
+    inset 0 2px 0 -1px var(--accent),
+    inset 0 -2px 0 -1px var(--accent),
+    inset -2px 0 0 0 var(--accent);
+}
+/* The row carries the treatment; the browser ring on top of it would be a second
+   edge one pixel out. */
+.table tbody tr:focus-visible {
+  outline: none;
+}
+
 /* Pane-level, because a `<table>` with a `thead` and no rows offers no
    sub-container to indent into — the one reason the old borrowed `.pane-loading`
    had the right padding and the wrong voice. */
@@ -3690,6 +3785,40 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   z-index: 6;
 }
 
+/*
+ * What the keyboard just did.
+ *
+ * Floating for the bulk bar's reason and one more: this appears and vanishes
+ * several times a minute once the digits are in use, and a banner that takes
+ * height would make the board jump on every keystroke. It sits at the *top*
+ * rather than the bottom so it cannot land under the bulk bar, which is the one
+ * other thing floating over the same content — and the two are routinely up at
+ * once, since a bulk write is exactly when a selection exists.
+ */
+.keynotice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  cursor: pointer;
+  max-width: min(560px, calc(100% - 24px));
+  box-shadow: 0 6px 20px rgba(20, 15, 35, 0.16);
+  /*
+   * Opaque, which an in-flow banner does not have to be.
+   *
+   * The tones are `color-mix(… , transparent)` — a tint over whatever the banner
+   * is sitting on, which is right in the panel and in a view, and unreadable
+   * floating over a column of cards. So the two tones are re-mixed over
+   * `surface-2` here. Same specificity as `.banner.is-bad`, declared later, so
+   * these win; keeping the mix percentages close means the floating banner and
+   * the in-flow one still read as the same object.
+   */
+  background: var(--surface-2);
+}
+.keynotice.is-bad { background: color-mix(in srgb, var(--bad) 14%, var(--surface-2)); }
+.keynotice.is-info { background: color-mix(in srgb, var(--accent) 10%, var(--surface-2)); }
+
 /* Where a reordered card will land. Only rendered on a saved view, since that is
    the only place card order can live. */
 .column-card.is-over-top {
@@ -3754,4 +3883,273 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   font-size: var(--text-xs);
   color: var(--bad);
   padding: 2px 2px 0;
+}
+
+/*
+ * The cheatsheet.
+ *
+ * A dialog rather than a rail section, because it is read once and dismissed:
+ * it answers "what can I press", and once you know, you never open it again.
+ * That is also why it is dense — three columns of pairs, not a scrolling list —
+ * and why it says its own escape at the foot.
+ *
+ * It shares `.scrim` with the panel, which is the one place the two agree: both
+ * are things drawn over the board that a click outside removes.
+ */
+/*
+ * Above everything, including the note panel.
+ *
+ * The panel is `21` and this used to be `21` too, so the one that rendered later
+ * won — and that was the panel, which meant pressing `?` while reading a card
+ * drew the sheet *behind* it. There is nothing this can be opened from that it
+ * should not cover: it is the map you reach for when you have lost your place.
+ */
+.cheatsheet-scrim {
+  z-index: 39;
+}
+.cheatsheet {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  width: min(940px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 16px 20px 10px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 18px 48px rgba(20, 15, 35, 0.28);
+}
+
+/*
+ * Multi-column, not grid.
+ *
+ * A grid puts each section in a *cell*, so every row of cells is as tall as the
+ * tallest section in it and the short ones leave holes — five sections of 3 to 13
+ * rows made a sheet half air, which is what pushed it past the fold. Columns flow
+ * instead: a section takes the height it needs and the next one starts under it.
+ *
+ * `break-inside: avoid` keeps a section whole. That makes the columns a little
+ * uneven, which is the right trade — a heading in one column and its rows in the
+ * next is worse than a ragged bottom edge.
+ *
+ * The whole point is that this fits without scrolling: it is read at a glance and
+ * dismissed, and a cheatsheet you have to scroll is one you close and guess
+ * instead. `overflow: auto` on the frame stays as a floor for a very short
+ * window, not as the resting state.
+ */
+.cheatsheet-grid {
+  columns: 4 210px;
+  column-gap: 26px;
+}
+
+.cheatsheet-block {
+  break-inside: avoid;
+  margin-bottom: 10px;
+}
+
+.cheatsheet-block h3 {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 4px;
+}
+/* Every section after the first needs air above it; the first sits under the
+   frame's own padding and would otherwise be double-spaced. */
+.cheatsheet-block + .cheatsheet-block h3 {
+  margin-top: 10px;
+}
+
+/* A grid so the descriptions line up down a column — the keys vary in width and
+   a ragged second column is what makes a table of pairs hard to scan. */
+.cheatsheet-row {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 7px;
+  align-items: baseline;
+  padding: 1px 0;
+}
+
+.cheatsheet-row dt {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.cheatsheet-row dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+
+/* A key, drawn as the thing you press. The only element in the app that earns a
+   raised fill, and it earns it by being a picture of a key. */
+.cheatsheet kbd {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  padding: 1px 5px;
+  min-width: 18px;
+  text-align: center;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--rule-2);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-base);
+}
+
+/* "then", between a prefix and what completes it. Not a `kbd`: it is not a key. */
+.cheatsheet-then {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  color: var(--ink-3);
+  align-self: center;
+}
+
+/* Which verb a digit means on this axis — the one thing a reader has to know
+   before pressing one. Quiet, because it is a footnote to the label. */
+.cheatsheet-mode {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  color: var(--ink-3);
+  margin-left: 6px;
+}
+
+.cheatsheet-foot {
+  margin-top: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+
+/*
+ * An item in a list the keyboard walks.
+ *
+ * `:focus` and not `:focus-visible`, which is the one place in this app that
+ * distinction has to be inverted. `:focus-visible` is a *heuristic* about whether
+ * the reader is using a keyboard, and it answers no for focus moved by script —
+ * which is precisely how `j` and `k` move it. Measured: walking the filter rail
+ * drew no ring at all, so the reader had no way to tell which value `⏎` would
+ * tick.
+ *
+ * The cost is a ring on an item that was clicked. For most of these it lasts as
+ * long as the click — a popover pick closes the popover, a reference chip
+ * navigates away — but a filter value stays put and keeps the ring until focus
+ * moves. That is accepted: it is the one item you tick repeatedly, and knowing
+ * which one you last touched is worth more there than anywhere else.
+ */
+[data-nav]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-base);
+}
+
+/* A filter value draws its own box, so the ring goes there rather than on the
+   input, which is the technique `input:focus-visible + .checkbox` already uses —
+   this is the same rule for the same box, on the state a walk actually produces. */
+input[data-nav]:focus {
+  outline: none;
+}
+input[data-nav]:focus + .checkbox {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/*
+ * The key that reaches a control, drawn beside it.
+ *
+ * Quiet, because it is on every facet row in the panel and every addressable row
+ * in the rail at once: mono at the label step in `ink-3`, a hairline box, no
+ * fill. Louder than that and the reminder becomes the thing the eye lands on
+ * before the label it is annotating.
+ *
+ * Deliberately *not* the cheatsheet's `kbd`, which is a picture of a key —
+ * raised, with a thicker bottom edge — because that one is the subject of its own
+ * table and this one is a footnote to somebody else's word.
+ */
+.keyhint {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  line-height: 1.35;
+  /*
+   * A key is the literal character you press, so it is the one thing in a label
+   * that must not be re-cased. `.rail-label` sits in the shared uppercase rule,
+   * and the hint inherited it — drawing `,V` and `,S` for keys that are lower
+   * case, beside `,G` and `,F` which genuinely are shifted. The two became
+   * indistinguishable, which is the whole of what the hint is for.
+   */
+  text-transform: none;
+  color: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-base);
+  padding: 0 3px;
+  white-space: nowrap;
+  /*
+   * Against the word it names.
+   *
+   * It used to take the column's inner edge, following the rule `ƒ` and the
+   * counts follow — and that is the wrong company. Those are *annotations about
+   * the row*, so they line up in a column and are read down; a key is part of the
+   * label, and reading `Children … A` with a gap between them makes the letter
+   * look like it belongs to whatever is on the right.
+   */
+  margin-left: 4px;
+  flex: none;
+}
+
+/*
+ * The rail is the exception, and earns it: its label column is a fixed 78px, so
+ * the hints there do form a column — seven of them, one per row, read down the
+ * side of the rail rather than each against its own word.
+ */
+.rail-label .keyhint,
+.rail-label-control .keyhint {
+  margin-left: auto;
+}
+
+/*
+ * In a section heading the hint sits *against the word*, not in the corner.
+ *
+ * There is no column of them to line up with — a heading is one line with one
+ * label — and the corner is already spoken for by the section's control: the
+ * refresh on Links, the pencil on Body and Frontmatter. Two things in one corner
+ * is how the reader stops knowing which of them the heading is about.
+ */
+.panel-section h3 .keyhint {
+  margin-left: 6px;
+}
+
+
+/* And the count takes the edge the hint gave up — the column's inner edge, where
+   the filter rail puts a count too. */
+.facetrow-count {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* The rail's labels are a fixed column, so they have to make room. `Group by`
+   plus a hint is the widest pair; the two label boxes move together or the
+   controls beneath them stop lining up. */
+.rail-label,
+.rail-label-control {
+  width: 78px;
+}
+.rail-label {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+/* The Sort row puts the hint outside its `<label>`, because the direction arrow
+   sits between the word and it. Both boxes are the same width, so the hint lands
+   in the same column either way — which is the point of moving it. */
+.rail-label-control .rail-label {
+  width: auto;
+}
+.rail-label-control .keyhint {
+  margin-left: 3px;
 }

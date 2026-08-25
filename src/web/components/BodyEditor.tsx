@@ -21,12 +21,15 @@ export function BodyEditor({
   value,
   onSave,
   onDirtyChange,
+  onEscape,
 }: {
   cardId: string;
   value: string;
   /** Rejects on failure. A save that cannot fail is a save that can lose text. */
   onSave: (body: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Escape: hand the document back to whoever opened it. */
+  onEscape?: () => void;
 }) {
   /**
    * A success that fades, and a refusal that does not.
@@ -74,6 +77,7 @@ export function BodyEditor({
     value,
     extensions,
     onSave,
+    onEscape,
   });
 
   /**

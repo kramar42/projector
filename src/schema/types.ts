@@ -195,6 +195,29 @@ export interface FacetDef {
    */
   hue?: string;
   /**
+   * The letter that addresses this axis from the keyboard.
+   *
+   * Declared here for the same reason `hue` is: **the app owns the keyboard and
+   * the vault owns the choice**, which is the only arrangement in which no facet
+   * is named in code (C4). A keymap that spelled `p` as `priority` in the client
+   * would be exactly the nine-entry map of facet names that `hue` replaced — and
+   * it would be wrong the moment you opened a second vault.
+   *
+   * One letter, a–z, and not one the keyboard already owns; `view/keys.ts` holds
+   * the reserved set and `pj check` refuses a collision. Lower-case as declared,
+   * because the shifted form of a letter is a different binding.
+   *
+   * It is an *address*, not a write shortcut, and that is what earns it a key in
+   * the file rather than being a fifth thing `single` is read for. `p3` sets the
+   * axis's third value, and `,g p` groups by it, `,o p` sorts by it, `,f p` shows
+   * it. Five setters, so it is not the kind of declaration that drifts.
+   *
+   * Absent means the axis has no letter, which is the honest default: you declare
+   * one the day you notice you keep reaching for the axis, and the rest stay
+   * reachable through the rail and the palette. Most axes want none.
+   */
+  key?: string;
+  /**
    * The app defined this axis, not the vault — `BUILTIN_FACETS` in
    * `schema/facets.ts`, which today means `project` alone.
    *

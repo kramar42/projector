@@ -2,6 +2,7 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { RecordPicker } from '../components/RecordPicker.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { IconButton } from '../components/Button.tsx';
+import { KeyHint } from '../components/KeyHint.tsx';
 import { DIRS } from '../../schema/vocabulary.ts';
 import { clearFocus, setFocus } from '../../view/intents.ts';
 import { relations } from '../query.ts';
@@ -48,13 +49,21 @@ export function FocusSection({
   return (
     <>
       <div className="rail-row">
-        <label className="rail-label">Focus</label>
+        <label className="rail-label">
+          Focus
+          <KeyHint keys="w" means="comma then w — walk from a note" />
+        </label>
         {focus ? (
           <>
             {/* The other place a note appeared with no mark. It is a note you
                 click through to, so it wears one — same as a card face, a table
                 row, a reference chip and a picker row. */}
-            <button className="rail-focus" title={focus.id} onClick={() => onOpenNote(focus.id)}>
+            <button
+              className="rail-focus"
+              data-rail="focus"
+              title={focus.id}
+              onClick={() => onOpenNote(focus.id)}
+            >
               <RecordMark card={note ?? { isProject: false, refCount: 0 }} />
               <span className="truncate">{title ?? focus.id}</span>
             </button>
@@ -68,6 +77,7 @@ export function FocusSection({
           <PopoverButton
             minWidth={320}
             fitContent
+            rail="focus"
             label="everything"
             render={(close) => (
               <RecordPicker
