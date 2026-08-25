@@ -210,6 +210,42 @@ export function blankQuery(spec: ViewSpec | null, search: string, view: string |
   return patch;
 }
 
+/**
+ * The parameters a change of *view* is not entitled to touch.
+ *
+ * Everything else in a spec answers "what is this view" — a canvas view is a
+ * canvas, `due` groups by `due`, `project-a` walks `parent` out of one note — so
+ * landing on a view means taking its answers. A text search does not answer
+ * that. It is what you are looking *for*, carried from view to view the way
+ * `?note=` and `?sel=` are, and having to retype it at every hop is the whole
+ * reason it is here.
+ *
+ * One entry, and a list rather than a special case, because the question it
+ * settles ("is this the view's to say?") is the one a new parameter has to be
+ * asked too.
+ */
+const CARRIED: readonly string[] = ['q'];
+
+/**
+ * Land on another saved view.
+ *
+ * A blank query plus the name, minus whatever the URL carries that the new view
+ * has no opinion on. The *override* rides along and the old view's own `q:` does
+ * not: the spec's search is whichever of those two won, so reading it here would
+ * turn a view's stored search into a sticky one that outlives the view.
+ *
+ * A key left out of the patch is a key `patchSearch` does not write, so the URL
+ * keeps it verbatim — which is also why an explicitly empty `q=` is *not* carried
+ * and falls through to `blankQuery`'s `null`. Empty means "this view's search,
+ * suppressed", and it stops meaning anything the moment the view changes.
+ */
+export function changeView(spec: ViewSpec | null, search: string, view: string): Patch {
+  const patch = blankQuery(spec, search, view);
+  const params = new URLSearchParams(search.replace(/^\?/, ''));
+  for (const key of CARRIED) if (params.get(key)) delete patch[key];
+  return patch;
+}
+
 /** Whether a patch says anything — which is exactly "this view has unsaved changes". */
 export function patchIsEmpty(patch: Patch): boolean {
   return Object.values(patch).every((v) => v === null);

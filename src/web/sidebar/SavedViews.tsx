@@ -5,7 +5,7 @@ import { CommitInput } from '../components/CommitInput.tsx';
 import { IconButton } from '../components/Button.tsx';
 import { type Patch } from '../query.ts';
 import type { ViewSpec } from '../../view/spec.ts';
-import { blankQuery, patchIsEmpty, specToPatch } from '../../view/intents.ts';
+import { blankQuery, changeView, patchIsEmpty, specToPatch } from '../../view/intents.ts';
 import type { QueryResponse, SavedViewSummary } from '../types.ts';
 
 // ---------------------------------------------------------------- saved views
@@ -75,8 +75,10 @@ export function SavedViews({
                   onClick={() => {
                     close();
                     // Picking a view replaces the query wholesale: the old
-                    // overrides belonged to the old view.
-                    patch({ ...blankQuery(spec, search), view: v.name });
+                    // overrides belonged to the old view. All but the search —
+                    // see `CARRIED`. What you are looking for is not something a
+                    // view answers, and it used to be cleared at every hop.
+                    patch(changeView(spec, search, v.name));
                   }}
                 >
                   <span className="truncate pop-pick-name">{v.title}</span>

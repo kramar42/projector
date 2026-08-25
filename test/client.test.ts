@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { renderBody } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
-import { blankQuery, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
+import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
 import { specFromFile, type ViewSpec } from '../src/view/spec.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
@@ -191,6 +191,40 @@ test('clearing drops the fixed keys and every facet override, from either source
   assert.equal(fromUrl.card, undefined, 'where you are looking is not part of the query');
 
   assert.equal(blankQuery(saved, '', 'inbox').view, 'inbox', 'landing on a view keeps it');
+});
+
+/**
+ * A view answers "what am I looking at", never "what am I looking for". Picking
+ * one used to run the same total blank as *revert* and *start from nothing*, so
+ * a search typed into the box was gone the moment you hopped views — the same
+ * class of surprise as a filter that empties itself.
+ */
+test('changing view keeps the search and nothing else', () => {
+  const saved = specFromFile('home', {
+    shape: 'board',
+    q: 'kafka',
+    filter: { status: ['planning'] },
+  });
+
+  const carried = changeView(saved, '?view=home&q=invoice&shape=table&f.tech=kafka', 'due');
+  assert.equal(carried.view, 'due');
+  assert.equal(carried.q, undefined, 'the typed search is not mentioned, so the URL keeps it');
+  assert.equal(carried.shape, null, 'how the old view drew itself is the old view\'s');
+  assert.equal(carried['f.status'], null, 'and so were its filters');
+  assert.equal(carried['f.tech'], null, 'including one only the URL carried');
+
+  // The spec's `q` is whichever of file and URL won, so reading it there would
+  // make a *view's* stored search sticky. Only an override rides along.
+  const fromFile = changeView(saved, '?view=home', 'due');
+  assert.equal(fromFile.q, null, "a view's own q: belongs to the view it came from");
+
+  // `q=` is "this view's search, suppressed" — a statement about a view that is
+  // no longer the one on screen.
+  assert.equal(changeView(saved, '?view=home&q=', 'due').q, null, 'an empty override is dropped');
+
+  // Every other way of leaving a view is still a full blank.
+  assert.equal(blankQuery(saved, '?view=home&q=invoice', 'home').q, null, 'revert discards it');
+  assert.equal(blankQuery(saved, '?q=invoice').q, null, 'and so does starting from nothing');
 });
 
 // ---------------------------------------------------------------- the location
