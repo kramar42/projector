@@ -128,7 +128,22 @@ export function branchFor(
   cardId: string,
   opts: { template?: string; jiraKeys?: string[] },
 ): string {
-  if (opts.template) return opts.template.replace(/\{card\}/g, cardId).replace(/\{id\}/g, cardId);
+  if (opts.template) {
+    // `{note}` is the placeholder the manual documents; `{card}` and `{id}` are
+    // the spellings templates written before the card→note rename carry. All
+    // three mean the note's id.
+    const branch = opts.template.replace(/\{(?:note|card|id)\}/g, cardId);
+    // Anything else left in braces would become a literal `{...}` branch shared
+    // by every card in the project — refuse it while it is still a template,
+    // not a worktree.
+    const leftover = branch.match(/\{[^}]*\}/);
+    if (leftover) {
+      throw new Error(
+        `branch template "${opts.template}" has an unknown placeholder ${leftover[0]} — {note} is the one that names the note`,
+      );
+    }
+    return branch;
+  }
   if (opts.jiraKeys?.length === 1) return opts.jiraKeys[0]!;
   return cardId;
 }

@@ -75,8 +75,8 @@ export function buildBriefing(input: {
     L.push('Already included in the context above, inherited outermost-project-first. Follow them.');
   } else {
     L.push(
-      'None recorded for this project. If rules emerge while you work, offer them for the project ' +
-        "project's `instructions` rather than keeping them in your head.",
+      "None recorded for this project. If rules emerge while you work, offer them for the project's " +
+        '`instructions` rather than keeping them in your head.',
     );
   }
   L.push('');

@@ -329,7 +329,9 @@ function cmdAdd(argv: string[]): void {
     console.log(`skipped — fingerprint already on ${res.id}`);
     return;
   }
-  console.log(`created cards/${res.id}.md (id: ${res.id})`);
+  // Notes land at the vault root (`paths().notes` is the root); the `cards/`
+  // prefix this used to print was a directory that never existed.
+  console.log(`created ${res.id}.md (id: ${res.id})`);
 }
 
 /**
@@ -854,7 +856,13 @@ try {
           ctx,
           workspace,
           branch,
-          repos: repos.map((r) => ({ name: r.path.split('/').pop()!, path: r.path, created: false, error: null })),
+          // Preview the worktree paths a real run would create. The source
+          // checkout is exactly the path the briefing forbids touching, so
+          // printing it here made the dry run contradict its own text.
+          repos: repos.map((r) => {
+            const name = r.path.split('/').pop()!;
+            return { name, path: join(workspace, name), created: false, error: null };
+          }),
         });
         console.log('\n--- AGENT_BRIEFING.md (dry run) ---\n');
         console.log(briefing);

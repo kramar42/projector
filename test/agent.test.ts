@@ -36,6 +36,16 @@ test('branch name prefers the template, then a lone jira key, then the id', () =
   assert.equal(branchFor('fix-kpow', {}), 'fix-kpow');
 });
 
+test('every spelling of the id placeholder substitutes, and a typo is refused', () => {
+  // `{note}` is what the manual documents; `{card}` and `{id}` predate the
+  // card→note rename and templates in the wild still say them.
+  assert.equal(branchFor('fix-kpow', { template: 'plat/{note}' }), 'plat/fix-kpow');
+  assert.equal(branchFor('fix-kpow', { template: '{id}-wip' }), 'fix-kpow-wip');
+  // An unknown placeholder would name a literal `{...}` branch shared by every
+  // card in the project — the second `pj work` would collide with the first.
+  assert.throws(() => branchFor('fix-kpow', { template: 'plat/{ntoe}' }), /\{ntoe\}/);
+});
+
 test('a branch with slashes still makes a legal directory name', () => {
   assert.equal(
     workspacePath('/wt', 'keycloak', 'kc/fix-kpow'),
@@ -170,6 +180,53 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
       ],
       'both single-valued axes, in declaration order — and `tech` is not one',
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a multi-byte card body does not derail the blob walk', () => {
+  // `git cat-file --batch` sizes are bytes. The walk once decoded first and
+  // sliced code units, so one em dash drifted the cursor into the next header:
+  // later blobs were misread or lost, and a modified card whose `after` went
+  // missing narrated as deleted. All-ASCII fixtures never caught it.
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
+  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+  try {
+    mkdirSync(paths(root).config, { recursive: true });
+    writeFileSync(
+      paths(root).facets,
+      'status: { values: [planning, done], single: true, closed: [done] }\n',
+      'utf8',
+    );
+    git('init', '-q');
+    git('config', 'user.email', 't@t');
+    git('config', 'user.name', 'T');
+
+    // The em dash sits in the first card the batch returns; the second card is
+    // the one that goes missing when the walk drifts.
+    const dashed = pathJoin(paths(root).notes, 'dashed.md');
+    const plain = pathJoin(paths(root).notes, 'plain.md');
+    writeFileSync(dashed, '---\nid: dashed\ntitle: Dashed\nfacets: { status: [planning] }\n---\n\nem — dash\n', 'utf8');
+    writeFileSync(plain, '---\nid: plain\ntitle: Plain\nfacets: { status: [planning] }\n---\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'seed');
+
+    writeFileSync(dashed, '---\nid: dashed\ntitle: Dashed\nfacets: { status: [done] }\n---\n\nem — dash\n', 'utf8');
+    writeFileSync(plain, '---\nid: plain\ntitle: Plain\nfacets: { status: [done] }\n---\n', 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'finish both');
+
+    const r = history(root, '1 year ago');
+    // Both edits are transitions — nothing was created or deleted by editing.
+    assert.deepEqual(
+      r.commits[0]!.changes.map((c) => [c.kind, c.id]),
+      [
+        ['facet', 'dashed'],
+        ['facet', 'plain'],
+      ],
+    );
+    assert.deepEqual([...r.finished].sort(), ['dashed', 'plain']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

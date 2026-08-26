@@ -86,6 +86,11 @@ function git(root: string, args: string[], input?: string): string {
   });
 }
 
+/** The same call, undecoded — for output that must be walked by byte count. */
+function gitBytes(root: string, args: string[], input?: string): Buffer {
+  return execFileSync('git', ['-C', root, ...args], { input, maxBuffer: 256 * 1024 * 1024 });
+}
+
 export function isRepo(root: string): boolean {
   try {
     git(root, ['rev-parse', '--git-dir']);
@@ -142,16 +147,21 @@ function readBlobs(root: string, shas: Set<string>): Map<string, string> {
   const wanted = [...shas].filter((s) => s !== ABSENT);
   if (!wanted.length) return out;
 
-  const raw = git(root, ['cat-file', '--batch'], wanted.join('\n') + '\n');
+  // Walked as bytes, because `<size>` is a byte count. Decoding first and
+  // slicing the string walked UTF-16 code units instead: one em dash in a card
+  // put the walk two bytes into the next record's header, and every blob after
+  // the drift was misread or lost — a modified card whose `after` goes missing
+  // narrates as deleted.
+  const raw = gitBytes(root, ['cat-file', '--batch'], wanted.join('\n') + '\n');
   let at = 0;
   while (at < raw.length) {
-    const eol = raw.indexOf('\n', at);
+    const eol = raw.indexOf(0x0a, at);
     if (eol === -1) break;
-    const [sha, type, size] = raw.slice(at, eol).split(' ');
+    const [sha, type, size] = raw.toString('utf8', at, eol).split(' ');
     at = eol + 1;
     if (!sha || type !== 'blob' || size === undefined) continue;
     const n = Number(size);
-    out.set(sha, raw.slice(at, at + n));
+    out.set(sha, raw.toString('utf8', at, at + n));
     at += n + 1; // the newline the batch protocol adds after each body
   }
   return out;
