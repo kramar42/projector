@@ -114,7 +114,7 @@ export const api = {
    * a saved view and an ad-hoc query are the same request.
    */
   query: (search: string) => get<QueryResponse>(`/api/query${search}`),
-  card: (id: string) => get<NoteDetail>(`/api/note/${encodeURIComponent(id)}`),
+  note: (id: string) => get<NoteDetail>(`/api/note/${encodeURIComponent(id)}`),
 
   patchNote: (id: string, patch: PatchCard) => (
     stampSelfWrite(id),

@@ -44,9 +44,9 @@ export type QueryResponse = QueryPayload;
  */
 export type Edit = (fn: (spec: Spec) => Spec, replace?: boolean) => void;
 
-/** One card and everything the panel needs around it — `GET /api/note/:id`. */
+/** One note and everything the panel needs around it — `GET /api/note/:id`. */
 export interface NoteDetail {
-  card: NoteDTO;
+  note: NoteDTO;
   file: string;
   /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
   mtime: number;

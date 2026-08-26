@@ -93,16 +93,16 @@ export function NotePanel(props: {
   onOpen: (id: string) => void;
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
 }) {
-  const { data, error, reload } = useLive<NoteDetail>(() => api.card(props.id), [props.id]);
+  const { data, error, reload } = useLive<NoteDetail>(() => api.note(props.id), [props.id]);
   return (
     <NoteCard
-      key={data?.card.id ?? props.id}
+      key={data?.note.id ?? props.id}
       {...props}
       // What is on screen, which during a switch is still the card you were
       // reading. Writes follow it rather than the id being fetched, so a keystroke
       // in the gap lands on the card under the cursor and not on one nobody has
       // seen yet.
-      id={data?.card.id ?? props.id}
+      id={data?.note.id ?? props.id}
       data={data}
       error={error}
       reload={reload}
@@ -192,7 +192,7 @@ function NoteCard({
     write.title(next);
   };
 
-  const card = data?.card;
+  const card = data?.note;
 
   /**
    * Which parts of this note moved without you, held long enough to see.

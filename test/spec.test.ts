@@ -204,14 +204,14 @@ test('any override that lives only in the URL can be cleared', () => {
 });
 
 /**
- * `card` is which panel is open and `view` is which saved view the diff is
+ * `note` is which panel is open and `view` is which saved view the diff is
  * *against*. Neither spec writes them back, so unioning the URL blindly would
  * null both — closing the panel and dropping the view on every keystroke.
  */
-test('an edit leaves the open card and the named view alone', () => {
+test('an edit leaves the open note and the named view alone', () => {
   const spec = parseSpec({ shape: 'canvas', focus: 'ideas', via: 'parent', dir: 'in' });
-  const patch = specToPatch(clearFocus(spec), null, '?view=focused&focus=ideas&card=every-facet');
-  assert.ok(!('card' in patch), 'the panel stays open');
+  const patch = specToPatch(clearFocus(spec), null, '?view=focused&focus=ideas&note=every-facet');
+  assert.ok(!('note' in patch), 'the panel stays open');
   assert.ok(!('view' in patch), 'the view stays named');
 });
 

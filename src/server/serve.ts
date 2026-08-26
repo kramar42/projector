@@ -289,7 +289,7 @@ app.get('/api/note/:id', (c) => {
   // One walk, shared by this card's own mark and by every reference it names.
   const inbound = inboundCounts(notes, facets);
   return c.json({
-    card: toDTO(rec, {
+    note: toDTO(rec, {
       facets,
       jiraBase: jiraConfig(root)?.url ?? null,
       // The panel edits `facets` and never `computed`, but a DTO that reports no

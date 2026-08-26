@@ -109,7 +109,7 @@ const HELP = `pj — projector CLI${vaultNote}
   pj link <id> <ref> [...] [--remove]
          [--session [id]] [--cwd dir]                       add or remove links; --session names the
                                                        live Claude session working here
-  pj check                                             validate every card file and saved view
+  pj check                                             validate every note file and saved view
   pj reindex                                           rebuild the index, and report what it holds
   pj search <query>                                    full-text search, most relevant first
   pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
@@ -121,10 +121,10 @@ const HELP = `pj — projector CLI${vaultNote}
      [--captured n]                                    move the cursor(s) the last sweep proposed
   pj intake commit --channel c --cursor v
      [--seen n] [--captured n]                         or say where by hand
-  pj intake known <fingerprint>...                     which cards already carry these refs
+  pj intake known <fingerprint>...                     which notes already carry these refs
   pj intake reset [--channel c]                        forget a cursor, back to the default window
 
-  pj context <id> [--json]                             everything known about a card, assembled
+  pj context <id> [--json]                             everything known about a note, assembled
   pj set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
   pj merge <id>... --into <id>                         fold notes into one, keeping its facets

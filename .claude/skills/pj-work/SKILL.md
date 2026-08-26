@@ -1,14 +1,14 @@
 ---
 name: pj-work
-description: Start work on a projector card — prepare a multi-repo git worktree workspace, write a briefing from the card's full context, and open a Claude session there. Use when asked to work on / start / pick up a card, or to set up a workspace or worktree for a piece of work. Also use to hand a card to a fresh session with its context intact.
+description: Start work on a projector note — prepare a multi-repo git worktree workspace, write a briefing from the note's full context, and open a Claude session there. Use when asked to work on / start / pick up a note, or to set up a workspace or worktree for a piece of work. Also use to hand a note to a fresh session with its context intact.
 ---
 
-# Work on a card
+# Work on a note
 
-Prepare a workspace and hand the card to a session that starts with everything it needs. Read the
+Prepare a workspace and hand the note to a session that starts with everything it needs. Read the
 `pj-about` skill first.
 
-## 1. Identify the card
+## 1. Identify the note
 
 If the user named one loosely, resolve it before doing anything:
 
@@ -17,7 +17,7 @@ pj search "<what they said>"
 pj ls --view unblocked       # when they asked "what should I work on"
 ```
 
-Confirm which card you landed on if there was any ambiguity. Never prepare a workspace for a guess.
+Confirm which note you landed on if there was any ambiguity. Never prepare a workspace for a guess.
 
 ## 2. Check it can actually be worked
 
@@ -42,7 +42,7 @@ pj work <id> --dry-run
 ```
 
 This prints the workspace path, the branch, the repos and the whole briefing without touching the
-filesystem. Worth doing when the card has several repos, an unfamiliar branch template, or when the
+filesystem. Worth doing when the note has several repos, an unfamiliar branch template, or when the
 user has not used this before.
 
 ## 4. Launch
@@ -52,7 +52,7 @@ pj work <id>
 ```
 
 Which does, in order: a workspace directory outside every repo; one `git worktree` per project repo
-on a single branch; `AGENT_BRIEFING.md` at the root with the card's full context embedded; and a
+on a single branch; `AGENT_BRIEFING.md` at the root with the note's full context embedded; and a
 Terminal running `claude "Read AGENT_BRIEFING.md and follow it exactly."`
 
 Report the workspace path and which repos were prepared. **One repo failing does not stop the
@@ -64,13 +64,13 @@ run themselves.
 ## 5. Close the loop
 
 The briefing already instructs the new session to run `pj link <id> --session` as its last step, so the
-card accumulates its own history. If you are *inside* a workspace and it has not happened yet:
+note accumulates its own history. If you are *inside* a workspace and it has not happened yet:
 
 ```bash
 pj link <id> --session
 ```
 
-That finds the live session working in this directory and appends `claude:<uuid>` to the card, which
+That finds the live session working in this directory and appends `claude:<uuid>` to the note, which
 then renders on the board with what it is doing — working, waiting on you, closed — and its last
 activity.
 
@@ -78,6 +78,6 @@ activity.
 
 - It does not commit, push, or open a pull request. The workspace is prepared; the work is the new
   session's, and the branch is left for the user.
-- It does not modify the card beyond adding a session link.
+- It does not modify the note beyond adding a session link.
 - It does not touch the main checkouts. Every repo in the workspace is a worktree; if a change
   belongs somewhere not laid out, stop and say so.

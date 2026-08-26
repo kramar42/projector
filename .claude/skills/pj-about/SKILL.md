@@ -25,7 +25,7 @@ subfolder. Folders are the user's to arrange and mean nothing to the app.
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
 "fix" such a file by adding frontmatter to it: the derived identity is deliberate, and any `pj` write
 writes down the same id anyway. The one thing to know is that until that happens, **renaming the file
-renames the card** — so if other notes reference it, use `pj` rather than a rename.
+renames the note** — so if other notes reference it, use `pj` rather than a rename.
 
 **`<vault>` below is whichever folder is in play — never a path written down here.** `pj` resolves it
 the way git finds a repository: `--vault <path>` wins, then `$PROJECTOR_DATA`, then a walk up from the

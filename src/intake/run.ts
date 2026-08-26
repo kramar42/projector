@@ -248,7 +248,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   }
   L.push(
     `${candidateCount(s)} candidate(s). Nothing is captured and no cursor has moved — ` +
-      `create what is worth a card, then: pj intake commit --advance [--captured n]`,
+      `create what is worth a note, then: pj intake commit --advance [--captured n]`,
   );
   return L.join('\n');
 }
