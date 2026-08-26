@@ -67,8 +67,8 @@ caches. One process, one URL: the server serves the built UI.
 The CLI needs nothing running:
 
 ```bash
-alias pj='bun "$PWD/src/cli/pj.ts"'
-pj ls --group priority
+alias pj="bun '$PWD/src/cli/pj.ts'"   # from the project root: the outer quotes freeze the path
+pj ls --group priority                # now run it from inside any vault
 ```
 
 **Nothing here is pinned to Bun.** The package scripts spell `node`, because Node is the floor
@@ -150,7 +150,4 @@ the sorting, and the setting-up-to-work.
 
 ## License
 
-<!-- TODO(you): MIT if attribution is fine and you want the version everyone recognises on
-     sight; 0BSD if you mean literally zero conditions. Either way, add the LICENSE file — a
-     public repo without one is legally "all rights reserved", which is the opposite of what
-     you want. Nothing here creates it for you; that is your declaration to make. -->
+[0BSD](LICENSE) — do whatever you like with it, no attribution required.

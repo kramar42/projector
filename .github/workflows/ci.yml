@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          # The version mise.toml pins, because that pin is what the docs tell a
-          # reader to install. `latest` here would test something nobody has.
-          bun-version: 1.4.0
-      - run: bun install
+      # mise reads mise.toml, so the runtime versions are pinned in exactly one
+      # place. It installs Node here too, which is the point rather than a side
+      # effect: `[run] bun = true` in bunfig.toml only does anything when a Node
+      # is present to be shadowed, so this job runs the setup a person has.
+      - uses: jdx/mise-action@v4
+      - run: bun install --frozen-lockfile
       - run: bun run typecheck
       # `bun test`, not `bun run test`: the script body is `node --test`, and
       # substituting the runtime makes that `bun --test`, which is not a flag
@@ -57,8 +57,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          # No `cache:` key. It hashes a lockfile to build one, and the only
+          # committed lockfile is bun's — setup-node would fail looking for a
+          # pnpm one. This job resolves fresh by design, so there is nothing
+          # stable to cache anyway.
+      # `--no-frozen-lockfile` because no pnpm lockfile is committed any more —
+      # bun's is. pnpm defaults to frozen whenever CI is set, so this has to say
+      # so out loud. Resolving fresh is also the point: it is the claim that any
+      # package manager works, being tested.
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

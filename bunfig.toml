@@ -12,3 +12,15 @@
 # different programs, so run the suite as `bun test`.
 [run]
 bun = true
+
+# pnpm's layout, on Bun's lockfile. `isolated` puts one copy of each package in a
+# central store under `node_modules/.bun` and symlinks into it, instead of
+# hoisting everything flat. Two things come with it: a dependency this repo does
+# not declare stops resolving by accident, and on APFS the store is populated
+# with `clonefile`, so the blocks are shared with Bun's global cache rather than
+# copied. A warm reinstall is milliseconds.
+#
+# It only governs `bun install`. npm, pnpm and yarn lay out node_modules their
+# own way, and CI installs with each of them.
+[install]
+linker = "isolated"

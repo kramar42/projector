@@ -43,7 +43,7 @@ Everything is plain files: create and edit them with Write/Edit, no API and no r
 for notes, because it validates and keeps formatting consistent. Run `pj check` after any batch.
 
 ```bash
-alias pj='bun "$PWD/src/cli/pj.ts"'   # from the projector project root
+alias pj="bun '$PWD/src/cli/pj.ts'"   # from the projector project root: freezes the path
 ```
 
 ## The model, in six facts

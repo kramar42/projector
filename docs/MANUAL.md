@@ -1119,11 +1119,18 @@ node --run test                   # under Node
 Both run the whole suite, CI runs each, and both must pass. Everything else — `serve`, `dev`, `pj`,
 `states`, and the scripts that call a binary rather than a runtime — substitutes cleanly.
 
-**Any package manager.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`, `yarn` and
-`bun install` all resolve the same tree. The committed lockfile is pnpm's, which is what CI installs
-from; the others resolve fresh, which CI also exercises. Bun's runtime reads a `node_modules` any of
-them produced. There is deliberately no `packageManager` field, since that would make Corepack refuse
-every manager but one.
+**Any package manager, one lockfile.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`,
+`yarn` and `bun install` all resolve the same tree, and Bun's runtime reads a `node_modules` any of
+them produced. The committed lockfile is Bun's, which is what CI installs frozen; every other manager
+resolves fresh, which CI also exercises, and their lockfiles are gitignored so two of them can never
+disagree about the tree. There is deliberately no `packageManager` field, since that would make
+Corepack refuse every manager but one.
+
+`bunfig.toml` asks Bun for pnpm's layout with `[install] linker = "isolated"`: one copy of each package
+in a store under `node_modules/.bun`, symlinked into place rather than hoisted flat. That buys strict
+resolution — a dependency this repo does not declare stops working by accident instead of silently
+inheriting someone else's — and on APFS the store is filled by `clonefile`, so it shares blocks with
+Bun's global cache instead of copying. It governs `bun install` only.
 
 Bun starts faster, which is worth something for a CLI you run by hand and nothing for a server that
 starts once, and it runs the suite in a fraction of the time. One thing has actually bitten: Bun ships
