@@ -8,10 +8,9 @@ web
 
 ## Users
 
-**Primary: one person on their own machine.** Oleksii Kramarenko, who runs it at
-Acme, running the app locally against a folder of his own files. He keeps it **open all day on
-a second monitor** — the board or canvas is ambient, glanced at and dragged on continuously, not
-visited for a session and closed.
+**Primary: one person on their own machine.** Someone running the app locally against a folder of
+their own notes. They keep it **open all day on a second monitor** — the board or canvas
+is ambient, glanced at and dragged on continuously, not visited for a session and closed.
 
 **Second, and first-class: Claude agent sessions.** Notes are plain files, so an agent creates and
 edits them directly through `pj` and the four `.claude/skills/` slash commands, with no API and no app
@@ -24,8 +23,8 @@ Two consequences future work must honour:
 - the interface is read **at desk distance, for hours** — legibility at a glance and sustained comfort
   in both themes are usage facts, not polish.
 
-No third audience is planned. The documentation is written for a reader, but no external user,
-other person or public release is confirmed.
+No third audience is planned. The documentation is written for a reader and the source is public,
+but no external user base is assumed.
 
 ## Product Purpose
 
@@ -80,9 +79,9 @@ step. The mechanisms a neighbouring product could not truthfully copy:
 - **Environment:** `PROJECTOR_JIRA_URL` / `_EMAIL` / `_TOKEN`, `PROJECTOR_WORKSPACES`, the
   authenticated `gh` CLI. Every fetcher is read-only and runs server-side, so credentials stay out of
   the browser.
-- **The work is real Acme work.** The vault carries actual project names (Project A, Project D,
-  mapping, Project F, Project B/Keycloak) and actual other people on actual notes. This is production of the
-  user's own real notes, not a demo dataset.
+- **The vault holds real notes, not a demo dataset.** The app is judged against the author's own
+  vault rather than a seeded one, which is why `vaults/coverage` has to carry states a seeded vault
+  never produces. That vault is private and is not in this repository.
 
 ## Capabilities and Constraints
 
@@ -162,7 +161,7 @@ count written here.
   should describe.
 - `vaults/coverage`: the fixture, carrying every state the app can draw. Tests reference it; prose
   does not need to.
-- The author's own vault is real working data. It is private, it is not in this repository, and
+- The author's own vault is their own real notes. It is private, it is not in this repository, and
   nothing written here describes it or counts what is in it — a number that changes by working is a
   claim that goes stale on its own.
 - One author; no external contributors.

@@ -6,7 +6,8 @@
      someone who already wants that and slides off everyone else. Consider leading
      with the shape of the problem instead, and letting the mechanism be the second
      sentence. Your call; it depends on whether the first readers are the university
-     friends (who need the problem) or other people (who will recognise the mechanism). -->
+     friends (who need the problem) or people who already work this way (who will recognise the
+     mechanism). -->
 
 A personal work-management app. One database of markdown notes, drawn as a **board**, a **mind-map
 canvas** or a **table** — whichever the current query asks for, with read-only inline views of Jira

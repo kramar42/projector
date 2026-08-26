@@ -24,4 +24,4 @@ strength xoria's light shades stack into noise. If light mode looks loud here, t
 tint has been bypassed somewhere.
 
 Also the only note carrying `owner`, which is declared in the vocabulary and used
-nowhere in the real vault.
+nowhere else in this vault.

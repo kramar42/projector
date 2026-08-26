@@ -31,9 +31,9 @@ Losing `.intake.db` is not a disaster: a channel with no cursor falls back to it
 | Channel | Fetched by | What counts |
 |---|---|---|
 | `claude` | `pj` — `~/.claude/projects` | sessions that moved: work in flight, often already on a card |
-| `git` | `pj` — the project repos | his own branches and base-branch commits with nothing tracking them |
-| `jira` | `pj` — JQL, needs `PROJECTOR_JIRA_*` | assigned to / reported by / watched by him, updated since the cursor |
-| `slack` | **you, through the Slack MCP** | `D01234567` (his scratchpad) and `is:saved` |
+| `git` | `pj` — the project repos | the user's own branches and base-branch commits with nothing tracking them |
+| `jira` | `pj` — JQL, needs `PROJECTOR_JIRA_*` | assigned to / reported by / watched by the user, updated since the cursor |
+| `slack` | **you, through the Slack MCP** | `D01234567` (your own scratchpad DM) and `is:saved` |
 | `gmail` | **you, through the Gmail MCP** | vendor threads, forwarded meeting notes — commitments made to other people |
 
 For Slack and Gmail: take the `cursor` off their report in the sweep, fetch **only since it**, and treat
@@ -89,7 +89,7 @@ each with the mechanical reason it matched:
   to proof.
 - `branch` / `branch names PROJ-303` / `mentions PROJ-303` — the name or the message says so. Strong.
 - `text` — it shares vocabulary with that card. **Weak.** Two cards about Keycloak are not the same
-  card. Never link on `text` alone; say what you think it is and let him say.
+  card. Never link on `text` alone; say what you think it is and let the user say.
 
 When linking, say which reason you are relying on, so a wrong call is visible before it lands. A
 session linked to the wrong card puts its history somewhere nobody will look for it — move it with
@@ -100,7 +100,7 @@ right card, or the message stays consumed by a card that never mentioned it.
 ### What extend may write, and what it may only flag
 
 The line is **facts against judgments**, not a list of safe fields. An external source is authoritative
-about the world; it is never authoritative about what he intends to do next.
+about the world; it is never authoritative about what the user intends to do next.
 
 | capture may write | capture may only flag |
 |---|---|
@@ -120,8 +120,8 @@ board will believe it.
 decide where work lives, and on a card that already exists the project is nearly always set — if it is
 not, the triage view catches it the same day.
 
-`waiting_on` is the tempting one. "I mailed Person D and he has not replied" reads like a fact; it is an
-inference about whether he is actually blocked. Flag it.
+`waiting_on` is the tempting one. "I mailed Person D and they have not replied" reads like a fact; it is an
+inference about whether they are actually blocked. Flag it.
 
 ### Flags
 
@@ -130,11 +130,11 @@ they are not candidates, so they do not belong in the candidate table:
 
 | card | facet | holds | the evidence says | source |
 |---|---|---|---|---|
-| `ship-the-thing` | status | `active` | Person E's mail of 22 Aug thanks him for shipping it | `gmail:<id>` |
+| `ship-the-thing` | status | `active` | Person E's mail of 22 Aug thanks you for shipping it | `gmail:<id>` |
 
 **Every flag ships with a link.** This is not politeness, it is the only thing that makes a flag
 durable: committing forgets the declines, and unlike a declined card a declined flag leaves no
-fingerprint behind either. Put the evidence on the card first, then flag it. If he does nothing, the
+fingerprint behind either. Put the evidence on the card first, then flag it. If the user does nothing, the
 mail is still on the card and the next person to open it can see why somebody thought it was done.
 
 ## 3. Propose, then stop
@@ -151,9 +151,9 @@ Rules:
 - **A card is something with an outcome.** A link worth reading is a card in `project: research` with
   `priority: someday`. A fact, a status update or a thing already done is not a card — those go under
   "noticed, not captured" so nothing looks silently dropped.
-- **Title in his voice, imperative where it is an action.** Keep his phrasing when he wrote it; do not
+- **Title in the user's voice, imperative where it is an action.** Keep their phrasing when they wrote it; do not
   tidy `clean-up ecr` into `Clean up Amazon ECR`. A Claude session's title is its opening prompt; a
-  branch's is its first commit subject. Both are already his words.
+  branch's is its first commit subject. Both are already their words.
 - **Never put a moving number in a title.** "Review the 29 overdue candidates" and "the 2 flagged
   expenses" are wrong by next week, and worse, they read as *different work* from the card already
   tracking them — which is how a duplicate gets proposed with a straight face. Name the thing, put the
@@ -221,6 +221,6 @@ cursors moved.
 
 If a swept message contains a secret — a token, an AWS key, a password — **do not put the value in a
 card**. Create the card describing the rotation needed and reference the message; say plainly that you
-withheld the value. His Slack scratchpad has had plaintext credentials in it before.
+withheld the value. A scratchpad DM is exactly where plaintext credentials tend to end up.
 
 Everything intake touches is read-only (C2). Nothing here writes to Slack, Jira, GitHub or Gmail.

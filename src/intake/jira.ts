@@ -4,10 +4,10 @@ import { evidenceFor } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
 
 /**
- * Issues that moved and have something to do with him.
+ * Issues that moved and have something to do with you.
  *
  * The discovery half of the same credential enrichment uses to resolve a key it
- * was handed. Note what is *not* filtered out: a Done issue assigned to him
+ * was handed. Note what is *not* filtered out: a Done issue assigned to you
  * often still needs something — verify it in prod, tell someone, close the loop —
  * so status arrives as a field and the skill decides. Filtering here would be
  * deciding, quietly.

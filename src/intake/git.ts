@@ -4,7 +4,7 @@ import { evidenceFor, repoIndex } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
 
 /**
- * His own commits in the project repos, with nothing tracking them.
+ * Your own commits in the project repos, with nothing tracking them.
  *
  * The unit is a **branch, not a commit.** Six commits on one branch are one piece
  * of work, and `git:<repo>@<sha>` per commit meant six cards and a fingerprint
@@ -76,9 +76,9 @@ export function originSlug(repo: string): string | null {
 }
 
 /**
- * Local branches only. `--all` would drag in every someone else's remote branch, and
- * the author filter is not enough on its own: a someone else's branch containing one
- * of his commits is not his work in flight.
+ * Local branches only. `--all` would drag in every remote branch, and the author
+ * filter is not enough on its own: someone else's branch carrying one of your
+ * commits is not your work in flight.
  */
 function commitsSince(repo: string, since: string, author: string): Commit[] {
   const out = git(repo, [

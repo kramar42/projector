@@ -43,7 +43,7 @@ layout: tree-lr
 include:
   under: project-a
 `;
-  const out = patchYamlFile(original, { nodes: { project-a: { x: 1, y: 2 } }, layout: 'manual' });
+  const out = patchYamlFile(original, { nodes: { 'project-a': { x: 1, y: 2 } }, layout: 'manual' });
   // The keys must appear exactly once — the frontmatter patcher would have
   // duplicated the whole document.
   assert.equal(out.match(/^kind:/gm)?.length, 1);

@@ -52,8 +52,8 @@ Rules for what you may propose:
   never two at once — `pj set` refuses both.
 - **Never propose `status: blocked` or `waiting`.** Those are derived. A card held up by another card
   gets a `blocks` edge from the blocker; one held up by a person gets `waiting_on`.
-- **Propose a `due` only when something external fixes the date** — a release, a meeting, a customer
-  commitment. A deadline you invented is worse than none, because the Due board will believe it.
+- **Propose a `due` only when something external fixes the date** — a release, a meeting, a promise
+  someone else is holding you to. A deadline you invented is worse than none, because the Due board will believe it.
   It is an ordinary facet: `pj set <id> --facet due=2026-09-01`.
 - **Leave a facet alone when the evidence is weak.** An honest blank beats a confident guess. Put
   those cards in a short "needs your brain" list under the table, with the one question that would

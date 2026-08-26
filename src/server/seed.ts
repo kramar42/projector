@@ -2,7 +2,7 @@
  * What a brand-new vault starts with.
  *
  * The model, not somebody else's data: the facet vocabulary without this
- * workspace's project ids, people, or its Project A `layer` taxonomy.
+ * workspace's project ids, people, or its own niche taxonomies.
  */
 
 export const SEED_FACETS = `# Facet vocabulary. This file is the single place column order lives —

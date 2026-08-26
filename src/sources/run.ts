@@ -56,9 +56,9 @@ export function run(
 }
 
 /**
- * `gh` needs GITHUB_TOKEN unset to use the keyring credential for the
- * Acme org — with the variable present it authenticates as the wrong
- * identity and 404s on private repos.
+ * `gh` needs GITHUB_TOKEN unset to use the keyring credential for a private
+ * org — with the variable present it authenticates as the wrong identity and
+ * 404s on private repos.
  */
 export function gh(args: string[], timeoutMs = 15_000): Promise<RunResult> {
   return run('gh', args, { timeoutMs, env: { GITHUB_TOKEN: undefined, GH_TOKEN: undefined } });

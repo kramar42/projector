@@ -557,7 +557,7 @@ function admits(selection: string[] | undefined): (value: string) => boolean {
  * hard sheds the panel down to the one axis you already used and there is no way
  * to look sideways. (Amazon does not hide Price because you picked a Brand.) A
  * facet with no real value anywhere in the universe is still dropped, which is
- * what keeps `layer` — absent from 157 of 159 cards — out of the way.
+ * what keeps a niche axis like `layer` — absent from all but a couple of notes — out of the way.
  *
  * **What each value counts** lifts that facet's own selection and applies every
  * other one. Count against the fully filtered set instead and every unselected

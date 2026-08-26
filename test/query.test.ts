@@ -21,7 +21,7 @@ import { paths } from '../src/config.ts';
  *   blocked-card ──blocked_by──> blocker
  */
 const CARDS: Record<string, string> = {
-  project-b: `---
+  'project-b': `---
 id: project-b
 title: Project B
 facets: { status: [active] }
@@ -46,7 +46,7 @@ links: [doc:notes.md]
 updated: 2026-08-18
 ---
 `,
-  project-a: `---
+  'project-a': `---
 id: project-a
 title: Project A
 facets: { status: [active] }
@@ -148,15 +148,15 @@ test('a facet filter is one level deep and reads values, not edges', () => {
 test('(none) selects absence, which no stored value can express', () => {
   const { root, cleanup } = vault();
   try {
-    assert.deepEqual(ids(root, { filter: { project: [NONE] } }), ['blocker', 'project-b', 'loose', 'project-a', 'project-a-eventing']);
-    assert.deepEqual(ids(root, { filter: { priority: [NONE] } }), ['project-b', 'loose', 'project-a', 'project-a-eventing']);
+    assert.deepEqual(ids(root, { filter: { project: [NONE] } }), ['blocker', 'loose', 'project-a', 'project-a-eventing', 'project-b']);
+    assert.deepEqual(ids(root, { filter: { priority: [NONE] } }), ['loose', 'project-a', 'project-a-eventing', 'project-b']);
     // A value and absence at once: "unassigned, or assigned to project-a".
     assert.deepEqual(ids(root, { filter: { priority: [NONE, 'month'] } }), [
-      'project-b',
       'kc-realms',
       'loose',
       'project-a',
       'project-a-eventing',
+      'project-b',
     ]);
   } finally {
     cleanup();
@@ -179,7 +179,7 @@ test('computed axes filter exactly like stored ones', () => {
   const { root, cleanup } = vault();
   try {
     assert.deepEqual(ids(root, { filter: { kind: ['node'] } }), ['project-a-eventing']);
-    assert.deepEqual(ids(root, { filter: { type: ['project'] } }), ['project-b', 'keycloak', 'project-a']);
+    assert.deepEqual(ids(root, { filter: { type: ['project'] } }), ['keycloak', 'project-a', 'project-b']);
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocker', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
@@ -188,16 +188,16 @@ test('computed axes filter exactly like stored ones', () => {
     // view does.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
       'blocker',
-      'project-b',
       'loose',
       'project-a',
       'project-a-eventing',
+      'project-b',
     ]);
     assert.deepEqual(ids(root, { filter: { triage: ['needs-priority'] } }), [
-      'project-b',
       'loose',
       'project-a',
       'project-a-eventing',
+      'project-b',
     ]);
     assert.deepEqual(ids(root, { filter: { staleness: ['older'] } }), ['loose', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { staleness: ['month'] } }), ['project-a']);
@@ -261,13 +261,13 @@ test('focus walks references transitively, in the direction asked for', () => {
     assert.deepEqual(set({ id: 'project-a', via: 'parent', dir: 'in' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
     assert.deepEqual(set({ id: 'kafka-schema', via: 'parent', dir: 'out' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
     // The project reference reaches the grandchild that `project=project-b` could not.
-    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in' }), ['project-b', 'kc-realms', 'keycloak']);
+    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in' }), ['kc-realms', 'keycloak', 'project-b']);
     // The relation is stored on the card that is stuck, so `out` from it reaches
     // its blockers and `in` from a blocker reaches what it holds up.
     assert.deepEqual(set({ id: 'blocked-card', via: 'blocked_by', dir: 'out' }), ['blocked-card', 'blocker']);
     assert.deepEqual(set({ id: 'blocker', via: 'blocked_by', dir: 'in' }), ['blocked-card', 'blocker']);
     // depth caps the walk one hop short of the grandchild.
-    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in', depth: 1 }), ['project-b', 'keycloak']);
+    assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in', depth: 1 }), ['keycloak', 'project-b']);
   } finally {
     cleanup();
   }
@@ -280,9 +280,9 @@ test('dir=both is two walks unioned, not one walk over a symmetric graph', () =>
     // From the middle of the chain: its own container and its own member, and
     // not `project-a` — which a walk over undirected edges would reach through project-b.
     assert.deepEqual([...focused({ id: 'keycloak', via: 'project', dir: 'both' }, notes)].sort(), [
-      'project-b',
       'kc-realms',
       'keycloak',
+      'project-b',
     ]);
   } finally {
     cleanup();
@@ -464,7 +464,7 @@ test('an axis absent from the universe is not offered; a selected one always is'
     const project = run({ filter: { project: [NONE] } }).counts.find((c) => c.facet === 'project')!;
     assert.deepEqual(
       project.values.map((v) => v.value),
-      ['project-b', 'keycloak', 'project-a', NONE],
+      ['keycloak', 'project-a', 'project-b', NONE],
     );
     // Selected but empty stays reachable, or it could never be unselected.
     const stuck = run({ filter: { priority: ['backlog'] } });
@@ -911,7 +911,7 @@ test('a relation groups a board and reaches (none), like any other facet', () =>
     const byValue = Object.fromEntries((res.groups ?? []).map((g) => [g.value, g.ids.length]));
     // None of this was possible while relations lived in an `edges` block:
     // filtering, grouping and absence all arrive because it is a facet.
-    assert.equal(byValue.project-a, 1);
+    assert.equal(byValue['project-a'], 1);
     assert.equal(byValue['project-a-eventing'], 1);
     assert.ok(byValue[NONE]! > 0);
     assert.deepEqual(ids(root, { filter: { parent: ['project-a'] } }), ['project-a-eventing']);
@@ -1115,12 +1115,12 @@ test('a negation keeps every note the axis says nothing about', () => {
     assert.deepEqual(out, [
       'blocked-card',
       'blocker',
-      'project-b',
       'kafka-schema',
       'kc-realms',
       'loose',
       'project-a',
       'project-a-eventing',
+      'project-b',
     ]);
 
     // Which is what naming every other value cannot do. `project-b`, `blocker` and
@@ -1182,8 +1182,8 @@ test('an excluded value is reported as excluded, and still counts what it would 
   try {
     const res = open(root)({ filter: { project: ['-project-b'] } });
     const project = res.counts.find((c) => c.facet === 'project')!;
-    const project-b = project.values.find((v) => v.value === 'project-b')!;
-    assert.deepEqual(project-b, { value: 'project-b', count: 1, selected: false, excluded: true });
+    const projectB = project.values.find((v) => v.value === 'project-b')!;
+    assert.deepEqual(projectB, { value: 'project-b', count: 1, selected: false, excluded: true });
     // Counted with this axis's own filter lifted, like every other value — so the
     // row says what un-excluding it would restore rather than reading 0.
     assert.equal(project.values.find((v) => v.value === 'keycloak')!.count, 1);

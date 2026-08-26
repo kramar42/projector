@@ -8,9 +8,9 @@ facets:
   source: ["jira"]
 links:
   - "jira:PROJ-303"
-  - "gh:pr:Acme/platform#412"
-  - "gh:branch:Acme/platform@main"
-  - "gh:commit:Acme/platform@0000000000000000000000000000000000000000"
+  - "gh:pr:acme/platform#412"
+  - "gh:branch:acme/platform@main"
+  - "gh:commit:acme/platform@0000000000000000000000000000000000000000"
   - "claude:00000000-0000-4000-8000-000000000000"
   - "doc:docs/resolves.md"
   - "doc:docs/absent.md"

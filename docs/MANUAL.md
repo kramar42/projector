@@ -716,7 +716,7 @@ by `pj check` like anything else.
 <vault>/
   fix-deploy.md                  # a note
   eventing.md                    # a node, may carry a project: block
-  reading-list.md                     # no frontmatter: still a note
+  reading-list.md                # no frontmatter: still a note
   archive/last-year.md           # any depth; folders mean nothing to the app
   assets/fix-deploy/error.png
   .projector/

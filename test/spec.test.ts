@@ -101,7 +101,7 @@ test('saving writes the query half and never the arrangement', () => {
     group: 'priority',
     show: 'parent,tech',
   });
-  spec.nodes = { project-a: { x: 10, y: 20 } };
+  spec.nodes = { 'project-a': { x: 10, y: 20 } };
   spec.order = { now: ['a', 'b'] };
   const file = specToFile(spec, 'Project A graph');
   assert.deepEqual(file, {
@@ -315,7 +315,7 @@ test('every key the writer emits is a key the checker knows', () => {
     sort: 'priority:asc',
     show: 'parent,tech',
   });
-  spec.nodes = { project-a: { x: 1, y: 2 } };
+  spec.nodes = { 'project-a': { x: 1, y: 2 } };
   spec.order = { now: ['a'] };
 
   const written = Object.keys(specToFile(spec, 'T'));

@@ -12,5 +12,5 @@ updated: 2026-08-25  # fresh
 
 Renders: the filled `is-overdue` chip. This is the rule that shipped with
 `color: var(--ink)` on `background: var(--bad)` — 1.92:1 in light, 1.94:1 in dark —
-and went unseen for as long as it did because no note in the work vault carries a
-`due` date. The chip shows the date and *wears* the bucket.
+and went unseen for as long as it did because the vault it shipped against carried no
+`due` dates at all. The chip shows the date and *wears* the bucket.

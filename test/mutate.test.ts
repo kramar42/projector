@@ -567,7 +567,7 @@ test('linking bumps updated, and unlinking an absent ref refuses', () => {
  * `bulkMove` carried a comment claiming this property while not having it: "it
  * writes only the named facets, so a value an agent changed since the client's
  * last read cannot be reverted". True of the payload, false of the file. Real
- * cost, on the real vault: `readAll` measures around 31ms over 191 notes, and
+ * cost, at vault scale: `readAll` measures tens of milliseconds over a few hundred notes, and
  * every write in the loop widens the gap after it, so a concurrent edit inside
  * that window was reverted with no conflict to report.
  *

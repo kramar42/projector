@@ -44,7 +44,7 @@ export interface Candidate {
    * converges. `pj add --fingerprint` refuses a duplicate on the strength of it.
    */
   fingerprint: string;
-  /** In his voice where the source gave one — a commit subject, an opening prompt. */
+  /** In the user's voice where the source gave one — a commit subject, an opening prompt. */
   title: string;
   /** Links to carry onto the card, provenance first. */
   links: string[];
