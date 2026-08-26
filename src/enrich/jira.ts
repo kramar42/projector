@@ -13,8 +13,8 @@ import { unavailable, type Enrichment, type Fetcher, type Tone } from './types.t
 /**
  * Colour a status without depending on workflow names.
  *
- * A Jira project may name its statuses anything — "in review", "Preparation", "Won't do" —
- * so matching on names would mis-colour most of them. `statusCategory.key` is
+ * A Jira project may name its statuses anything at all, and most do, so matching
+ * on names would mis-colour most of them. `statusCategory.key` is
  * Jira's stable three-way split and travels across every project.
  *
  * One override on top of it: Jira files abandonment under `done`, so "Won't do"
@@ -36,13 +36,19 @@ export function statusTone(name: string, category: string | undefined): Tone {
   }
 }
 
-export const jiraFetcher: Fetcher = {
-  ttl: 900,
-  async fetch(ref) {
+export function jiraFetcher(root: string): Fetcher {
+  return {
+    ttl: 900,
+    async fetch(ref) {
     const key = ref.trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) return unavailable(`"${ref}" is not an issue key`);
 
-    const res = await jiraGet<IssueJson>(`/rest/api/3/issue/${key}`, { fields: ISSUE_FIELDS }, 12_000);
+      const res = await jiraGet<IssueJson>(
+        root,
+        `/rest/api/3/issue/${key}`,
+        { fields: ISSUE_FIELDS },
+        12_000,
+      );
     if (!res.ok) {
       if (res.status === 404) return unavailable(`${key} not found, or not visible to this account`);
       return unavailable(res.reason, res.needsSetup);
@@ -73,7 +79,8 @@ export const jiraFetcher: Fetcher = {
             : '',
         },
       ].filter((f) => f.v),
-      url: jiraBrowse(issue.key) ?? undefined,
-    } satisfies Enrichment;
-  },
-};
+        url: jiraBrowse(root, issue.key) ?? undefined,
+      } satisfies Enrichment;
+    },
+  };
+}

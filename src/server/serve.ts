@@ -14,6 +14,7 @@ import {
   suggestName,
   touchVault,
 } from '../vault.ts';
+import { jiraConfig } from '../sources/jira.ts';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
 import { loadNote } from '../schema/note.ts';
@@ -269,7 +270,13 @@ app.get('/api/query', (c) => {
   const resolved = resolveSpec(root, c.req.url);
   if ('error' in resolved) return c.json({ error: resolved.error }, 404);
 
-  return c.json(queryPayload({ facets, db, notes, views }, resolved.spec, resolved.saved));
+  return c.json(
+    queryPayload(
+      { facets, db, notes, views, jiraBase: jiraConfig(root)?.url ?? null },
+      resolved.spec,
+      resolved.saved,
+    ),
+  );
 });
 
 
@@ -284,6 +291,7 @@ app.get('/api/note/:id', (c) => {
   return c.json({
     card: toDTO(rec, {
       facets,
+      jiraBase: jiraConfig(root)?.url ?? null,
       // The panel edits `facets` and never `computed`, but a DTO that reports no
       // computed values at all is a DTO that lies about this card — and it is the
       // same card the board just drew.

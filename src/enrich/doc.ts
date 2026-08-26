@@ -2,6 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { ago, firstLine } from '../sources/run.ts';
 import { unavailable, type Enrichment, type Fetcher } from './types.ts';
 import { resolveDoc } from '../vault.ts';
+import { settingsFor } from '../settings.ts';
 
 /**
  * How to open a file that is not a web page.
@@ -22,10 +23,10 @@ import { resolveDoc } from '../vault.ts';
  *   PROJECTOR_DOC_URL='vscode://file{path}'
  *   PROJECTOR_DOC_URL='obsidian://open?path={path}'
  */
-function openers(abs: string): { action?: { label: string; href: string }; command?: string } {
+function openers(root: string, abs: string): { action?: { label: string; href: string }; command?: string } {
   // `open` is macOS's own "hand this to whatever owns it", which is the only
   // thing here that needs no configuration and no assumption about an editor.
-  const template = process.env.PROJECTOR_DOC_URL?.trim();
+  const template = settingsFor(root).docUrl;
   // A click beats a paste, and offering both would spend a line on the worse of
   // the two — the same either/or `claude:` already applies.
   if (template?.includes('{path}'))
@@ -34,8 +35,8 @@ function openers(abs: string): { action?: { label: string; href: string }; comma
 }
 
 /**
- * Local markdown documents — the design docs that are the real artifacts of the
- * domain-owner work with no Jira ticket. Filesystem only.
+ * Local markdown documents — the notes and design docs that are the real
+ * artifact of a piece of work with no ticket behind it. Filesystem only.
  */
 export function docFetcher(dataRoot: string): Fetcher {
   return {
@@ -65,7 +66,7 @@ export function docFetcher(dataRoot: string): Fetcher {
           { k: 'modified', v: ago(st.mtime.toISOString()) },
           { k: 'lines', v: String(head.split('\n').length >= 200 ? '200+' : head.split('\n').length) },
         ],
-        ...openers(path),
+        ...openers(dataRoot, path),
       } satisfies Enrichment;
     },
   };

@@ -6,6 +6,10 @@ dist/
 .DS_Store
 vaults.json
 
+# A vault's own settings hold its credentials. The two vaults that ship here
+# are no exception, and `pj setup` writes this path.
+vaults/*/.projector/config.yaml
+
 # One lockfile is committed — bun's, which is what CI installs from. Every other
 # manager works and resolves fresh; their lockfiles just must not land here, or
 # two of them drift and nobody knows which one describes the tree.

@@ -1,5 +1,6 @@
 import { ISSUE_FIELDS, jiraBrowse, jiraGet, jqlDate, type IssueJson } from '../sources/jira.ts';
 import { ago } from '../sources/run.ts';
+import { settingsFor } from '../settings.ts';
 import { evidenceFor } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
 
@@ -35,11 +36,11 @@ interface SearchJson {
  * a 404 or 410 costs one request in the case that will not happen twice, and
  * saves the sweep going dark on whichever deployment this turns out to be.
  */
-async function searchIssues(jql: string, max: number) {
+async function searchIssues(root: string, jql: string, max: number) {
   const params = { jql, fields: ISSUE_FIELDS, maxResults: String(max) };
-  const modern = await jiraGet<SearchJson>('/rest/api/3/search/jql', params);
+  const modern = await jiraGet<SearchJson>(root, '/rest/api/3/search/jql', params);
   if (modern.ok || (modern.status !== 404 && modern.status !== 410)) return modern;
-  return jiraGet<SearchJson>('/rest/api/3/search', params);
+  return jiraGet<SearchJson>(root, '/rest/api/3/search', params);
 }
 
 export const jiraChannel: Channel = {
@@ -47,8 +48,8 @@ export const jiraChannel: Channel = {
   defaultDays: 7,
 
   async collect(ctx): Promise<ChannelReport> {
-    const jql = process.env.PROJECTOR_INTAKE_JQL || defaultJql(ctx.since);
-    const res = await searchIssues(jql, Math.max(ctx.limit * 2, 20));
+    const jql = settingsFor(ctx.root).jql || defaultJql(ctx.since);
+    const res = await searchIssues(ctx.root, jql, Math.max(ctx.limit * 2, 20));
 
     if (!res.ok) {
       // A cursor is never advanced on a failed fetch: nothing was looked at.
@@ -108,7 +109,7 @@ export const jiraChannel: Channel = {
           { k: 'assignee', v: issue.fields.assignee?.displayName ?? 'unassigned' },
           { k: 'updated', v: ago(updated) },
           { k: 'epic', v: issue.fields.parent?.key ?? '' },
-          { k: 'url', v: jiraBrowse(key) ?? '' },
+          { k: 'url', v: jiraBrowse(ctx.root, key) ?? '' },
         ].filter((f) => f.v),
         evidence,
       });

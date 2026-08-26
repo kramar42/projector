@@ -510,7 +510,18 @@ read per level, walking up the process tree to find which live Claude session is
 nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
 because a path may contain a quote.
 
-**Environment:**
+**Where configuration lives.** A vault's own `.projector/config.yaml` holds which channels it
+sweeps, whether its links are enriched, and the credentials those need — read by `src/settings.ts`,
+memoised per vault on the file's mtime *and* on the overriding variables, because one server process
+holds several vaults open and none of them may answer with another's token. `pj setup`
+(`src/setup.ts`) writes the file, adds it to the vault's `.gitignore`, and probes each channel by
+making the request rather than checking that a value is present: configured-and-wrong and
+never-configured look identical otherwise.
+
+The registry beside the app stays what it was — a list of paths, holding nothing secret.
+
+**Environment.** Every value below still wins over the file, which is the one-way escape hatch a test
+or a one-off run needs:
 
 | | |
 |---|---|
@@ -525,8 +536,8 @@ because a path may contain a quote.
 | `PROJECTOR_CLAUDE_DESKTOP` | where the Claude Desktop session store is |
 | `PROJECTOR_DOC_URL` | an editor URL template for `doc:` links (`cursor://file{path}`); absent means a copyable command instead |
 
-No credential is read from anywhere but the environment, and none reaches the browser: enrichment
-responses carry the resolved fields, never the token.
+A credential is read from the vault's config or the environment and from nowhere else, and none
+reaches the browser: enrichment responses carry the resolved fields, never the token.
 
 ## Why the registry is a file
 
@@ -665,6 +676,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging |
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
+| `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |

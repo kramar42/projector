@@ -64,6 +64,8 @@ export interface PayloadDeps {
   views: ViewSpec[];
   /** Overridable so a test does not depend on the day it runs. */
   today?: string;
+  /** The Jira host bare `jira:` refs link to, for this vault. */
+  jiraBase?: string | null;
 }
 
 export function queryPayload(
@@ -95,6 +97,7 @@ export function queryPayload(
     byId[id] = toDTO(rec, {
       facets,
       today,
+      jiraBase: deps.jiraBase ?? null,
       computed: computedOf(rec),
       refCount: inbound.get(id) ?? 0,
       blockedBy: blockedBy(id, notes, facets),

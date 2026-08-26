@@ -5,6 +5,7 @@ import { commitWatermark, recordPending, watermarkFor, watermarks } from './db.t
 import { gitChannel } from './git.ts';
 import { jiraChannel } from './jira.ts';
 import { gmailChannel, slackChannel } from './mcp.ts';
+import { channelEnabled } from '../settings.ts';
 import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 
 /**
@@ -60,7 +61,14 @@ function readVault(root: string): VaultRead {
 }
 
 export interface SweepOptions {
-  /** Channel names to run. Empty means all of them. */
+  /**
+   * Channel names to run. Empty means the ones this vault has turned on.
+   *
+   * Naming a channel explicitly runs it whether or not the vault lists it: the
+   * config says what a bare `pj intake` should bother with, and asking for one
+   * by name is not a bare sweep. Otherwise `pj intake jira` would print nothing
+   * and give no reason.
+   */
   only?: string[];
   /** Overrides every channel's watermark and default window. */
   since?: Date;
@@ -76,7 +84,9 @@ export interface Sweep {
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
 
 export async function sweep(root: string, opts: SweepOptions = {}): Promise<Sweep> {
-  const wanted = opts.only?.length ? opts.only : channelNames();
+  const wanted = opts.only?.length
+    ? opts.only
+    : channelNames().filter((n) => channelEnabled(root, n));
   const unknown = wanted.filter((w) => !CHANNELS.some((c) => c.name === w));
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const reports: ChannelReport[] = [];

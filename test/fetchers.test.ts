@@ -10,6 +10,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+/** No config file lives here, so settings come from the environment alone. */
+const NO_VAULT = '/nonexistent-vault';
+
 
 /**
  * The read-only link fetchers, one per kind, and what an unavailable one reports.
@@ -74,7 +77,7 @@ test('a desktop-app local_ id explains why it cannot resolve', async () => {
 test('jira says what configuration it needs', async () => {
   const saved = process.env.PROJECTOR_JIRA_URL;
   delete process.env.PROJECTOR_JIRA_URL;
-  const r = await jiraFetcher.fetch('PROJ-303');
+  const r = await jiraFetcher(NO_VAULT).fetch('PROJ-303');
   assert.equal(isUnavailable(r), true);
   if (isUnavailable(r)) {
     assert.equal(r.needsSetup, true);
@@ -87,7 +90,7 @@ test('a bad issue key never reaches the network', async () => {
   process.env.PROJECTOR_JIRA_URL = 'https://example.invalid';
   process.env.PROJECTOR_JIRA_EMAIL = 'a@b.c';
   process.env.PROJECTOR_JIRA_TOKEN = 'x';
-  const r = await jiraFetcher.fetch('not-a-key');
+  const r = await jiraFetcher(NO_VAULT).fetch('not-a-key');
   assert.equal(isUnavailable(r), true);
   if (isUnavailable(r)) assert.match(r.reason, /not an issue key/);
   delete process.env.PROJECTOR_JIRA_URL;

@@ -58,9 +58,10 @@ function code(text: string): string {
  * offender fails this test, and adding a line here is a decision somebody makes
  * on purpose rather than a check quietly getting looser.
  *
- * All three are foreign vocabularies that happen to collide. Jira has fields
+ * All of them are foreign vocabularies that happen to collide. Jira has fields
  * called `status` and `priority` and a status category called `done`; React Flow
- * has a handle `type="source"`; and `pj intake status` is a subcommand.
+ * has a handle `type="source"`; and `pj intake status` and `gh auth status` are
+ * subcommands.
  */
 const ALLOWED: { file: string; word: string; why: string }[] = [
   { file: 'enrich/jira.ts', word: 'priority', why: "Jira's field name, in a Jira fetcher" },
@@ -68,6 +69,7 @@ const ALLOWED: { file: string; word: string; why: string }[] = [
   { file: 'intake/jira.ts', word: 'status', why: "Jira's field name, in a Jira sweep" },
   { file: 'sources/jira.ts', word: 'status', why: "Jira's field name, in a Jira client" },
   { file: 'cli/pj.ts', word: 'status', why: '`pj intake status` — a subcommand, not an axis' },
+  { file: 'setup.ts', word: 'status', why: '`gh auth status` — the gh CLI\'s subcommand' },
   { file: 'web/views/CanvasView.tsx', word: 'source', why: "React Flow's handle type" },
 ];
 

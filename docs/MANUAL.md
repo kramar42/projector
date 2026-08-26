@@ -616,11 +616,12 @@ accumulates its own history.
 
 ## Skills
 
-`.claude/skills/` ships four skills, invoked as slash commands from a Claude session in this project:
+`.claude/skills/` ships five skills, invoked as slash commands from a Claude session in this project:
 
 | | |
 |---|---|
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
+| `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
 | `/pj-capture` | sweep the five intake channels; each candidate becomes a note, a link on an existing note, or nothing |
 | `/pj-triage` | give incomplete notes a project, priority and status |
 | `/pj-work` | start work on a note |
@@ -691,6 +692,7 @@ one.
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
+| `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 

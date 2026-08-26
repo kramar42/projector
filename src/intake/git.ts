@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { settingsFor } from '../settings.ts';
 import { evidenceFor, repoIndex } from './match.ts';
 import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
 
@@ -47,9 +48,8 @@ function git(cwd: string, args: string[]): string | null {
 }
 
 /** The identity to filter on: the repo's own `user.email`, overridable. */
-function authorFor(repo: string): string | null {
-  if (process.env.PROJECTOR_GIT_AUTHOR) return process.env.PROJECTOR_GIT_AUTHOR;
-  return git(repo, ['config', 'user.email'])?.trim() || null;
+function authorFor(root: string, repo: string): string | null {
+  return settingsFor(root).gitAuthor ?? (git(repo, ['config', 'user.email'])?.trim() || null);
 }
 
 /**
@@ -155,7 +155,7 @@ export const gitChannel: Channel = {
         missing.push(repo.path);
         continue;
       }
-      const author = authorFor(repo.path);
+      const author = authorFor(ctx.root, repo.path);
       if (!author) {
         missing.push(`${repo.path} (no git user.email)`);
         continue;

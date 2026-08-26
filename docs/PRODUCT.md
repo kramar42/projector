@@ -13,7 +13,7 @@ their own notes. They keep it **open all day on a second monitor** — the board
 is ambient, glanced at and dragged on continuously, not visited for a session and closed.
 
 **Second, and first-class: Claude agent sessions.** Notes are plain files, so an agent creates and
-edits them directly through `pj` and the four `.claude/skills/` slash commands, with no API and no app
+edits them directly through `pj` and the five `.claude/skills/` slash commands, with no API and no app
 running. Both write the same vault; the agent is not a guest.
 
 Two consequences future work must honour:
@@ -76,9 +76,12 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   `pj intake` creates no note and moves no cursor.
 - **`pj work`** prepares a multi-repo git worktree workspace, a briefing with the note's full context,
   and a terminal running a Claude session in it.
-- **Environment:** `PROJECTOR_JIRA_URL` / `_EMAIL` / `_TOKEN`, `PROJECTOR_WORKSPACES`, the
-  authenticated `gh` CLI. Every fetcher is read-only and runs server-side, so credentials stay out of
-  the browser.
+- **Configuration is the vault's.** `.projector/config.yaml` says which channels this vault sweeps,
+  whether links are enriched, and holds the credentials both need — gitignored, because a vault is
+  often a repository. The matching `PROJECTOR_*` variables still override it for one run. `pj setup`
+  writes the file and reports what actually answered; GitHub is the exception with nothing to store,
+  since `pj` shells out to an authenticated `gh`. Every fetcher is read-only and runs server-side, so
+  credentials stay out of the browser.
 - **The vault holds real notes, not a demo dataset.** The app is judged against the author's own
   vault rather than a seeded one, which is why `vaults/coverage` has to carry states a seeded vault
   never produces. That vault is private and is not in this repository.

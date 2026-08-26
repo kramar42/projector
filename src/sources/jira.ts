@@ -1,3 +1,4 @@
+import { settingsFor } from '../settings.ts';
 /**
  * Jira, read-only: the credential and the GET, with no opinion about what is
  * being asked.
@@ -8,8 +9,10 @@
  * same failure vocabulary — and neither should own the other's store, so what is
  * shared stops here.
  *
- * Set `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL` and `PROJECTOR_JIRA_TOKEN` (an
- * Atlassian API token) to turn it on. Only GET is ever issued (C2).
+ * The credential is the vault's — `.projector/config.yaml`, or the matching
+ * `PROJECTOR_JIRA_*` variables, which win. Every entry point therefore takes the
+ * vault it is acting for: one server process holds several open, and the wrong
+ * token is worse than none. Only GET is ever issued (C2).
  */
 
 export interface JiraConfig {
@@ -18,15 +21,12 @@ export interface JiraConfig {
   token: string;
 }
 
-export function jiraConfig(): JiraConfig | null {
-  const url = process.env.PROJECTOR_JIRA_URL?.replace(/\/+$/, '');
-  const email = process.env.PROJECTOR_JIRA_EMAIL;
-  const token = process.env.PROJECTOR_JIRA_TOKEN;
-  return url && email && token ? { url, email, token } : null;
+export function jiraConfig(root: string): JiraConfig | null {
+  return settingsFor(root).jira;
 }
 
 export const JIRA_UNCONFIGURED =
-  'Jira is not configured — set PROJECTOR_JIRA_URL, PROJECTOR_JIRA_EMAIL and PROJECTOR_JIRA_TOKEN';
+  'Jira is not configured — run `pj setup`, or set PROJECTOR_JIRA_URL, PROJECTOR_JIRA_EMAIL and PROJECTOR_JIRA_TOKEN';
 
 /**
  * A GET that never throws. Callers specialise the message where a status means
@@ -39,11 +39,12 @@ export type JiraResult<T> =
   | { ok: false; status?: number; reason: string; needsSetup?: boolean };
 
 export async function jiraGet<T>(
+  root: string,
   path: string,
   params: Record<string, string> = {},
   timeoutMs = 15_000,
 ): Promise<JiraResult<T>> {
-  const cfg = jiraConfig();
+  const cfg = jiraConfig(root);
   if (!cfg) return { ok: false, reason: JIRA_UNCONFIGURED, needsSetup: true };
 
   const url = new URL(`${cfg.url}${path}`);
@@ -109,7 +110,7 @@ export function jqlDate(when: Date): string {
 }
 
 /** The base of a browse URL, for links. Null when unconfigured. */
-export function jiraBrowse(key: string): string | null {
-  const cfg = jiraConfig();
+export function jiraBrowse(root: string, key: string): string | null {
+  const cfg = jiraConfig(root);
   return cfg ? `${cfg.url}/browse/${key}` : null;
 }

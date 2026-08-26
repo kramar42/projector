@@ -1,5 +1,4 @@
 import { fallbackHref, fallbackLabel } from '../schema/links.ts';
-import { jiraConfig } from '../sources/jira.ts';
 import type { Note } from '../schema/types.ts';
 import { isProject } from '../index/project.ts';
 import { bucketOf } from '../schema/facets.ts';
@@ -111,6 +110,12 @@ export function toDTO(
     computed?: Record<string, string[]>;
     /** Overridable so a test does not depend on the day it runs. */
     today?: string;
+    /**
+     * The Jira host a bare `jira:` ref links to, read from the vault whose
+     * payload this is. Passed in rather than looked up, because a DTO is built
+     * for one vault and the process may hold several open with different hosts.
+     */
+    jiraBase?: string | null;
   } = {},
 ): NoteDTO {
   return {
@@ -121,7 +126,7 @@ export function toDTO(
     links: rec.links.map((l) => ({
       ...l,
       label: fallbackLabel(l),
-      href: fallbackHref(l, jiraConfig()?.url ?? null),
+      href: fallbackHref(l, extra.jiraBase ?? null),
     })),
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),

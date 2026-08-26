@@ -2,6 +2,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths, resolveCliVault, resolvePath } from '../config.ts';
+import { settingsFor } from '../settings.ts';
+import { formatReport, probe, writeTemplate } from '../setup.ts';
+import { jiraConfig } from '../sources/jira.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
 import { SEED_FACETS, SEED_VIEWS } from '../server/seed.ts';
 import { declaredFacets, loadFacets } from '../schema/facets.ts';
@@ -127,6 +130,9 @@ const HELP = `pj — projector CLI${vaultNote}
   pj merge <id>... --into <id>                         fold notes into one, keeping its facets
   pj rm <id>...                                        delete, dropping references to it
   pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
+
+  pj setup [--json]                                    what this vault can reach, and what is missing
+  pj setup --init                                      write .projector/config.yaml and gitignore it
 
   pj vaults                                            list known vaults
   pj vaults add <path> [--name n] [--create]           open a folder as a vault
@@ -257,7 +263,11 @@ function cmdLs(argv: string[]): void {
   // The same assembly the web app receives, from the same module (C9). A second
   // shape for the CLI is how the two surfaces would start disagreeing about the
   // answer, having been made unable to disagree about the question.
-  const payload = queryPayload({ facets, db, notes, views: loadViews(root) }, spec, saved);
+  const payload = queryPayload(
+    { facets, db, notes, views: loadViews(root), jiraBase: jiraConfig(root)?.url ?? null },
+    spec,
+    saved,
+  );
 
   if (flags.has('json')) {
     console.log(JSON.stringify(payload, null, 2));
@@ -814,11 +824,12 @@ try {
       // Required, with no fallback. `pj work` creates real worktrees on disk, and a
       // guessed parent directory puts them somewhere the user did not choose and
       // will not think to look. Being told is cheap; being surprised is not.
-      const workspaces = process.env.PROJECTOR_WORKSPACES;
+      const workspaces = settingsFor(root).workspaces;
       if (!workspaces) {
         console.error(
-          'PROJECTOR_WORKSPACES is not set — `pj work` needs to be told where worktrees go.\n' +
-            '  export PROJECTOR_WORKSPACES=~/Code/wt',
+          '`pj work` has not been told where worktrees go. Run `pj setup`, put\n' +
+            '`workspaces: ~/Code/wt` in .projector/config.yaml, or export\n' +
+            'PROJECTOR_WORKSPACES.',
         );
         process.exit(1);
       }
@@ -877,6 +888,28 @@ try {
         console.error(`could not open Terminal: ${(err as Error).message}`);
         console.log(`run it yourself:\n  cd ${workspace} && claude "Read AGENT_BRIEFING.md and follow it exactly."`);
       }
+      break;
+    }
+
+    case 'setup': {
+      const { flags } = argFlags(
+        argv,
+        ['json', 'init', 'channels', 'no-enrich'],
+        ['json', 'init', 'no-enrich'],
+      );
+      if (flags.has('init')) {
+        const channels = (flags.get('channels')?.[0] ?? 'claude,git,jira,slack,gmail')
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+        const res = writeTemplate(root, channels, !flags.has('no-enrich'));
+        console.log(res.written ? `wrote ${res.path}` : `left ${res.path} alone: ${res.reason}`);
+        if (!res.written) process.exitCode = 1;
+        break;
+      }
+      const report = await probe(root);
+      if (flags.has('json')) console.log(JSON.stringify(report, null, 2));
+      else console.log(formatReport(report));
       break;
     }
 

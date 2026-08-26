@@ -118,6 +118,7 @@ pj rm <id>...                       # deletes, dropping every reference pointing
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory
 pj check                     # validate everything; run this after a batch of edits
+pj setup                     # which channels and fetchers this vault can reach, and what is missing
 ```
 
 `--facet` replaces a facet's values, `--add`/`--remove` adjust them. `--fingerprint` makes a create

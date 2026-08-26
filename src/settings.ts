@@ -1,0 +1,214 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { parse } from 'yaml';
+import { paths, resolvePath } from './config.ts';
+
+/**
+ * What a vault needs to reach the world: which channels it sweeps, whether its
+ * links are enriched, and the credentials both of those want.
+ *
+ * **Why this lives in the vault and not beside the app.** A credential belongs
+ * to the channel that spends it, and which channels are worth sweeping is a fact
+ * about *this* set of notes — a vault of work notes wants Jira and the project
+ * repos; a vault of reading notes wants neither, and being asked about them
+ * every sweep is noise. `vaults.json` stays what it always was: a list of paths
+ * an install has opened, holding nothing you would mind reading aloud.
+ *
+ * **The file is not committed.** `pj setup` writes `.projector/config.yaml` and
+ * adds it to the vault's `.gitignore`, because a vault is often a git repository
+ * and a token in one is a token pushed. Nothing else in `.projector/` is secret,
+ * so the ignore names this file rather than the folder.
+ *
+ * **The environment wins.** Every value here has a `PROJECTOR_*` variable that
+ * already meant it, and the variable is still read first. A file is where a
+ * setting lives; a variable is how you override it for one run without editing
+ * anything — which is what CI does, and what every test in this repository does.
+ * The precedence is one way round and never the other, so "why is it not picking
+ * up my token" has one answer: something exported it.
+ *
+ * Read per vault and memoised on the file's mtime, because the server holds
+ * several vaults open at once and one of them must never answer with another's
+ * credentials.
+ */
+
+/** Everything a channel or fetcher may ask a vault for. */
+export interface Settings {
+  /** Channel names this vault sweeps. `null` means all of them — the default. */
+  channels: string[] | null;
+  /** Link kinds to enrich. `null` means every kind that has a fetcher. */
+  enrich: string[] | null;
+  jira: { url: string; email: string; token: string } | null;
+  /** Overrides the default intake query. */
+  jql: string | null;
+  gitAuthor: string | null;
+  /** Where `pj work` puts worktrees. */
+  workspaces: string | null;
+  /** A template like `cursor://file{path}` for opening a `doc:` ref. */
+  docUrl: string | null;
+}
+
+export const CONFIG_FILE = 'config.yaml';
+
+/** Where a vault's settings live. */
+export function settingsPath(root: string): string {
+  return join(paths(root).config, CONFIG_FILE);
+}
+
+interface Raw {
+  channels?: unknown;
+  enrich?: unknown;
+  jira?: { url?: unknown; email?: unknown; token?: unknown; jql?: unknown };
+  git?: { author?: unknown };
+  doc?: { url?: unknown };
+  workspaces?: unknown;
+}
+
+const str = (v: unknown): string | null => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s : null;
+};
+
+/**
+ * A list, a `false`, or nothing.
+ *
+ * `channels: false` and `enrich: false` are how a vault says *none*, which a
+ * list cannot say — an empty list reads like an unfinished edit, and treating it
+ * as "all" would be the file quietly doing the opposite of what it looks like.
+ */
+const list = (v: unknown): string[] | null => {
+  if (v === false) return [];
+  if (v === true || v === undefined || v === null) return null;
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  const one = str(v);
+  return one ? [one] : null;
+};
+
+function readFile(path: string): Raw {
+  try {
+    const parsed = parse(readFileSync(path, 'utf8'));
+    return parsed && typeof parsed === 'object' ? (parsed as Raw) : {};
+  } catch {
+    // A malformed file is not a reason to refuse to start. `pj setup --check`
+    // is where a person is told about it, in the one place they are looking.
+    return {};
+  }
+}
+
+const cache = new Map<string, { key: string; value: Settings }>();
+
+function stamp(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * Every variable that can override the file, in one string.
+ *
+ * The memo cannot key on the file alone. A variable exported after the first
+ * read would then never be seen — which is not a hypothetical: the tests in this
+ * repository set and delete these between cases, and a memo that ignored them
+ * would hand the second case the first one's answer.
+ */
+const OVERRIDES = [
+  'PROJECTOR_JIRA_URL',
+  'PROJECTOR_JIRA_EMAIL',
+  'PROJECTOR_JIRA_TOKEN',
+  'PROJECTOR_INTAKE_JQL',
+  'PROJECTOR_GIT_AUTHOR',
+  'PROJECTOR_WORKSPACES',
+  'PROJECTOR_DOC_URL',
+] as const;
+
+const envKey = () => OVERRIDES.map((k) => process.env[k] ?? '').join('\u0000');
+
+/** The settings for one vault: its file, with any exported variable winning. */
+export function settingsFor(root: string): Settings {
+  const path = settingsPath(root);
+  const at = stamp(path);
+  const key = `${at}\u0000${envKey()}`;
+  const hit = cache.get(root);
+  if (hit && hit.key === key) return hit.value;
+
+  const raw = at === -1 ? {} : readFile(path);
+  const env = process.env;
+
+  const url = str(env.PROJECTOR_JIRA_URL) ?? str(raw.jira?.url);
+  const email = str(env.PROJECTOR_JIRA_EMAIL) ?? str(raw.jira?.email);
+  const token = str(env.PROJECTOR_JIRA_TOKEN) ?? str(raw.jira?.token);
+
+  const value: Settings = {
+    channels: list(raw.channels),
+    enrich: list(raw.enrich),
+    jira: url && email && token ? { url: url.replace(/\/+$/, ''), email, token } : null,
+    jql: str(env.PROJECTOR_INTAKE_JQL) ?? str(raw.jira?.jql),
+    gitAuthor: str(env.PROJECTOR_GIT_AUTHOR) ?? str(raw.git?.author),
+    workspaces: (() => {
+      const w = str(env.PROJECTOR_WORKSPACES) ?? str(raw.workspaces);
+      return w ? resolvePath(w, root) : null;
+    })(),
+    docUrl: str(env.PROJECTOR_DOC_URL) ?? str(raw.doc?.url),
+  };
+
+  cache.set(root, { key, value });
+  return value;
+}
+
+/** Whether this vault sweeps a channel. Unconfigured vaults sweep everything. */
+export function channelEnabled(root: string, name: string): boolean {
+  const { channels } = settingsFor(root);
+  return channels === null || channels.includes(name);
+}
+
+/** Whether this vault enriches a link kind. Unconfigured vaults enrich all. */
+export function enrichEnabled(root: string, kind: string): boolean {
+  const { enrich } = settingsFor(root);
+  if (enrich === null) return true;
+  // `gh` in the file covers `gh:pr`, `gh:branch` and `gh:commit` — three refs of
+  // one credential, and nobody wants to enable them one at a time.
+  return enrich.includes(kind) || enrich.includes(kind.split(':')[0]!);
+}
+
+/** Forget the memo. Only tests need this; the mtime handles the real case. */
+export function forgetSettings(): void {
+  cache.clear();
+}
+
+/** The file `pj setup` writes, with everything commented out but the choices. */
+export function settingsTemplate(channels: string[], enrich: boolean): string {
+  return `# projector — what this vault reaches for.
+#
+# Written by \`pj setup\`. Gitignored, because it holds credentials and a vault is
+# often a git repository. Any PROJECTOR_* variable you export overrides the value
+# here for that run.
+
+# Channels \`pj intake\` sweeps. Remove one to stop being asked about it;
+# \`channels: false\` sweeps none.
+channels: [${channels.join(', ')}]
+
+# Link kinds to resolve for display. \`false\` turns enrichment off entirely and
+# every link renders as its raw ref.
+enrich: ${enrich ? 'true' : 'false'}
+
+# jira:
+#   url: https://your-org.atlassian.net
+#   email: you@example.com
+#   token: <an Atlassian API token, not your password>
+#   jql: <optional — overrides the default intake query>
+
+# git:
+#   author: you@example.com   # defaults to this repository's git config
+
+# doc:
+#   url: 'cursor://file{path}'   # how a doc: ref opens; defaults to the OS
+
+# workspaces: ~/Code/wt   # where \`pj work\` puts worktrees
+#
+# Where Claude itself lives is a fact about the machine, not about this vault, so
+# it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.
+`;
+}
+
+export { existsSync };
