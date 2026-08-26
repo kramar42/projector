@@ -1,3 +1,12 @@
+# Optional. mise is one way to get a runtime; nvm, fnm, Homebrew or a system
+# install are all equally fine — `engines` in package.json is the real contract,
+# and the CI matrix is what proves the floor still holds.
+#
+# A concrete major, not `latest`. There is no lockfile for a runtime, so this
+# file *is* the pin: `latest` would hand two people on two days two different
+# Node versions, which is the opposite of what a version manager is for. Newest
+# rather than the floor, because CI already tests the floor. Bump deliberately.
+#
+# No package manager is pinned here, because none is required.
 [tools]
-node = "latest"
-pnpm = "latest"
+node = "26"

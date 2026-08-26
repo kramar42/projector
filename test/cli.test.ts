@@ -60,7 +60,10 @@ function run(args: string[], env: Record<string, string> = {}): Run {
   const clean = { ...process.env };
   for (const key of SEAMS) delete clean[key];
   try {
-    const out = execFileSync('node', [CLI, ...args], {
+    // `process.execPath`, not 'node': this spawns the CLI under whichever runtime
+    // is running the suite, so `bun test` exercises the CLI on Bun rather than
+    // quietly shelling out to a Node that a Bun-only machine may not even have.
+    const out = execFileSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
       env: { ...clean, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],

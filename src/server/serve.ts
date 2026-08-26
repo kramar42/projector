@@ -18,6 +18,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
 import { loadNote } from '../schema/note.ts';
 import { basename, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import type { Facets, Note } from '../schema/types.ts';
@@ -722,10 +723,16 @@ app.get('/api/events', (c) =>
 );
 
 // Built UI, when present. Single-port production mode.
-const dist = new URL('../../dist/', import.meta.url).pathname;
+//
+// Resolved against this file rather than the working directory: the server is a
+// path you can run from anywhere (`node /somewhere/projector/src/server/serve.ts`),
+// and a `./dist` relative to the caller's cwd made the UI 404 everywhere except a
+// shell sitting in the repo root — while the existence check above it, which was
+// already absolute, cheerfully reported the UI as built.
+const dist = fileURLToPath(new URL('../../dist/', import.meta.url));
 if (existsSync(dist)) {
-  app.use('/assets/*', serveStatic({ root: './dist' }));
-  app.get('*', serveStatic({ path: './dist/index.html' }));
+  app.use('/assets/*', serveStatic({ root: dist }));
+  app.get('*', serveStatic({ path: join(dist, 'index.html') }));
 }
 
 serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
@@ -735,5 +742,5 @@ serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
   for (const v of known) {
     console.log(`vault    ${v.name}  ${v.path}${v.exists ? '' : ' (missing)'}`);
   }
-  if (!existsSync(dist)) console.log(`ui       not built — run \`pnpm dev:web\` for the dev server`);
+  if (!existsSync(dist)) console.log('ui       not built — run the `build` script, or `dev:web` for the dev server');
 });

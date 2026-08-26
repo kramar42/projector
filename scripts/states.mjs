@@ -17,7 +17,7 @@
  * committed: a committed one would be a set of hardcoded dates that all read
  * `overdue` within a month, which is the same failure this exists to prevent.
  *
- *   npm run states -- [<out-dir>]             # default: .vaults/states
+ *   node scripts/states.mjs [<out-dir>]        # default: .vaults/states
  *
  * Then register it and open it — the server only opens a vault on the list:
  *

@@ -1,0 +1,75 @@
+# Two runtimes and three package managers, because the README promises all of
+# them. A promise nothing exercises is a promise that quietly stops being true.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends, both concrete. `24` is the floor the README promises and
+        # the one that catches an API newer than this repo claims to support;
+        # `26` is what development happens on. Pinned rather than `latest` so a
+        # green run stays green — a new Node release should turn CI red when
+        # somebody bumps this line, not overnight on an untouched branch.
+        node: ['24', '26']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          # Explicit, because package.json deliberately carries no
+          # `packageManager` field — pinning one there would make Corepack
+          # refuse every other package manager.
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: cli runs
+        run: node src/cli/pj.ts --help
+
+  bun:
+    name: bun
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      # `bun test` rather than `node --test`: Bun's node:test is only wired up
+      # under its own runner. The CLI tests spawn `process.execPath`, so this
+      # exercises the CLI on Bun rather than shelling out to Node.
+      - run: bun test
+      # `--bun` is required: `vite`'s shebang says node, and `bun run` honours
+      # it with no fallback, so without the flag this would silently test Node.
+      - run: bun run --bun build
+      - name: cli runs
+        run: bun src/cli/pj.ts --help
+
+  npm:
+    name: npm (no lockfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      # No lockfile of npm's is committed, so this resolves fresh. That is the
+      # point: it is the claim "any package manager works" being tested, and it
+      # is also the early warning for a dependency that breaks on a new minor.
+      - run: npm install --no-package-lock
+      - run: npm test
+      - run: npm run build

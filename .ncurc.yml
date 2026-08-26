@@ -1,0 +1,9 @@
+# Config for `npm-check-updates`, driven by the `deps:check` / `deps:update`
+# scripts. YAML rather than JSON so the one exception can explain itself.
+
+reject:
+  # @types/node tracks the floor in `engines`, not the newest release. Types for
+  # a Node this repo does not claim to support would let a 26-only API typecheck
+  # clean here and then fail on the `node 24` job in CI — the types would be
+  # describing a runtime half our users do not have.
+  - '@types/node'

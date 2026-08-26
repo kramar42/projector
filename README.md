@@ -23,7 +23,46 @@ pj ls --group priority            # the CLI needs nothing running
 ```
 
 One process, one URL: the server serves the built UI. `pnpm dev:web` alongside `pnpm serve` gives a
-hot-reloading UI on 5176 instead. Tests: `node --test test/*.test.ts`
+hot-reloading UI on 5176 instead. Tests: `pnpm test`.
+
+### Bring your own tools
+
+Nothing here locks you to the tools it was written with, and CI proves that rather than promising it.
+
+**Any package manager.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`, `yarn` and
+`bun install` all resolve the same tree. The committed lockfile is pnpm's because that is what CI
+installs from; the others resolve fresh, which CI also exercises. There is deliberately no
+`packageManager` field, since that would make Corepack refuse every manager but one.
+
+**Either runtime.** Because the server and the CLI have no build step, the runtime is a property of
+the command you type rather than a setting in the repo. The `package.json` scripts spell Node because
+Node is the floor; Bun runs the same files:
+
+```bash
+bun install
+bun test                          # Bun's own runner — node:test only works under it
+bun run --bun build               # --bun is required: vite's shebang says node
+bun src/server/serve.ts           # and `bun --watch …` for the dev loop
+bun src/cli/pj.ts ls
+```
+
+The whole suite passes on both, and the CLI prints byte-identical output. Bun starts faster, which is
+worth something for a CLI you run by hand and nothing for a server that starts once. Two things are
+worth knowing. `bun run <script>` honours the `#!/usr/bin/env node` shebang inside `vite` and has no
+fallback, so `--bun` is not optional on a machine without Node. And Bun ships its own SQLite build,
+which has trailed Node's — a version-sensitive `ALTER TABLE … DROP COLUMN` in the test suite is the
+one place that has actually bitten.
+
+**Pins where a pin is the only thing there is.** Dependencies carry `^` ranges because the lockfile
+is already the pin: the range says what is acceptable, the lockfile says what you got. A runtime has
+no lockfile, so `mise.toml` *is* the pin and names a concrete major rather than `latest` — otherwise
+two people on two days get two Node versions. It tracks the newest major, not the floor, because CI
+tests the floor. Nothing pins a package manager, because none is required.
+
+`pnpm deps:check` lists what has moved; `pnpm deps:update` writes the new ranges, after which any
+install refreshes the lockfile. `@types/node` is deliberately held at the floor rather than the
+newest — see `.ncurc.yml` — because types for a Node this repo does not claim to support would let a
+26-only API typecheck clean and then fail on the `node 24` job.
 
 ---
 

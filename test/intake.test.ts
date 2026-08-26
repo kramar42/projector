@@ -491,9 +491,26 @@ test('the watermark store migrates in place rather than being replaced', () => {
     commitWatermark(root, 'jira', '2026-08-18T13:32:49.967+0000', { seen: 1 });
     const file = join(root, '.intake.db');
     const raw = new DatabaseSync(file);
-    raw.exec('ALTER TABLE watermark DROP COLUMN pending_cursor');
-    raw.exec('ALTER TABLE watermark DROP COLUMN pending_seen');
-    raw.exec('ALTER TABLE watermark DROP COLUMN pending_at');
+    const before = raw
+      .prepare('SELECT channel, cursor, ran_at, seen, captured FROM watermark')
+      .all() as { channel: string; cursor: string; ran_at: string; seen: number; captured: number }[];
+    // The old shape is written out, not derived by dropping the pending columns.
+    // `DROP COLUMN` rewrites the stored schema text, and before SQLite 3.53 the
+    // `--` comment above the last column swallowed the closing paren — so that
+    // spelling passed on Node's SQLite and failed on Bun's. This one also states
+    // the pre-migration schema instead of approximating it.
+    raw.exec('DROP TABLE watermark');
+    raw.exec(`CREATE TABLE watermark (
+      channel   TEXT PRIMARY KEY,
+      cursor    TEXT,
+      ran_at    TEXT NOT NULL,
+      seen      INTEGER NOT NULL DEFAULT 0,
+      captured  INTEGER NOT NULL DEFAULT 0
+    )`);
+    const ins = raw.prepare(
+      'INSERT INTO watermark (channel, cursor, ran_at, seen, captured) VALUES (?, ?, ?, ?, ?)',
+    );
+    for (const r of before) ins.run(r.channel, r.cursor, r.ran_at, r.seen, r.captured);
     raw.close();
     closeIntakeDb(root);
 
