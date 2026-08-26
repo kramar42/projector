@@ -236,6 +236,25 @@ needs to be part of two things.
   already wants to be a list and settles for naming the kinds, because `data.project` resolves along
   the chain and a count would be confidently wrong on a project inside another project.
 
+- **A body checkbox should toggle.** The rendered body draws each `- [ ]` as a real
+  `<input type="checkbox">` — `marked` with `gfm: true` emits one per task item — but the HTML
+  arrives through `dangerouslySetInnerHTML` and nothing listens: the whole rendered body is
+  read-only by design, and flipping one box means entering the editor to change one character.
+  A control that looks native and does nothing is the panel's one false affordance, and it is
+  found the way false affordances are found — by someone clicking it, twice, and concluding the
+  app is broken.
+
+  The fix is bounded and needs no new write path. A click on `.md input[type='checkbox']` maps
+  the box's ordinal among the rendered task inputs to the nth task marker in the source — the
+  orders agree, because only a real task item becomes a checkbox, so a `- [ ]` inside a code
+  fence counts in neither — flips exactly that `[ ]`↔`[x]`, and goes through `write.body`, the
+  same mtime-guarded write the editor uses (C10: content is edited in the panel). One character
+  changes; every other byte is preserved, which is the promise the progress bar already relies
+  on.
+
+  Until it lands, the honest interim is smaller still: render the boxes `disabled` so the
+  cursor says what a click will do.
+
 - **Three small panel things, each independent of the rest.** `updated` sits in the workshop block
   without the `ƒ` that marks its neighbours as resolved rather than stored, though it is derived from
   the file's mtime — one span. `.refchip-title` ellipsises at `26ch` while a `.reflink` row takes a
