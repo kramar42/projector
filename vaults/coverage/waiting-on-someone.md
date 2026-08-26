@@ -10,5 +10,6 @@ created: 2025-07-22  # older
 updated: 2026-08-22  # week
 ---
 
-Renders: red `waiting_on` chips and `blocked: waiting` — the third value on that
-axis, computed from a non-empty facet rather than from an edge.
+Renders: red `waiting_on` chips and `blocked: waiting_on` — the axis names the
+blocking facet that is failing, computed from a non-empty facet rather than from
+an edge.

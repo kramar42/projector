@@ -20,7 +20,7 @@ pj ls --view triage --json
 
 The view groups by `triage`, so each group names exactly what is missing — `needs-project`,
 `needs-priority`, `needs-status` — and a card short of two things appears under both. Work the groups
-it gives you. Do not scan the cards directory yourself and do not invent a worklist: the view *is* the
+it gives you. Do not scan the vault's markdown files yourself and do not invent a worklist: the view *is* the
 definition of untriaged, and it is the same one the board shows.
 
 If the user named a subset ("just the Trello ones", "only the research links"), filter that list;
@@ -51,7 +51,8 @@ Rules for what you may propose:
 - **`priority` and `status` are closed and single-valued.** Never propose a value outside them, and
   never two at once — `pj set` refuses both.
 - **Never propose `status: blocked` or `waiting`.** Those are derived. A card held up by another card
-  gets a `blocks` edge from the blocker; one held up by a person gets `waiting_on`.
+  gets `blocked_by` set on the stuck card, naming what it waits for
+  (`pj set <stuck-id> --facet blocked_by=<blocker-id>`); one held up by a person gets `waiting_on`.
 - **Propose a `due` only when something external fixes the date** — a release, a meeting, a promise
   someone else is holding you to. A deadline you invented is worse than none, because the Due board will believe it.
   It is an ordinary facet: `pj set <id> --facet due=2026-09-01`.

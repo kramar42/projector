@@ -59,8 +59,9 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #
 # Everything below is a starting point, not a schema. Delete what your domain has
 # no use for; an empty file is a valid vault. The one facet you will not find here
-# is \`project\`, which is built in — its definition is not read from this file, so
-# declaring it does nothing and \`pj check\` says so.
+# is \`project\`, which is built in — its shape (type, values, open, single) is
+# fixed and \`pj check\` refuses changing those; label, expected, hue and key are
+# yours to set by declaring it.
 
 # Lifecycle only. Being blocked is derived — see blocking: below — so it is not a
 # value here: storing a reason beside the thing it is computed from gives two

@@ -8,7 +8,7 @@ import type { Meta, Shape, ViewSpec } from './types.ts';
  * a view shareable, back-buttonable and — crucially — *not* sticky: nothing you
  * adjust survives unless you name it and it becomes a file.
  *
- * `?card=` is deliberately untouched by all of this: it is where you are looking,
+ * `?note=` is deliberately untouched by all of this: it is where you are looking,
  * not what you are looking at, and it predates the query model. `?sel=` joined it
  * for the same reason.
  */

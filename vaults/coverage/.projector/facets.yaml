@@ -1,6 +1,13 @@
 # Fixture vocabulary — declared here in full, so this vault stands alone.
-# Every value declared here is carried by at least one note in the vault. If you add
-# a value and no note takes it, the fixture has stopped doing its job.
+# The intent: every declared value is carried by at least one note, so every
+# chip renders at least once. Nothing pins that, so treat a value no note takes
+# as a gap in the fixture rather than a promise kept.
+
+# The built-in axis, declared for its triage expectation: with it the triage
+# axis has all four values — needs-project included — so this vault can draw
+# every one. Shape is the built-in's; only the expectation is set here.
+project:
+  expected: true
 
 status:
   label: Status

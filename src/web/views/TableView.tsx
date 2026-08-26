@@ -17,7 +17,7 @@ import { useTouched } from '../touched.tsx';
  * so switching shape never asks "which facets matter" twice, and there is no
  * column picker to build or keep in sync.
  *
- * Read-only, like every shape: a row click opens `?card=` and the panel does the
+ * Read-only, like every shape: a row click opens `?note=` and the panel does the
  * editing (C10). Selecting rows is a gesture, not editing, so the bulk bar is on
  * the same side of C10 here as it is on a board.
  */

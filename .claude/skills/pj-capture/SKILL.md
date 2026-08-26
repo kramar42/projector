@@ -23,7 +23,7 @@ where you read the cursor you fetch those two from. **The cursor is why this is 
 once** — without it you are the thing deciding what counts as new, from a fixed window, every time.
 `pj intake status` answers the same question without fetching, if you want the state and nothing else.
 
-Losing `.intake.db` is not a disaster: a channel with no cursor falls back to its default window and
+Losing `.projector/intake.db` is not a disaster: a channel with no cursor falls back to its default window and
 `source_fingerprint` still stops every duplicate. Wider sweep, never a wrong one.
 
 `pj` fetches three of the five itself. Say which you covered and which you skipped.

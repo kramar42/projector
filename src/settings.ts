@@ -19,8 +19,10 @@ import { paths, resolvePath } from './config.ts';
  * and a token in one is a token pushed. Nothing else in `.projector/` is secret,
  * so the ignore names this file rather than the folder.
  *
- * **The environment wins.** Every value here has a `PROJECTOR_*` variable that
- * already meant it, and the variable is still read first. A file is where a
+ * **The environment wins.** Every credential and path here has a `PROJECTOR_*`
+ * variable that already meant it, and the variable is still read first —
+ * `channels:` and `enrich:` are the two file-only keys, being vault policy
+ * rather than machine facts. A file is where a
  * setting lives; a variable is how you override it for one run without editing
  * anything — which is what CI does, and what every test in this repository does.
  * The precedence is one way round and never the other, so "why is it not picking

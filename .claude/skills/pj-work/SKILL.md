@@ -32,7 +32,8 @@ Stop and say so, rather than pressing on, if:
   frontmatter tab in the app is the place to edit it.
 - **It is blocked.** `blockedBy` lists unfinished blockers. Say which, and ask whether to proceed
   anyway or switch to a blocker.
-- **It is a `node`, not a card.** Nodes are thoughts. Offer to promote it.
+- **It carries no `status`.** Carrying a status is what makes a note work; without one it is a
+  thought, not a commitment. Offer to triage it first.
 
 ## 3. Dry run first when anything is unusual
 

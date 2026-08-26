@@ -10,7 +10,7 @@ import type { NoteDTO } from '../types.ts';
  * node and a table row. Every shape gets an identical card face because there is
  * only one implementation of a card face.
  *
- * It renders and nothing else: content is edited in the `?card=` panel, structure
+ * It renders and nothing else: content is edited in the `?note=` panel, structure
  * by gesture (C10). There is no third `expanded` size — the panel is that, with
  * a deep link and the real editors.
  */

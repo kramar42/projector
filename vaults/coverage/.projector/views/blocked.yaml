@@ -1,4 +1,5 @@
-# The derived axis: blocked · waiting · clear, including the note whose blocker is done.
+# The derived axis: waiting_on · blocked_by · clear — one value per blocking
+# facet — including the note whose blocker is done.
 shape: board
 title: Blocked
 groupBy: [blocked]

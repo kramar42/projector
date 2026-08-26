@@ -1,4 +1,4 @@
-# week · month · older, and the undated note that has no value on the axis at all.
+# week · month · older · undated — the fourth value is the note nothing ever wrote `updated` on.
 shape: board
 title: Staleness
 groupBy: [staleness]

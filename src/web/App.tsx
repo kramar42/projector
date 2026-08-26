@@ -53,7 +53,7 @@ import type { Meta, NoteDTO, QueryResponse } from './types.ts';
  *
  * P1 routed `/board/:name` and `/canvas/:name`, because a view was a place you
  * navigated to. A view is a query now (C9), so there is one page and the query
- * lives in the search string — which keeps `?card=` deep links working exactly
+ * lives in the search string — which keeps `?note=` deep links working exactly
  * as before, and makes any view shareable without having to first save it.
  */
 export function App() {
@@ -131,7 +131,7 @@ export function App() {
   );
 
   /**
-   * Selection is written like `?card=` and never like a query: `replace` always,
+   * Selection is written like `?note=` and never like a query: `replace` always,
    * because a twelve-card selection is twelve clicks and the back button is for
    * views rather than for undoing a pick.
    */

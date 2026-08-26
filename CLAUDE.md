@@ -1,7 +1,7 @@
 # Working on projector
 
 This is the app itself, not a vault. For reading and writing notes in a vault, the `pj-about` skill is
-the reference and the other three `.claude/skills/` do the work — none of that is repeated here.
+the reference and the other four `.claude/skills/` do the work — none of that is repeated here.
 
 ## Commands
 

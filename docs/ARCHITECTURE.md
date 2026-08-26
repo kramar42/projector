@@ -217,7 +217,7 @@ filter happened to hide. Same for `order`, per column. An entry is dropped only 
 actually gone, and the live-id set is built at most once per save.
 
 **Saving a view keeps its arrangement.** *Save current as…* over an existing name replaces the query
-wholesale and leaves `nodes`, `order` and `layout` alone, so refining a saved view's filter does not
+wholesale and leaves `nodes` and `order` alone, so refining a saved view's filter does not
 cost you its layout.
 
 **Two sentinels, one reason.** The server merges a saved view's parameters *under* the URL's, so an
@@ -452,7 +452,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block | never touches the body |
 | `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside the vault |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
-| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id, plus `layout: manual` whenever positions are sent | never drops an entry whose note still exists |
+| `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose note still exists |
 | `DELETE /api/view/:name` | one view file | never touches the notes it selected |
 | `POST /api/note/:id/asset` | one file under `assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
@@ -483,7 +483,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
 | `<vault>/.projector/intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
-| `$PROJECTOR_WORKSPACES/<note>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
+| `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
 
 Every note write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
 sees half a file. The registry is written the same way.
@@ -659,7 +659,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 
 | | |
 |---|---|
-| `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs |
+| `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
 | `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a card lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, and the layout following only the relation shown |

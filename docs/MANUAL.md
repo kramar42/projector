@@ -893,8 +893,9 @@ what you are working in, and the palette's job keeps shrinking as the map covers
 ## Checking it works
 
 Each of these starts from a fresh load of a board view — `?view=home` on a vault whose `facets.yaml`
-declares at least `status`, `priority` and `project` keys. Where a step needs a letter, `s`, `p` and
-`r` are the ones the shipped `work` vault declares; substitute your own.
+declares at least `status`, `priority` and `project` keys. Where a step needs a letter, `s` and `p`
+are the ones the shipped tutorial vault declares; `project` ships without one, so declare it first —
+`project: {key: r}` in `facets.yaml`, which the built-in accepts — and substitute your own elsewhere.
 
 1. **The cursor appears.** Press `j`. A ring appears on the first card of the first column. Press `j`
    twice more, then `k` — the ring walks down and back. Press `l` — it crosses to the next column at
@@ -1119,7 +1120,7 @@ node --run test                   # under Node
 ```
 
 Both run the whole suite, CI runs each, and both must pass. Everything else — `serve`, `dev`, `pj`,
-`states`, and the scripts that call a binary rather than a runtime — substitutes cleanly.
+`redate`, and the scripts that call a binary rather than a runtime — substitutes cleanly.
 
 **Any package manager, one lockfile.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`,
 `yarn` and `bun install` all resolve the same tree, and Bun's runtime reads a `node_modules` any of

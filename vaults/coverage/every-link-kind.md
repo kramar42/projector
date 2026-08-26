@@ -26,6 +26,8 @@ cannot resolve without credentials. Each should say why *once* and stay cached,
 not retry on every render. The bare URL is long on purpose: the label ellipsises
 at 130px.
 
-Every kind here except `claude` and `doc` is clickable with no fetcher having
-run — a fetcher adds a title and a status, never the ability to click. Those two
-have nowhere on the web to go: a session on this machine, and a file in the vault.
+Every kind here except `claude`, `doc` and `jira` is clickable with no fetcher
+having run — a fetcher adds a title and a status, never the ability to click.
+`jira` joins the clickable ones once a base URL is configured
+(`PROJECTOR_JIRA_URL`, or `jira.url` in config.yaml); the other two have nowhere
+on the web to go: a session on this machine, and a file in the vault.

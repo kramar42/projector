@@ -26,6 +26,6 @@ Delete `.projector/` and you still have your notes. That is the point.
 
 ## Try it
 
-- Press `?` for the key map. Every letter it lists comes from `facets.yaml`.
+- Press `?` for the key map. The letters in its This-vault section come from `facets.yaml`.
 - Drag a card between columns — that writes one facet to one file.
 - Open [getting-started.md](getting-started.md), which carries no frontmatter at all.

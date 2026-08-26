@@ -92,9 +92,11 @@ nothing else.
 it, and which channels are worth sweeping is a fact about *this* set of notes. It is gitignored: a
 vault is often a git repository, and a token in one is a token pushed.
 
-Everything in it has a `PROJECTOR_*` environment variable that means the same thing, and **the
-variable wins**. That is the escape hatch — a one-off run against a different host, or CI — and the
-precedence only goes one way. If a value looks wrong and the file looks right, something exported it.
+Every credential and path in it — `jira.*`, `git.author`, `workspaces`, `doc.url` — has a
+`PROJECTOR_*` environment variable that means the same thing, and **the variable wins**. That is the
+escape hatch — a one-off run against a different host, or CI — and the precedence only goes one way.
+If a value looks wrong and the file looks right, something exported it. `channels:` and `enrich:`
+live in the file only.
 
 Where Claude itself lives is a fact about the machine rather than about the vault, so it stays an
 environment variable: `PROJECTOR_CLAUDE_HOME`, `PROJECTOR_CLAUDE_DESKTOP`.

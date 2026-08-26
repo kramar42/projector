@@ -1,4 +1,4 @@
-# Board by priority — reaches the dashed `(none)` column, since two notes carry no priority.
+# Board by priority — reaches the dashed `(none)` column, since some notes carry no priority.
 shape: board
 title: Home
 groupBy: [priority]
