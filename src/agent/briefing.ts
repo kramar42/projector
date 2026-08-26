@@ -5,9 +5,8 @@ import type { RepoResult } from './worktree.ts';
  * The briefing an agent reads before touching anything.
  *
  * Five steps, and step 4 is the point: read everything first, then **stop and
- * ask**. Two framings in it are
- * worth keeping word for word — "the card is not the whole story", and report
- * what was deliberately left out.
+ * ask**. Two framings in it are worth keeping word for word — "the card is not
+ * the whole story", and report what was deliberately left out.
  */
 export function buildBriefing(input: {
   ctx: NoteContext;

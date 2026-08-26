@@ -6,9 +6,9 @@ import type { ProjectRepo } from '../schema/types.ts';
 /**
  * Multi-repo worktree workspaces.
  *
- * Five of the details here were
- * bugs they had already paid for — each is commented where it applies. The
- * workspace lives outside every repository, so there is nothing to git-exclude.
+ * Five of the details here are bugs that were already paid for once — each is
+ * commented where it applies. The workspace lives outside every repository, so
+ * there is nothing to git-exclude.
  */
 
 export interface RepoResult {
