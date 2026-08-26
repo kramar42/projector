@@ -370,7 +370,7 @@ test('every plain key the cheatsheet lists actually does something', () => {
 test('the cheatsheet has a row for every section a reader would look under', () => {
   assert.deepEqual(
     KEYMAP.map((s) => s.section),
-    ['Moving', 'Choosing', 'Writing', 'The view'],
+    ['The cursor', 'Into a card', 'In a list', 'Choosing', 'Writing', 'The view'],
   );
   for (const section of KEYMAP) assert.ok(section.rows.length > 0, section.section);
 });
@@ -389,12 +389,14 @@ const board: Grid = {
     [['a', 'b', 'c'], [], ['d']],
     [['e'], ['f', 'g'], []],
   ],
+  columns: ['now', 'month', 'backlog'],
   continuous: false,
 };
 
 /** A table: one lane, three sections, read as one list down the page. */
 const table: Grid = {
   cells: [[['a', 'b'], ['c'], ['d', 'e']]],
+  columns: ['now', 'month', 'backlog'],
   continuous: true,
 };
 
@@ -453,7 +455,7 @@ test('a cursor on a card the view does not draw re-enters at the top', () => {
 });
 
 test('an empty grid has nowhere to go, and says so without throwing', () => {
-  const canvas: Grid = { cells: [], continuous: false };
+  const canvas: Grid = { cells: [], columns: [], continuous: false };
   assert.equal(stepped(canvas, null, 'row', 1), null);
   assert.equal(first(canvas), null);
   assert.deepEqual(drawn(canvas), []);

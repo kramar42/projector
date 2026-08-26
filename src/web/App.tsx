@@ -24,7 +24,7 @@ import {
 } from './query.ts';
 import { useSelection, type Selection } from './selection.ts';
 import { focusSoon, useCursor, type Cursor } from './cursor.ts';
-import { drawn, first, gridOf, last, stepped, type Grid } from './views/motion.ts';
+import { drawn, first, gridOf, last, locate, stepped, type Grid } from './views/motion.ts';
 import {
   changeView,
   clearFilters,
@@ -156,6 +156,14 @@ export function App() {
   const [notice, setNotice] = useState<{ tone: 'bad' | 'info'; text: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   /**
+   * The column `n` asked to create a card in.
+   *
+   * The one binding whose target is not a card, so it is the one that cannot be
+   * done from here alone: the inline field belongs to the column that draws it.
+   * The shell names the column and the board opens it.
+   */
+  const [newIn, setNewIn] = useState<string | null>(null);
+  /**
    * The undo stacks. A ref, because nothing renders from them — `u` consults them
    * and they are invisible the rest of the time.
    */
@@ -196,6 +204,10 @@ export function App() {
    * every edge permanently pending. `cursor.step` is a `useCallback` with no
    * deps for exactly this.
    */
+  // Identity-stable, so the board's effect fires on the request rather than on
+  // every render of the shell.
+  const clearNewIn = useCallback(() => setNewIn(null), []);
+
   const openCard = useCallback(
     (id: string | null) => {
       if (id) cursor.step(id);
@@ -383,6 +395,7 @@ export function App() {
     groupedAxis: data?.spec.query.groupBy?.[0] ?? null,
     notify: setNotice,
     notice,
+    newCardIn: setNewIn,
     follow: followCard,
     edit,
     spec: data?.spec ?? null,
@@ -456,6 +469,8 @@ export function App() {
         selection={selection}
         cursor={cursor.id}
         onCursor={cursor.step}
+        newIn={newIn}
+        onNewHandled={clearNewIn}
         reload={reload}
       />
     );
@@ -586,6 +601,8 @@ interface KeyState {
   groupedAxis: string | null;
   notify: (n: { tone: 'bad' | 'info'; text: string } | null) => void;
   notice: { tone: 'bad' | 'info'; text: string } | null;
+  /** Ask the board to open its inline creator in one column. */
+  newCardIn: (column: string) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
   /** Go to a note and record it on the trail — what `H` comes back from. */
@@ -1245,6 +1262,57 @@ function run(command: Command, s: KeyState): void {
           ? `cleared ${def.label}`
           : `set ${def.label} to ${value} on ${ids.length === 1 ? 'a card' : `${ids.length} cards`}`,
       });
+    }
+
+    /**
+     * A new card, in the column the cursor is in.
+     *
+     * The only binding whose target is not a card, and the reason it waited: the
+     * field it opens belongs to `Column`, so the shell can name a column and
+     * nothing else. A card created there inherits that column's value for the
+     * grouped axis — which is the board's own rule, and the one write outside the
+     * panel that is not a gesture.
+     *
+     * A board only. A table and a canvas draw no inline creator, and inventing a
+     * prompt for them would be a second way to make a card that looks nothing like
+     * the first.
+     */
+    case 'newCard': {
+      if (!grid.columns.length) {
+        return s.notify({ tone: 'info', text: 'new cards are made on a board' });
+      }
+      const spot = locate(grid, cursor.id);
+      const column = grid.columns[spot ? spot[1] : 0];
+      if (column === undefined) return;
+      return s.newCardIn(column);
+    }
+
+    /**
+     * One axis's own row, which is what `⟨key⟩` means on its own.
+     *
+     * The fallback of the axis prefix: `p3` writes the third value and `pp` — or
+     * `p` and anything that is not a digit — goes to the row so you can see them.
+     * It was the one command `bind` emitted that nothing acted on, which made the
+     * prefix's own rule ("never leaves you with nothing") false for exactly the
+     * case it was written about.
+     *
+     * The same reach `gf` makes, narrowed to one axis. A card that carries nothing
+     * on it draws no row, so this says so rather than opening a panel to nothing.
+     */
+    case 'openAxisControl': {
+      if (!openNote && cursor.id) s.setOpenNote(cursor.id);
+      const def = s.facets[command.facet];
+      return focusSoon(
+        () => axisRow(command.facet, false)?.querySelector<HTMLElement>('[data-nav]'),
+        8,
+        // The card draws no row for this axis, which is what "carries nothing on
+        // it" looks like in the DOM. Say so, and say where the door is.
+        () =>
+          s.notify({
+            tone: 'info',
+            text: `nothing on ${def?.label ?? command.facet} — g⇧F adds an axis`,
+          }),
+      );
     }
 
     case 'undo':

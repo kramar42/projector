@@ -148,8 +148,21 @@ export function useCursorFocus(
  * or not anything is being painted. It gives up rather than leaving a timer
  * looking for an element that is never coming.
  */
-export function focusSoon(find: () => HTMLElement | null | undefined, tries = 3): void {
+export function focusSoon(
+  find: () => HTMLElement | null | undefined,
+  tries = 3,
+  /**
+   * What to do when it never turns up.
+   *
+   * A search that can fail has to be able to say so, or the key it belongs to is
+   * a silent no-op — which is exactly what `pp` was on an axis the card carries
+   * nothing for: the row never appeared, the retries ran out, and nothing on
+   * screen changed or explained why.
+   */
+  orElse?: () => void,
+): void {
   const el = find();
   if (el) return el.focus();
-  if (tries > 0) setTimeout(() => focusSoon(find, tries - 1), 16);
+  if (tries > 0) setTimeout(() => focusSoon(find, tries - 1, orElse), 16);
+  else orElse?.();
 }

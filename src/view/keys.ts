@@ -621,25 +621,39 @@ export interface KeyRow {
 
 export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
   {
-    section: 'Moving',
+    section: 'The cursor',
     rows: [
       { keys: 'j k', does: 'down / up a column' },
       { keys: 'h l', does: 'across columns' },
       { keys: '[ ]', does: 'across lanes' },
       { keys: 'gg G', does: 'first / last' },
-      { keys: 'H L', does: 'back / forward through visited cards' },
-      { keys: 'g ⟨axis⟩', does: 'go to the note it names there' },
-      { keys: 'g ⇧⟨axis⟩', does: 'show what names this card there' },
-      { keys: 'g f', does: 'this card’s facet rows' },
-      { keys: 'g F', does: 'add an axis it carries nothing on' },
-      { keys: 'g l', does: 'this card’s links' },
-      { keys: 'g c', does: 'edit the body' },
-      { keys: 'g y', does: 'edit the raw frontmatter' },
-      { keys: 'h l', does: 'a facet’s values; j k change axis' },
-      { keys: 'j k', does: 'a stacked list: links, refs, filters' },
-      { keys: '⏎', does: 'in a list, take what is under it' },
       { keys: '⏎ o', does: 'open the card' },
+      { keys: 'H L', does: 'back / forward through visited cards' },
       { keys: 'esc', does: 'close · leave a list · deselect' },
+    ],
+  },
+  {
+    section: 'Into a card',
+    rows: [
+      { keys: 'g ⟨axis⟩', does: 'the note it names there' },
+      { keys: 'g ⇧⟨axis⟩', does: 'what names this card there' },
+      { keys: 'g f', does: 'its facet rows' },
+      { keys: 'g ⇧F', does: 'add an axis it lacks' },
+      { keys: 'g l', does: 'its links' },
+      { keys: 'g c', does: 'edit the body' },
+      { keys: 'g y', does: 'edit the frontmatter' },
+      { keys: '⟨axis⟩⟨axis⟩', does: 'one axis’s row' },
+    ],
+  },
+  {
+    // Stated once rather than repeated per list: which key walks and which steps
+    // out follows how the list is drawn, and that is the whole rule.
+    section: 'In a list',
+    rows: [
+      { keys: 'j k', does: 'a stacked list — links, refs, filters' },
+      { keys: 'h l', does: 'a facet’s values; j k change axis' },
+      { keys: '⏎', does: 'take what is under the cursor' },
+      { keys: 'esc', does: 'back to the cards' },
     ],
   },
   {
@@ -656,6 +670,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: '1–9', does: 'move to the nth column' },
       { keys: '0', does: 'clear the grouped axis' },
       { keys: '⟨axis⟩ 1–9', does: 'set that axis to its nth value' },
+      { keys: 'n', does: 'new card in this column' },
       { keys: 'u U', does: 'undo · redo' },
     ],
   },
@@ -667,7 +682,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: ', g', does: 'group by (+ axis key sets it)' },
       { keys: ', G', does: 'then by' },
       { keys: ', o', does: 'sort' },
-      { keys: ', O', does: 'flip the sort direction' },
+      { keys: ', O', does: 'flip the direction' },
       { keys: ', f', does: 'which facets show' },
       { keys: ', F', does: 'the filter rail' },
       { keys: ', w', does: 'focus: walk from a note' },

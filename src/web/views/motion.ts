@@ -25,6 +25,16 @@ export interface Grid {
   /** lanes → columns → card ids, in the order the shape draws them. */
   cells: string[][][];
   /**
+   * What each column *is* — the grouped axis's value, in the same order.
+   *
+   * Positions alone are enough to walk a grid and not enough to write to one: a
+   * card created in a column inherits that column's value, so `n` needs the value
+   * the index stands for. Kept here rather than re-derived at the call site
+   * because it comes from the same `groupsFor` call the cells do, and two
+   * derivations of one order is how they come to disagree.
+   */
+  columns: string[];
+  /**
    * Does `j` run off the end of a column into the top of the next one?
    *
    * A table reads as one continuous list — a section heading is a divider, not a
@@ -38,7 +48,7 @@ export interface Grid {
   continuous: boolean;
 }
 
-const EMPTY: Grid = { cells: [], continuous: false };
+const EMPTY: Grid = { cells: [], columns: [], continuous: false };
 
 /**
  * The grid a payload draws, whichever shape it is drawn as.
@@ -60,7 +70,11 @@ export function gridOf(data: QueryResponse | null): Grid {
     // exactly as it draws them — a section with nothing in it has no row to land
     // on, so a cursor must not be able to step into it.
     const sections = groupsFor(data, { lanes: 'all', empties: 'drop' });
-    return { cells: [sections.map((s) => s.ids)], continuous: true };
+    return {
+      cells: [sections.map((s) => s.ids)],
+      columns: sections.map((s) => s.value),
+      continuous: true,
+    };
   }
 
   const lanes: (string | undefined)[] = data.groupOrder.secondary.length
@@ -69,8 +83,12 @@ export function gridOf(data: QueryResponse | null): Grid {
   // `empties: 'keep'`, matching the board: a declared column with nothing in it
   // is still drawn, and `l` walking across has to count it or the cursor and the
   // columns disagree about which one is third.
+  const perLane = lanes.map((lane) => groupsFor(data, { lane, empties: 'keep' }));
   return {
-    cells: lanes.map((lane) => groupsFor(data, { lane, empties: 'keep' }).map((g) => g.ids)),
+    cells: perLane.map((groups) => groups.map((g) => g.ids)),
+    // Every lane draws the same columns in the same declared order, so the first
+    // lane's values name them all.
+    columns: (perLane[0] ?? []).map((g) => g.value),
     continuous: false,
   };
 }

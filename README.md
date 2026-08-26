@@ -826,6 +826,7 @@ drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one d
 | `g` `l` | this card's links. `j` `k` step, `⏎` opens one in a new tab |
 | `g` `c` | edit the body. `⌘S` saves, `Esc` leaves it |
 | `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
+| `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
 
 `g f` is how you reach an axis that declares **no** `key:` — walk to its row and pick a value.
 **`g ⇧F` adds one**: the list of axes the card carries nothing on opens with focus already in it, and
@@ -853,6 +854,7 @@ already follows. The panel being open changes nothing, because the panel is the 
 | `1`–`9` | set the grouped axis to its nth declared value |
 | `0` | clear the grouped axis |
 | `⟨axis⟩` `1`–`9` | set that axis to its nth value, whether or not the card carries it yet |
+| `n` | a new card in the cursor's column, inheriting that column's value. A board only |
 | `u` `U` | undo · redo |
 
 `u` covers what the digits and the axis letters write. A value **toggled in the panel** with `⏎` is a
@@ -888,9 +890,9 @@ repeating the prefix seven times said nothing and made the letters different wid
 
 ### Not bound yet
 
-`bind` recognises four more commands that nothing acts on, so they are deliberately absent from `?`:
-`⟨axis⟩⟨axis⟩` to open an axis's control, `n` for a new card in the cursor's column, `⌥j` / `⌥k` to
-reorder within a column, and `.` for a command palette. NEXT.md says why each is waiting.
+Two, and `?` lists neither: `⌥j` / `⌥k` to reorder within a column, and `.` for a command palette.
+NEXT.md says why each is waiting — the short of it is that reordering is idle until a saved view is
+what you are working in, and the palette's job keeps shrinking as the map covers more of it.
 
 ### Checking it works
 
@@ -1007,6 +1009,14 @@ declares at least `status`, `priority` and `project` keys. Where a step needs a 
 36. **Flipping the sort.** Press `,O`. The arrow beside the Sort row turns over and the board
     re-orders; the axis being sorted by does not change. Press `,O` again to put it back. (With
     nothing sorted it says so rather than doing nothing.)
+37. **A new card, where the cursor is.** On a board, put the cursor in a column that is not the first
+    and press `n`. The inline title field opens **in that column**, focused. Type a title and press
+    `⏎`: the card is created there and carries that column's value for the grouped axis. Press `n`,
+    then `Esc` — the field closes and nothing is made; press `n` again and it opens once more. On a
+    table or a canvas `n` says that new cards are made on a board.
+38. **An axis's own row.** With a card open, press an axis letter twice — `pp`. Focus lands on that
+    axis's row in the panel, on its first value. On an axis the card carries nothing for, it says so
+    and points at `g⇧F`.
 
 
 ## Facet vocabulary

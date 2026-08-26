@@ -114,19 +114,44 @@ needs to be part of two things.
 
   Still not bound, and each for its own reason rather than as a batch:
 
-  - **`n`, a new card in the cursor's column.** The only binding whose target is not a card. The
-    inline `<textarea>` it wants belongs to `Column`, so it needs a way to say "open that editor"
-    across a component boundary that nothing else in the map needs.
   - **`⌥j` / `⌥k`, reordering within a column.** Cheap — the stored order is a splice through
-    `saveArrangement` — and idle until a saved view is the thing being worked in.
-  - **`⟨key⟩⟨key⟩`, opening an axis's control.** `bind` emits `openAxisControl` and nothing consumes
-    it. It wants a popover anchored to the cursor's card rendering `FacetEditor`'s body, which is the
-    same component the palette will want. Worth doing once, for both.
-  - **The palette (`.`)** is unclaimed. Its shape is known: the bulk bar's axis-then-value state
-    machine with the record picker's type-to-filter.
+    `saveArrangement` — and idle until a saved view is the thing being worked in. Card order only
+    lives in a file, so on an ad-hoc query there is nothing for it to write to.
   - **A view's own `key:`.** `⌥1`–`⌥9` counts along the rail's order, so adding a view renumbers the
     ones after it. The fix is the one facets already have — let the file declare its letter — and it
     is not worth doing until the order actually churns.
+  - **Focus restore on closing the panel.** Focus is left wherever it was rather than returned to the
+    card. In practice the cursor *is* that card and `j` picks up from it, so the cost is one Tab in
+    the rare case.
+
+- **The palette (`.`), and why its job keeps shrinking.**
+
+  `.` is bound in the grammar and acts on nothing. The shape was never the question: it is the bulk
+  bar's state machine — pick an axis, then the control that axis's `type` picks — with
+  `RecordPicker`'s type-to-filter over the front of it. Both halves exist and neither would have to be
+  written twice.
+
+  What has changed is how much would be *left* for it. When it was filed, the palette was the answer
+  to "an axis with no letter", "an axis this card carries nothing on", and "a value I would rather
+  type than walk to". The first two are gone: `gf` walks every drawn row and `g⇧F` adds one, so every
+  axis in the vocabulary is reachable whether or not it declares a `key:` and whether or not the card
+  carries it. What is left of the third is real but small — a project picked by typing three letters
+  of its name rather than walked to — and `RecordPicker` already does that from the rail's Focus row
+  and the bulk bar.
+
+  So the honest residual is **the commands that are not axes**: merge, save this query as a view,
+  delete. Delete is deliberately unbound and should stay that way; the other two live in the rail and
+  are two keystrokes away. That is a thin case for a whole surface.
+
+  Two things would change the answer. A vocabulary with **more axes worth reaching than there are
+  letters** — fourteen are free, the seeded vault spends seven — at which point a name is the only
+  address left. Or a **command set that outgrows the map**: the moment there is a third thing like
+  merge that has no row in the rail and no letter, the palette stops being a nicer way to do what a
+  key already does and starts being the only way to do something.
+
+  The trap to avoid, and the reason not to build it early: a palette that duplicates the map is a
+  second place for every binding to be kept in step, and the first one to drift will be the one nobody
+  presses.
 
 - **The panel is not modal, and that overrides what the panel critique asked for.** The critique of
   2026-08-22 wanted a focus trap, `inert` on the background and focus restore on close. It got the

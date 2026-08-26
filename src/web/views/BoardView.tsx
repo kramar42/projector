@@ -29,6 +29,8 @@ export function BoardView({
   selection,
   cursor,
   onCursor,
+  newIn,
+  onNewHandled,
   reload,
 }: {
   data: QueryResponse;
@@ -43,6 +45,16 @@ export function BoardView({
   cursor: string | null;
   /** A pointer landing somewhere is the keyboard landing there too. */
   onCursor: (id: string) => void;
+  /**
+   * The column `n` asked to create in, or `null`.
+   *
+   * A value rather than a boolean, because the request comes from the shell —
+   * which knows where the cursor is but not which column that is on screen — and
+   * arrives at one column out of however many are drawn. `onNewHandled` clears it
+   * so pressing `n`, escaping, and pressing it again opens the field twice.
+   */
+  newIn: string | null;
+  onNewHandled: () => void;
   reload: () => void;
 }) {
   const selected = selection.ids;
@@ -221,6 +233,8 @@ export function BoardView({
                   selected={selected}
                   cursor={cursor}
                   onCursor={onCursor}
+                  startAdding={newIn === g.value}
+                  onNewHandled={onNewHandled}
                   dragging={dragging}
                   groupBy={groupBy}
                   droppable={draggableBoard}
@@ -275,6 +289,8 @@ function Column({
   selected,
   cursor,
   onCursor,
+  startAdding,
+  onNewHandled,
   dragging,
   groupBy,
   droppable,
@@ -298,6 +314,9 @@ function Column({
   selected: ReadonlySet<string>;
   cursor: string | null;
   onCursor: (id: string) => void;
+  /** `n` named this column. */
+  startAdding: boolean;
+  onNewHandled: () => void;
   dragging: string | null;
   groupBy: string;
   droppable: boolean;
@@ -313,6 +332,14 @@ function Column({
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const value = group.value;
+
+  // `n` reached this column. Cleared immediately, so the request is a one-shot
+  // rather than a state the column has to be talked back out of.
+  useEffect(() => {
+    if (!startAdding) return;
+    setAdding(true);
+    onNewHandled();
+  }, [startAdding, onNewHandled]);
 
   useEffect(() => {
     const el = ref.current;
@@ -365,7 +392,13 @@ function Column({
               placeholder="title, ⏎ to create"
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setAdding(false);
+                // `stopPropagation` on Escape is not needed — the shell hands a
+                // field every key it is given — but the field does have to put the
+                // keyboard back on the board, or `n` is a one-way door.
+                if (e.key === 'Escape') {
+                  setAdding(false);
+                  setTitle('');
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   create();

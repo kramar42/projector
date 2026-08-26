@@ -97,9 +97,9 @@ the two are expected to be editing the same note at the same time.
 |---|---|
 | `src/schema/` | note and facet types, frontmatter read/write, validation, how notes fold together |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
-| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, and `dropOutcome.ts`, what a drag means |
+| `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, `dropOutcome.ts`, what a drag means, `keys.ts`, what a keystroke means and which letters a vault may not claim, and `undo.ts`, the write that puts a write back |
 | `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
-| `src/web/` | React: sidebar, three shapes, note panel |
+| `src/web/` | React: sidebar, three shapes, note panel. `cursor.ts` is where the keyboard is and `views/motion.ts` is where it can go |
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
