@@ -37,7 +37,7 @@ it does not get re-proposed and does not clutter the document it was rejected fr
 
 ## Two of these are machine-checked
 
-DESIGN's frontmatter and ARCHITECTURE's tables are read by the test suite: `pnpm test` fails if the
+DESIGN's frontmatter and ARCHITECTURE's tables are read by the test suite: `bun test` fails if the
 tokens named in DESIGN drift from the stylesheet, if a write path gains or loses a guard without
 ARCHITECTURE's write-path table following, or if ARCHITECTURE names a test that does not exist. Edit
 either of those two documents expecting the suite to have an opinion.

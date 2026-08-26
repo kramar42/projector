@@ -264,12 +264,12 @@ test('a key is normalised to the letter the keyboard actually sends', () => {
   assert.equal(loadFacets(file).mood!.key, 'p');
 });
 
-test('the seeded vault and the example vault declare keys that hold', () => {
+test('the seeded vault and the tutorial vault declare keys that hold', () => {
   // The two vocabularies that actually ship. A collision here is a `pj check`
   // error the first time anyone opens them, which is not how a seed should read.
-  // The example vault is in the repository, so this holds in a fresh clone —
-  // it used to read `work/`, which is gitignored and exists on one machine.
-  for (const file of [paths('example').facets, undefined]) {
+  // The tutorial vault is in the repository, so this holds in a fresh clone —
+  // it used to read a private vault that exists on one machine.
+  for (const file of [paths('vaults/tutorial').facets, undefined]) {
     const path = file ?? facetsFile(SEED_FACETS);
     assert.deepEqual(
       validateVocabulary(declaredFacets(path), path),

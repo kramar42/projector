@@ -540,7 +540,7 @@ and write frontmatter into its documentation.
 
 `vaults.json` is never committed, and cannot usefully be: entries hold absolute paths, so one checked
 into the repository would name the machine it was committed from. Instead an absent registry *means*
-the example vault in `example/`, resolved against `appRoot` at read time — a synthesised row, not a
+`vaults/tutorial`, resolved against `appRoot` at read time — a synthesised row, not a
 seeded file, so nothing is written until you open something and `pj vaults forget` works on it like any
 other entry. `PROJECTOR_VAULTS` opts out, which is what keeps the tests from having to know what the
 repository ships with.
@@ -573,17 +573,34 @@ markdown attracts one. That exclusion is gone: the folder full of markdown *is* 
 same observation is the reason a README should be a card. `listNoteFiles` skips two directories and no
 filenames — anything dotted, and `assets`, which is the one tree the app deletes from wholesale.
 
-## The example vault
+## The two vaults that ship
 
-`example/` is a real vault, committed, and the only one that ships. A clone opens it without
-configuring anything, and the tests read its `facets.yaml` as one of the two vocabularies that must
-validate — the other being `SEED_FACETS`, which is what created it.
+Both live under `vaults/`, both are committed, and they have different jobs — which is also the rule
+for what may mention them. **Prose describes the tutorial; tests reference either; nothing anywhere
+describes the author's own vault**, because a private folder is not evidence a reader can check and
+counting what is in it is a number that goes stale by working.
 
-It carries eleven cards chosen to be a tour rather than a fixture: a project with members, a blocked
-card and its blocker, a card waiting on a person, one deliberately overdue, a note that is not work at
-all, a card in a subfolder, a `README.md` that is both the folder's readme and a card, and one file
-with no frontmatter whose id and title are derived. `.vaults/states` remains the exhaustive fixture and
-is still generated, because dates that must read `overdue` cannot be committed.
+**`vaults/tutorial`** is what a fresh clone opens onto, with no configuration — see *Why the registry
+is a file*. Eleven cards chosen as a tour: a project with members, a blocked card and its blocker, a
+card waiting on a person, one deliberately overdue, a note that is not work at all, a card in a
+subfolder, a `README.md` that is both the folder's readme and a card, and one file with no frontmatter
+whose id and title are derived. Its `facets.yaml` is one of the two vocabularies the key checker must
+pass — the other is `SEED_FACETS`, which is what created it.
+
+**`vaults/coverage`** carries every state the app can draw: every declared facet value, both ends of
+every bucket, a blocking chain and one whose blocker is finished, a link of every kind including two
+that cannot resolve. A real vault only exercises the states real work happens to produce, which is how
+`.chip.is-overdue` shipped with its text the same colour as its background — no card carried a `due`
+date, so the rule had never rendered once.
+
+Its cards are committed markdown, but **its dates are derived**. `due` and `staleness` are computed
+against today, so a fixed date stops meaning what it was chosen to mean: the `today` column empties
+tomorrow, and within seven weeks every dated card is overdue and four columns have collapsed into one.
+Each date therefore names the band it demonstrates in a comment beside it — `due: ["2026-08-17"]  #
+overdue` — and `bun run redate` moves them all back to today. That is the whole of what the script
+does; the 690-line generator it replaced held every card as a JavaScript string literal, so adding a
+state meant editing code rather than writing a note. Two tests guard the arrangement: every date must
+carry a band, and the bands must be exactly the buckets the vault's own `facets.yaml` declares.
 
 ## Stack
 

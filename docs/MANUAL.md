@@ -1088,37 +1088,55 @@ setting.
 
 Nothing here locks you to the tools it was written with, and CI proves that rather than promising it.
 
-**Any package manager.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`, `yarn` and
-`bun install` all resolve the same tree. The committed lockfile is pnpm's because that is what CI
-installs from; the others resolve fresh, which CI also exercises. There is deliberately no
-`packageManager` field, since that would make Corepack refuse every manager but one.
-
-**Either runtime.** Because the server and the CLI have no build step, the runtime is a property of
-the command you type rather than a setting in the repo. The `package.json` scripts spell Node because
-Node is the floor; Bun runs the same files:
+**Either runtime, chosen by the launcher.** The server and the CLI have no build step, so the runtime
+is a property of the command you type rather than a setting in the repo. Every script that runs this
+repo's own TypeScript spells `node`, because Node is the floor `engines` promises — and `bun run`
+prepends a `node` symlink pointing at itself, so the same script runs under Bun. One set of scripts,
+three ways in:
 
 ```bash
-bun install
-bun test                          # Bun's own runner — node:test only works under it
-bun run --bun build               # --bun is required: vite's shebang says node
-bun src/server/serve.ts           # and `bun --watch …` for the dev loop
-bun src/cli/pj.ts ls
+bun run serve                     # Bun
+node --run serve                  # Node, no package manager needed
+pnpm serve                        # Node, via a package manager
 ```
 
-The whole suite passes on both, and the CLI prints byte-identical output. Bun starts faster, which is
-worth something for a CLI you run by hand and nothing for a server that starts once. Two things are
-worth knowing. `bun run <script>` honours the `#!/usr/bin/env node` shebang inside `vite` and has no
-fallback, so `--bun` is not optional on a machine without Node. And Bun ships its own SQLite build,
-which has trailed Node's — a version-sensitive `ALTER TABLE … DROP COLUMN` in the test suite is the
-one place that has actually bitten.
+`bunfig.toml` is what makes the first line honest. Bun only substitutes itself when asked, and its
+default is to do so *only if `node` is absent from `$PATH`* — so with a Node installed, `bun run serve`
+would quietly execute under Node. `[run] bun = true` settles it, and is exactly what `--bun` does per
+invocation. It also means `bun run build` needs no flag, though `vite`'s `#!/usr/bin/env node` shebang
+is the reason the flag exists.
+
+**One script cannot play, and the reason is a rule.** A script that hands the runtime a *file* is
+substitutable. A script that hands it a *runtime flag* is not, because the flag belongs to one runtime
+only. `test` is `node --test`; substituted, that reads `bun --test`, and Bun's runner is the subcommand
+`bun test`, never a flag. They are two different programs:
+
+```bash
+bun test                          # under Bun
+node --run test                   # under Node
+```
+
+Both run the whole suite, CI runs each, and both must pass. Everything else — `serve`, `dev`, `pj`,
+`states`, and the scripts that call a binary rather than a runtime — substitutes cleanly.
+
+**Any package manager.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`, `yarn` and
+`bun install` all resolve the same tree. The committed lockfile is pnpm's, which is what CI installs
+from; the others resolve fresh, which CI also exercises. Bun's runtime reads a `node_modules` any of
+them produced. There is deliberately no `packageManager` field, since that would make Corepack refuse
+every manager but one.
+
+Bun starts faster, which is worth something for a CLI you run by hand and nothing for a server that
+starts once, and it runs the suite in a fraction of the time. One thing has actually bitten: Bun ships
+its own SQLite build, which has trailed Node's, and a version-sensitive `ALTER TABLE … DROP COLUMN` in
+the test suite is where that showed up.
 
 **Pins where a pin is the only thing there is.** Dependencies carry `^` ranges because the lockfile
 is already the pin: the range says what is acceptable, the lockfile says what you got. A runtime has
-no lockfile, so `mise.toml` *is* the pin and names a concrete major rather than `latest` — otherwise
-two people on two days get two Node versions. It tracks the newest major, not the floor, because CI
-tests the floor. Nothing pins a package manager, because none is required.
+no lockfile, so `mise.toml` *is* the pin: it names both runtimes at concrete versions rather than
+`latest`, otherwise two people on two days get two of each. It tracks newer than the floor, because CI
+tests the floor. Nothing pins a package manager, because no particular one is required.
 
-`pnpm deps:check` lists what has moved; `pnpm deps:update` writes the new ranges, after which any
+`bun run deps:check` lists what has moved; `bun run deps:update` writes the new ranges, after which any
 install refreshes the lockfile. `@types/node` is deliberately held at the floor rather than the
 newest — see `.ncurc.yml` — because types for a Node this repo does not claim to support would let a
 26-only API typecheck clean and then fail on the `node 24` job.

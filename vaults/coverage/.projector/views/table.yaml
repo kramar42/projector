@@ -1,0 +1,5 @@
+# Every note as columns of values, which is the only place a facet reads as a column.
+shape: table
+title: Table
+sort: [title:asc]
+show: [priority, status, due, project, tech, layer, owner]

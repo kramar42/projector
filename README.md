@@ -51,13 +51,13 @@ Three promises shape everything else:
 
 ## Install
 
-Node 24 or newer. Nothing is compiled ahead of time except the web UI, so there is no build step for
-the server or the CLI.
+[Bun](https://bun.com) or Node 24+. Nothing is compiled ahead of time except the web UI, so there is
+no build step for the server or the CLI.
 
 ```bash
 git clone <TODO(you): url> && cd projector
-pnpm install
-pnpm build && pnpm serve
+bun install
+bun run build && bun run serve
 ```
 
 Then open <http://127.0.0.1:8092>. On first run it asks for a folder; point it at an empty one and it
@@ -67,13 +67,15 @@ caches. One process, one URL: the server serves the built UI.
 The CLI needs nothing running:
 
 ```bash
-alias pj='node "$PWD/src/cli/pj.ts"'
+alias pj='bun "$PWD/src/cli/pj.ts"'
 pj ls --group priority
 ```
 
-`npm`, `yarn` and `bun` all work, and Bun runs it as well as Node does. CI exercises every
-combination — see [Toolchain](docs/MANUAL.md#toolchain) for the details and the two things worth
-knowing.
+**Nothing here is pinned to Bun.** The package scripts spell `node`, because Node is the floor
+`engines` promises; Bun runs them because `bun run` substitutes itself for `node`. So the runtime is
+whichever launcher you type — `bun run serve`, `node --run serve` and `pnpm serve` are the same script
+on three runtimes, and `npm`, `pnpm` and `yarn` all install it. CI exercises every combination; see
+[Toolchain](docs/MANUAL.md#toolchain) for the one command that is an exception and why.
 
 <!-- TODO(you): a CI badge belongs here or under the title if you want one. There is a real
      workflow to point at, so it would not be decoration. -->

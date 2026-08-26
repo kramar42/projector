@@ -1,0 +1,6 @@
+# week · month · older, and the undated note that has no value on the axis at all.
+shape: board
+title: Staleness
+groupBy: [staleness]
+sort: [updated:desc]
+show: [status, priority]

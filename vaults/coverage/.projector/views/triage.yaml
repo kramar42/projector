@@ -1,0 +1,6 @@
+# All four triage values, including `complete`.
+shape: board
+title: Triage
+groupBy: [triage]
+sort: [updated:desc]
+show: [project, priority, status]

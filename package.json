@@ -19,7 +19,7 @@
     "dev:web": "vite",
     "build": "vite build",
     "serve": "node src/server/serve.ts",
-    "states": "node scripts/states.mjs"
+    "redate": "node scripts/redate.mjs"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^3.0.0",

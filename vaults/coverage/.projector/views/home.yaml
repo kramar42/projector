@@ -1,0 +1,6 @@
+# Board by priority — reaches the dashed `(none)` column, since two notes carry no priority.
+shape: board
+title: Home
+groupBy: [priority]
+sort: [updated:desc]
+show: [project, status, tech]

@@ -1,0 +1,83 @@
+# Fixture vocabulary — a copy of the work vault's, so this vault stands alone.
+# Every value declared here is carried by at least one note in the vault. If you add
+# a value and no note takes it, the fixture has stopped doing its job.
+
+status:
+  label: Status
+  values: [planning, active, on-hold, done, archived]
+  open: false
+  single: true
+  # No further work expected, whatever the outcome — abandonment counts,
+  # on-hold does not. A closed note stops blocking whatever waits on it.
+  closed: [done, archived]
+  expected: true
+  hue: green
+
+priority:
+  label: Priority
+  values: [now, month, backlog, someday]
+  open: false
+  single: true
+  expected: true
+  hue: orange
+
+due:
+  label: Due
+  type: date
+  single: true
+  buckets: { overdue: {upTo: -1, hue: red}, today: {upTo: 0, hue: yellow}, week: 7 }
+  overflow: later
+
+waiting_on:
+  label: Waiting on
+  values: [person-a, person-b, person-c, person-d, person-e, person-g, person-f]
+  open: true
+  blocking: true
+  hue: yellow
+
+energy:
+  label: Energy
+  values: [deep, shallow, decide, delegate]
+  open: false
+  single: true
+
+domain:
+  label: Domain
+  values: [eventing, identity, master-data, workflow, observability, lifecycle]
+  open: true
+
+tech:
+  label: Tech
+  values: [k8s, aws, github, kafka, keycloak, quarkus, temporal, mongodb, devops]
+  open: true
+  hue: pink
+
+layer:
+  label: Layer
+  values: [layer-1, layer-2, layer-3, layer-4, layer-5]
+  open: false
+
+source:
+  label: Source
+  values: [brain, trello, slack, jira, gmail, gdocs, git, claude]
+  open: true
+
+owner:
+  label: Owner
+  values: []
+  open: true
+  single: true
+
+parent:
+  label: Part of
+  type: ref
+  single: true
+  hue: purple
+  inverse: Children
+
+blocked_by:
+  label: Blocked by
+  type: ref
+  blocking: true
+  hue: red
+  inverse: Blocks

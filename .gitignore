@@ -7,9 +7,6 @@ dist/
 .DS_Store
 vaults.json
 
-# Sample vaults you generate, open and throw away. The `states` script writes one.
-.vaults/
-
 # One lockfile is committed — pnpm's, which is what CI installs from. Every other
 # manager works and resolves fresh; their lockfiles just must not land here, or
 # two of them drift and nobody knows which one describes the tree.

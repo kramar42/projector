@@ -1,0 +1,14 @@
+# `bun run <script>` should mean what it says.
+#
+# A package.json script that spells `node` — every one here that runs this
+# repo's own TypeScript does — is honoured literally by default, so with Node on
+# PATH (mise puts it there) `bun run serve` would quietly execute under Node.
+# This setting prepends a `node` symlink pointing at bun, so a script written
+# for the floor runs under whichever runtime was asked for. It is exactly what
+# `--bun` does per invocation.
+#
+# The one script this cannot rescue is `test`: `node --test` becomes
+# `bun --test`, and Bun's runner is the subcommand `bun test`, not a flag. Two
+# different programs, so run the suite as `bun test`.
+[run]
+bun = true

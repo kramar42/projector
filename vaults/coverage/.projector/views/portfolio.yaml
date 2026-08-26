@@ -1,0 +1,8 @@
+# Roll-ups: direct / total, blocked, untriaged, last activity — including the
+# project that owns nothing, whose row must read 0 / 0.
+shape: table
+title: Portfolio
+filter:
+  type: [project]
+sort: [title:asc]
+show: [status, priority, due]

@@ -1,0 +1,6 @@
+# Grouped by which kinds of link a note carries — one note carries all of them.
+shape: board
+title: Linked
+groupBy: [linked]
+sort: [title:asc]
+show: [status, project]

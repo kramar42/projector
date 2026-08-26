@@ -1,0 +1,9 @@
+# Matches nothing, on purpose. The empty result is a state too, and it is the one
+# most likely to be reached by accident.
+shape: board
+title: Empty
+filter:
+  status: [done]
+  priority: [now]
+groupBy: [priority]
+show: [project]

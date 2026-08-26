@@ -42,13 +42,13 @@ export interface VaultInfo extends VaultEntry {
 }
 
 /**
- * What an install knows about before anyone has configured it: the example vault
- * that ships in the repository.
+ * What an install knows about before anyone has configured it: `vaults/tutorial`,
+ * which ships in the repository.
  *
  * **The registry is never committed, and this is why it does not have to be.** A
  * checked-in `vaults.json` could not work anyway — entries hold absolute paths,
  * so the one file would name the machine it was committed from. Deriving the
- * example's path from `appRoot` at read time gets it right in every clone, and
+ * tutorial's path from `appRoot` at read time gets it right in every clone, and
  * leaves the real registry untracked, so opening your own vaults never shows up
  * as a change to the repository.
  *
@@ -56,12 +56,16 @@ export interface VaultInfo extends VaultEntry {
  * something. Which also means `pj vaults forget` works on it — that write
  * materialises the file, and an empty list is then an empty list.
  *
+ * Only the tutorial ships this way. `vaults/coverage` is committed too, but it is
+ * a test fixture: it belongs to whoever is looking at the app, not to somebody
+ * opening it for the first time.
+ *
  * `PROJECTOR_VAULTS` opts out. Pointing the registry somewhere else says this
  * list is mine, and a test asserting on `no vaults yet` should not have to know
  * what the repository ships with.
  */
 export function shippedVaults(): VaultEntry[] {
-  const path = join(appRoot, 'example');
+  const path = join(appRoot, 'vaults', 'tutorial');
   if (process.env.PROJECTOR_VAULTS || !isConfigured(path)) return [];
   return [{ path, name: suggestName(path), addedAt: 0 }];
 }

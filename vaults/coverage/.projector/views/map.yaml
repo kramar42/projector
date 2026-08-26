@@ -1,0 +1,4 @@
+# The decomposition tree, plus blocking edges. Two relation colours on one canvas.
+shape: canvas
+title: Map
+show: [parent, blocked_by]

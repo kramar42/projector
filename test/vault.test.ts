@@ -12,6 +12,9 @@ import {
   suggestName,
 } from '../src/vault.ts';
 import { readAll } from '../src/index/indexer.ts';
+import { listNoteFiles } from '../src/schema/note.ts';
+import { split } from '../src/schema/frontmatter.ts';
+import { loadFacets, orderValues } from '../src/schema/facets.ts';
 import { isConfigured, paths, resolveCliVault, vaultAbove } from '../src/config.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
@@ -40,7 +43,7 @@ test('the suggested name is the folder name, and nothing cleverer', () => {
   // A suggestion sits in an editable field, so guessing buys nothing and costs
   // predictability.
   assert.equal(suggestName('/Users/k/notes/vault'), 'vault');
-  assert.equal(suggestName('/Users/k/Code/work/projector/work'), 'work');
+  assert.equal(suggestName('/Users/k/Code/projector/vaults/tutorial'), 'tutorial');
   assert.equal(suggestName('/Users/k/second-brain'), 'second-brain');
 });
 
@@ -208,14 +211,16 @@ test('opening a folder of markdown adds a .projector and touches nothing else', 
  *
  * `vaults.json` cannot be committed and be correct: its entries are absolute
  * paths, so one checked in would name the machine it came from. An absent
- * registry *means* the example vault instead, resolved against `appRoot` when it
+ * registry *means* the tutorial vault instead, resolved against `appRoot` when it
  * is read — right in every clone, and never written until you open something.
  */
 test('an unconfigured install knows about the vault that ships with it', () => {
   const shipped = shippedVaults();
+  // The tutorial, and only the tutorial. `vaults/coverage` ships too, but it is a
+  // fixture for whoever is looking at the app — not the thing a stranger opens.
   assert.equal(shipped.length, 1, 'exactly one, and it is in the repository');
-  assert.equal(basename(shipped[0]!.path), 'example');
-  assert.equal(shipped[0]!.name, 'example');
+  assert.equal(basename(shipped[0]!.path), 'tutorial');
+  assert.equal(shipped[0]!.name, 'tutorial');
   assert.ok(isConfigured(shipped[0]!.path), 'and it is a vault, not an empty folder');
 
   // `PROJECTOR_VAULTS` opts out: pointing the registry elsewhere says the list is
@@ -229,7 +234,7 @@ test('an unconfigured install knows about the vault that ships with it', () => {
   }
 });
 
-test('the example vault is a working vault, not a folder of samples', () => {
+test('the tutorial vault is a working vault, not a folder of samples', () => {
   const root = shippedVaults()[0]!.path;
   const { notes, unreadable, duplicates } = readAll(paths(root).notes);
   assert.deepEqual(unreadable, [], 'every file in it parses');
@@ -247,6 +252,63 @@ test('the example vault is a working vault, not a folder of samples', () => {
     [...notes.values()].some((r) => basename(r.file) === 'README.md'),
     'and a README that is a card like any other file',
   );
+});
+
+/**
+ * The coverage vault's dates are committed but derived, and this is what keeps
+ * `bun run redate` able to reach them.
+ *
+ * Every date in it names the band it demonstrates in a comment beside it, which
+ * is how the re-dater knows where to put it back without a table of card ids. A
+ * date written without that comment is invisible to the re-dater: it will sit
+ * there going stale while everything around it moves, and the column it was
+ * meant to fill quietly empties. That is the failure the fixture exists to
+ * prevent, reappearing inside the fixture itself.
+ *
+ * Deliberately date-independent. Asserting that the buckets are *currently*
+ * populated would make the suite fail with the calendar rather than with a
+ * defect; running the re-dater is what makes that true, and it says so itself.
+ */
+test('every date in the coverage vault says which band it is demonstrating', () => {
+  const root = 'vaults/coverage';
+  const DUE = ['overdue', 'today', 'week', 'later'];
+  const WHEN = ['fresh', 'week', 'month', 'older'];
+  const claimed = new Set<string>();
+
+  for (const file of listNoteFiles(paths(root).notes)) {
+    const { yaml } = split(readFileSync(file, 'utf8'));
+    for (const line of (yaml ?? '').split('\n')) {
+      const m = /^(\s*)(due|created|updated):\s*\[?"?\d{4}-\d{2}-\d{2}/.exec(line);
+      if (!m) continue;
+      const band = /#\s*(\w+)\s*$/.exec(line)?.[1];
+      assert.ok(band, `${basename(file)}: "${line.trim()}" has no band comment — redate cannot move it`);
+      const legal = m[2] === 'due' ? DUE : WHEN;
+      assert.ok(legal.includes(band!), `${basename(file)}: "${band}" is not a ${m[2]} band`);
+      claimed.add(`${m[2] === 'due' ? 'due' : 'when'}:${band}`);
+    }
+  }
+
+  // And every band still has a card, so none of them can be quietly dropped.
+  for (const b of DUE) assert.ok(claimed.has(`due:${b}`), `no card demonstrates due ${b}`);
+  for (const b of WHEN) assert.ok(claimed.has(`when:${b}`), `no card demonstrates staleness ${b}`);
+});
+
+/**
+ * The bands the re-dater knows are the buckets the vault declares.
+ *
+ * Two files decide what `due` means — `facets.yaml` names the buckets, and
+ * `redate.mjs` picks a date inside each. Add a bucket to one and not the other
+ * and the fixture stops covering a column without anything failing.
+ */
+test('the coverage vault declares exactly the due buckets the re-dater fills', () => {
+  // Asked through `orderValues`, which is what the board asks — so this is the
+  // column order a person sees, not a re-reading of the file.
+  assert.deepEqual(orderValues(loadFacets(paths('vaults/coverage').facets).due, []), [
+    'overdue',
+    'today',
+    'week',
+    'later',
+  ]);
 });
 
 test('the seeded vocabulary covers every facet the seeded views use', () => {

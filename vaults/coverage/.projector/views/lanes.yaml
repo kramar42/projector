@@ -1,0 +1,6 @@
+# Two grouping axes: columns within rows. The only view that draws a lane head.
+shape: board
+title: Lanes
+groupBy: [priority, status]
+sort: [title:asc]
+show: [project, due]

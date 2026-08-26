@@ -1,0 +1,8 @@
+# Match plus context: the filter keeps unmatched ancestors so the tree stays
+# connected, drawn muted and counted separately. The dashed context band lives here.
+shape: canvas
+title: Context
+filter:
+  priority: [now]
+groupBy: [status]
+show: [parent]

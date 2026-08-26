@@ -1,0 +1,6 @@
+# Every `due` bucket at once. The two filled chips live here and nowhere else.
+shape: board
+title: Due
+groupBy: [due]
+sort: [due:asc]
+show: [priority, status, due]

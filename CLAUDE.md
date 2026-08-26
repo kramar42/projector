@@ -6,28 +6,40 @@ the reference and the other three `.claude/skills/` do the work — none of that
 ## Commands
 
 ```bash
-pnpm install
-pnpm test           # node --test
-pnpm typecheck
-pnpm build          # vite build → dist/
-pnpm serve          # 127.0.0.1:8092, serving dist/
-pnpm dev:web        # hot-reloading UI on 5176, alongside pnpm serve
-node src/cli/pj.ts  # the CLI, needs nothing running
+bun install
+bun test            # not `bun run test` — see below
+bun run typecheck
+bun run build       # vite build → dist/
+bun run serve       # 127.0.0.1:8092, serving dist/
+bun run dev:web     # hot-reloading UI on 5176, alongside bun run serve
+bun run pj -- ls    # the CLI, needs nothing running
 ```
 
-**`pnpm serve` serves `dist/`, not `src/`.** A UI change is invisible in the browser until
-`pnpm build` runs. A "the fix didn't take" reading at 8092 is almost always a stale bundle rather than
+**Bun is the default, not a requirement.** `mise.toml` pins both runtimes; every script above spells
+`node`, and `bun run` substitutes itself for it (`bunfig.toml`), so the runtime is whichever launcher
+you type. On a machine without mise or without Bun, `node --run <script>` runs any of these under Node
+— `node --run serve`, `node --run typecheck` — and `npm`, `pnpm` and `yarn` all install. Node is the
+floor `engines` promises and CI tests it; nothing here needs Bun.
+
+**`test` is the one script that does not shim.** Its body is `node --test`, and substituting the
+runtime makes that `bun --test`, which is not a thing — Bun's runner is the subcommand `bun test`. Two
+different programs, so: `bun test` under Bun, `node --run test` under Node. Both run the whole suite
+and both must pass; CI runs each.
+
+**`bun run serve` serves `dist/`, not `src/`.** A UI change is invisible in the browser until
+`bun run build` runs. A "the fix didn't take" reading at 8092 is almost always a stale bundle rather than
 a wrong fix.
 
-**`pnpm states` writes a vault carrying every state the app can draw** into `.vaults/states` —
-every facet value, both ends of every bucket, a blocking chain, a link of every kind including two
-that cannot resolve. The real vault only exercises the states real work happens to produce, so use
-this one for anything visual. Register it before the server will open it:
-`node src/cli/pj.ts vaults add .vaults/states --name states`.
+**`vaults/coverage` carries every state the app can draw** — every facet value, both ends of every
+bucket, a blocking chain, a link of every kind including two that cannot resolve. The real vault only
+exercises the states real work happens to produce, so use this one for anything visual. Its cards are
+committed markdown; only the dates are derived, because `due` and `staleness` are computed against
+today. So `bun run redate` first, then register it before the server will open it:
+`bun run pj -- vaults add vaults/coverage --name coverage`.
 
 ## The docs are part of the test suite
 
-`pnpm test` reads two of them. Editing them is not free-form:
+`bun test` reads two of them. Editing them is not free-form:
 
 - **[docs/DESIGN.md](docs/DESIGN.md)** — its frontmatter names the tokens, and the suite asserts they
   match the stylesheet and that every token reference resolves.
@@ -62,6 +74,6 @@ second document would have to restate something to be complete, link instead.
 
 - **Never commit without consent.** Never `git push`.
 - The vault under `work/` is real work and is gitignored. Do not commit anything out of it, and
-  prefer `.vaults/states` for anything you need to look at.
+  prefer `vaults/coverage` for anything you need to look at.
 - Nothing in this repo writes to Jira, GitHub, Trello or Slack (`C2`). Adding a code path that does
   is not a refactor.

@@ -70,8 +70,8 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   `GET /api/query` returns, so a view means the same thing in both.
 - **A vault** is a folder of markdown — the cards at the root, the vocabulary and the saved views
   under `.projector/` — opened the way Obsidian opens one. It is a git repository, which is where
-  `pj log` reads history from. The live work vault holds
-  a couple of hundred notes and a dozen saved views.
+  `pj log` reads history from. Two ship in this one: `vaults/tutorial`, which a fresh clone opens
+  onto, and `vaults/coverage`, the fixture.
 - **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL — plus Slack and
   Gmail, which have no fetcher here and are read by an agent through MCP. Sweeps propose and stop;
   `pj intake` creates no note and moves no cursor.
@@ -156,11 +156,15 @@ count written here.
 
 ## Evidence on Hand
 
-- `README.md` and `ARCHITECTURE.md` are the written product note; `NEXT.md`
+- `README.md` and `docs/ARCHITECTURE.md` are the written product note; `docs/NEXT.md`
   notes what is deliberately not being done and why.
-- The `work/` vault: a couple of hundred real notes, a dozen saved views, a real annotated
-  `facets.yaml`. Gitignored, so it
-  is private working data — usable as design evidence, never as publishable content.
+- `vaults/tutorial`: the vault a stranger opens first, and the only one anything written for a reader
+  should describe.
+- `vaults/coverage`: the fixture, carrying every state the app can draw. Tests reference it; prose
+  does not need to.
+- The author's own vault is real working data. It is private, it is not in this repository, and
+  nothing written here describes it or counts what is in it — a number that changes by working is a
+  claim that goes stale on its own.
 - One author; no external contributors.
 - **Absences that must not be filled by invention:** no testimonials, users, customers, benchmarks,
   pricing, licence or deployment story exists. Nothing is published or hosted, and there is no landing

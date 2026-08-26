@@ -1,0 +1,8 @@
+# A saved view carrying a focus, which is the state the ✕ beside it has to be
+# able to undo. Clearing has to travel as `focus=` rather than as a deleted key:
+# the server merges a view file's parameters *under* the query string's, so an
+# absent key means inherit and the saved focus would come straight back.
+shape: canvas
+title: Focused
+focus: { id: ideas, via: parent, dir: in }
+show: [parent]

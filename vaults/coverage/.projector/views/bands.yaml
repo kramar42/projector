@@ -1,0 +1,5 @@
+# A grouped canvas: bands behind the nodes, drawn from the grouping axis.
+shape: canvas
+title: Bands
+groupBy: [priority]
+show: [parent]

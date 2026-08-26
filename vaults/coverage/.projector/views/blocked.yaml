@@ -1,0 +1,6 @@
+# The derived axis: blocked · waiting · clear, including the note whose blocker is done.
+shape: board
+title: Blocked
+groupBy: [blocked]
+sort: [priority:asc]
+show: [priority, blocked_by, waiting_on]
