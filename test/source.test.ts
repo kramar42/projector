@@ -25,7 +25,7 @@ const ROOT = new URL('..', import.meta.url).pathname;
 
 /** Text extensions only. A real binary — a font, an image — is not a source file. */
 const SEARCHABLE = new Set(['.ts', '.tsx', '.css', '.md', '.json', '.yaml', '.yml', '.html']);
-const SKIP = new Set(['node_modules', 'dist', '.git', '.pnpm-store', 'work']);
+const SKIP = new Set(['node_modules', 'dist', '.git', '.pnpm-store']);
 
 /**
  * Tab, newline and carriage return are the control bytes a text file may hold.

@@ -73,7 +73,7 @@ second document would have to restate something to be complete, link instead.
 ## Rules
 
 - **Never commit without consent.** Never `git push`.
-- The vault under `work/` is real work and is gitignored. Do not commit anything out of it, and
-  prefer `vaults/coverage` for anything you need to look at.
+- The author's real vault lives outside this repository and nothing here describes it. Do not go
+  looking for it, and prefer `vaults/coverage` for anything you need to look at.
 - Nothing in this repo writes to Jira, GitHub, Trello or Slack (`C2`). Adding a code path that does
   is not a refactor.
