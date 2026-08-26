@@ -1,46 +1,64 @@
 # projector
 
-<!-- TODO(you): one sentence a stranger can finish and know whether to keep reading.
-     The line below is your existing opener. It is accurate, but it leads with the
-     mechanism — "one note database, projected as three things" — which lands for
-     someone who already wants that and slides off everyone else. Consider leading
-     with the shape of the problem instead, and letting the mechanism be the second
-     sentence. Your call; it depends on whether the first readers are the university
-     friends (who need the problem) or people who already work this way (who will recognise the
-     mechanism). -->
+[![CI](https://github.com/kramar42/projector/actions/workflows/ci.yml/badge.svg)](https://github.com/kramar42/projector/actions/workflows/ci.yml)
 
-A personal work-management app. One database of markdown notes, drawn as a **board**, a **mind-map
-canvas** or a **table** — whichever the current query asks for, with read-only inline views of Jira
-issues, GitHub PRs, Claude sessions and local docs.
+Work scatters. The issue tracker holds the shared work, email and chat hold the asks, markdown
+notes hold the thinking — and the picture of what to do next lives in none of them. projector is a
+personal work-management app for exactly that: one database of markdown notes, drawn as a
+**board**, a **mind-map canvas** or a **table** — whichever the current question asks for — with
+read-only inline views of Jira issues, GitHub PRs, Claude sessions and local docs.
 
-<!-- TODO(you): drop the screenshot in and uncomment. Left commented so the README does
-     not ship a broken image in the meantime.
-![A board, grouped by project](docs/img/board.png)
--->
+The name is the pun it looks like. A **project** is a collection of items with a shared context. A
+**projection** is one way of looking at something that has more dimensions than any single view can
+show. The app is named after doing both.
 
-<!-- TODO(you): three shots of the SAME query in all three shapes, side by side, is the entire
-     pitch in one row and needs no caption. If you only ship one, ship the canvas — it is the
-     thing no board tool does, so it is the image that raises a question. -->
+**The same query, three shapes.** Planning starts on the board:
+
+![Open work grouped by priority, as a board](docs/img/board.png)
+
+Too many cards to scan at once, and the table is the natural summary — same filter, same grouping,
+one control changed:
+
+![The same query as a table](docs/img/table.png)
+
+Deciding what to pick up next is a question about relations, so the same query again as a canvas —
+`parent` lays out the tree, and the unfinished blocker is the dashed red edge:
+
+![The same query as a canvas](docs/img/canvas.png)
 
 ## Why it exists
 
-<!-- TODO(you): this section carries the file, and nothing in the repo says it yet.
-     docs/PRODUCT.md has positioning ("replaces the need for trello, miro") but not reasoning.
-     Worth saying, in your own words and roughly this order:
+My work lives in systems that are also everyone else's: the issue tracker is where I work with
+other people, email and messages are personal communication and asks, a folder of markdown captures
+my notes. On top of those I used Trello for priorities and projects, Excalidraw and Miro for
+high-level design, and reached for a table whenever a board grew past what one screen could show. Each
+tool held a fragment; none of them was the truth; and Trello's real limit named the whole problem —
+a card is stuck to its list. There is no *projection*: no way to keep the notes and change the
+view.
 
-       - what you were doing before this, and what specifically broke about it. Not "it was
-         annoying" — the failure. A hand-kept TODO.md going stale, work falling between Jira and
-         Slack, whichever it actually was.
-       - why "real TODOs and conceptual mind-maps in one place" is a problem and not a taste.
-         What went wrong when they lived in two tools that a stranger would recognise.
-       - why markdown files on disk rather than an app with a database. The honest reason.
-       - why nothing is ever written back to Jira, GitHub or Slack. This is an unusual, strongly
-         held constraint and a stranger reads it as a missing feature until you say why it is a
-         choice. This may be the most interesting paragraph in the README.
-       - optionally: what building it taught you. That is the reason a friend keeps reading.
+Capturing everything made it worse before it made it better. A system that captures everything
+greets you every morning with a hundred-item list, and I drowned in mine. So filtering things *out*
+is not a convenience here, it is the point: a view that shows one project's actionable cards — open,
+nobody waited on, no unfinished blocker — is the difference between a system that extends your
+attention and one that spends it.
 
-     Half a screen. A stranger's patience for someone else's motivation is thin — but zero
-     paragraphs here makes the whole repo read as a tool nobody needed. -->
+Being able to switch the shape without touching the rest of the view looks like a gimmick until you
+live with it. It means no way of looking at the notes is privileged: the board when planning, the
+table when there are too many cards, the canvas when the question is how things relate. Same notes,
+same filter, one control moved.
+
+The files are markdown because text is king: readable by people and by machines, diffable through
+git, composable, open, independent of any program — this one included. There is no lock-in to
+regret because there is nothing to be locked into.
+
+And nothing is ever written back to Jira, GitHub, Trello or Slack, which a stranger reads as a
+missing feature until it is said plainly: this is a *personal* context layer, and it should be
+invisible to everyone else. It extends my brain — a card carries the text, the facets, the links
+and the refs, so I do not have to remember that these three Slack messages are about that Jira
+issue. The systems other people see stay exactly as they were.
+
+The whole loop: **capture → triage → project** *(the verb)* **→ work** — and because projects nest
+and combine context, by the time work starts the context is as full as it can be.
 
 Three promises shape everything else:
 
@@ -56,7 +74,7 @@ Three promises shape everything else:
 no build step for the server or the CLI.
 
 ```bash
-git clone <TODO(you): url> && cd projector
+git clone https://github.com/kramar42/projector && cd projector
 bun install
 bun run build && bun run serve
 ```
@@ -78,9 +96,6 @@ whichever launcher you type — `bun run serve`, `node --run serve` and `pnpm se
 on three runtimes, and `npm`, `pnpm` and `yarn` all install it. CI exercises every combination; see
 [Toolchain](docs/MANUAL.md#toolchain) for the one command that is an exception and why.
 
-<!-- TODO(you): a CI badge belongs here or under the title if you want one. There is a real
-     workflow to point at, so it would not be decoration. -->
-
 ## The words
 
 Six terms carry the rest.
@@ -94,9 +109,8 @@ Six terms carry the rest.
 | **shape** | `board`, `canvas` or `table`. A view is a query; the shape is one field of it |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
 
-<!-- TODO(you): decide whether "computed axis" earns a seventh row. Against: it is a mechanism,
-     and mechanisms belong in the manual. For: a stranger meets `ƒ` on screen in the first
-     minute with no way to guess what it means. -->
+One mark worth knowing before the first minute on screen: an axis labelled `ƒ` is *computed* from
+the notes — blocked, triage, staleness — never stored on them.
 
 The full glossary is at the top of [docs/MANUAL.md](docs/MANUAL.md), which defines every word the app,
 the docs and the CLI use.
@@ -114,15 +128,14 @@ mind-map leaf and a tracked task the same file.
 **Links point outward, and only outward.** A note can carry a Jira issue, a GitHub PR, a Claude
 session or a local doc. Each is fetched, cached and shown inline, and none is ever written to.
 
-<!-- TODO(you): keep, cut, or move down — your call, and it depends on the audience.
-     For some readers this is the most interesting line in the README; for others it is the one
-     that makes a real tool look like an AI demo. -->
-**An agent is a first-class writer.** Notes are plain files, so a Claude session creates and edits
-them directly — no API, nothing running. Four slash commands in `.claude/skills/` do the sweeping,
-the sorting, and the setting-up-to-work.
+**An agent is a first-class writer — at the points of leverage.** Notes are plain files, so a Claude
+session creates and edits them directly: no API, nothing running. The agent is used where judgement
+pays — sweeping the intake, filling in facets, triage — and deliberately not where determinism does:
+enrichment is plain fetching, and every count on screen is computed, never guessed.
 
-<!-- TODO(you): a fourth bullet only if there is one thing you are actually pleased with that
-     the three above miss. Resist a feature list — the manual is for that. -->
+**The vocabulary makes it extensible.** Facets are declared per vault, so every vault tracks exactly
+what its domain needs; link kinds and their enrichments, intake sources, even shapes — a calendar, a
+timeline — are additions to a registry, not rewrites.
 
 ## Documentation
 
@@ -139,15 +152,11 @@ the sorting, and the setting-up-to-work.
 
 ## Status
 
-<!-- TODO(you): one honest paragraph. A stranger's real first question is "is this maintained,
-     and can I use it?" Things worth being plain about:
-       - a single-user personal project, dogfooded daily, no release and no packaging
-       - runs on your own machine against your own files; there is no server and no account
-       - desktop-only by construction — no breakpoints, no responsive layout at all
-       - no support, and no promise the file format is stable
-     Being direct here is what makes the rest of the README trustworthy. Understating it is
-     worse than overstating it: a friend who tries it and hits a wall you knew about will
-     trust the docs less afterwards. -->
+A single-user personal project, dogfooded daily. It runs on your own machine against your own
+files: no server, no account, no telemetry. Desktop-only by construction — there are no breakpoints
+and no responsive layout at all. There is no release, no packaging, no support, and no promise yet
+that the file format is stable — though because the files are plain markdown, the worst case is a
+folder of notes you can read anywhere.
 
 ## License
 
