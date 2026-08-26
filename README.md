@@ -61,8 +61,8 @@ bun run build && bun run serve
 ```
 
 Then open <http://127.0.0.1:8092>. On first run it asks for a folder; point it at an empty one and it
-sets itself up — a note directory, a starter vocabulary, a few views, and a `.gitignore` for the
-caches. One process, one URL: the server serves the built UI.
+sets itself up — a starter vocabulary and a few saved views under `.projector/`, and a `.gitignore`
+for the caches. Your notes go in the folder itself. One process, one URL: the server serves the built UI.
 
 The CLI needs nothing running:
 
