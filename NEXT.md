@@ -168,6 +168,88 @@ needs to be part of two things.
   rather than returning it to the card. In practice the cursor is that card and `j` picks up from it,
   so the cost is one Tab in the rare case, which is why it is filed rather than fixed.
 
+- **What is left of the two panel critiques.** The critiques of 2026-08-22 and 2026-08-23 are gone as
+  files: `6d4bf8a` rewrote the panel they cite, so every line reference in them was dead, and the two
+  documents disagreed with each other about what was still true. Their P0s and P1s all shipped — the
+  facets tier pruned, the project mark asking before it deletes a `project:` block, Escape stopping at
+  the link field, the refusal banner moved into the sticky head, the labels off the UA form-control
+  font and a test that fails on the original bug. What follows is the residue: the entries below, the
+  modality decision above, and nothing else.
+
+- **An open axis still draws its whole vocabulary.** `FacetEditor` renders `[...def.values,
+  ...extras]` whichever way `def.open` points, so a carried `tech` draws nine chips with the card's
+  actual value merely lit. Pruning uncarried axes fixed the larger half of the "mostly empty chrome"
+  finding — thirteen label-only rows on a bare card became none — and this is what is left of it: a
+  carried label axis is as tall as its vocabulary rather than as tall as its values.
+
+  The shape is already in the file. The `ref` and `date` branches open a `PopoverButton` instead of
+  drawing inline, so a values-only readout that expands to the picker on click is the third case of a
+  pattern that already has two. What makes it worth doing is a vocabulary wider than what a note
+  carries on it — which `tech` and `source` are and the frequent axes are not, since `single` axes
+  draw few chips anyway. Do it when an `open: true` axis is in daily use, or when one declares more
+  values than a row can hold.
+
+- **The link field is documented by a placeholder.** `LinkEditor` is one input whose five syntaxes
+  live in `placeholder`, which disappears on the first keystroke — the documentation goes away exactly
+  when it is needed. A `+ link` control opening a kind picker would also give the genuinely awkward
+  case a labelled destination: pasting an opaque `claude:local_…` id, where nothing on screen says
+  which of the five kinds it is. `LINK_KINDS` in `src/web/links.ts` already declares each kind with a
+  glyph and a hue, so the picker's contents are data rather than new vocabulary.
+
+  Filed rather than fixed because the part that lost work is fixed: Escape stops at the field now, so
+  what remains is discoverability for a syntax the README also states.
+
+- **Colour and contrast are the rules prose still guards.** `test/theme.test.ts` refuses a raw type
+  step, a raw radius, an untokenised frontmatter colour, uppercase not taken via the Label step, a
+  browser-drawn control, a breakpoint, a hue no vocabulary names, a `className` that resolves to no
+  rule, and a `<button>` carrying no font family. It says nothing about whether two colours can be
+  read against each other, and `COMPONENTS.md` names that as the gap.
+
+  There has been exactly one regression of this kind and it was caught by hand: `style.css:1827`
+  records a `dt` label receding by `opacity: 0.72` and landing at 3.16:1, under the floor, found by
+  measuring rather than by testing. The panel measured well when it was measured — 6.11:1 dark, 5.04:1
+  light, nothing under 4.5:1 — and nothing holds it there.
+
+  Why it is not written: a ratio needs resolved colour, and the palette is custom properties with a
+  light definition and a dark override. That means either a browser — `puppeteer` is not a dependency,
+  which is also why the design detector returns zero findings on TSX and why its clean run proves
+  nothing about contrast — or resolving custom properties in the test. The second is the cheaper one
+  and it is bounded: tokens on `:root` plus one override block. The next contrast regression is what
+  makes it worth the afternoon.
+
+- **The tier-1 ordering is emergent, and nothing pins it.** `project` and `parent` land first and
+  adjacent among the reference facets because `BUILTIN_FACETS` inserts `project` first and the vault
+  declares `parent` next — not because any code says so. That is the right architecture, and it is
+  what closed the original complaint that `owner`, documented as declared and unused, held a permanent
+  row between the two axes doing structural work. But it is an outcome of two files' line order, so a
+  vocabulary edit can silently undo it. A test asserting what the reference tier's first rows are
+  would pin the outcome without the panel naming a facet, which is the property worth keeping.
+
+- **Native `confirm()` at every high-stakes moment.** Six call sites now — close with unsaved changes,
+  discard an editor, un-project a note, delete a note, delete a selection, and the bulk bar's second
+  one. The app draws its own checkboxes and selects on the grounds that a browser-drawn control is a
+  seam; the most consequential moments are handed to the browser wholesale.
+
+  The counter-argument is why it is filed. A native dialog cannot be styled into looking dismissible,
+  cannot be missed, and blocks — which is most of what a confirm is for. What would change the answer
+  is the first prompt that needs to show something a string cannot: the project block's own prompt
+  already wants to be a list and settles for naming the kinds, because `data.project` resolves along
+  the chain and a count would be confidently wrong on a project inside another project.
+
+- **Three small panel things, each independent of the rest.** `updated` sits in the workshop block
+  without the `ƒ` that marks its neighbours as resolved rather than stored, though it is derived from
+  the file's mtime — one span. `.refchip-title` ellipsises at `26ch` while a `.reflink` row takes a
+  full line, so the same note reads shorter as a Part-of chip than as a Children row inside one
+  scroll. And `+ record` cannot mint one: linking a note that does not exist yet means closing the
+  panel, creating it, and reopening. The third is the only one with a design question in it, and `n`
+  narrowed it rather than answering it: a new card on the board inherits the column it was made in,
+  because the board's own rule says what that column means. A picker has no column to inherit — what
+  it has is the axis it was opened from and the note that opened it.
+
+  `CommitInput` belongs to the same list. Field, explicit button, Escape; used in the rail and the
+  canvas; used in the panel nowhere, whose remaining plain-Enter fields are exactly its shape. Its
+  docstring explains why it did not generalise to the title textarea and is silent about these.
+
 - **Tokenizing the rest of the scale.** `font-size` and `border-radius` are `--text-*` and `--radius-*`
   now, and `test/theme.test.ts` refuses a raw one — which held through 349 lines of new panel CSS
   without a single new step. `padding`, `gap` and `letter-spacing` did not get the same treatment:
