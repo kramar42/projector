@@ -103,6 +103,13 @@
   --radius-badge: 7px;    /* the filter rail's marked count, and nothing else */
   --radius-xl: 8px;       /* a container: column, popover, bulk bar, toolbar */
   --radius-pill: 10px;    /* a count badge, a canvas band */
+
+  /* The one layout width that two rules have to agree about. `.panel` is the
+     width, and `.shell` reserves the same width as a track so that an open panel
+     takes space out of the view instead of covering it. Written twice, they drift
+     and the view draws cards under the panel again. Clamped with `min(px, vw)`,
+     which is what DESIGN.md asks of an overlay in a narrow window. */
+  --panel-w: min(560px, 92vw);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -322,15 +329,42 @@ body {
 
 /* ---------------------------------------------------------------- shell */
 
+/*
+ * Three tracks: the rail, the view, and the panel's dock.
+ *
+ * The dock holds nothing — `.panel` is `position: fixed` and paints over it — and
+ * that is the whole of it: a fixed overlay is invisible to layout, so the width it
+ * covers has to be taken out of the view by hand or the view keeps drawing cards
+ * underneath it. The cursor is what turned that from cosmetic into a bug.
+ * `scrollIntoView` calls a card in view when it is inside the scrollport, and the
+ * scrollport ran to the window's edge, so `l` walked the cursor into 560px of
+ * board nobody could see and `nearest` had nothing to fix — see `useCursorFocus`.
+ *
+ * Two independent switches on one template rather than a template per state, which
+ * is what kept the collapsed rail's copy from having to know about the panel.
+ *
+ * `minmax(0, …)` on the dock rather than a bare width, because a track that cannot
+ * shrink overflows the shell in a narrow window: this is the clamp, done by track
+ * sizing instead of by hand. The panel covers the view again once the window is too
+ * narrow to seat both, which is the same trade `min(560px, 92vw)` already makes.
+ */
 .shell {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  --rail-w: 248px;
+  --dock-w: 0px;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, var(--dock-w));
   height: 100%;
   transition: grid-template-columns 140ms ease;
 }
 
 .shell.sidebar-is-collapsed {
-  grid-template-columns: 38px minmax(0, 1fr);
+  --rail-w: 38px;
+}
+
+/* The panel docks rather than covers. It is still `position: fixed` — this is only
+   the space it is fixed over, so nothing is drawn beneath it. */
+.shell.panel-is-open {
+  --dock-w: var(--panel-w);
 }
 
 /* The sidebar *is* the view: sections grouped by purpose, and exactly one of
@@ -1715,7 +1749,8 @@ input:focus-visible + .checkbox {
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(560px, 92vw);
+  /* The same token `.shell` reserves a track for. See `--panel-w`. */
+  width: var(--panel-w);
   background: var(--surface);
   border-left: 1px solid var(--rule);
   z-index: 21;
@@ -3818,6 +3853,60 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 }
 .keynotice.is-bad { background: color-mix(in srgb, var(--bad) 14%, var(--surface-2)); }
 .keynotice.is-info { background: color-mix(in srgb, var(--accent) 10%, var(--surface-2)); }
+
+/*
+ * What the cursor's scroll has to clear.
+ *
+ * `scrollIntoView({ block: 'nearest' })` calls a card in view when it sits inside
+ * the scrollport — and a scrollport is a box, not a picture. The sticky table head
+ * and the bulk bar above are both painted over that box without displacing it, so
+ * neither exists as far as that test is concerned: `j` onto the row under the head
+ * scrolled nothing and left it half covered, measured at 54% of a 29px row behind a
+ * 26px header.
+ *
+ * `scroll-padding` is the answer the platform already has — it shrinks the region a
+ * scroll-into-view aims at, and leaves a card that is genuinely visible alone. The
+ * numbers are measurements, so they come from `useEdgeInset`: the thing doing the
+ * covering writes its own reach, and it writes it on the box the scrollers sit
+ * inside rather than on a scroller, because a custom property inherits — one write
+ * from the bulk bar serves `.board-scroll` and every `.column-body` in it. With
+ * nothing covering anything the fallback is `0px` and these declarations are inert.
+ *
+ * The keynotice is deliberately not compensated. It is transient, centred and
+ * self-dismissing, and it would be writing over the same edge the table head owns —
+ * two covers on one edge is a `max()` of two numbers that inheritance cannot take.
+ */
+.table-wrap,
+.board-scroll,
+.column-body {
+  scroll-padding-top: calc(var(--covered-top, 0px) + var(--ring-out, 0px));
+  scroll-padding-bottom: calc(var(--covered-bottom, 0px) + var(--ring-out, 0px));
+}
+
+/*
+ * And the cursor's own ring, where it is drawn outside the card.
+ *
+ * A board draws the cursor as the app's one ring — `outline: 2px solid` at
+ * `outline-offset: 1px` on the face — and an outline is painted *outside* the box it
+ * belongs to. `scrollIntoView` aims at the box, so a card brought to an edge landed
+ * flush and the scroller clipped the ring: the top edge of the first card and the
+ * bottom edge of the last one, three pixels of it, which is what the ring measures.
+ * Not breathing room, then — the aim was short by exactly the part of the cursor
+ * that is not the card.
+ *
+ * A table wants none of this: `.table tbody tr.is-cursor` draws its ring from inset
+ * shadows, because a `<tr>` cannot take an outline, so there it is already inside
+ * the box being aimed at.
+ */
+.board-scroll,
+.column-body {
+  --ring-out: 3px;
+  /* The same three pixels on the axis the board scrolls sideways along. Inert in a
+     column body, which scrolls one way, and declared once for both rather than
+     leaving one of the two edges of a card ringed and the other clipped. */
+  scroll-padding-left: var(--ring-out);
+  scroll-padding-right: var(--ring-out);
+}
 
 /* Where a reordered card will land. Only rendered on a saved view, since that is
    the only place card order can live. */

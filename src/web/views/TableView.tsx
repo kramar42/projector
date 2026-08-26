@@ -3,7 +3,7 @@ import { axisValues, FacetChip, RecordMark } from '../components/CardBody.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
-import { useCursorFocus } from '../cursor.ts';
+import { useCursorFocus, useEdgeInset } from '../cursor.ts';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
@@ -41,6 +41,16 @@ export function TableView({
 }) {
   const chips = data.spec.show;
   const [problem, setProblem] = useState<string | null>(null);
+  /**
+   * The head is `position: sticky`, so it covers the top of the scroller it is in
+   * without taking any of its height — which is invisible to `scrollIntoView` and
+   * left the cursor's row half behind it. `useEdgeInset` is the compensation, and
+   * it is measured rather than declared because the labels are the view's `show`
+   * list and can wrap.
+   */
+  const wrap = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLTableSectionElement>(null);
+  useEdgeInset(head, 'top', wrap);
   // Why `every` and not `some` is `columns.ts`'s to explain.
   const projects = earnsRollups(data.ids, data.notes);
 
@@ -79,9 +89,9 @@ export function TableView({
   return (
     <div className="table-shell">
       {problem && <div className="banner is-bad">{problem}</div>}
-      <div className="table-wrap">
+      <div className="table-wrap" ref={wrap}>
       <table className="table">
-        <thead>
+        <thead ref={head}>
           <tr>
             <th className="col-title">Title</th>
             {chips.map((c) => (

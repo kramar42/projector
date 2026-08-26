@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ApiError, api } from '../api.ts';
 import { plural } from '../plural.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { RecordPicker } from './RecordPicker.tsx';
 import { RecordMark } from './CardBody.tsx';
 import { Button } from './Button.tsx';
+import { useEdgeInset } from '../cursor.ts';
 import { useHue, useVocabulary } from '../vocabulary.tsx';
 import type { QueryResponse } from '../types.ts';
 
@@ -35,6 +36,17 @@ export function BulkBar({
   onProblem: (m: string) => void;
 }) {
   const facets = useVocabulary();
+  /**
+   * The bar floats over the surface it belongs to rather than taking a row of it,
+   * so that a selection appearing does not make the whole board jump — and a card
+   * scrolled to the bottom edge landed underneath it, because `scrollIntoView`
+   * cannot see anything that does not displace the box. So the bar says how much of
+   * the bottom it is standing on, and the scrollers inside the same surface read it
+   * as `scroll-padding`. Its parent is that surface — the table shell, the board
+   * wrap — which is why nothing has to be passed in.
+   */
+  const bar = useRef<HTMLDivElement>(null);
+  useEdgeInset(bar, 'bottom');
   /**
    * Merging asks one question — which note survives — and it can only be answered
    * from inside the selection, so this lists what is selected rather than reusing
@@ -76,7 +88,7 @@ export function BulkBar({
       .catch((e: ApiError) => onProblem(e.message));
 
   return (
-    <div className="bulkbar">
+    <div className="bulkbar" ref={bar}>
       <span className="bulkbar-count">{ids.length} selected</span>
 
       {/* One picker floats above the bar at a time: choosing an axis to write and

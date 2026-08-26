@@ -478,7 +478,11 @@ type scale, which is why the scale test does not police them.
 
 ## Layout
 
-**The shell** is a two-column CSS grid: `248px minmax(0, 1fr)`, collapsing to `38px`. There is no top
+**The shell** is a three-track CSS grid: the rail at `248px`, collapsing to `38px`; the view at
+`minmax(0, 1fr)`; and a dock at `minmax(0, var(--panel-w))` that is `0` until the panel opens. The
+dock holds nothing — the panel is `position: fixed` and paints over it — and exists so that an open
+panel *takes* its width from the view rather than covering it. Two switches on one template, so the
+collapsed rail and the open panel do not have to know about each other. There is no top
 bar. The sidebar *is* the view — vault switcher, shape and grouping controls, search, then the filter
 panel — and the footer carries the counts. The canvas floats its own transient toolbar rather than
 adding a chrome row that would be empty in the other two shapes.
@@ -489,6 +493,19 @@ column scrolls its own body under a fixed head. Nothing scrolls inside something
 the same axis, with one known exception: from three lanes up the board scrolls vertically, and the
 column bodies inside it still scroll vertically too.
 
+**A scroller declares what covers it.** `scrollIntoView` — how the cursor keeps itself on screen —
+calls a card in view when it is inside the scrollport, which is a box and not a picture: the sticky
+table head and the floating bulk bar are painted over that box without displacing it, so a card
+half behind either one counted as visible and `nearest` moved nothing. Every scroller the cursor
+scrolls therefore reads `scroll-padding` from `--covered-top` / `--covered-bottom`, which the covering
+element measures and writes on the surface it floats on (`useEdgeInset`). Nothing covering it means
+`0px` and no behaviour. A board's scrollers add three pixels on every edge for the cursor's own ring:
+the ring is `outline: 2px` at `outline-offset: 1px`, an outline is painted outside the box, and the
+box is what the scroll aims at — so the first and last card in a column landed with their ring clipped
+until the aim accounted for it. A table's cursor is drawn from inset shadows and needs none of it, and
+the keynotice is deliberately left out: it is transient, centred and self-dismissing, and it would be
+writing over the edge the table head already owns.
+
 **The board** is a flex row of fixed 292px columns with a 12px gutter, `align-items: flex-start` so a
 short column does not stretch. Notes stack 7px apart in an 8px-padded body. A single-lane board lets
 its columns take the full available height; a laned board shares that height between its lanes,
@@ -498,7 +515,8 @@ sliver. That cap was a fixed fraction of the viewport, which only added up for t
 strip under the last one that nothing could use. Lanes are 14px apart, and a lane head is
 `position: sticky; left: 0` so its name survives horizontal scroll.
 
-**The panel** is fixed to the right edge at `min(560px, 92vw)` over a `rgba(10, 8, 14, 0.34)` scrim,
+**The panel** is fixed to the right edge at `--panel-w` (`min(560px, 92vw)`, the same token the
+shell's dock reserves, so the two cannot drift) over a `rgba(10, 8, 14, 0.34)` scrim,
 with `0 0 30px` of padding on the scrolling body and `10px` on every tier inside it — the deep bottom
 pad so the last section clears the viewport edge when scrolled. **The tier owns its padding**, which is
 what lets its divider reach the panel's edges instead of stopping 20px short at both ends; the panel

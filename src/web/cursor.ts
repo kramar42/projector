@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * Where the keyboard is.
@@ -132,6 +132,75 @@ export function useCursorFocus(
     // The ref is stable for the life of the element; `isCursor` is the question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCursor]);
+}
+
+/**
+ * Declare how far something floating over a surface reaches into it.
+ *
+ * `useCursorFocus` leans on `scrollIntoView`, which calls an element in view when
+ * it is inside the scrollport — and a scrollport is a box, not a picture. A sticky
+ * table head or a floating bulk bar is painted over that box without displacing it,
+ * so `nearest` sees nothing wrong and leaves the cursor's card half under it. CSS
+ * has the lever for exactly this in `scroll-padding`; what it does not have is the
+ * number, because the number is a measurement.
+ *
+ * So the cover measures itself. What it writes is its **reach** — from the host's
+ * edge to its own far side — rather than its height, so the 16px the bulk bar sits
+ * above the bottom is counted without being written down a second time here.
+ *
+ * It lands on the host rather than on a scroller because a custom property
+ * inherits: one write on `.board-wrap` serves `.board-scroll` and every
+ * `.column-body` inside it, and neither has to know what is floating over it.
+ *
+ * Removed on unmount, which is what makes the clearance last exactly as long as the
+ * thing that needs it — the bar goes and the padding goes with it, rather than a
+ * board keeping a 56px dead zone for a selection that no longer exists.
+ *
+ * A **layout** effect, and that is the load-bearing part rather than a preference.
+ * `useCursorFocus` is a passive effect on a card, which is a *child* of the surface
+ * measured here — and passive effects run child before parent, so on the commit that
+ * mounts a table with the cursor already somewhere, the scroll would happen before
+ * the padding existed and land the row under the head after all. Every layout effect
+ * runs before any passive one, which is the ordering this needs.
+ */
+export function useEdgeInset(
+  cover: { current: HTMLElement | null },
+  side: 'top' | 'bottom',
+  /**
+   * Where to write it. Defaults to the cover's parent, which is what a thing
+   * floating over a surface is a child of — so the bulk bar names nothing and the
+   * table head, whose parent is the `<table>` and not the scroller, names the wrap.
+   */
+  host?: { current: HTMLElement | null },
+): void {
+  useLayoutEffect(() => {
+    const el = cover.current;
+    const on = host?.current ?? el?.parentElement;
+    if (!el || !on) return;
+    const prop = side === 'top' ? '--covered-top' : '--covered-bottom';
+    const write = (): void => {
+      const c = el.getBoundingClientRect();
+      const h = on.getBoundingClientRect();
+      const reach = side === 'top' ? c.bottom - h.top : h.bottom - c.top;
+      // Never negative: a cover that has scrolled clear of the edge covers nothing,
+      // and a negative padding would pull the aim past the edge instead.
+      on.style.setProperty(prop, `${Math.max(0, Math.round(reach))}px`);
+    };
+    write();
+    // Both boxes. The cover's size is what it takes — a bulk bar wraps to two rows
+    // once a facet has enough values — and the host's edge is where it is taken
+    // from, which a resized window moves without touching the cover.
+    const observer = new ResizeObserver(write);
+    observer.observe(el);
+    observer.observe(on);
+    return () => {
+      observer.disconnect();
+      on.style.removeProperty(prop);
+    };
+    // The refs are stable for the life of their elements, and a cover does not
+    // change which edge it sits on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [side]);
 }
 
 /**

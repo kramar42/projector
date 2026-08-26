@@ -506,7 +506,18 @@ export function App() {
           chip on a card face, a table cell, a canvas node and the bulk bar
           cannot disagree about what colour an axis is. */}
       <VocabularyProvider facets={meta.facets}>
-      <div className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
+      {/*
+        The panel's width is a *track* of this grid, not just a fixed overlay —
+        `.shell.panel-is-open` reserves it, so an open panel takes space out of the
+        view instead of covering two columns of it. The cursor is the reason: a
+        fixed overlay is invisible to `scrollIntoView`, so `l` used to walk into
+        board that was on screen only in the sense that its coordinates were.
+      */}
+      <div
+        className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${
+          openNote ? 'panel-is-open' : ''
+        }`}
+      >
         <Sidebar
           meta={meta}
           data={data}
