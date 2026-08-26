@@ -145,6 +145,13 @@ test('every seeded file parses as what it claims to be', () => {
     assert.ok(y.shape, `${view.path} states its shape`);
     assert.ok(y.title, `${view.path} has a title`);
   }
+  // The set itself, by name. MANUAL.md counts these in prose, and a count that
+  // moves by deciding rather than by working is one a test should hold instead
+  // of a reader.
+  assert.deepEqual(
+    SEED_VIEWS.map((v) => v.path).sort(),
+    ['due.yaml', 'everything.yaml', 'home.yaml', 'projects.yaml', 'unblocked.yaml', 'week.yaml'],
+  );
 });
 
 test('a new vault is seeded with a vocabulary and views, and no prose', () => {
@@ -357,6 +364,47 @@ test('a folder with somebody else\'s files is refused, not adopted', () => {
   try {
     writeFileSync(pathJoin(root, 'thesis.docx'), 'not a vault', 'utf8');
     assert.throws(() => initVault(root, SEED_FACETS, SEED_VIEWS), /not empty/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an existing .gitignore is appended to, not skipped and not clobbered', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-ignore-'));
+  try {
+    // A vault that is already a git repository — which is every adopted one, and
+    // the case that used to get nothing at all, because the file existed.
+    writeFileSync(pathJoin(root, '.gitignore'), '__pycache__/\n*.pyc\n', 'utf8');
+    writeFileSync(pathJoin(root, 'a-note.md'), '# A note\n', 'utf8');
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+
+    const out = readFileSync(pathJoin(root, '.gitignore'), 'utf8');
+    assert.match(out, /^__pycache__\/\n\*\.pyc\n/, 'what was there is still there, first');
+    for (const line of ['.projector/*.db*', '*.tmp-*', '.DS_Store']) {
+      assert.ok(out.includes(line), `${line} was added`);
+    }
+
+    // Idempotent: adopting twice does not stack a second copy.
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    assert.equal(
+      readFileSync(pathJoin(root, '.gitignore'), 'utf8'),
+      out,
+      'a second adoption changes nothing',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a vault that already ignores one of the lines gets only the rest', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-ignore-'));
+  try {
+    writeFileSync(pathJoin(root, '.gitignore'), '.DS_Store\n', 'utf8');
+    writeFileSync(pathJoin(root, 'a-note.md'), '# A note\n', 'utf8');
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    const out = readFileSync(pathJoin(root, '.gitignore'), 'utf8');
+    assert.equal(out.match(/\.DS_Store/g)?.length, 1, 'not repeated');
+    assert.ok(out.includes('.projector/*.db*'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

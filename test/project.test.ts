@@ -244,3 +244,47 @@ test('a self-reference and a dangling one are dropped by every blocking answer',
  * declared column because it is somewhere to drag to, and a canvas drops it
  * because a canvas drag moves a position without changing a facet.
  */
+
+test('two projects merge into one outermost-first order, not one chain after another', () => {
+  // The shape that broke it: a note that is itself a project and names two
+  // others. Walking chain by chain emitted `garden → money → agent`, putting the
+  // note's own advice between its two parents' — so the second parent's general
+  // rules read after the specific ones they exist to precede.
+  const g = graph(
+    rec('garden', [], { instructions: 'general: the garden' }),
+    rec('agent', [], { instructions: 'general: the agent' }),
+    rec('money', [], { instructions: 'specific: money' }, '', ['garden', 'agent']),
+  );
+  const p = resolveProject('money', g, '/data')!;
+  assert.deepEqual(p.chain, ['garden', 'agent', 'money']);
+  assert.deepEqual(
+    p.instructions.map((i) => i.split('\n')[1]),
+    ['general: the garden', 'general: the agent', 'specific: money'],
+  );
+  // The nearest value is the most specific one, which is now the note itself
+  // rather than whichever parent the traversal reached last.
+  assert.equal(p.key, 'money');
+});
+
+test('a project reachable at two depths reads at its most general position', () => {
+  // `base` is both a direct parent of `leaf` and a grandparent through `mid`.
+  // Ranking by the *longest* distance from a root is what keeps it ahead of
+  // `mid` on both paths; the shortest would let it read after its own child.
+  const g = graph(
+    rec('base', [], { instructions: 'base' }),
+    rec('mid', [], { instructions: 'mid' }, '', ['base']),
+    rec('leaf', [], { instructions: 'leaf' }, '', ['mid', 'base']),
+  );
+  assert.deepEqual(resolveProject('leaf', g, '/data')!.chain, ['base', 'mid', 'leaf']);
+});
+
+test('two parents equally general keep the order the note declared', () => {
+  const g = graph(
+    rec('alpha', [], { instructions: 'alpha' }),
+    rec('beta', [], { instructions: 'beta' }),
+    rec('note', [], undefined, '', ['beta', 'alpha']),
+  );
+  // Declaration order, not alphabetical and not traversal order: the file is
+  // what decides which of two equals reads first.
+  assert.deepEqual(resolveProject('note', g, '/data')!.chain, ['beta', 'alpha']);
+});

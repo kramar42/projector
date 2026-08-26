@@ -231,6 +231,11 @@ outward — each value's note, then whatever *that* note belongs to. `repos` acc
 (a nested project needs its parent's plus its own), `instructions` concatenate outermost-first so the
 most specific advice reads last, and everything else takes the nearest value.
 
+A note may name **several** projects, and they are merged into one order rather than read one after
+another: every project comes before anything that names it, and two that are equally general keep the
+order the note listed them in. So a note belonging to both a subject and a way of working reads both
+sets of instructions as general → specific, with its own last.
+
 **Instructions are configuration**, so they live in the block with the rest of it rather than under a
 heading in the body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a
 progress bar, the first prose paragraph becomes the note-face excerpt, and the whole of it goes into
@@ -664,12 +669,18 @@ adds others.
 
 **Notes you already keep are a vault.** Point at an Obsidian folder or a directory of meeting notes
 and it opens: every `.md` is a note, and one with no frontmatter is titled by its leading heading and
-identified by its filename. Nothing is moved, converted, or written back until you change something —
+identified by its filename. **A key it cannot use counts as a key you did not write** — an `id:` that
+is not a lowercase slug, or a `created:`/`updated:` a foreign tool stamped in its own format, falls
+back to the derived value rather than failing the note, so an export is never partly invisible.
+Dates are read in either ISO form, `2026-08-27` or `20260827`, with anything after the date dropped.
+Nothing is moved, converted, or written back until you change something —
 and the first change writes down the id the note was already going by, so a later rename moves a file
 rather than a note. There is no exempted filename: a `README.md` is a note like the rest.
 
-Opening a folder that has no `.projector/` sets one up — a facet vocabulary, five starter views, and a
-`.gitignore` for the databases. That is all it writes: the folder's own files are not touched. A
+Opening a folder that has no `.projector/` sets one up — a facet vocabulary, six starter views, and a
+`.gitignore` for the databases. If the folder already has a `.gitignore`, which an adopted repository
+usually does, the missing lines are appended to it and nothing already there is touched or repeated.
+That is all it writes: the folder's own files are not touched. A
 non-empty folder holding no markdown is refused. No prose document is written into a vault — there is
 no seeded README, and the note format is explained in the `pj-about` skill.
 

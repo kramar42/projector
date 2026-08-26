@@ -23,15 +23,21 @@ const projectSchema = z.object({
 });
 
 export const frontmatterSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug').optional(),
+  id: z.string().optional(),
   title: z.string().min(1).optional(),
   facets: z.record(z.string(), z.unknown()).optional(),
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
   source_fingerprint: z.string().optional(),
   absorbed_fingerprints: z.array(z.string()).optional(),
-  created: z.union([z.string(), z.date()]).optional(),
-  updated: z.union([z.string(), z.date()]).optional(),
+  // Any scalar. These two are the app's own fields wearing names a foreign tool
+  // may already have used for something else — Logseq writes
+  // `created: 20210330234143398` — and rejecting the *note* over a stamp it
+  // cannot read is the whole file lost to one field. `asDate` decides what it
+  // can make of the value; anything it cannot read is simply absent, which is a
+  // state every note without frontmatter is already in.
+  created: z.unknown().optional(),
+  updated: z.unknown().optional(),
 });
 
 export type ParseResult =
@@ -58,11 +64,28 @@ function normaliseFacets(raw: unknown): Record<string, string[]> {
   return out;
 }
 
-function asDate(v: unknown): string | undefined {
+/**
+ * The date a value states, or nothing.
+ *
+ * Both ISO 8601 date forms are read: extended (`2026-08-27`) and basic
+ * (`20260827`, optionally carrying a time after it). Basic is not a courtesy to
+ * any particular tool — it is the same standard written without separators, and
+ * it is what a note exported from a system that stamped milliseconds looks like.
+ * Whatever follows the date is dropped, because only the date is kept.
+ *
+ * Anything else reads as absent rather than as garbage. A wrong date is worse
+ * than no date: `staleness` is computed from `updated`, and a note claiming to
+ * be from the year 2021033 would sort ahead of everything real for ever.
+ */
+export function asDate(v: unknown): string | undefined {
   if (v == null) return undefined;
   if (v instanceof Date) return v.toISOString().slice(0, 10);
-  return String(v).slice(0, 10);
+  const m = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(String(v).trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined;
 }
+
+/** A usable id: the shape every id the app writes already has. */
+const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * A note's id when its file does not carry one: the filename, lowercased, with
@@ -97,6 +120,14 @@ export function idFromFile(file: string): string {
  * something else. An Obsidian note carrying `tags:` and no `id:` is the ordinary
  * case, not a malformed note.
  *
+ * **A key it cannot use is a key it does not have.** The fallback covers a bad
+ * value as well as a missing one, because the two are the same situation from the
+ * note's side: an `id:` that is not slug-shaped, and a `created:` or `updated:`
+ * that is not a date, are read as absent rather than fatal. Five years of notes
+ * exported from another tool arrive carrying exactly this — a stamp in a foreign
+ * format under a name this app also uses — and rejecting the note would hide a
+ * quarter of a vault while the app reported itself as working.
+ *
  * The cost is named: a mistyped `idd:` no longer fails `pj check`, it quietly
  * derives an id instead. That is the price of a format with no required keys, and
  * it is the right way round — a vault should open, and a typo should cost you a
@@ -126,7 +157,13 @@ export function parseNote(file: string, text: string): ParseResult {
   return {
     ok: true,
     rec: {
-      id: fm.id ?? idFromFile(file),
+      // A stated id that is not slug-shaped is treated as no id at all. This is
+      // the rule the paragraph above already describes for a mistyped `idd:`,
+      // applied to a mistyped *value* — an imported note titling itself
+      // `id: book highlights summary` costs the name it was going by, not the
+      // note. The derived id is what every reference to it already resolves
+      // through, since nothing could have pointed at a non-slug.
+      id: fm.id && SLUG.test(fm.id) ? fm.id : idFromFile(file),
       title: fm.title ?? headingOf(body) ?? basename(file, '.md'),
       facets: normaliseFacets(fm.facets),
       links: (fm.links ?? []).map(parseLink),

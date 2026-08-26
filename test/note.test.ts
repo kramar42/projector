@@ -105,10 +105,16 @@ test('links are parsed into kind and ref', () => {
   );
 });
 
-test('a bad id is reported, not thrown', () => {
+test('a bad id costs the name, not the note', () => {
+  // This used to be an error naming the slug rule, and the cost of that only
+  // showed on a real imported vault: the note vanished from the app entirely and
+  // only `pj check` said why. It now derives an id, which is exactly what a note
+  // carrying no `id:` at all has always done. Writing an id is still validated —
+  // leniency is for reading a file someone else's tool wrote.
   const res = parseNote('/f.md', '---\nid: Not A Slug\nkind: card\ntitle: T\n---\n');
-  assert.equal(res.ok, false);
-  if (!res.ok) assert.match(res.errors.join(' '), /slug/);
+  assert.ok(res.ok);
+  assert.equal(res.rec.id, 'f');
+  assert.equal(res.rec.title, 'T');
 });
 
 test('render then parse round-trips', () => {
@@ -495,4 +501,39 @@ test('the survivor answers for every fingerprint it absorbs, and never for its o
     MERGE_FACETS,
   );
   assert.deepEqual(out.absorbed, ['slack:C1/1', 'todo:old']);
+});
+
+test('a foreign date stamp costs the field, not the note', () => {
+  // What five years of Logseq exports actually carry: a millisecond stamp under
+  // a key this app also uses. Rejecting the note over it hid a quarter of a real
+  // vault while the app reported itself as working.
+  const res = parseNote('/x/wCQkv.md', '---\ncreated: 20210330234143398\ntags: type/report\n---\n\nбыл дома\n');
+  assert.ok(res.ok, 'the note parses');
+  // ISO 8601 basic is still ISO 8601: the date is read, the time after it dropped.
+  assert.equal(res.rec.created, '2021-03-30');
+  assert.equal(res.rec.id, 'wcqkv');
+});
+
+test('a date it cannot read is absent rather than wrong', () => {
+  const res = parseNote('/x/n.md', '---\ncreated: sometime last spring\n---\n');
+  assert.ok(res.ok);
+  assert.equal(res.rec.created, undefined);
+});
+
+test('both ISO forms read the same, and a real date still round-trips', () => {
+  for (const [written, read] of [
+    ['2026-08-27', '2026-08-27'],
+    ['20260827', '2026-08-27'],
+    ['2026-08-27T14:03:00Z', '2026-08-27'],
+  ]) {
+    const res = parseNote('/x/n.md', `---\nupdated: "${written}"\n---\n`);
+    assert.ok(res.ok);
+    assert.equal(res.rec.updated, read, written);
+  }
+});
+
+test('a slug-shaped id is still the note’s own', () => {
+  const res = parseNote('/x/whatever.md', '---\nid: kept-as-written\n---\n');
+  assert.ok(res.ok);
+  assert.equal(res.rec.id, 'kept-as-written');
 });

@@ -30,10 +30,12 @@ export function projectsOf(rec: Note): string[] {
  * Resolve a note's effective project config from its `project` facet.
  *
  * Membership is the facet and only the facet — parent edges are decomposition and
- * carry no config. A note may belong to several projects, so the chain is
- * walked for each and the results merged with the same rules that already apply
- * within one chain: `repos` union, `instructions` concatenate outermost-first so
- * the most specific advice reads last, and other keys take the nearest value.
+ * carry no config. A note may belong to several projects, so every chain it sits
+ * on is walked and the results merged into **one** outermost-first order rather
+ * than concatenated chain by chain: `repos` union, `instructions` read general →
+ * specific so the most specific advice reads last, and other keys take the
+ * nearest value — which is now the last in that same order, and so the most
+ * specific rather than whichever chain happened to be walked last.
  *
  * Returns null when the note names no project that exists.
  */
@@ -54,19 +56,34 @@ export function resolveProject(
   const starts = rec.project ? [rec.id] : (rec.facets.project ?? []).filter((k) => byId.has(k));
 
   // Outermost-first, so instructions read general → specific and repos
-  // accumulate the same way. A chain arrives nearest-first, hence the reverse.
-  const order: Note[] = [];
-  const seen = new Set<string>();
+  // accumulate the same way — across *every* chain at once rather than one chain
+  // after another.
+  //
+  // Chain by chain was wrong the moment a note named two projects. Walking
+  // `[a, note]` and then `[b, note]`, de-duplicating as it went, emitted
+  // `a → note → b`: the note's own advice landed in the middle, and `b`'s
+  // general rules read *after* the specific ones they were supposed to precede.
+  // One parent hid it, because with one chain the two orders agree.
+  //
+  // A node's rank is its **longest** distance from a root, which is what makes
+  // this a topological order: a project always reads before anything that names
+  // it, on every path, and the shortest distance would not guarantee that. Ties
+  // — two parents equally general — keep the order the note declared them in,
+  // so the file is what decides and not the traversal.
+  const rank = new Map<string, number>();
+  const declared = new Map<string, number>();
   for (const start of starts) {
     for (const chain of chains(start, adj)) {
-      for (const key of [...chain].reverse()) {
-        const owner = byId.get(key);
-        if (!owner?.project || seen.has(key)) continue;
-        seen.add(key);
-        order.push(owner);
-      }
+      [...chain].reverse().forEach((key, depth) => {
+        rank.set(key, Math.max(rank.get(key) ?? 0, depth));
+        if (!declared.has(key)) declared.set(key, declared.size);
+      });
     }
   }
+  const order: Note[] = [...rank.keys()]
+    .sort((a, b) => rank.get(a)! - rank.get(b)! || declared.get(a)! - declared.get(b)!)
+    .map((key) => byId.get(key))
+    .filter((owner): owner is Note => owner?.project !== undefined);
 
   if (!order.length) return null;
 

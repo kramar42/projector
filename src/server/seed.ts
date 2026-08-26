@@ -198,6 +198,29 @@ show: [project, priority]
 `,
   },
   {
+    path: 'week.yaml',
+    body: `# Does this week fit?
+#
+# The horizon \`due\` already draws, with one axis added: \`energy\` lanes, so a
+# column shows the *shape* of a day rather than only its count. Three \`deep\` notes
+# stacked in today is a claim about the day that can be judged before it is lived,
+# which a flat count of nine never is.
+#
+# Two columns carry the weight. \`overdue\` should be empty — anything sitting in it
+# is a promise already broken and not yet admitted. And \`later\` is left out on
+# purpose: a horizon with no far edge is a backlog, and a backlog can never say
+# you are finished for the day.
+shape: board
+title: This week
+filter:
+  status: [planning, active]
+  due: [overdue, today, week]
+groupBy: [due, energy]
+sort: [due:asc, priority:asc]
+show: [project, priority]
+`,
+  },
+  {
     path: 'projects.yaml',
     body: `# Every project, with its roll-ups. \`type\` is a computed axis: nothing is stored.
 # A table's columns are its \`show\` list, \`project\` included: it is which project

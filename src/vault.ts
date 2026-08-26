@@ -224,12 +224,28 @@ export function initVault(
  *
  * One line covers the three databases now that they live together — they used to
  * need six, at the root, next to the notes.
+ *
+ * **Missing lines are appended, not skipped.** Writing the file only when it was
+ * absent meant it was written for a fresh folder and never for a vault that was
+ * already a git repository — which is every adopted one, the case the whole
+ * feature exists for. Those vaults grew three untracked databases and nothing
+ * said why. Nothing already present is repeated, and nothing already there is
+ * touched: this only ever adds lines to the end.
  */
+const IGNORED = ['.projector/*.db*', '*.tmp-*', '.DS_Store'];
+
 function ensureIgnore(path: string): void {
   const ignore = join(path, '.gitignore');
   if (!existsSync(ignore)) {
-    writeFileSync(ignore, '.projector/*.db*\n*.tmp-*\n.DS_Store\n', 'utf8');
+    writeFileSync(ignore, `${IGNORED.join('\n')}\n`, 'utf8');
+    return;
   }
+  const current = readFileSync(ignore, 'utf8');
+  const have = new Set(current.split('\n').map((l) => l.trim()));
+  const missing = IGNORED.filter((l) => !have.has(l));
+  if (!missing.length) return;
+  const gap = current === '' || current.endsWith('\n\n') ? '' : current.endsWith('\n') ? '\n' : '\n\n';
+  writeFileSync(ignore, `${current}${gap}# projector — derived and disposable\n${missing.join('\n')}\n`, 'utf8');
 }
 
 /**

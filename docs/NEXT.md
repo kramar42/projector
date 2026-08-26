@@ -18,6 +18,29 @@ needs to be part of two things.
 
 ## Not now
 
+- **The aging view — who owes me what, and for how long.** `waiting_on` says the ball is in
+  someone else's court and `staleness` says how long it has sat there, but nothing puts the two on
+  screen together, so a parked note is only found by opening it. The view is a table filtered to
+  `blocked: [waitingon]`, sorted by staleness descending, showing `waiting_on` and the note's project
+  — a nudge list, in the order the nudges are overdue.
+
+  It needs no new mechanism, which is exactly why it is filed rather than built. Both axes exist and
+  both compute; `views/week.yaml` is the same kind of object and took one file. What it lacks is
+  **data**: `waiting_on` is set on almost nothing, so the view would ship reading empty and prove
+  nothing — the failure `blocked_by` already demonstrated, where an empty answer looked plausible for
+  two days because there was no data to contradict it.
+
+  So the order is deliberate: set `waiting_on` for a fortnight of real weeks first, then write the
+  view against notes that exist. Shipping it before then would add a second empty board beside the
+  first, and an empty view teaches the reader that the axis is decorative.
+
+  One design question to settle when it lands, and it is the only one: **staleness is measured from
+  the file's `updated`, not from when the waiting started.** Editing a note's body resets it, so a
+  note you thought about on Tuesday reads as fresh on Wednesday while the person has been silent for
+  a fortnight. That makes the sort wrong in exactly the case the view exists for. Either the view
+  accepts the approximation and says so, or `waiting_on` needs a date beside the person — which is a
+  second value on a label facet, and the vocabulary has no shape for that today.
+
 - **The expression language.** Moving the five remaining computed axes — `type`, `blocked`, `triage`,
   `staleness`, `linked` — into `facets.yaml` needs one, and its hardest case cannot be a per-note
   expression at all: `blocked` requires the aggregate pass over every note's blocking references.
