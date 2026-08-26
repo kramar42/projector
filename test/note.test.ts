@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 
 
 /**
- * The card format: frontmatter round-trips, parsing, slugs, typed values and validation.
+ * The note format: frontmatter round-trips, parsing, slugs, typed values and validation.
  *
  * Split out of a 1,306-line `model.test.ts` that had become the catch-all: anything
  * not obviously about the query compiler, a view spec or intake landed there, and
@@ -74,7 +74,7 @@ test('scalar arrays serialize on one line', () => {
   assert.match(serialize({ facets: { priority: ['now', 'month'] } }), /priority: \[now, month\]/);
 });
 
-// ---------------------------------------------------------------- card parsing
+// ---------------------------------------------------------------- note parsing
 
 const CARD = `---
 id: demo-card
@@ -229,7 +229,7 @@ test('a yaml date in a facet round-trips as a date, not a timestamp', () => {
 // ---------------------------------------------------------------- bare notes
 
 /**
- * A markdown file is a card, and a card need say nothing about itself.
+ * A markdown file is a note, and a note need say nothing about itself.
  *
  * This is what lets a folder of somebody's existing notes be *opened* rather than
  * imported. Every assertion here is about a file nobody wrote for projector.
@@ -278,7 +278,7 @@ test('a derived id is always a legal id, whatever the filename was', () => {
 
 test('a bare note keeps its identity when it is written down', () => {
   // What `patchAll` materialises has to be what the reader was already using, or
-  // the first write renames the card and orphans every reference to it.
+  // the first write renames the note and orphans every reference to it.
   const res = parseNote('/vault/Reading Notes.md', '# Monday reading\n\nbody\n');
   assert.ok(res.ok);
   const written = renderNote({ ...res.rec, facets: {}, links: [] });
@@ -307,7 +307,7 @@ function recordOf(text: string): Note {
   return res.rec;
 }
 
-test('a single-valued facet holding two values is an error, not a card in two columns', () => {
+test('a single-valued facet holding two values is an error, not a note in two columns', () => {
   const facets = loadFacets(
     facetsFile('status: { values: [planning, done], open: false, single: true }\n'),
   );

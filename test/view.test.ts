@@ -97,11 +97,11 @@ test('a view naming an unknown axis is an error, in every position it can appear
 });
 
 /**
- * `pj link` is the only writer of a card's `links`, and it goes through the gate.
+ * `pj link` is the only writer of a note's `links`, and it goes through the gate.
  *
  * Three commands used to write that array. `link` and `unlink` patched
  * frontmatter directly and so never bumped `updated`, while `link-session` went
- * through `patchNote` and did — so attaching a Jira issue left a card reading as
+ * through `patchNote` and did — so attaching a Jira issue left a note reading as
  * untouched, on a field README says "only ever says that *something* changed".
  */
 
@@ -324,7 +324,7 @@ test('a view key the reader does not know is an error, not a line that does noth
 
 // ---------------------------------------------------------------- show
 
-test('every axis `show` accepts arrives on the card, computed or stored', () => {
+test('every axis `show` accepts arrives on the note, computed or stored', () => {
   // `show` took a computed axis everywhere except where it mattered. The view
   // validated (`validateViews` checks `show` against facets *and* `COMPUTED`),
   // the table resolved the label off `counts` and drew the header — and then
@@ -365,10 +365,10 @@ test('every axis `show` accepts arrives on the card, computed or stored', () => 
     assert.equal(card.computed.linked, undefined, 'a note with no links says nothing on `linked`');
 
     // The invariant behind all of it: every computed axis is answerable for every
-    // card, so a column can never be labelled from `counts` and then come up dry.
+    // note, so a column can never be labelled from `counts` and then come up dry.
     for (const name of Object.keys(COMPUTED)) {
       const values = card.facets[name] ?? card.computed[name] ?? [];
-      assert.ok(Array.isArray(values), `${name} must be readable off the card`);
+      assert.ok(Array.isArray(values), `${name} must be readable off the note`);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });

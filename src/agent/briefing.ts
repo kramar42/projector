@@ -5,7 +5,7 @@ import type { RepoResult } from './worktree.ts';
  * The briefing an agent reads before touching anything.
  *
  * Five steps, and step 4 is the point: read everything first, then **stop and
- * ask**. Two framings in it are worth keeping word for word — "the card is not
+ * ask**. Two framings in it are worth keeping word for word — "the note is not
  * the whole story", and report what was deliberately left out.
  */
 export function buildBriefing(input: {
@@ -21,7 +21,7 @@ export function buildBriefing(input: {
   const L: string[] = [];
   L.push(`# Working on: ${ctx.title}`);
   L.push('');
-  L.push(`- card: \`${ctx.id}\`  ·  file: \`${ctx.file}\``);
+  L.push(`- note: \`${ctx.id}\`  ·  file: \`${ctx.file}\``);
   L.push(`- workspace: \`${workspace}\``);
   L.push(`- branch: \`${branch}\` — commit here, in every repo you touch`);
   if (ctx.project) L.push(`- project: \`${ctx.project.key}\` (${ctx.project.chain.join(' → ')})`);
@@ -41,15 +41,15 @@ export function buildBriefing(input: {
   }
   L.push('');
   L.push(
-    'These are git worktrees created for this card. Work only here; never edit the main checkouts. ' +
+    'These are git worktrees created for this note. Work only here; never edit the main checkouts. ' +
       'If a change belongs in a repo that is not in this workspace, stop and say so rather than reaching outside it.',
   );
   L.push('');
 
-  L.push('## Step 1 — Read the card, then its sources');
+  L.push('## Step 1 — Read the note, then its sources');
   L.push('');
   L.push(
-    'The context below is complete as of launch. **The card is not the whole story**: open every ' +
+    'The context below is complete as of launch. **The note is not the whole story**: open every ' +
       'linked Jira issue, pull request and document before deciding what the work is. A title is not a brief.',
   );
   L.push('');
@@ -85,7 +85,7 @@ export function buildBriefing(input: {
   L.push('');
   L.push(
     'Once you have read the docs and the linked sources: **STOP.** Ask clarifying questions about ' +
-      'exactly what this card needs, and wait for answers. Do not plan and do not write code before ' +
+      'exactly what this note needs, and wait for answers. Do not plan and do not write code before ' +
       'they are answered.',
   );
   L.push('');
@@ -97,7 +97,7 @@ export function buildBriefing(input: {
   L.push('1. Implement the change.');
   L.push('2. Run the tests of every repo you touched, and say which commands you ran.');
   L.push('3. Report **per repo**: what changed, what passed, and **what you deliberately left out**.');
-  L.push('4. Link this session back to the card so it can be found later:');
+  L.push('4. Link this session back to the note so it can be found later:');
   L.push('');
   L.push('   ```bash');
   L.push(`   pj link ${ctx.id} --session`);

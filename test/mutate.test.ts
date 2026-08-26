@@ -25,9 +25,9 @@ import { paths } from '../src/config.ts';
 /**
  * The write gate.
  *
- * Every change to a card file goes through this module, and half of it had no
- * test — including `bulkMove`, the per-card transform that makes a drag mean the
- * same thing for one card and for twelve. That fix was verified by hand in a
+ * Every change to a note file goes through this module, and half of it had no
+ * test — including `bulkMove`, the per-note transform that makes a drag mean the
+ * same thing for one note and for twelve. That fix was verified by hand in a
  * terminal and never pinned, which is the pattern this codebase keeps producing:
  * the pure part covered, the thing that applies it not.
  *
@@ -62,15 +62,15 @@ const facetsOf = (root: string, id: string) =>
 
 /**
  * The bug this function exists to make unrepresentable: the board computed the
- * new values for one card and threw them away whenever more than one was
+ * new values for one note and threw them away whenever more than one was
  * selected, sending uniform values instead. Shift-dragging `now`→`month` took
- * `now` off a single card and `month` off a batch.
+ * `now` off a single note and `month` off a batch.
  *
- * The property is that every card gets *its own* answer from one transform, which
- * a uniform `values` array cannot express — so the test uses three cards holding
+ * The property is that every note gets *its own* answer from one transform, which
+ * a uniform `values` array cannot express — so the test uses three notes holding
  * three different things and one gesture.
  */
-test('a move gives every card its own answer from one gesture', () => {
+test('a move gives every note its own answer from one gesture', () => {
   const v = vault({
     both: card('both', 'priority: [now, month]'),
     only: card('only', 'priority: [now]'),
@@ -129,8 +129,8 @@ test('a move that changes nothing writes nothing', () => {
 
 /**
  * A diagonal drag on a matrix board crosses two axes and is still one gesture, so
- * it is one write. Two writes would read the card twice, bump `updated` twice and
- * let the second land on a card the first had already changed.
+ * it is one write. Two writes would read the note twice, bump `updated` twice and
+ * let the second land on a note the first had already changed.
  */
 test('a move across two axes is a single write', () => {
   const v = vault({ a: card('a', 'priority: [now], status: [planning], tech: [kafka]') });
@@ -144,7 +144,7 @@ test('a move across two axes is a single write', () => {
       ],
       'replace',
     );
-    assert.equal(res.changed, 1, 'one card, counted once however many axes moved');
+    assert.equal(res.changed, 1, 'one note, counted once however many axes moved');
     const after = facetsOf(v.root, 'a');
     assert.deepEqual(after.status, ['done']);
     assert.deepEqual(after.priority, ['month']);
@@ -154,7 +154,7 @@ test('a move across two axes is a single write', () => {
   }
 });
 
-/** Every axis is checked before any is written, so there is no half-moved card. */
+/** Every axis is checked before any is written, so there is no half-moved note. */
 test('a move refused on one axis leaves the other alone', () => {
   const v = vault({ a: card('a', 'priority: [now], status: [planning]') });
   try {
@@ -186,7 +186,7 @@ test('a move refuses a value the vocabulary does not have', () => {
       () => bulkMove(v.root, ['a'], [{ facet: 'priority', from: 'now', to: 'urgent' }], 'replace'),
       (e: Error) => e instanceof Invalid && /urgent/.test(e.message),
     );
-    assert.deepEqual(facetsOf(v.root, 'a').priority, ['now'], 'and leaves the card alone');
+    assert.deepEqual(facetsOf(v.root, 'a').priority, ['now'], 'and leaves the note alone');
   } finally {
     v.cleanup();
   }
@@ -443,7 +443,7 @@ test('frontmatter is written whole, and a stale mtime is a conflict', () => {
  * `patchKey` was always happy to invent a fence, so the naive version of this
  * wrote `updated:` alone — a file with frontmatter, no `id`, and a body it could
  * no longer be found by. Identity has to go in *with* the first key, and it has
- * to be the identity the card was already answering to.
+ * to be the identity the note was already answering to.
  */
 test('writing to a note that carried no frontmatter freezes the name it was going by', () => {
   const v = vault();
@@ -463,9 +463,9 @@ test('writing to a note that carried no frontmatter freezes the name it was goin
     assert.match(text, /We talked about the thing\.\n$/, 'and the body is untouched');
 
     // Which is the whole point: the file can now be renamed without renaming the
-    // card, so a reference pointing at it survives.
+    // note, so a reference pointing at it survives.
     renameSync(file, join(paths(v.root).notes, 'archive-me.md'));
-    assert.ok(readAll(paths(v.root).notes).notes.get('reading-notes'), 'still the same card');
+    assert.ok(readAll(paths(v.root).notes).notes.get('reading-notes'), 'still the same note');
   } finally {
     v.cleanup();
   }
@@ -489,15 +489,15 @@ test('a body written to a bare note leaves it bare until the identity lands', ()
 
 // ---------------------------------------------------------------- assets
 
-test('an asset is stored by content hash under its card, and its type is checked', () => {
+test('an asset is stored by content hash under its note, and its type is checked', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
     const png = Buffer.from('89504e470d0a1a0a', 'hex');
     const first = saveAsset(v.root, 'a', 'image/png', png);
-    // The path returned is relative to `cards/`, since that is where a card body
+    // The path returned is relative to `notes/`, since that is where a note body
     // resolves it from.
     assert.match(first.path, /^assets\/a\/[0-9a-f]{12}\.png$/, first.path);
-    assert.ok(existsSync(join(paths(v.root).notes, first.path)), 'stored under cards/');
+    assert.ok(existsSync(join(paths(v.root).notes, first.path)), 'stored under notes/');
 
     // The same bytes hash to the same name rather than accumulating copies.
     assert.equal(saveAsset(v.root, 'a', 'image/png', png).path, first.path);
@@ -549,12 +549,12 @@ test('linking bumps updated, and unlinking an absent ref refuses', () => {
 /**
  * The gesture that meant two things.
  *
- * The board computed `nextValues` for one card and then threw it away whenever
+ * The board computed `nextValues` for one note and then threw it away whenever
  * more than one was selected, sending uniform values to the bulk endpoint
  * instead. Three of four gestures diverged and one *inverted*: shift-dragging
- * `now`→`month` took `now` off a single card and `month` off a batch. There is no
+ * `now`→`month` took `now` off a single note and `month` off a batch. There is no
  * cardinality branch to test any more, so this asserts the property instead — the
- * intent carries endpoints, and one transform answers for every card.
+ * intent carries endpoints, and one transform answers for every note.
  */
 
 // ------------------------------------------------- the base a loop writes from
@@ -888,15 +888,15 @@ test('a merge carries the fingerprints of what it absorbed', () => {
 });
 
 /**
- * A merge is not the only way a card comes to answer for a fingerprint.
+ * A merge is not the only way a note comes to answer for a fingerprint.
  *
- * Most of what a sweep turns up is neither a new card nor a link on one — it is
- * *more* about a card that already exists, and a standing chore emits a fresh
+ * Most of what a sweep turns up is neither a new note nor a link on one — it is
+ * *more* about a note that already exists, and a standing chore emits a fresh
  * message id every time, so its fingerprint can never collide with the one
  * already captured. Without somewhere to record that the message was consumed,
- * the sweep proposes it again for ever, and the same card gets created weekly.
+ * the sweep proposes it again for ever, and the same note gets created weekly.
  */
-test('a card can answer for a message that extended it, without claiming to have come from it', () => {
+test('a note can answer for a message that extended it, without claiming to have come from it', () => {
   const v = vault({ chore: noteFile('chore', 'source_fingerprint: gmail:ORIGIN\n') });
   try {
     patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'] } });
@@ -916,12 +916,12 @@ test('a card can answer for a message that extended it, without claiming to have
 });
 
 /**
- * Two cards answering for one fingerprint means whichever the sweep reads first
+ * Two notes answering for one fingerprint means whichever the sweep reads first
  * decides, and the other quietly stops being re-proposed — the same failure as
- * a link on the wrong card, except nothing ever surfaces it. So it is refused,
+ * a link on the wrong note, except nothing ever surfaces it. So it is refused,
  * and the refusal names the holder, because the fix is to go and look at it.
  */
-test('a fingerprint answers for exactly one card', () => {
+test('a fingerprint answers for exactly one note', () => {
   const v = vault({
     chore: noteFile('chore', 'source_fingerprint: gmail:ORIGIN\nabsorbed_fingerprints: [gmail:LATER]\n'),
     other: noteFile('other'),

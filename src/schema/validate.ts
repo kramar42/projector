@@ -10,7 +10,7 @@ import { resolveDoc } from '../vault.ts';
 /**
  * Validate every note against the loaded vocabulary and the graph.
  *
- * Collects every problem rather than stopping at the first — a card file is
+ * Collects every problem rather than stopping at the first — a note file is
  * something you fix in one pass, so the report has to be complete.
  */
 export function validate(
@@ -68,7 +68,7 @@ export function validate(
         );
       }
       // A reference facet's values are note ids. A value that resolves to
-      // nothing is a warning rather than an error — an agent may write a card
+      // nothing is a warning rather than an error — an agent may write a note
       // before the one it points at exists.
       // A typed facet's values have to *be* what the type says, or every
       // comparison downstream is guessing.
@@ -121,7 +121,7 @@ export function validate(
 
   }
 
-  // There is deliberately no "this card has no project" warning here any more.
+  // There is deliberately no "this note has no project" warning here any more.
   //
   // It was one, exempting a project note and reporting the rest. The exemption
   // was policy — a project is configuration rather than work — and policy moved

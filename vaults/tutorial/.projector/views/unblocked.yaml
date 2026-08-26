@@ -2,7 +2,7 @@
 #
 # `blocked` names one value per blocking facet, so `clear` means none of them
 # applies. A deadline outranks an intention, so `due` sorts
-# before `priority`: a card due tomorrow is next whatever bucket it was filed in.
+# before `priority`: a note due tomorrow is next whatever bucket it was filed in.
 shape: board
 title: Unblocked now
 filter:

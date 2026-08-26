@@ -8,6 +8,6 @@ created: 2026-08-26
 updated: 2026-08-26
 ---
 
-In a subfolder, because cards live at any depth. Folders are yours to arrange and mean
-nothing to projector — this card is grouped, filtered and found exactly like the ones at the
+In a subfolder, because notes live at any depth. Folders are yours to arrange and mean
+nothing to projector — this note is grouped, filtered and found exactly like the ones at the
 root.

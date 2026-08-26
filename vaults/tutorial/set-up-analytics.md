@@ -13,5 +13,5 @@ updated: 2026-08-26
 Deliberately overdue, so the **Due** board has something in its first column and the
 overdue styling is visible in an example rather than only in a screenshot.
 
-`due` is compared against today rather than matched against a list, so this card moves
+`due` is compared against today rather than matched against a list, so this note moves
 between buckets on its own.

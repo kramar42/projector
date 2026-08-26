@@ -145,7 +145,7 @@ export function branchFor(
     // three mean the note's id.
     const branch = opts.template.replace(/\{(?:note|card|id)\}/g, cardId);
     // Anything else left in braces would become a literal `{...}` branch shared
-    // by every card in the project — refuse it while it is still a template,
+    // by every note in the project — refuse it while it is still a template,
     // not a worktree.
     const leftover = branch.match(/\{[^}]*\}/);
     if (leftover) {

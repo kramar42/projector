@@ -8,12 +8,12 @@ import { fromWorkspacePath, slugBranch } from '../agent/workspaceName.ts';
  * Mechanical evidence for "is this more work on something already tracked".
  *
  * Every function here answers with a *reason*, never a score: a session in a
- * project's repo is a fact, a title sharing four words with a card is a fact, and
- * neither is a verdict. Turning facts into "link it to that card" is a judgement
+ * project's repo is a fact, a title sharing four words with a note is a fact, and
+ * neither is a verdict. Turning facts into "link it to that note" is a judgement
  * the `/capture` skill makes, out loud, on evidence it can quote.
  *
  * Deliberately not a similarity model. The one thing that would make this
- * unusable is a confident wrong answer — a session linked to the wrong card puts
+ * unusable is a confident wrong answer — a session linked to the wrong note puts
  * its history somewhere nobody will look for it.
  */
 
@@ -45,7 +45,7 @@ function push(into: Match[], ctx: IntakeContext, id: string, why: string): void 
 
 
 
-/** Cards reachable from a working directory: its worktree's project, or a repo's. */
+/** Notes reachable from a working directory: its worktree's project, or a repo's. */
 export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
   if (!cwd) return [];
   const here = resolve(cwd);
@@ -54,8 +54,8 @@ export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
   const ws = fromWorkspacePath(here);
   if (ws) {
     push(out, ctx, ws.project, 'worktree');
-    // The branch half names the card in the common case, since `branchFor`
-    // falls back to the card id.
+    // The branch half names the note in the common case, since `branchFor`
+    // falls back to the note id.
     for (const rec of ctx.notes.values()) {
       if (slugBranch(rec.id) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
     }
@@ -70,7 +70,7 @@ export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
 
 const JIRA_KEY = /\b[A-Z][A-Z0-9]+-\d+\b/g;
 
-/** Cards a branch name points at: one named after a card, or after a Jira key a card links. */
+/** Notes a branch name points at: one named after a note, or after a Jira key a note links. */
 export function matchBranch(ctx: IntakeContext, branch: string | undefined): Match[] {
   if (!branch) return [];
   const out: Match[] = [];
@@ -85,7 +85,7 @@ export function matchBranch(ctx: IntakeContext, branch: string | undefined): Mat
   return out;
 }
 
-/** Cards linking a Jira key mentioned in free text — a commit message, a prompt. */
+/** Notes linking a Jira key mentioned in free text — a commit message, a prompt. */
 export function matchJiraKeys(ctx: IntakeContext, text: string | undefined): Match[] {
   if (!text) return [];
   const out: Match[] = [];
@@ -96,7 +96,7 @@ export function matchJiraKeys(ctx: IntakeContext, text: string | undefined): Mat
 }
 
 /**
- * Words too common in this vault to distinguish two cards. Not a general
+ * Words too common in this vault to distinguish two notes. Not a general
  * stopword list — the point is only to stop an FTS query being carried by "the",
  * "fix" and "work".
  */
@@ -130,7 +130,7 @@ export function ftsOverlapQuery(text: string, maxTokens = 12): string | null {
   return tokens.length < 2 ? null : tokens.map((t) => `"${t}"`).join(' OR ');
 }
 
-/** Cards whose text overlaps this text, by the vault's own full-text index. */
+/** Notes whose text overlaps this text, by the vault's own full-text index. */
 export function matchText(ctx: IntakeContext, text: string | undefined, limit = 2): Match[] {
   if (!text) return [];
   const q = ftsOverlapQuery(text);

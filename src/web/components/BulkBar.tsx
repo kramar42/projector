@@ -10,7 +10,7 @@ import { useHue, useVocabulary } from '../vocabulary.tsx';
 import type { QueryResponse } from '../types.ts';
 
 /**
- * Bulk actions across a selection — what makes cleaning 130 imported cards
+ * Bulk actions across a selection — what makes cleaning 130 imported notes
  * feasible, and structure-only, so it stays on the gesture side of C10.
  *
  * The facet list comes from the query's own histogram, so it offers the axes
@@ -154,7 +154,7 @@ export function BulkBar({
       <Button
         tone="danger" size="small"
         onClick={() => {
-          if (!confirm(`Delete ${plural(ids.length, 'card')}?\n\nThe files are in git, so this is recoverable.`))
+          if (!confirm(`Delete ${plural(ids.length, 'note')}?\n\nThe files are in git, so this is recoverable.`))
             return;
           void run(() => api.bulk({ ids, op: 'delete' }));
         }}

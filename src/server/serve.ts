@@ -142,7 +142,7 @@ app.onError((err, c) => {
 
 // ---------------------------------------------------------------- vaults
 //
-// A vault is a folder of cards, opened the way Obsidian opens one. Nothing here
+// A vault is a folder of notes, opened the way Obsidian opens one. Nothing here
 // assumes a location or a directory name.
 
 app.get('/api/vaults', (c) => c.json({ vaults: listVaults() }));
@@ -181,7 +181,7 @@ app.post('/api/vaults', async (c) => {
     const path = normalise(body.path);
 
     // Anything without a `.projector/` has to be set up, and that includes a
-    // folder of markdown — the cards are already there, but the vocabulary and
+    // folder of markdown — the notes are already there, but the vocabulary and
     // the views are not, and a vault with no board opens onto nothing. `create`
     // is still required for all of them: writing into somebody's notes folder is
     // a decision they make, not one an inspection makes for them.
@@ -286,9 +286,9 @@ app.get('/api/note/:id', (c) => {
   const root = vaultOf(c);
   const { notes, facets } = load(root);
   const rec = notes.get(c.req.param('id'));
-  if (!rec) return c.json({ error: 'no such card' }, 404);
+  if (!rec) return c.json({ error: 'no such note' }, 404);
   const project = resolveProject(rec.id, notes, root);
-  // One walk, shared by this card's own mark and by every reference it names.
+  // One walk, shared by this note's own mark and by every reference it names.
   const inbound = inboundCounts(notes, facets);
   return c.json({
     note: toDTO(rec, {
@@ -311,11 +311,11 @@ app.get('/api/note/:id', (c) => {
     // the chips refreshed on every write and the raw pane never did, so saving
     // it reverted whatever the chips had just done. One read, one mtime.
     yaml: split(readFileSync(rec.file, 'utf8')).yaml ?? '',
-    // Every note this card points at, from any reference facet, resolved to a
+    // Every note this note points at, from any reference facet, resolved to a
     // title. A reference facet stores ids, so without this the panel can only
     // draw `check-technical-challenge-code-submissions-nikola` where the rest of
     // the app draws a title — which is why `parent` had grown a bespoke section
-    // to say the same thing better, and why the card then carried two controls
+    // to say the same thing better, and why the note then carried two controls
     // for one axis. One answer for every reference facet, so none needs its own.
     refs: Object.fromEntries(
       Object.entries(rec.facets)
@@ -342,7 +342,7 @@ app.get('/api/note/:id', (c) => {
     //
     // Keyed by the relation, so the panel can label each with the word the
     // vocabulary gave it. `blocked_by` changed ends when the relation did: the
-    // edge is stored on the card that is stuck, so what a card *holds up* is the
+    // edge is stored on the note that is stuck, so what a note *holds up* is the
     // derived half.
     inbound: inverseOf(rec, notes, facets, inbound),
     project,
@@ -394,7 +394,7 @@ interface Inbound {
 // ---------------------------------------------------------------- writes
 //
 // Every mutating route lives here and does nothing but delegate to mutate.ts.
-// There is still no path to any external system: these write card files, canvas
+// There is still no path to any external system: these write note files, canvas
 // files and assets under the data directory, and nothing else.
 
 function fail(c: Context, err: unknown) {
@@ -452,9 +452,9 @@ app.post('/api/bulk', async (c) => {
       values?: string[];
       mode?: 'set' | 'add' | 'remove';
       /**
-       * `move` only: the drag's endpoints, from which each card's values follow.
+       * `move` only: the drag's endpoints, from which each note's values follow.
        * One entry per grouping axis crossed — a diagonal drag on a matrix board
-       * names two, and they are applied in a single write per card.
+       * names two, and they are applied in a single write per note.
        */
       moves?: { facet: string; from: string; to: string }[];
       dragMode?: DragMode;
@@ -462,7 +462,7 @@ app.post('/api/bulk', async (c) => {
     const ids = b.ids ?? [];
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
-    // A drag, one card at a time: the values are per note, so only the endpoints
+    // A drag, one note at a time: the values are per note, so only the endpoints
     // travel and `nextValues` runs here.
     else if (b.op === 'move') {
       res = bulkMove(root, ids, b.moves ?? [], b.dragMode ?? 'replace');
@@ -562,7 +562,7 @@ app.post('/api/note/:id/asset', async (c) => {
   const root = vaultOf(c);
   try {
     const id = c.req.param('id');
-    fileFor(root, id); // 400s cleanly when the card does not exist
+    fileFor(root, id); // 400s cleanly when the note does not exist
     const mime = c.req.header('Content-Type') ?? '';
     const bytes = Buffer.from(await c.req.arrayBuffer());
     if (!bytes.length) throw new Invalid('empty upload');
@@ -573,12 +573,12 @@ app.post('/api/note/:id/asset', async (c) => {
   }
 });
 
-// Pasted images are referenced from a card body, so the body renderer needs them.
+// Pasted images are referenced from a note body, so the body renderer needs them.
 app.get('/api/asset/*', (c) => {
   const root = vaultOf(c);
   const p = paths(root);
   const rel = c.req.path.replace('/api/asset/', '');
-  // Confine to the assets tree: a card body is authored content, and a `..` in
+  // Confine to the assets tree: a note body is authored content, and a `..` in
   // an image path must not be able to read outside the data directory.
   const file = join(p.assets, rel.replace(/^assets\//, ''));
   if (!file.startsWith(p.assets) || !existsSync(file)) return c.json({ error: 'not found' }, 404);
@@ -666,7 +666,7 @@ app.post('/api/enrich/clear', async (c) => {
 
 // ---------------------------------------------------------------- live updates
 //
-// The point of the watcher is C3: a Claude session editing a card file must show
+// The point of the watcher is C3: a Claude session editing a note file must show
 // up in the open app without a manual refresh.
 
 let revision = 0;
@@ -743,7 +743,7 @@ function notesTouched(root: string, changed?: string): string[] | undefined {
 /**
  * Anything dotted, below one of the roots being watched.
  *
- * The cards are the vault now, so the watched tree *is* the vault — which is the
+ * The notes are the vault now, so the watched tree *is* the vault — which is the
  * whole of it, `.git/` and `.projector/` included. Watching those is not merely
  * wasteful: the index writes `.projector/index.db-wal` continuously, so a watcher
  * that sees it reports a change caused by reading, and every client refetches

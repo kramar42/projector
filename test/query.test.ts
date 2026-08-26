@@ -14,7 +14,7 @@ import { paths } from '../src/config.ts';
 
 /**
  * A vault of its own, so these assert the engine rather than whatever the real
- * cards happen to say today.
+ * notes happen to say today.
  *
  *   project-b ──member─ keycloak ──member─ kc-realms          (project chain)
  *   project-a ──parent── project-a-eventing ──parent── kafka-schema  (decomposition)
@@ -123,7 +123,7 @@ function ids(root: string, query: Query): string[] {
   return [...open(root)(query).ids].sort();
 }
 
-test('every card is loaded, so a bare query is the whole vault', () => {
+test('every note is loaded, so a bare query is the whole vault', () => {
   const { root, cleanup } = vault();
   try {
     assert.equal(open(root)({}).total, Object.keys(CARDS).length);
@@ -183,7 +183,7 @@ test('computed axes filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocker', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
-    // A card missing two axes lands in both buckets. `project-b` and `project-a` are project
+    // A note missing two axes lands in both buckets. `project-b` and `project-a` are project
     // notes and appear here too: the engine no longer exempts them, the triage
     // view does.
     assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
@@ -262,7 +262,7 @@ test('focus walks references transitively, in the direction asked for', () => {
     assert.deepEqual(set({ id: 'kafka-schema', via: 'parent', dir: 'out' }), ['kafka-schema', 'project-a', 'project-a-eventing']);
     // The project reference reaches the grandchild that `project=project-b` could not.
     assert.deepEqual(set({ id: 'project-b', via: 'project', dir: 'in' }), ['kc-realms', 'keycloak', 'project-b']);
-    // The relation is stored on the card that is stuck, so `out` from it reaches
+    // The relation is stored on the note that is stuck, so `out` from it reaches
     // its blockers and `in` from a blocker reaches what it holds up.
     assert.deepEqual(set({ id: 'blocked-card', via: 'blocked_by', dir: 'out' }), ['blocked-card', 'blocker']);
     assert.deepEqual(set({ id: 'blocker', via: 'blocked_by', dir: 'in' }), ['blocked-card', 'blocker']);
@@ -323,7 +323,7 @@ test('focus bounds the facet filter rather than being one', () => {
   }
 });
 
-test('grouping puts a multi-valued card in every matching column', () => {
+test('grouping puts a multi-valued note in every matching column', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
@@ -350,7 +350,7 @@ test('grouping puts a multi-valued card in every matching column', () => {
 test('every declared value gets a group, empty or not', () => {
   const { root, cleanup } = vault();
   try {
-    // `backlog` is declared in facets.yaml and no card carries it. It still gets a
+    // `backlog` is declared in facets.yaml and no note carries it. It still gets a
     // column: a priority board missing one reads as though it did not exist, and
     // an empty column is somewhere to drag a card to.
     assert.deepEqual(
@@ -562,7 +562,7 @@ test('a second grouping axis makes a matrix, not a new concept', () => {
  * A filter on the axis you group by says which columns exist.
  *
  * The axis used to be the vocabulary and nothing else, so `due` — grouped by
- * `due`, filtered to three of its four buckets — drew a `later` column no card
+ * `due`, filtered to three of its four buckets — drew a `later` column no note
  * could ever reach, and `triage` drew `complete` the same way. The two cases a
  * board has to tell apart: a value the filter *admits* that happens to be empty
  * is a place to drag a card to, and a value the filter *excludes* is not part of
@@ -572,7 +572,7 @@ test('a value the filter excludes is not a column; an admitted empty one still i
   const { root, cleanup } = vault();
   try {
     const run = open(root);
-    // `backlog` is declared and admitted, and no card carries it — the empty
+    // `backlog` is declared and admitted, and no note carries it — the empty
     // column a board wants, because it is somewhere to drag to.
     const wide = run({ groupBy: ['priority'] });
     assert.deepEqual(wide.groupOrder.primary, ['now', 'month', 'backlog', NONE]);
@@ -620,12 +620,12 @@ test('a derived axis narrows too, having no vocabulary of its own to defend', ()
 
 /**
  * The property that makes narrowing safe, stated as a test: to match a selection
- * of value *names* a card must carry one of those names, so it always keeps a
- * column. A card admitted by a *range* need not — its bucket can sit outside the
+ * of value *names* a note must carry one of those names, so it always keeps a
+ * column. A note admitted by a *range* need not — its bucket can sit outside the
  * selection entirely — so a range selection narrows nothing rather than emptying
  * the board.
  */
-test('a range selection narrows nothing, so no card loses its column', () => {
+test('a range selection narrows nothing, so no note loses its column', () => {
   const { root, cleanup } = vault();
   try {
     const res = open(root)({ groupBy: ['due'], filter: { due: ['>2026-01-01'] } });
@@ -643,10 +643,10 @@ test('a range selection narrows nothing, so no card loses its column', () => {
 
 /**
  * On a multi-valued axis the narrowing drops *placements*, and that is the point:
- * a column headed `keycloak` in a view that holds only `kafka` cards invites the
- * wrong reading. What it must never drop is a card.
+ * a column headed `keycloak` in a view that holds only `kafka` notes invites the
+ * wrong reading. What it must never drop is a note.
  */
-test('narrowing a multi-valued axis drops extra placements but never a card', () => {
+test('narrowing a multi-valued axis drops extra placements but never a note', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
@@ -656,7 +656,7 @@ test('narrowing a multi-valued axis drops extra placements but never a card', ()
 
     const one = run({ groupBy: ['tech'], filter: { tech: ['kafka'] } });
     assert.deepEqual(one.groupOrder.primary, ['kafka']);
-    // The cards themselves are untouched — only the column they also sat in went.
+    // The notes themselves are untouched — only the column they also sat in went.
     assert.equal(one.total, 1);
     assert.equal(one.placements, 1);
     const placed = new Set(one.groups!.flatMap((g) => g.ids));
@@ -709,7 +709,7 @@ test('focus and search do narrow which facets exist', () => {
   const { root, cleanup } = vault();
   try {
     const run = open(root);
-    // `tech` lives on two cards, neither in the project-b project chain.
+    // `tech` lives on two notes, neither in the project-b project chain.
     const scoped = run({ focus: { id: 'project-b', via: 'project', dir: 'in' } });
     assert.ok(scoped.counts.some((c) => c.facet === 'tech')); // kc-realms is in there
     const elsewhere = run({ focus: { id: 'blocker', via: 'blocks', dir: 'out' } });
@@ -744,7 +744,7 @@ test('universe is what the filter is hiding, exactly', () => {
 
 /**
  * A second vault, because these axes need notes the others must not see —
- * adding a card to the shared fixture would move every count asserted above.
+ * adding a note to the shared fixture would move every count asserted above.
  */
 const DATED: Record<string, string> = {
   'ship-it': `---
@@ -950,7 +950,7 @@ test('actionable now is one query, and never silently empty', () => {
     const actionable = ids(root, {
       filter: { status: ['planning', 'active'], blocked: ['clear'] },
     });
-    assert.ok(actionable.length > 0, 'no open, unblocked card — the filter matched nothing');
+    assert.ok(actionable.length > 0, 'no open, unblocked note — the filter matched nothing');
     // Open and clear: in. Blocked, waited-on, and carrying no lifecycle: out.
     assert.ok(actionable.includes('keycloak'));
     assert.ok(!actionable.includes('blocked-card'), 'an unfinished blocker keeps it out');
@@ -982,7 +982,7 @@ test('the unblocked view parses to exactly the actionable query', () => {
 test('the linked axis makes external references askable', () => {
   const { root, cleanup } = vault();
   try {
-    // Every axis on a card was askable except this one, across the notes that
+    // Every axis on a note was askable except this one, across the notes that
     // carry a link — most of the real vault.
     assert.deepEqual(ids(root, { filter: { linked: ['jira'] } }), ['keycloak']);
     assert.deepEqual(ids(root, { filter: { linked: ['doc'] } }), ['kc-realms']);

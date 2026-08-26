@@ -35,7 +35,7 @@ export const BUILTIN_FACETS: Facets = {
  * The reason `project` is built in at all is that its *shape* must hold: the
  * config chain walks it as a relation, so retyping it to `label` would strand
  * inheritance with nothing to say so. None of that is true of what it is called
- * or whether a card is expected to carry one — those are a vault's business.
+ * or whether a note is expected to carry one — those are a vault's business.
  *
  * It declares no `hue`, and that is the point rather than an omission: `builtin`
  * is what the client reads, and the app's own axis draws in the app's own colour.
@@ -113,7 +113,7 @@ export function loadFacets(file: string): Facets {
     };
   }
   // Built-ins lead the order, and win their structural keys. A vault may still
-  // set the rest — its label, whether a card is expected to carry one — so a
+  // set the rest — its label, whether a note is expected to carry one — so a
   // declaration merges *under* the built-in's shape rather than being discarded.
   //
   // Only the keys the file actually *wrote*. A normalised definition carries a
@@ -158,7 +158,7 @@ export function declaredFacets(file: string): Record<string, unknown> {
 }
 
 /**
- * Column order for a facet: declared order first, then any extras seen in cards.
+ * Column order for a facet: declared order first, then any extras seen in notes.
  *
  * A **bucketed** facet declares its order through `buckets` rather than
  * `values` — the boundaries are written in order and `overflow` comes last, so

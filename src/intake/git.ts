@@ -8,9 +8,9 @@ import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
  * Your own commits in the project repos, with nothing tracking them.
  *
  * The unit is a **branch, not a commit.** Six commits on one branch are one piece
- * of work, and `git:<repo>@<sha>` per commit meant six cards and a fingerprint
+ * of work, and `git:<repo>@<sha>` per commit meant six notes and a fingerprint
  * that grew a seventh tomorrow. `git:<repo>@<branch>` is stable while the work
- * continues, so a sweep run again after three more commits finds the card it
+ * continues, so a sweep run again after three more commits finds the note it
  * already made.
  *
  * The exception is the base branch, where each commit stands alone: commits land

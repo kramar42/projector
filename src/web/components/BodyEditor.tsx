@@ -49,7 +49,7 @@ export function BodyEditor({
       markdown(),
       syntaxHighlighting(projectorHighlight, { fallback: true }),
       placeholder('Free-form markdown — description, links, checklists, pasted images.'),
-      // Paste an image and it lands in the card's own assets directory.
+      // Paste an image and it lands in the note's own assets directory.
       EditorView.domEventHandlers({
         paste: (event, ev) => {
           const files = [...(event.clipboardData?.files ?? [])].filter((f) =>

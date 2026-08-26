@@ -54,7 +54,7 @@ function graph(...recs: Note[]): Map<string, Note> {
 }
 
 
-/** Parse a card from its text, failing the test rather than returning a result. */
+/** Parse a note from its text, failing the test rather than returning a result. */
 function recordOf(text: string): Note {
   const res = parseNote('/x.md', text);
   assert.ok(res.ok);
@@ -75,7 +75,7 @@ test('repos union across the project chain, nearest wins for scalars', () => {
   assert.deepEqual(p.chain, ['root', 'mid']);
 });
 
-test('a card in two projects inherits from both, unioned', () => {
+test('a note in two projects inherits from both, unioned', () => {
   const g = graph(
     rec('project-d', [], { repos: [{ path: '/project-d' }], instructions: 'project-d rule' }),
     rec('mapping', [], { repos: [{ path: '/mapping' }], instructions: 'mapping rule' }),
@@ -199,7 +199,7 @@ test('a self-reference and a dangling one are dropped by every blocking answer',
   const facets = loadFacets(
     facetsFile('status: { values: [planning, done], closed: [done] }\nblocked_by: { type: ref, blocking: true }\n'),
   );
-  // Stored on the card that is stuck: `target` names both of its blockers.
+  // Stored on the note that is stuck: `target` names both of its blockers.
   const notes = new Map(
     [
       recordOf('---\nid: loop\ntitle: Loops\nfacets: { blocked_by: [loop], status: [planning] }\n---\n'),

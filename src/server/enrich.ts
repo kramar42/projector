@@ -10,7 +10,7 @@ import { isUnavailable, type Enrichment, type Fetcher, type Unavailable } from '
  * The enrichment cache, and the stale-while-revalidate policy around it.
  *
  * Deliberately its own SQLite file rather than a table in the index: the index is
- * derived from the card files and rebuilt from scratch on every request, which
+ * derived from the note files and rebuilt from scratch on every request, which
  * would throw away network data that cost a second to fetch. Different
  * lifecycles, different stores.
  *
@@ -63,7 +63,7 @@ function open(dataRoot: string): DatabaseSync {
 }
 
 /**
- * Refreshes in flight, so N cards linking the same PR cause one fetch. Keyed by
+ * Refreshes in flight, so N notes linking the same PR cause one fetch. Keyed by
  * vault as well as ref: a `doc:` ref is vault-relative, so the same string means
  * different files in different vaults.
  *

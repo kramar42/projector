@@ -333,7 +333,7 @@ drawn follows from what it is:
 
 A **computed axis** may be shown like any other, which is the same rule that lets one be filtered,
 grouped and sorted by (C4): `show: [staleness]` gives a column of `week · month · older`. It arrives on
-the card as `computed`, beside `facets` rather than merged into it — what the file stores is editable
+the note as `computed`, beside `facets` rather than merged into it — what the file stores is editable
 and what the app derives is not, and a face draws either.
 
 ## grouping
@@ -656,17 +656,17 @@ only "already on a note" is a fact. The rest is a judgement, made on evidence it
 
 # Vaults
 
-A **vault** is a folder of markdown, opened the way Obsidian opens one. The cards sit at the root, at
+A **vault** is a folder of markdown, opened the way Obsidian opens one. The notes sit at the root, at
 any depth; the only thing the app adds is `.projector/`, holding the vocabulary, the saved views and
 three derived databases. The app has no built-in location and assumes no directory name: on first run
 it asks for a folder and remembers the choice, and the switcher at the top of the sidebar opens or
 adds others.
 
 **Notes you already keep are a vault.** Point at an Obsidian folder or a directory of meeting notes
-and it opens: every `.md` is a card, and one with no frontmatter is titled by its leading heading and
+and it opens: every `.md` is a note, and one with no frontmatter is titled by its leading heading and
 identified by its filename. Nothing is moved, converted, or written back until you change something —
-and the first change writes down the id the card was already going by, so a later rename moves a file
-rather than a card. There is no exempted filename: a `README.md` is a card like the rest.
+and the first change writes down the id the note was already going by, so a later rename moves a file
+rather than a note. There is no exempted filename: a `README.md` is a note like the rest.
 
 Opening a folder that has no `.projector/` sets one up — a facet vocabulary, five starter views, and a
 `.gitignore` for the databases. That is all it writes: the folder's own files are not touched. A
@@ -791,7 +791,7 @@ Press `?` in the app for the same map, filled in with **this vault's** axis lett
 names a facet, because the client may not (C4): an axis is addressed by the `key:` it declares in
 `facets.yaml`, and `pj check` refuses one that collides with the map or with another axis.
 
-**The keys are drawn where they apply.** Every facet row in the card panel and every addressable row
+**The keys are drawn where they apply.** Every facet row in the note panel and every addressable row
 in the rail carries a small mono reminder of the key that reaches it — and an axis that declares no
 `key:` carries nothing, which is the useful half: you can see that `Layer` has no letter before
 pressing one that means something else.
@@ -819,7 +819,7 @@ Three rules carry most of it:
 | `gg` | the first drawn card |
 | `G` | the last drawn card |
 | `⏎` `o` | open the panel on the cursor's card |
-| `H` `L` | back / forward through cards you have *followed* — see the trail, below |
+| `H` `L` | back / forward through notes you have *followed* — see the trail, below |
 | `Esc` | close the cheatsheet, then leave a list, then dismiss a message, then close the panel, then clear the selection |
 
 The cursor is the only pointer: with the panel open it **is** the panel, so `j` turns the page to the

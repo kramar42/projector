@@ -37,7 +37,7 @@ import { nextValues, type AxisMove, type DragMode } from '../view/dropOutcome.ts
  *
  * Two rules hold throughout: a frontmatter-only change never touches body bytes,
  * and no write proceeds when the file changed on disk since the client read it —
- * an agent editing the same card must never be silently overwritten (C1, C3).
+ * an agent editing the same note must never be silently overwritten (C1, C3).
  */
 
 export class Conflict extends Error {
@@ -59,7 +59,7 @@ function fileFor(root: string, id: string): string {
     const res = loadNote(f);
     if (res.ok && res.rec.id === id) return f;
   }
-  throw new Invalid(`no card with id "${id}"`);
+  throw new Invalid(`no note with id "${id}"`);
 }
 
 export function mtimeOf(file: string): number {
@@ -132,15 +132,15 @@ function today(): string {
  * The id and title a bare note has been answering to, so a write can write them
  * down.
  *
- * A file with no frontmatter is a card whose identity is derived from its name
+ * A file with no frontmatter is a note whose identity is derived from its name
  * (see `parseNote`), and derived identity is only as stable as the filename. The
- * moment anything is stored on the card, that stops being good enough: a
+ * moment anything is stored on the note, that stops being good enough: a
  * reference facet somewhere else now points at this id, and a rename would
  * orphan it. So the first write freezes what the file has been called all along —
  * the same id, never a new one — and every later rename moves a file rather than
- * a card.
+ * a note.
  *
- * Nothing is written for a card that already says who it is, which is every card
+ * Nothing is written for a note that already says who it is, which is every note
  * projector itself created.
  */
 function identity(text: string, file: string): Record<string, string> {
@@ -298,14 +298,14 @@ export interface PatchCardInput {
    */
   facet?: { name: string; values: string[]; mode?: FacetMode };
   /**
-   * Fingerprints this card answers for beyond its own origin, as a delta.
+   * Fingerprints this note answers for beyond its own origin, as a delta.
    *
    * The delta form rather than the whole list for the same reason `facet` takes
    * one: a caller adding the fingerprint of a message it just linked knows that
    * one fingerprint, not the set, and asserting the set would drop whatever a
    * merge put there in the meantime.
    *
-   * They land in `absorbed_fingerprints`, never in `source_fingerprint` — a card
+   * They land in `absorbed_fingerprints`, never in `source_fingerprint` — a note
    * extended by a message did not come from it, and overwriting its origin would
    * lose where it actually came from.
    */
@@ -352,7 +352,7 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
     if (mode === 'remove') {
       // Symmetric with `pj link --remove`, and for the same reason: a removal
       // that reports success while doing nothing is how you find out a month
-      // later that the fingerprint is still on the other card, silently keeping
+      // later that the fingerprint is still on the other note, silently keeping
       // it out of every sweep.
       const missing = values.filter((v) => !held.includes(v));
       if (missing.length) throw new Invalid(`${id} does not answer for ${missing.join(', ')}`);
@@ -361,7 +361,7 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
     } else {
       for (const v of values) {
         if (rec.source_fingerprint === v) throw new Invalid(`${id} already came from ${v}`);
-        // A fingerprint answers for exactly one card. Letting two claim it means
+        // A fingerprint answers for exactly one note. Letting two claim it means
         // whichever the sweep asks about first decides, and the other silently
         // stops being re-proposed — so refuse and name the holder instead.
         for (const other of notes.values()) {
@@ -400,7 +400,7 @@ export function createNote(
     body?: string;
     links?: string[];
     /**
-     * A stable hash of whatever this card came from. A sweep that runs twice
+     * A stable hash of whatever this note came from. A sweep that runs twice
      * must converge rather than refill the inbox, so a fingerprint already
      * present short-circuits instead of creating a duplicate.
      */
@@ -493,7 +493,7 @@ export function repointed(
 }
 
 /**
- * Delete a card file, and drop every reference that pointed at it so the graph
+ * Delete a note's file, and drop every reference that pointed at it so the graph
  * does not keep dangling values. The files are in git, so this is recoverable.
  */
 export function deleteNote(root: string, id: string): { removedEdges: number } {
@@ -516,7 +516,7 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   }
 
   rmSync(file);
-  // Assets belong to the card; nothing else references them.
+  // Assets belong to the note; nothing else references them.
   const assets = join(p.assets, id);
   if (existsSync(assets)) rmSync(assets, { recursive: true });
   return { removedEdges };
@@ -670,15 +670,15 @@ export function mergeNotes(
 }
 
 /**
- * Move notes along one or more facets, one card at a time.
+ * Move notes along one or more facets, one note at a time.
  *
  * Distinct from `bulkFacet` because the two are different operations that happen
- * to write the same field. "Make these twelve cards say `now`" is uniform, and
+ * to write the same field. "Make these twelve notes say `now`" is uniform, and
  * that is what `bulkFacet` does. "Move these twelve from `now` to `month`, keeping
- * whatever else each of them says" is *per card* — every card's answer depends on
+ * whatever else each of them says" is *per note* — every note's answer depends on
  * its own values, and a uniform `values` array cannot express one.
  *
- * The board used to compute the single-card answer with `nextValues` and then
+ * The board used to compute the single-note answer with `nextValues` and then
  * throw it away whenever more than one card was selected, sending uniform values
  * instead. So the same gesture produced different results by selection count:
  * shift-dragging `now`→`month` removed `now` for one card and `month` for two.
@@ -705,8 +705,8 @@ export function bulkMove(
     if (!rec) continue;
     // A drag across a matrix board crosses two axes and is still one gesture, so
     // both endpoints fold into one map and one write. Writing per axis would bump
-    // `updated` twice and let the second write land on a card the first changed —
-    // and would leave the card half moved when the second value is refused.
+    // `updated` twice and let the second write land on a note the first changed —
+    // and would leave the note half moved when the second value is refused.
     // Not `rec.facets`: that is the pre-loop snapshot. See `facetsNow`.
     let facets = facetsNow(rec);
     const check: Record<string, string[]> = {};
@@ -852,11 +852,11 @@ export function patchFields(
 }
 
 /**
- * Replace a card's whole frontmatter from raw YAML.
+ * Replace a note's whole frontmatter from raw YAML.
  *
  * Validated before anything is written: it must parse, satisfy the skeleton
  * schema, and pass the same facet checks as any other write. `id` is refused
- * because other cards' edges point at it — renaming would silently orphan them.
+ * because other notes' edges point at it — renaming would silently orphan them.
  */
 export function putFrontmatter(
   root: string,
@@ -903,7 +903,7 @@ export function putFrontmatter(
 
   // Self-reference and cycles are already refused by `checkFacets`; a value
   // naming a note that does not exist yet is only a warning, because an agent
-  // may write a card before the one it points at.
+  // may write a note before the one it points at.
   const warnings: string[] = [];
   const defs = loadDefs(paths(root).facets);
   for (const [name, values] of Object.entries(facets)) {
@@ -921,12 +921,12 @@ export function putFrontmatter(
 
 // ---------------------------------------------------------------- canvas
 
-/** Persist canvas node positions and sizes. Cards are untouched — views own arrangement. */
+/** Persist canvas node positions and sizes. Notes are untouched — views own arrangement. */
 /**
  * Arrangement: node positions, and card order within a column.
  *
  * Both are hand-curated, so both live in a named view and nowhere else (C9) —
- * which is what makes naming a view the act that buys manual arrangement. Cards
+ * which is what makes naming a view the act that buys manual arrangement. Notes
  * own identity and content; views own arrangement.
  */
 export function saveArrangement(
@@ -942,7 +942,7 @@ export function saveArrangement(
 
   const patch: Record<string, unknown> = {};
   let live: Set<string> | null = null;
-  /** Ids whose card is gone. The set is built at most once, and only if needed. */
+  /** Ids whose note is gone. The set is built at most once, and only if needed. */
   const dead = (ids: string[]): Set<string> => {
     const out = new Set<string>();
     for (const id of ids) {
@@ -1034,7 +1034,7 @@ export function saveView(root: string, name: string, body: Record<string, unknow
   return { name: slug };
 }
 
-/** Delete a saved view. The cards it selected are untouched. */
+/** Delete a saved view. The notes it selected are untouched. */
 export function deleteView(root: string, name: string): void {
   const file = viewFileFor(root, name);
   if (!existsSync(file)) throw new Invalid(`no view "${name}"`);
@@ -1051,7 +1051,7 @@ const EXT: Record<string, string> = {
   'image/svg+xml': 'svg',
 };
 
-/** Save a pasted image beside its card and return the relative markdown path. */
+/** Save a pasted image beside its note and return the relative markdown path. */
 export function saveAsset(root: string, id: string, mime: string, bytes: Buffer): { path: string } {
   const ext = EXT[mime];
   if (!ext) throw new Invalid(`unsupported image type "${mime}"`);

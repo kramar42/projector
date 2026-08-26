@@ -10,7 +10,7 @@ import { paths } from '../src/config.ts';
 /**
  * The memo, and the one thing its stamp cannot see.
  *
- * `stampOf` reads the source files — cards, views, vocabulary — and skips
+ * `stampOf` reads the source files — notes, views, vocabulary — and skips
  * dotfiles, because the index is its own output and including it would make
  * every rebuild invalidate itself. The gap that leaves: the index is derived and
  * disposable (C1), so another process may delete it and write a new one without
@@ -46,14 +46,14 @@ test('nothing changed means nothing is rebuilt', () => {
   }
 });
 
-test('a card written outside the app rebuilds the memo', () => {
+test('a note written outside the app rebuilds the memo', () => {
   const root = vault();
   try {
     invalidate(root);
     const first = cached(root, build, dispose);
     writeFileSync(join(root, 'three.md'), '---\nid: three\ntitle: Three\n---\n\nBody.\n');
     const second = cached(root, build, dispose);
-    assert.notEqual(second, first, 'a new card changes the stamp');
+    assert.notEqual(second, first, 'a new note changes the stamp');
     assert.equal(second.notes.size, 3);
   } finally {
     invalidate(root);
@@ -66,7 +66,7 @@ test('a card written outside the app rebuilds the memo', () => {
  * — opens the index `fresh`, and that unlinks `index.db` along with its `-wal`
  * and `-shm`. Before the memo tracked which file it had open, a server that had
  * cached a value went on serving the old handle: the stamp was unchanged because
- * no card had moved, and every read through the dead handle failed with
+ * no note had moved, and every read through the dead handle failed with
  * `disk I/O error` until the process was restarted. `/api/meta` died while
  * `/api/query` survived, because only one of them touches the database.
  */

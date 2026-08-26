@@ -8,8 +8,8 @@ import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
  *
  * The channel that most needs the three-way answer, because most sessions are
  * not work: a session can be work already tracked (link it), work nobody has
- * filed (a card), or a question asked and answered (neither). Only the first is
- * decidable here — a uuid already on a card is a fact — so the other two arrive
+ * filed (a note), or a question asked and answered (neither). Only the first is
+ * decidable here — a uuid already on a note is a fact — so the other two arrive
  * as evidence and the skill chooses between them.
  *
  * Cheap by construction: `listTranscripts` stats the directory and opens nothing.

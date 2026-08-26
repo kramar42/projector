@@ -132,7 +132,7 @@ export function App() {
 
   /**
    * Selection is written like `?note=` and never like a query: `replace` always,
-   * because a twelve-card selection is twelve clicks and the back button is for
+   * because a twelve-note selection is twelve clicks and the back button is for
    * views rather than for undoing a pick.
    */
   const commitSelection = useCallback((next: ReadonlySet<string>) => {
@@ -158,7 +158,7 @@ export function App() {
   /**
    * The column `n` asked to create a card in.
    *
-   * The one binding whose target is not a card, so it is the one that cannot be
+   * The one binding whose target is not a note, so it is the one that cannot be
    * done from here alone: the inline field belongs to the column that draws it.
    * The shell names the column and the board opens it.
    */
@@ -178,7 +178,7 @@ export function App() {
    */
   const panelUnsaved = useRef({ body: false, frontmatter: false });
   /**
-   * The last values seen on every card, so an undo can put back what a card held
+   * The last values seen on every note, so an undo can put back what a note held
    * even after the write moved it out of the view. See `KeyState.valuesOf`.
    */
   const seenFacets = useRef(new Map<string, NoteDTO['facets']>());
@@ -193,7 +193,7 @@ export function App() {
   }, []);
 
   /**
-   * Opening a card from a view: the cursor goes where the pointer did.
+   * Opening a note from a view: the cursor goes where the pointer did.
    *
    * `step` rather than `jump`, because clicking a card you can see is not a
    * detour — the trail is for the one move the cursor cannot walk back from,
@@ -217,11 +217,11 @@ export function App() {
   );
 
   /**
-   * Opening a card from *inside the panel* — a reference chip, a reflink.
+   * Opening a note from *inside the panel* — a reference chip, a reflink.
    *
    * The one move that records, because it is the one you need bringing back
-   * from: the card it lands on may not be drawn in the current view at all, and
-   * `H` is what returns you to the card you were reading.
+   * from: the note it lands on may not be drawn in the current view at all, and
+   * `H` is what returns you to the note you were reading.
    */
   const followCard = useCallback(
     (id: string) => {
@@ -293,7 +293,7 @@ export function App() {
   editRef.current = data ? { spec: data.spec, savedSpec: data.savedSpec } : null;
 
   /**
-   * Where the cursor can go: the payload's cards, in the order the shape draws
+   * Where the cursor can go: the payload's notes, in the order the shape draws
    * them.
    *
    * Built here rather than inside a view, because `App` already holds the payload
@@ -302,8 +302,8 @@ export function App() {
    */
   const grid = useMemo(() => gridOf(data), [data]);
 
-  // Remember every card the query has shown. Cheap — one entry per note in the
-  // vault at worst — and it is the only record of what a card held once the query
+  // Remember every note the query has shown. Cheap — one entry per note in the
+  // vault at worst — and it is the only record of what a note held once the query
   // stops returning it.
   useEffect(() => {
     if (!data) return;
@@ -331,13 +331,13 @@ export function App() {
    * flight together is a conflict this would be manufacturing for itself.
    */
   /**
-   * Fold a write we just made into what we remember about those cards.
+   * Fold a write we just made into what we remember about those notes.
    *
    * Without this the memory is only as fresh as the last payload, and the case it
-   * exists for is exactly the case where payloads stop coming: a card written out
+   * exists for is exactly the case where payloads stop coming: a note written out
    * of the view is never seen again, so the *second* write to it computed its
    * inverse from the values it had two writes ago. Undo put back the wrong thing —
-   * `planning` where the card had been `on-hold`.
+   * `planning` where the note had been `on-hold`.
    */
   const remember = useCallback((w: FacetWrite) => {
     for (const id of w.ids) {
@@ -561,7 +561,7 @@ export function App() {
         {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
         {openNote && (
           <NotePanel
-            // Not keyed here any more — `NotePanel` keys the frame on the card it
+            // Not keyed here any more — `NotePanel` keys the frame on the note it
             // is *showing*, one level in, so the fetch outlives the reset and
             // walking `j` down a list turns the page instead of blinking.
             id={openNote}
@@ -595,15 +595,15 @@ interface KeyState {
   panelUnsaved: { current: { body: boolean; frontmatter: boolean } };
   /** The vocabulary, for the declared value a digit names and its cardinality. */
   facets: Meta['facets'];
-  /** The drawn cards. */
+  /** The drawn notes. */
   notes: QueryResponse['notes'];
   /**
-   * What an axis held before a write, for a card that may no longer be drawn.
+   * What an axis held before a write, for a note that may no longer be drawn.
    *
-   * The payload is not enough on its own: a write that moves a card out of the
+   * The payload is not enough on its own: a write that moves a note out of the
    * view removes it from `notes`, and an undo computed from an empty value list
    * would *clear* the axis rather than put back what was there. So the last
-   * values seen for every card are kept, and this asks the payload first and the
+   * values seen for every note are kept, and this asks the payload first and the
    * memory second.
    */
   valuesOf: (id: string, facet: string) => readonly string[];
@@ -633,12 +633,12 @@ interface KeyState {
 
 /**
  * What a write lands on: the selection if there is one, otherwise the cursor's
- * card.
+ * note.
  *
  * The same rule a drag already follows — "dragging a card that is not part of the
  * selection moves just that card" — so the pointer and the keyboard cannot
  * disagree about what a gesture applies to. The panel being open changes nothing,
- * because the panel *is* the cursor's card.
+ * because the panel *is* the cursor's note.
  */
 function targets(s: KeyState): string[] {
   // A selection is narrowed to what is drawn, which is the bulk bar's rule: "3
@@ -650,12 +650,12 @@ function targets(s: KeyState): string[] {
    *
    * It used to be, by analogy with the selection, and the analogy is wrong: a
    * selection is a set you built out of what was on screen, while the cursor is a
-   * single card you are looking at — and it routinely sits on a card the query
+   * single note you are looking at — and it routinely sits on a note the query
    * does not return. Two ordinary things put it there. Writing a value the view
    * filters out (`home` keeps `planning, active`, so setting anything else drops
-   * the card), and following a reference with `g` to a card outside the view.
+   * the note), and following a reference with `g` to a note outside the view.
    *
-   * In both cases the panel stays open on the card, the reader keeps typing at
+   * In both cases the panel stays open on the note, the reader keeps typing at
    * it, and every write after the first was discarded without a word.
    */
   return s.cursor.id ? [s.cursor.id] : [];
@@ -709,7 +709,7 @@ function stepSelect(el: HTMLSelectElement, delta: number): void {
 /**
  * The chip list an element belongs to, or `null`.
  *
- * A row of the panel's facet grid, or the links block — the two places a card
+ * A row of the panel's facet grid, or the links block — the two places a note
  * points somewhere else. Scoped to a *row* rather than to the whole panel, so
  * `j` walks the three children under `Children` and stops, instead of running on
  * into whatever axis happens to be drawn beneath it.
@@ -862,7 +862,7 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
-     * Follow one axis out of this card.
+     * Follow one axis out of this note.
      *
      * The single-value case is the common one and is answered from the payload,
      * so it works with the panel shut: one note, go there. It is a `jump`, which
@@ -879,7 +879,7 @@ function run(command: Command, s: KeyState): void {
        * actually knows.
        *
        * It draws from the note's own detail; the query payload is a different
-       * question and routinely does not contain this card at all — you have just
+       * question and routinely does not contain this note at all — you have just
        * written it out of the view, or followed a reference into one. Reading the
        * payload alone is what made `g r` report "nothing on Project" while the
        * project sat on screen three rows below the cursor.
@@ -892,14 +892,14 @@ function run(command: Command, s: KeyState): void {
       if (chips.length > 1) return chips[0]!.focus();
 
       // No panel — so no chips to read. What the query knows, and failing that
-      // what it knew when it last drew this card.
+      // what it knew when it last drew this note.
       const id = cursor.id;
       const held = id ? s.valuesOf(id, command.facet) : [];
       if (!held.length) {
         return s.notify({ tone: 'info', text: `nothing on ${def?.label ?? command.facet}` });
       }
       if (held.length === 1) return s.follow(held[0]!);
-      // Several, and nothing drawn to choose between them. Opening the card is
+      // Several, and nothing drawn to choose between them. Opening the note is
       // the honest half-step: the choice is on screen and one more `g` makes it.
       if (id) s.setOpenNote(id);
       return s.notify({ tone: 'info', text: `${def?.label ?? command.facet} names ${held.length}` });
@@ -937,7 +937,7 @@ function run(command: Command, s: KeyState): void {
       s.edit((spec) => setFocus(spec, { id, via: command.facet, dir: 'in' }));
       return s.notify({
         tone: 'info',
-        text: `showing what names this card on ${def?.label ?? command.facet}`,
+        text: `showing what names this note on ${def?.label ?? command.facet}`,
       });
     }
 
@@ -1048,11 +1048,11 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
-     * A region of the open card.
+     * A region of the open note.
      *
      * Everything here needs a panel, so a shut one is opened rather than
-     * refused — the reader asked to be somewhere in the card, and the honest
-     * half-step is to put the card on screen. `focusSoon` covers the gap while it
+     * refused — the reader asked to be somewhere in the note, and the honest
+     * half-step is to put the note on screen. `focusSoon` covers the gap while it
      * loads.
      */
     case 'gotoRegion': {
@@ -1220,7 +1220,7 @@ function run(command: Command, s: KeyState): void {
        * Then the panel, with the prompt that used to live inside it.
        *
        * Ordered above the selection because it is what is in front of you: a
-       * card open over a board of twelve selected cards should close before the
+       * note open over a board of twelve selected cards should close before the
        * twelve are let go, and one keystroke should undo one thing.
        */
       if (openNote) {
@@ -1282,7 +1282,7 @@ function run(command: Command, s: KeyState): void {
      * followed: **the type picks the control and the cardinality picks the verb.**
      * One slot can only be replaced, so a single-valued axis is `set`; an axis
      * that holds several is `add`, exactly as `FacetEditor.take` does for a value
-     * that is not on the card yet. It is deliberately never `remove` — a digit
+     * that is not on the note yet. It is deliberately never `remove` — a digit
      * cannot destroy, and `0` is the gesture that clears.
      */
     case 'setAxisValue': {
@@ -1312,14 +1312,14 @@ function run(command: Command, s: KeyState): void {
         back,
         label: clearing
           ? `cleared ${def.label}`
-          : `set ${def.label} to ${value} on ${ids.length === 1 ? 'a card' : `${ids.length} cards`}`,
+          : `set ${def.label} to ${value} on ${ids.length === 1 ? 'a note' : `${ids.length} notes`}`,
       });
     }
 
     /**
      * A new card, in the column the cursor is in.
      *
-     * The only binding whose target is not a card, and the reason it waited: the
+     * The only binding whose target is not a note, and the reason it waited: the
      * field it opens belongs to `Column`, so the shell can name a column and
      * nothing else. A card created there inherits that column's value for the
      * grouped axis — which is the board's own rule, and the one write outside the
@@ -1348,7 +1348,7 @@ function run(command: Command, s: KeyState): void {
      * prefix's own rule ("never leaves you with nothing") false for exactly the
      * case it was written about.
      *
-     * The same reach `gf` makes, narrowed to one axis. A card that carries nothing
+     * The same reach `gf` makes, narrowed to one axis. A note that carries nothing
      * on it draws no row, so this says so rather than opening a panel to nothing.
      */
     case 'openAxisControl': {
@@ -1357,7 +1357,7 @@ function run(command: Command, s: KeyState): void {
       return focusSoon(
         () => axisRow(command.facet, false)?.querySelector<HTMLElement>('[data-nav]'),
         8,
-        // The card draws no row for this axis, which is what "carries nothing on
+        // The note draws no row for this axis, which is what "carries nothing on
         // it" looks like in the DOM. Say so, and say where the door is.
         () =>
           s.notify({

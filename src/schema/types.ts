@@ -108,8 +108,8 @@ export interface FacetDef {
    * the whole engine reads it that way — so this is a *vocabulary* constraint,
    * living exactly where `open` and `values` live.
    *
-   * It exists because `status: [planning, done]` is not a card in two columns,
-   * it is a card in no coherent state, and a model whose primary writer is an
+   * It exists because `status: [planning, done]` is not a note in two columns,
+   * it is a note in no coherent state, and a model whose primary writer is an
    * agent making plain file writes (C3) has to be able to say so.
    */
   single: boolean;
@@ -142,9 +142,9 @@ export interface FacetDef {
    */
   closed?: string[];
   /**
-   * A well-filed card in this vault carries this axis.
+   * A well-filed note in this vault carries this axis.
    *
-   * Not enforced on write — a card missing one is a gap, not an error, which is
+   * Not enforced on write — a note missing one is a gap, not an error, which is
    * the distinction `validate` already draws between a warning and an error. It
    * is what the `triage` axis is computed from, and it has to be declared: it
    * cannot be inferred from `single` or from a closed vocabulary, because
@@ -163,8 +163,8 @@ export interface FacetDef {
    *
    * That second rule is not a shortcut. A person does not *complete*: marking
    * `person-a` closed is nonsense, you clear the axis instead — so `waiting_on`
-   * behaves as non-empty whether its values are labels or cards, and a vault is
-   * free to make them cards for the traversal without changing what it means.
+   * behaves as non-empty whether its values are labels or notes, and a vault is
+   * free to make them notes for the traversal without changing what it means.
    *
    * Plural on purpose. Unlike `project`, whose config chain admits exactly one
    * relation, "reasons this cannot move" is naturally a list — which is what the
@@ -232,13 +232,13 @@ export interface FacetDef {
    * What the *other end* of this relation is called, if it has a name worth
    * drawing.
    *
-   * `parent` is answered by children; `blocked_by` by what this card blocks. Both
+   * `parent` is answered by children; `blocked_by` by what this note blocks. Both
    * were a two-entry map keyed by facet name, in the server *and* in the panel,
    * so a vault renaming either lost the row and a vault's own relation could
    * never have one.
    *
    * The inverse of a relation is not vocabulary in the sense values are — it is
-   * not something a card can carry — but it is a word this vault uses, and there
+   * not something a note can carry — but it is a word this vault uses, and there
    * is nowhere else for it to live. Absent means no derived row, which stays the
    * right default: nothing computes an inverse for a relation that has not
    * named one.

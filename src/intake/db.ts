@@ -6,7 +6,7 @@ import { paths } from '../config.ts';
 /**
  * Where the last sweep got to, per channel. A third SQLite file, deliberately.
  *
- * `.index.db` is derived from the card files and rebuilt from scratch whenever
+ * `.index.db` is derived from the note files and rebuilt from scratch whenever
  * they change. `.enrich.db` is a cache: TTL'd, clearable, and losing it costs one
  * refetch. Watermarks are neither — lose them and the next sweep re-proposes
  * every message and commit of the last three months. Different lifecycles,
@@ -14,12 +14,12 @@ import { paths } from '../config.ts';
  * for not being a table in the index.
  *
  * **What keeps this safe is that the watermark is not load-bearing.**
- * Correctness comes from `source_fingerprint` on the cards: a candidate already
+ * Correctness comes from `source_fingerprint` on the notes: a candidate already
  * captured is dropped whether or not the cursor knows about it. The watermark
  * only decides how far back to *look*, so deleting this file degrades a sweep to
- * a seven-day window — noisier, never wrong, and never duplicating a card.
+ * a seven-day window — noisier, never wrong, and never duplicating a note.
  *
- * Nothing here is card data, so C1 is untouched: no question about the work has
+ * Nothing here is note data, so C1 is untouched: no question about the work has
  * two answers.
  */
 
@@ -173,9 +173,9 @@ export function watermarkFor(dataRoot: string, channel: string): Watermark | nul
  *
  * Called **after** a proposal has been resolved, never after fetching: a sweep
  * abandoned halfway must not swallow what it had already listed. The consequence
- * is deliberate — once committed, an item declined as "not a card" does not come
+ * is deliberate — once committed, an item declined as "not a note" does not come
  * back, and the cursor is the only note that it was ever considered. A
- * rejection worth keeping belongs on a card with `status: archived`, which keeps
+ * rejection worth keeping belongs on a note with `status: archived`, which keeps
  * its fingerprint.
  */
 export function commitWatermark(

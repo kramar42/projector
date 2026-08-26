@@ -14,7 +14,7 @@ import {
 } from '../src/web/panel/write.ts';
 
 /**
- * The card panel's decisions.
+ * The note panel's decisions.
  *
  * Every one of these was previously unreachable by a test — they lived inside a
  * 481-line component, behind a `run(label, fn)` that took an opaque thunk. Which
@@ -89,7 +89,7 @@ test('a toggle names the value it moved, not the axis it thinks it left behind',
   }
 });
 
-/** "The panel writes one card" as a property, not as a habit. */
+/** "The panel writes one note" as a property, not as a habit. */
 test('no write plan reaches the bulk endpoint', () => {
   for (const w of EVERY) {
     assert.ok(['patch', 'frontmatter', 'delete'].includes(planWrite(w, 1).call), w.kind);
@@ -109,7 +109,7 @@ test('the busy word follows the write, including which way the project toggle we
  * Both halves of `max` are a bug that has happened.
  *
  * Last-write-wins bricks the panel: once a write response is the base it never
- * yields to a fresher read, so an agent editing the card 409s everything and the
+ * yields to a fresher read, so an agent editing the note 409s everything and the
  * Reload button cannot recover it. Read-only is subtler — a second chip click
  * inside the reload window carries a pre-write mtime and 409s against the user's
  * own previous change.
@@ -223,10 +223,10 @@ test('a failure is superseded or reported, never dropped by someone else succeed
 });
 
 /** A write can settle after the panel has moved on — the race `useLive` also has. */
-test('a write settling for a card the panel has left changes nothing', () => {
+test('a write settling for a note the panel has left changes nothing', () => {
   const s = nextStatus(idleStatus(), { t: 'start', seq: 1, label: 'renaming' });
   const after = nextStatus(s, { t: 'settled', seq: 99, failure: { message: 'x', conflict: true } });
-  assert.equal(after, s, 'an unknown seq is a no-op, not a banner on the wrong card');
+  assert.equal(after, s, 'an unknown seq is a no-op, not a banner on the wrong note');
 });
 
 test('the header names the newest write in flight, and nothing when idle', () => {

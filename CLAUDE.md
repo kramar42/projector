@@ -32,7 +32,7 @@ a wrong fix.
 
 **`vaults/coverage` carries every state the app can draw** — every facet value, both ends of every
 bucket, a blocking chain, a link of every kind including two that cannot resolve. The real vault only
-exercises the states real work happens to produce, so use this one for anything visual. Its cards are
+exercises the states real work happens to produce, so use this one for anything visual. Its notes are
 committed markdown; only the dates are derived, because `due` and `staleness` are computed against
 today. So `bun run redate` first, then register it before the server will open it:
 `bun run pj -- vaults add vaults/coverage --name coverage`.

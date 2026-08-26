@@ -333,7 +333,7 @@ function cmdAdd(argv: string[]): void {
 }
 
 /**
- * The one place a card's `links` array is written.
+ * The one place a note's `links` array is written.
  *
  * Three commands used to do this. `unlink` was `link`'s inverse with the same
  * body, and `link-session` differed only in where the ref came from — the cwd
@@ -343,19 +343,19 @@ function cmdAdd(argv: string[]): void {
  * It writes through `patchNote`, which is the other half of collapsing them.
  * `link` and `unlink` wrote frontmatter directly and so never bumped `updated`,
  * while `link-session` went through the gate and did: attaching a Jira issue left
- * a card reading as untouched since 2020, and README is explicit that `updated`
+ * a note reading as untouched since 2020, and README is explicit that `updated`
  * "only ever says that *something* changed". One write path, one answer.
  *
  * A ref that is not there is an error rather than a no-op on `--remove`:
  * `pj link x --remove jira:FOO-1` reporting success while doing nothing is how
- * you find out a month later that the link is still on the other card.
+ * you find out a month later that the link is still on the other note.
  *
  * Which session `--session` means is answered in three tiers, most reliable
  * first: the process tree (the session that ran this command, which is almost
  * always the answer and cannot be ambiguous), then the working directory, then an
  * id you name. The middle tier refuses rather than guesses — two sessions in one
  * directory used to resolve to whichever started last, silently, and a link on
- * the wrong card looks exactly like a link on the right one.
+ * the wrong note looks exactly like a link on the right one.
  */
 function cmdLink(argv: string[]): void {
   const { flags, rest } = argFlags(argv, ['remove', 'session', 'cwd', 'fingerprint'], ['remove']);
@@ -398,9 +398,9 @@ function cmdLink(argv: string[]): void {
   if (!rec) fail(`no note with id "${id}"`);
   const existing = rec.links.map((l) => l.raw);
 
-  // A swept message that extends a card instead of becoming one has no file to
+  // A swept message that extends a note instead of becoming one has no file to
   // leave its fingerprint on, so it leaves it here. Written before the links so
-  // a refused fingerprint — one another card already answers for — stops the
+  // a refused fingerprint — one another note already answers for — stops the
   // whole command rather than leaving a link behind that says the message was
   // handled when the sweep will hand it to you again tomorrow.
   if (prints.length) {
@@ -442,11 +442,11 @@ function cmdCheck(): void {
   const { notes, unreadable, duplicates } = readAll(p.notes);
   const issues = [
     // Before the notes, because a facet wearing a reserved name is a fault in
-    // the vocabulary itself — every card checked against it is checked against
+    // the vocabulary itself — every note checked against it is checked against
     // an axis that will not answer.
     ...validateVocabulary(declaredFacets(p.facets), p.facets),
     ...validate(notes, facets, root, { unreadable, duplicates }),
-    // A view is checked against the same vocabulary its cards are. Until it was,
+    // A view is checked against the same vocabulary its notes are. Until it was,
     // a filter naming a deleted facet matched nothing and reported success.
     ...validateViews(loadViewFiles(root), facets),
   ];
@@ -484,7 +484,7 @@ function cmdReindex(): void {
  * same way now — same sanitiser, same notes. What it cannot do is order by
  * relevance: the comparator ranks a note by its own facet values, and a match
  * score belongs to the result set rather than to any note in it. So this stays,
- * as the ranked spelling, and pj-work resolving "which card did they mean" gets
+ * as the ranked spelling, and pj-work resolving "which note did they mean" gets
  * the best match first rather than the most recently touched.
  *
  * It used to pass raw input straight to FTS5 — `pj search 'foo('` died with a
@@ -740,7 +740,7 @@ try {
       }
 
       // Every id gets the same edit, so a bulk move is one invocation rather
-      // than one process per card re-reading the whole vault.
+      // than one process per note re-reading the whole vault.
       for (const id of rest) {
         const rec = notes.get(id)!;
         const facets: Record<string, string[]> = { ...rec.facets };

@@ -7,14 +7,14 @@ import { paths } from '../config.ts';
  * from.
  *
  * P0–P4 rebuilt the index on every request, which was the right call while it
- * cost nothing: at 159 cards a full reindex is ~37ms, and a cache that can go
+ * cost nothing: at 159 notes a full reindex is ~37ms, and a cache that can go
  * stale is worse than one that cannot exist. P5 makes the query interactive —
  * live search means several requests per second while typing, and each one also
  * wants a disjunctive facet histogram — so 37ms of synchronous work per
  * keystroke stops being free.
  *
  * The stamp keeps C1 intact rather than trading it away. It is not a heuristic
- * or a TTL: it is an exact function of what `load` reads — every card, view and
+ * or a TTL: it is an exact function of what `load` reads — every note, view and
  * facet file's mtime, plus how many there are — and it costs ~0.5ms to compute,
  * 75× less than the rebuild it avoids. If any of those bytes could have changed,
  * the answer is rebuilt. So the app still cannot disagree with what an agent

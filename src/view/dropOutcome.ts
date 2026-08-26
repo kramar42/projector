@@ -27,7 +27,7 @@ export function modeFor(input: { altKey?: boolean; shiftKey?: boolean }): DragMo
 }
 
 /**
- * The new values of one card's grouped facet after a drop.
+ * The new values of one note's grouped facet after a drop.
  *
  * Plain drag replaces, matching Trello muscle memory. Holding ⌥ adds instead, so
  * a card deliberately sits in two columns at once; ⇧ removes only the value it
@@ -35,9 +35,9 @@ export function modeFor(input: { altKey?: boolean; shiftKey?: boolean }): DragMo
  * an accident — which is what makes a multi-valued grouping facet safe to use.
  *
  * Dropping into the uncategorised column removes **only the value dragged from**,
- * so it clears the facet for a card that had one value on this axis and leaves a
- * multi-valued card in its other columns rather than landing it in `(none)`. For
- * such a card that makes a plain drop into `(none)` return exactly what `⇧`
+ * so it clears the facet for a note that had one value on this axis and leaves a
+ * multi-valued note in its other columns rather than landing it in `(none)`. For
+ * such a note that makes a plain drop into `(none)` return exactly what `⇧`
  * returns — the two gestures agree where the prose above says they differ.
  *
  * Left as it is on purpose, pending a judgement about how it feels in use: the
@@ -47,7 +47,7 @@ export function modeFor(input: { altKey?: boolean; shiftKey?: boolean }): DragMo
  * the current answer for both the one-value and the many-value case, so whichever
  * way it goes is a deliberate edit rather than a drift.
  *
- * It reads `current`, so it is **per card**. That is the whole reason the bulk
+ * It reads `current`, so it is **per note**. That is the whole reason the bulk
  * path may not compute values of its own: twelve cards dragged together each need
  * their own answer, and a uniform `values` array cannot express one.
  */
@@ -82,16 +82,16 @@ export interface AxisMove {
 }
 
 /**
- * Move cards along one or both grouping axes. Endpoints and a mode rather than
- * final values, because the values are per card and the server applies
+ * Move notes along one or both grouping axes. Endpoints and a mode rather than
+ * final values, because the values are per note and the server applies
  * `nextValues` to each.
  *
  * `moves` is a list because a matrix board has two axes and a diagonal drag
- * crosses both, and the two travel as one write. A card is one file: two writes
+ * crosses both, and the two travel as one write. A note is one file: two writes
  * would be two reads, two validations and two `updated` bumps, with the second
- * landing on a card the first had already changed. One write is also one thing
+ * landing on a note the first had already changed. One write is also one thing
  * to refuse — a diagonal drop onto a value the vocabulary rejects leaves the
- * card alone rather than half moved.
+ * note alone rather than half moved.
  */
 export interface FacetIntent {
   kind: 'facet';

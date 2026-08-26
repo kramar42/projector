@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
  *
  * `pj work` names a workspace `<project>-wt-<branch>`, so a working directory
  * inside one says which project and which branch without reading anything —
- * which is how the intake sweep recognises a Claude session as work on a card.
+ * which is how the intake sweep recognises a Claude session as work on a note.
  *
  * Both halves are here because they were not. `worktree.ts` encoded and
  * `intake/match.ts` decoded, each holding its own copy of the character class,

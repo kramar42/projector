@@ -17,11 +17,11 @@ import {
 } from './write.ts';
 
 /**
- * The only place in the browser that names an endpoint for one card.
+ * The only place in the browser that names an endpoint for one note.
  *
  * `api.bulk` is deliberately not in this switch. That is the whole of "the panel
- * writes one card" — the board's bulk bar keeps `POST /api/bulk` because it
- * genuinely has many cards and no single mtime, and the panel can no longer
+ * writes one note" — the board's bulk bar keeps `POST /api/bulk` because it
+ * genuinely has many notes and no single mtime, and the panel can no longer
  * borrow it by accident.
  */
 function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: string[] }> {
@@ -126,7 +126,7 @@ export function usePanelWriter(o: {
   const run = useCallback(async (w: CardWrite): Promise<{ warnings?: string[] }> => {
     const doc = w.kind === 'body' || w.kind === 'frontmatter' ? w.kind : null;
     const at = doc ? held.current[doc] : baseOf(read.current, wrote.current);
-    if (at === null) throw new ApiError('the card is not loaded yet', 0);
+    if (at === null) throw new ApiError('the note is not loaded yet', 0);
     const res = await dispatch(live.current.id, planWrite(w, at));
     if (typeof res.mtime === 'number') {
       wrote.current = res.mtime;

@@ -32,7 +32,7 @@ export function isOrdered(def: FacetDef | undefined): boolean {
  * do.
  *
  * A reference facet is stored on the note that *depends* — `parent` on the
- * child, `project` on the member, `blocked_by` on the card that is stuck — and
+ * child, `project` on the member, `blocked_by` on the note that is stuck — and
  * points at what it depends on. So a canvas flips every reference edge to draw
  * it, and dagre gets every one the same way round, roots on the left.
  *
@@ -132,7 +132,7 @@ export function splitSelection(selection: readonly string[]): {
   return { wanted, unwanted };
 }
 
-/** The three projections of one card database. */
+/** The three projections of one note database. */
 export type Shape = 'board' | 'canvas' | 'table';
 
 export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];

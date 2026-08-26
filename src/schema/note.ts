@@ -76,7 +76,7 @@ function asDate(v: unknown): string | undefined {
  * A derived id is only stable while the filename is. That is the trade a bare
  * note makes, and it ends the moment the note gains any structure: every write
  * materialises the id it was being called by, so a rename after that renames a
- * file rather than a card.
+ * file rather than a note.
  */
 export function idFromFile(file: string): string {
   const stem = basename(file, '.md');
@@ -84,9 +84,9 @@ export function idFromFile(file: string): string {
 }
 
 /**
- * Parse a card file.
+ * Parse a note file.
  *
- * **A markdown file is a card.** No frontmatter is not an error — it is a note
+ * **A markdown file is a note.** No frontmatter is not an error — it is a note
  * that has not said anything about itself yet, so the file says it instead: the
  * filename is the id and a leading heading is the title. That is what makes a
  * folder of ordinary markdown — an Obsidian vault, a directory of meeting notes —
@@ -95,7 +95,7 @@ export function idFromFile(file: string): string {
  * The same fallback applies key by key rather than only to a file with no
  * frontmatter at all, because the file that most needs it has frontmatter for
  * something else. An Obsidian note carrying `tags:` and no `id:` is the ordinary
- * case, not a malformed card.
+ * case, not a malformed note.
  *
  * The cost is named: a mistyped `idd:` no longer fails `pj check`, it quietly
  * derives an id instead. That is the price of a format with no required keys, and
@@ -146,17 +146,17 @@ export function loadNote(file: string): ParseResult {
 }
 
 /**
- * What the card walk does not descend into, and neither is an exception to what a
- * card is.
+ * What the note walk does not descend into, and neither is an exception to what a
+ * note is.
  *
  * Anything dotted is the app's own state — `.projector/` above all. `assets` is
- * the one tree projector *writes into and deletes from*, wholesale, when a card
+ * the one tree projector *writes into and deletes from*, wholesale, when a note
  * is removed or merged: a markdown file in there would be deleted along with the
- * images it sits among, so it is not offered as a card in the first place.
+ * images it sits among, so it is not offered as a note in the first place.
  *
  * `README.md` used to be skipped too, and no longer is. The reason it was there —
  * a folder full of markdown attracts a README — is exactly the reason it should
- * be a card now that the folder full of markdown *is* the vault.
+ * be a note now that the folder full of markdown *is* the vault.
  */
 const skipped = (name: string): boolean => name === 'assets' || name.startsWith('.');
 
@@ -182,13 +182,13 @@ export function listNoteFiles(cardsDir: string): string[] {
 }
 
 /**
- * Whether a vault-relative path is a card, without a filesystem to walk.
+ * Whether a vault-relative path is a note, without a filesystem to walk.
  *
  * `pj log` needs this: it reads paths out of `git log`, where the vault is the
  * whole repository and the diff carries `.projector/facets.yaml` alongside the
- * cards. Sharing `skipped` with the walk is the point — a path git names and a
+ * notes. Sharing `skipped` with the walk is the point — a path git names and a
  * path the indexer finds have to be the same set, or the log narrates changes to
- * files that are not cards.
+ * files that are not notes.
  */
 export function isNotePath(rel: string): boolean {
   return rel.endsWith('.md') && !rel.split('/').some(skipped);
@@ -211,7 +211,7 @@ export function renderNote(rec: Omit<Note, 'file'>): string {
   for (const k of KEY_ORDER) if (k in fm) ordered[k] = fm[k];
   // The body is written exactly as given. Normalising it here — prepending a
   // newline to "tidy" the output — would insert a blank line into every
-  // hand-written card the first time the app saved it, which is precisely the
+  // hand-written note the first time the app saved it, which is precisely the
   // silent rewriting C1 and C3 exist to prevent. Callers that want a blank line
   // after the frontmatter include it in `body`.
   return join(serialize(ordered), rec.body);

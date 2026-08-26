@@ -16,7 +16,7 @@ updated: 2026-08-26
 ---
 
 Blocked, and the board says so without anyone writing "blocked" anywhere: `blocked_by`
-is declared `blocking: true` in `facets.yaml`, so while it names a card that is not closed,
+is declared `blocking: true` in `facets.yaml`, so while it names a note that is not closed,
 this one is parked. Finish the blocker and this leaves the blocked column on its own.
 
 - [x] Collect references

@@ -75,7 +75,7 @@ export interface PatchCard {
    * Required here, optional on the server.
    *
    * The server has callers that legitimately have no single mtime to offer — the
-   * board's bulk bar writes many cards at once. The panel writes exactly one, so
+   * board's bulk bar writes many notes at once. The panel writes exactly one, so
    * a write without a base is a lost update, and making the field required is
    * what turns "someone remembered" into "it compiles".
    */
@@ -228,7 +228,7 @@ export const api = {
 /**
  * Subscribe to server events.
  *
- * `change` means a file under the data directory changed — a card edited by a
+ * `change` means a file under the data directory changed — a note edited by a
  * Claude session in another window shows up without a refresh, which is the whole
  * point of keeping markdown as the source of truth. `enriched` means a background
  * enrichment fetch landed, and is deliberately separate so a chip resolving does

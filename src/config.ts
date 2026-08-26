@@ -18,7 +18,7 @@ export function resolvePath(p: string, base: string): string {
  * whichever folder the user opened, the way Obsidian works. `paths()` is the only
  * place the internal layout of a vault is written down.
  *
- * **The cards are the vault.** They sit at the root, at any depth, the way a
+ * **The notes are the vault.** They sit at the root, at any depth, the way a
  * folder of markdown already looks before projector ever sees it — so pointing at
  * an existing pile of notes is opening it, not importing it. Everything the app
  * adds lives under `.projector/`: the vocabulary, the saved views, and the three
@@ -26,7 +26,7 @@ export function resolvePath(p: string, base: string): string {
  * but what you wrote.
  *
  * `notes` is still its own key rather than a second name for `root`. Every caller
- * that reads it wants *where the cards are*, and saying so is what let this
+ * that reads it wants *where the notes are*, and saying so is what let this
  * change be five lines instead of forty.
  */
 export const paths = (root: string) => ({
@@ -63,7 +63,7 @@ export function isConfigured(path: string): boolean {
  * Whether a directory is a vault: it has been opened as one, or it is a folder
  * of markdown, which is the same thing before anyone opened it.
  *
- * There is no exempted filename. A `README.md` is a card like every other file,
+ * There is no exempted filename. A `README.md` is a note like every other file,
  * because a rule that holds for all but one name is a rule nobody can predict —
  * and the exemption used to be a guess about a file the app does not write.
  *

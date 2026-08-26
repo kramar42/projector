@@ -8,14 +8,14 @@ import type { Note } from '../schema/types.ts';
  * display it; intake is given a channel and a cursor and returns refs nobody has
  * filed yet. Neither imports the other, and they share only `src/sources/`.
  *
- * A channel **proposes and classifies; it never writes a card.** Everything a
+ * A channel **proposes and classifies; it never writes a note.** Everything a
  * channel emits is either deterministic fact or provenance — the judgement of
- * what deserves a card belongs to the `/capture` skill, and the judgement of
+ * what deserves a note belongs to the `/capture` skill, and the judgement of
  * where it lives belongs to `/triage` (C8: what is computed is computed, what is
  * decided is decided by someone).
  */
 
-/** A card this candidate might belong to, and the mechanical reason it might. */
+/** A note this candidate might belong to, and the mechanical reason it might. */
 export interface Match {
   id: string;
   title: string;
@@ -29,11 +29,11 @@ export interface Match {
  * the evidence it decides from.
  */
 export interface Evidence {
-  /** Cards already carrying this exact link. Non-empty means there is nothing to do. */
+  /** Notes already carrying this exact link. Non-empty means there is nothing to do. */
   linkedTo?: string[];
-  /** Cards whose `source_fingerprint` is this candidate's. */
+  /** Notes whose `source_fingerprint` is this candidate's. */
   capturedAs?: string[];
-  /** Cards this might be more work on, most likely first. */
+  /** Notes this might be more work on, most likely first. */
   matches?: Match[];
 }
 
@@ -46,7 +46,7 @@ export interface Candidate {
   fingerprint: string;
   /** In the user's voice where the source gave one — a commit subject, an opening prompt. */
   title: string;
-  /** Links to carry onto the card, provenance first. */
+  /** Links to carry onto the note, provenance first. */
   links: string[];
   /** ISO, when the source has one. Drives the cursor and the display order. */
   when?: string;
@@ -99,9 +99,9 @@ export interface IntakeContext {
   root: string;
   db: DatabaseSync;
   notes: Map<string, Note>;
-  /** `source_fingerprint` → card ids. */
+  /** `source_fingerprint` → note ids. */
   fingerprints: Map<string, string[]>;
-  /** A link's raw text → card ids carrying it. */
+  /** A link's raw text → note ids carrying it. */
   links: Map<string, string[]>;
   since: Date;
   cursor: string | null;

@@ -370,7 +370,7 @@ export function CanvasView({
    * Dragging between handles adds a value to the selected relation.
    *
    * A relation is a reference facet, so this is an ordinary facet write — the
-   * same call the card panel and the bulk bar make. A hierarchy is drawn
+   * same call the note panel and the bulk bar make. A hierarchy is drawn
    * container → member, so the value lands on the *target* note and points
    * back at the source; `single: true` on the facet is what makes a second
    * parent replace the first rather than stack on it.

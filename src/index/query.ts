@@ -109,7 +109,7 @@ export interface QueryResult {
   /**
    * Notes left by focus and search, before the facet filter — so
    * `universe - total` is exactly how many the filter is hiding. The sidebar says
-   * that number out loud: the worst failure mode of global filtering is "the card
+   * that number out loud: the worst failure mode of global filtering is "the note
    * isn't there and I don't know why".
    */
   universe: number;
@@ -148,7 +148,7 @@ function daysSince(date: string | undefined, today: string): number | null {
   return date ? daysBetween(date, today) : null;
 }
 
-/** Which facets a vault expects a well-filed card to carry, in declaration order. */
+/** Which facets a vault expects a well-filed note to carry, in declaration order. */
 export function expectedFacets(facets: Facets): string[] {
   return Object.entries(facets)
     .filter(([, def]) => def.expected)
@@ -250,7 +250,7 @@ export const COMPUTED: Record<string, Computed> = {
   /**
    * Which kinds of external reference a note carries.
    *
-   * Every axis on a card was askable except this one: most notes here hold a
+   * Every axis on a note was askable except this one: most notes here hold a
    * link (110 of 191 at the time of writing) and there was no way to ask which. A
    * note with none yields no value, so "nothing linked" is the ordinary
    * `(none)` refinement.
@@ -486,7 +486,7 @@ function inRange(rec: Note, facet: string, op: string, bound: string, ctx: Ctx):
  * range (`-<2026-08-01`) work without a line of its own, since the negation is
  * stripped before the token is read.
  *
- * `(none)` is a selectable refinement, not a value — most cards carry no project,
+ * `(none)` is a selectable refinement, not a value — most notes carry no project,
  * and reaching them is the point of having it.
  */
 function hits(rec: Note, facet: string, token: string, have: string[], ctx: Ctx): boolean {
@@ -514,11 +514,11 @@ function matches(rec: Note, filter: Record<string, string[]>, ctx: Ctx): boolean
  * Which values of one axis the query admits, or `null` for all of them.
  *
  * A filter on the facet a view *groups by* is a statement about which columns the
- * view has, not only about which cards land in them. Grouping by `status`,
+ * view has, not only about which notes land in them. Grouping by `status`,
  * filtering it to `active` and still drawing a `frozen` column is the view
  * contradicting itself — and it is what left `due` with a permanently empty
  * `later` column and `triage` with a permanently empty `complete` one, columns no
- * card could reach by construction.
+ * note could reach by construction.
  *
  * It also settles an incoherence rather than adding a rule. The axis kept every
  * *declared* value whatever the filter said and dropped every undeclared one, so
@@ -530,8 +530,8 @@ function matches(rec: Note, filter: Record<string, string[]>, ctx: Ctx): boolean
  * are expressions rather than value names and nothing here can say which buckets
  * they cover. Narrowing on a range would hide every column at once, and it would
  * cost the property that makes this safe at all: every hit keeps a column to sit
- * in, because to match a name selection a card must carry one of the names. A
- * card admitted by a range need not.
+ * in, because to match a name selection a note must carry one of the names. A
+ * note admitted by a range need not.
  */
 function admits(selection: string[] | undefined): (value: string) => boolean {
   if (!selection?.length) return () => true;
@@ -733,12 +733,12 @@ export function runQuery(
       //
       // Intersected with the vocabulary rather than replacing it, so the axis
       // stays a subset of what the facet declares. A selection naming a value no
-      // card carries and no vocabulary declares is a broken URL, not a column.
+      // note carries and no vocabulary declares is a broken URL, not a column.
       const admit = admits(filter[facet]);
       const order = (computed ? computed.values(facets) : orderValues(facets[facet], seen)).filter(
         (v) => admit(v),
       );
-      // `(none)` needs no test of its own, and no policy either. A card with no
+      // `(none)` needs no test of its own, and no policy either. A note with no
       // value here is a hit only when the selection names `(none)`, so the column
       // is absent exactly when nothing is uncategorised or the filter excluded it.
       //
@@ -746,7 +746,7 @@ export function runQuery(
       // had no user in any vault; `hide` had one, and it was dead config — the
       // view already filtered the axis it grouped by, so `(none)` could not
       // appear. Where `hide` was live it was a broken duplicate of a filter: it
-      // dropped the cards from the groups but left them in `ids`, so the count
+      // dropped the notes from the groups but left them in `ids`, so the count
       // over-reported and a canvas — which draws its nodes from `ids` — went on
       // drawing them, in the band meant for context notes.
       if (none.length) {
@@ -766,7 +766,7 @@ export function runQuery(
       secondary = second.order;
       const laneOf = new Map<string, Set<string>>();
       for (const lane of secondary) laneOf.set(lane, new Set(second.buckets.get(lane) ?? []));
-      // Every cell of the matrix, in reading order. A card multi-valued on both
+      // Every cell of the matrix, in reading order. A note multi-valued on both
       // axes lands in every cell it belongs to, exactly as it lands in every
       // column on a one-axis board.
       groups = [];
@@ -799,7 +799,7 @@ export function runQuery(
 // ---------------------------------------------------------------- roll-ups
 
 export interface Rollup {
-  /** Cards naming this project directly in their `project` facet. */
+  /** Notes naming this project directly in their `project` facet. */
   direct: number;
   /** …plus everything in a project that belongs to this one, transitively. */
   total: number;

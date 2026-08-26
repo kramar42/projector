@@ -19,7 +19,7 @@ import { paths } from '../src/config.ts';
 
 /**
  * Intake is the one part of projector holding state that is not derived from the
- * card files, so most of what is worth testing here is the discipline around
+ * note files, so most of what is worth testing here is the discipline around
  * that: the cursor may not skip anything, and it may not be the thing
  * correctness depends on.
  */
@@ -112,7 +112,7 @@ test('resetting a cursor falls back to the default window, not to the beginning 
 
 // ------------------------------------------------------------------ the sweep
 
-test('a sweep writes no cards and moves no cursor', async () => {
+test('a sweep writes no notes and moves no cursor', async () => {
   const root = vault({ a: card('a') });
   try {
     const before = reindex(root).notes.size;
@@ -182,7 +182,7 @@ test('every channel in the registry is named in channelNames', () => {
 
 // ------------------------------------------------------------------- dedup
 
-test('a fingerprint already on a card is what makes a re-sweep converge', () => {
+test('a fingerprint already on a note is what makes a re-sweep converge', () => {
   const root = vault({
     known: `---\nid: known\ntitle: known\nsource_fingerprint: claude:abc-123\n---\n\nb\n`,
   });
@@ -198,7 +198,7 @@ test('a fingerprint already on a card is what makes a re-sweep converge', () => 
   }
 });
 
-test('a link already on a card is reported as linked, not as a candidate', () => {
+test('a link already on a note is reported as linked, not as a candidate', () => {
   const root = vault({
     tracked: `---\nid: tracked\ntitle: tracked\nlinks:\n  - claude:abc-123\n---\n\nb\n`,
   });
@@ -254,7 +254,7 @@ test('a worktree path names the project and the branch it was made for', () => {
   assert.equal(parsed?.branchSlug, 'feature-PROJ-303');
 });
 
-test('a branch naming a Jira key finds the card carrying that key', () => {
+test('a branch naming a Jira key finds the note carrying that key', () => {
   const root = vault({
     c: `---\nid: c\ntitle: c\nlinks:\n  - jira:PROJ-303\n---\n\nb\n`,
   });
@@ -269,7 +269,7 @@ test('a branch naming a Jira key finds the card carrying that key', () => {
   }
 });
 
-test('a branch named after a card matches it, at any path segment', () => {
+test('a branch named after a note matches it, at any path segment', () => {
   const root = vault({ 'clean-up-ecr': card('clean-up-ecr') });
   try {
     const ctx = context(root);
@@ -572,7 +572,7 @@ test('a transcript store can be pointed somewhere a test built', () => {
  * `sessionForCwd` used to answer this from the directory alone, taking the first
  * match in a list sorted newest-started-first — so three sessions in one directory
  * resolved to whichever started last, silently. A wrong answer here puts a
- * session's history on the wrong card and looks fine, so the cwd tier now requires
+ * session's history on the wrong note and looks fine, so the cwd tier now requires
  * an unambiguous match and reports the candidates when it cannot get one.
  */
 const S = (sessionId: string, pid: number, cwd: string, alive = true): LiveSession => ({

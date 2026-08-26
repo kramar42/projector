@@ -292,7 +292,7 @@ test('check exits 1 on an error and 0 on warnings alone', () => {
   }
 });
 
-test('a command naming a card that does not exist fails rather than inventing one', () => {
+test('a command naming a note that does not exist fails rather than inventing one', () => {
   const v = vault();
   try {
     for (const cmd of [['context', 'ghost'], ['set', 'ghost', '--facet', 'status=done'], ['rm', 'ghost']]) {

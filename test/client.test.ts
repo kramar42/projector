@@ -37,7 +37,7 @@ import {
  * before markdown runs. This is a security property, and until it moved out of
  * the panel it was a security property no test could reach.
  */
-test('a card body cannot smuggle markup into the panel', () => {
+test('a note body cannot smuggle markup into the panel', () => {
   const attacks = [
     '<img src=x onerror="alert(1)">',
     '<script>alert(1)</script>',
@@ -59,7 +59,7 @@ test('a card body cannot smuggle markup into the panel', () => {
 
 /**
  * A bare note is titled by its leading heading, and the panel has already drawn
- * that as the card's name — so rendering it again prints the title twice.
+ * that as the note's name — so rendering it again prints the title twice.
  *
  * The reader and the renderer have to agree about which line that is, and they
  * agree by both calling `headingOf`. Only an exact match is dropped: a first
@@ -71,7 +71,7 @@ test('the heading a note is named by is not printed under its own name', () => {
   assert.doesNotMatch(shown, /<h1/, 'the title is the panel’s to draw, once');
   assert.match(shown, /We talked about the thing/, 'and the rest of the body survives');
 
-  // A card that says something else in its first heading keeps it.
+  // A note that says something else in its first heading keeps it.
   assert.match(renderBody(body, 'Something else'), /<h1/);
   // As does one nobody passed a title for.
   assert.match(renderBody(body), /<h1/);
@@ -210,7 +210,7 @@ test('clearing drops the fixed keys and every facet override, from either source
   // A filter present only as a URL override, for an axis the spec no longer carries.
   const fromUrl = blankQuery(null, '?f.tech=kafka&note=x');
   assert.equal(fromUrl['f.tech'], null);
-  assert.equal(fromUrl.card, undefined, 'where you are looking is not part of the query');
+  assert.equal(fromUrl.note, undefined, 'where you are looking is not part of the query');
 
   assert.equal(blankQuery(saved, '', 'inbox').view, 'inbox', 'landing on a view keeps it');
 });
@@ -278,7 +278,7 @@ test('a parameter the app does not own is dropped from the URL', () => {
 
 /**
  * A selection round-trips through the URL, because that is where it lives: a
- * change of shape unmounts the view, and picking the same twelve cards again is
+ * change of shape unmounts the view, and picking the same twelve notes again is
  * the work you were trying to avoid.
  */
 test('a selection survives the URL, and an empty one leaves no trace', () => {
@@ -303,7 +303,7 @@ test('a selection survives the URL, and an empty one leaves no trace', () => {
 });
 
 test('only query parameters reach the server, and the rest survive a patch', () => {
-  assert.equal(apiSearch('?view=home&card=abc&f.status=planning'), '?view=home&f.status=planning');
+  assert.equal(apiSearch('?view=home&note=abc&f.status=planning'), '?view=home&f.status=planning');
   // The selection is the app's, not the query's. Both halves matter: a saved view
   // must not note one, and `useLive` blanks its data before refetching — so a
   // `sel` that counted as a query param would flash the pane on every click.
@@ -546,9 +546,9 @@ test('excluding one value leaves the rest of the axis alone', () => {
 // ---------------------------------------------------------------- table columns
 
 test('only a table of projects earns the roll-up columns', () => {
-  // `Cards`, `Blocked` and `Untriaged` are `projectRollups` numbers, and only a
+  // `Notes`, `Blocked` and `Untriaged` are `projectRollups` numbers, and only a
   // note with a `project:` block has one. The gate asked `some`, so one project
-  // note among ordinary cards grew three columns that were blank on every row
+  // note among ordinary notes grew three columns that were blank on every row
   // that cannot have a number — which is width spent to say "not applicable".
   const face = (id: string, isProject: boolean) => ({ id, isProject }) as NoteDTO;
   const notes: Record<string, NoteDTO> = {

@@ -162,7 +162,7 @@
  * The focus ring, once, for everything.
  *
  * It was a per-component rule: `.btn`, the inputs, the sidebar toggle and the
- * record mark had one, and the other twenty-eight focusable things in the card
+ * record mark had one, and the other twenty-eight focusable things in the note
  * panel alone fell through to the browser's — `1px auto rgb(229, 151, 0)` in
  * Chrome, a colour from no palette, on a surface where every other value is a
  * literal from xoria256. Keyboard focus is a browser surface in the same sense
@@ -1277,7 +1277,7 @@ input:focus-visible + .checkbox {
    took a second stripe in `hue-purple`, which said what the record mark says in
    every place a record appears — so a face carried the fact twice and a board of
    projects was a board of striped rectangles. Blocked stays, because nothing else
-   on the face says a card cannot move: the mark names what a record *is*, not
+   on the face says a note cannot move: the mark names what a record *is*, not
    whether it is stuck. */
 .cardface.is-blocked {
   border-left: 3px solid var(--bad);
@@ -1592,7 +1592,7 @@ input:focus-visible + .checkbox {
  * The inverse of `.blocked`, and quieter than it on purpose.
  *
  * It took the accent, which The App Voice Rule does not allow: how many records
- * a card holds up is a property of that card — derived, but a property — where
+ * a note holds up is a property of that note — derived, but a property — where
  * the accent is live state and the app speaking. Being stuck is worth a colour
  * because it stops the work; being *needed* is worth a number.
  *
@@ -2017,7 +2017,7 @@ code {
   flex: none;
 }
 
-/* rendered card body */
+/* rendered note body */
 
 /* The documented prose step, and the one `.linkrow-title` a tier up already
    uses. Headings stay at `--text-title`, so they keep their separation by
@@ -2052,7 +2052,7 @@ code {
 }
 
 /*
- * A task list in a card body — the third browser-drawn checkbox, and the one The
+ * A task list in a note body — the third browser-drawn checkbox, and the one The
  * Drawn Control Rule's own wording missed because it names the two the app
  * renders itself. This one comes from the markdown, so it is content rather than
  * a control, and it arrives `disabled`: it states a fact, it does not take input.
@@ -2450,7 +2450,7 @@ textarea { resize: vertical; font-family: inherit; }
  * A value you can take on or off — and, now, in its axis's own family.
  *
  * It was the accent in both states: an unset value in `ink-3`, a set one filled
- * `--accent`. That made the card editor the one surface where a facet value does
+ * `--accent`. That made the note editor the one surface where a facet value does
  * not carry its axis's hue, in the one place all the axes are on screen at once —
  * a lit `priority` and a lit `project` the same purple, and `waiting_on`, the
  * facet whose presence is itself a warning, losing its red exactly where you set
@@ -2671,7 +2671,7 @@ textarea { resize: vertical; font-family: inherit; }
    sits beside the heading rather than floating right, because it annotates the
    name; a control would float. */
 /*
- * The `ƒ` that says a value was computed rather than read off the card.
+ * The `ƒ` that says a value was computed rather than read off the note.
  *
  * One mark, four places: the filter rail's pseudo-facet head, the panel's two
  * inbound lists, and the panel's Inherited block. It was two classes with five
@@ -2851,7 +2851,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 /*
- * The door to an axis this card carries nothing on. A `.popbtn` by construction —
+ * The door to an axis this note carries nothing on. A `.popbtn` by construction —
  * it opens a popover, and that machinery is the reason — but painted as the ghost
  * button it reads as, and sized to its own words rather than to a rail column.
  *
@@ -2861,7 +2861,7 @@ textarea { resize: vertical; font-family: inherit; }
  * the same button is one item in a row of chips: `.facetrow-values` is a wrapping
  * flex row, so the button grew to the end of it, a click target several hundred
  * pixels wide reading `+ note` at the left of a field of nothing. Measured on two
- * axes of the same card, 230px and 319px — the width was whatever the chips left,
+ * axes of the same note, 230px and 319px — the width was whatever the chips left,
  * which is the tell.
  *
  * `width: auto` and `align-self: start` were already here and could not do it.
@@ -3099,7 +3099,7 @@ textarea { resize: vertical; font-family: inherit; }
  * picker open: the popover was scrolling 340px of content through 286, and the
  * list inside it 737px through 290. Two wheels on one axis.
  *
- * This rule is now the only answer to that, and it covers every picker: the card
+ * This rule is now the only answer to that, and it covers every picker: the note
  * panel's reference picker used to sit in the panel's flow behind a
  * `.picker.is-inline` variant that surrendered the scroll the same way. It floats
  * here too now, so one mechanism serves both and the variant is gone.
@@ -3112,7 +3112,7 @@ textarea { resize: vertical; font-family: inherit; }
 /*
  * `.picker.is-inline` is gone with its one caller.
  *
- * It existed so the card panel's reference picker did not scroll inside a surface
+ * It existed so the note panel's reference picker did not scroll inside a surface
  * that already scrolls. That picker floats in a popover now, where
  * `.popover .picker-list` above already surrenders the scroll to the popover's own
  * measured `maxHeight` — so the rule the inline variant was avoiding is satisfied
@@ -3999,7 +3999,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
  * Above everything, including the note panel.
  *
  * The panel is `21` and this used to be `21` too, so the one that rendered later
- * won — and that was the panel, which meant pressing `?` while reading a card
+ * won — and that was the panel, which meant pressing `?` while reading a note
  * drew the sheet *behind* it. There is nothing this can be opened from that it
  * should not cover: it is the map you reach for when you have lost your place.
  */

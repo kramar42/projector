@@ -327,7 +327,7 @@ separate them already — seven families do not survive spending three on one ho
 - **Text** (`ink`): the document's default — every title and value, and a heading inside rendered
   markdown.
 - **Gandalf** (`ink-2`): control labels, secondary values and body copy — the resting colour of a
-  button, which goes to `ink` on hover, and the colour of the rendered card body. A filter row rests
+  button, which goes to `ink` on hover, and the colour of the rendered note body. A filter row rests
   here too but reaches `ink` when it is *on*, not on hover.
 - **Grey** (`ink-3`): every label, key, count, meta line and excerpt. Roughly half the type in the app
   is this colour; it is the ground state of annotation.
@@ -958,7 +958,7 @@ There were **three** checkboxes and **two** stray selects:
 - the filter rail's value — once per value, down the whole rail
 - the facets popover's row — which had no `appearance: none` at all, so the shared field rule was
   dressing an OS checkbox in an input's border, radius and `5px 8px` padding
-- a markdown task list in a card body — content rather than a control, which is why the draft's
+- a markdown task list in a note body — content rather than a control, which is why the draft's
   wording missed it, and the most visually foreign of the three
 - the bulk bar's select and the canvas toolbar's select — the draft asserted "every `<select>`
   already takes `appearance: none`"; the shared field rule has none, so only `.rail-select` did.

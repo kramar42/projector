@@ -8,9 +8,9 @@ import type { Note, ResolvedProject } from '../schema/types.ts';
 import type { Resolved } from '../server/enrich.ts';
 
 /**
- * Everything known about one card, assembled in one place.
+ * Everything known about one note, assembled in one place.
  *
- * This is the layer the skills consume: instead of an agent re-deriving a card's
+ * This is the layer the skills consume: instead of an agent re-deriving a note's
  * project, repos, instructions and link state by reading files, it asks once and
  * gets a complete, deterministic picture. Nothing here is a judgement — it is
  * assembly (C8).
@@ -64,7 +64,7 @@ export interface Related {
   /**
    * `done` is present only on a **blocking** relation, where whether the other
    * end is finished is the whole point of the list. There used to be a second
-   * `## Blocked by` section rendering exactly that, so a card drew its blockers
+   * `## Blocked by` section rendering exactly that, so a note drew its blockers
    * twice — once under the facet's own label without their state, once under a
    * hardcoded heading with it.
    */
@@ -136,7 +136,7 @@ export function noteContext(id: string, dataRoot: string): NoteContext | null {
 }
 
 /**
- * Cards a triage pass should look at, with the reason each one needs attention.
+ * Notes a triage pass should look at, with the reason each one needs attention.
  * Deterministic, so a skill gets its worklist rather than inventing one.
  */
 /** Render a context as markdown — what a briefing embeds and a human can read. */
@@ -171,7 +171,7 @@ export function renderContext(ctx: NoteContext): string {
     }
   } else {
     L.push('');
-    L.push('> This card has no project, so it inherits no repos and no instructions.');
+    L.push('> This note has no project, so it inherits no repos and no instructions.');
   }
 
   const rel = (label: string, items: { id: string; title: string; done?: boolean }[]) => {
@@ -213,7 +213,7 @@ export function renderContext(ctx: NoteContext): string {
 
   if (ctx.body.trim()) {
     L.push('');
-    L.push('## Card body');
+    L.push('## Note body');
     L.push('');
     L.push(ctx.body.trim());
   }

@@ -12,5 +12,5 @@ created: 2026-08-26
 updated: 2026-08-26
 ---
 
-The blocker. Mark this `done` and *Unblocked now* gains the card that was waiting on it —
+The blocker. Mark this `done` and *Unblocked now* gains the note that was waiting on it —
 the view is a saved query, not a list anybody maintains.

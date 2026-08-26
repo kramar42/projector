@@ -45,7 +45,7 @@ test('every spelling of the id placeholder substitutes, and a typo is refused', 
   assert.equal(branchFor('fix-kpow', { template: 'plat/{note}' }), 'plat/fix-kpow');
   assert.equal(branchFor('fix-kpow', { template: '{id}-wip' }), 'fix-kpow-wip');
   // An unknown placeholder would name a literal `{...}` branch shared by every
-  // card in the project — the second `pj work` would collide with the first.
+  // note in the project — the second `pj work` would collide with the first.
   assert.throws(() => branchFor('fix-kpow', { template: 'plat/{ntoe}' }), /\{ntoe\}/);
 });
 
@@ -318,10 +318,10 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
   }
 });
 
-test('a multi-byte card body does not derail the blob walk', () => {
+test('a multi-byte note body does not derail the blob walk', () => {
   // `git cat-file --batch` sizes are bytes. The walk once decoded first and
   // sliced code units, so one em dash drifted the cursor into the next header:
-  // later blobs were misread or lost, and a modified card whose `after` went
+  // later blobs were misread or lost, and a modified note whose `after` went
   // missing narrated as deleted. All-ASCII fixtures never caught it.
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
@@ -336,7 +336,7 @@ test('a multi-byte card body does not derail the blob walk', () => {
     git('config', 'user.email', 't@t');
     git('config', 'user.name', 'T');
 
-    // The em dash sits in the first card the batch returns; the second card is
+    // The em dash sits in the first note the batch returns; the second note is
     // the one that goes missing when the walk drifts.
     const dashed = pathJoin(paths(root).notes, 'dashed.md');
     const plain = pathJoin(paths(root).notes, 'plain.md');

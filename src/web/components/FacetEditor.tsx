@@ -31,7 +31,7 @@ import { isAppAxis } from '../hue.ts';
  * **There is no disclosure here any more.** An axis carrying nothing used to
  * draw a collapsed head, so thirteen axes drew thirteen rows and nine of them
  * said only their own name — the panel restating facets.yaml instead of
- * describing the card. The caller now renders a row only for an axis that is
+ * describing the note. The caller now renders a row only for an axis that is
  * carried or was asked for, which is the filter rail's own policy ("empty facets
  * are absent"), and what is left needs no caret: a row is here because it has
  * something to show.
@@ -74,7 +74,7 @@ export function FacetEditor({
   values: string[];
   /** Titles for reference values. Absent for a label or date axis. */
   refs?: NoteDetail['refs'];
-  /** The card being edited, so it cannot be made its own reference. */
+  /** The note being edited, so it cannot be made its own reference. */
   selfId?: string;
   onChange: (next: string[], mode: FacetMode) => void;
   onOpen?: (id: string) => void;
@@ -98,7 +98,7 @@ export function FacetEditor({
     setAdding('');
   };
 
-  // Values already on the card that the vocabulary does not declare — shown so
+  // Values already on the note that the vocabulary does not declare — shown so
   // they can be removed rather than silently hidden.
   const extras = values.filter((v) => !def.values.includes(v));
 
@@ -125,7 +125,7 @@ export function FacetEditor({
             // A reference is a note, so it reads as one: the title, and a
             // click that goes there. Removing is its own mark — the row used
             // to remove on click and say so only in a hover title, which put
-            // "go to this card" and "unlink this card" on the same gesture.
+            // "go to this note" and "unlink this note" on the same gesture.
             <span key={v} className={`refchip ${app ? 'is-app' : ''}`}>
               {/* The mark sits inside the button, because it is part of the
                   note's identity rather than a control beside it — the same

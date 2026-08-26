@@ -168,7 +168,7 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
  * Every key a view file may hold: what `specFromFile` reads below, plus the two
  * `saveArrangement` writes.
  *
- * A view file was the one document nothing checked the *shape* of. Card
+ * A view file was the one document nothing checked the *shape* of. Note
  * frontmatter has a schema and `facets.yaml` has `validateVocabulary`, but a view
  * with a misspelled or retired key parsed fine and did nothing — which is how an
  * `uncategorised:` line survived in the seeded `due.yaml` long after it had

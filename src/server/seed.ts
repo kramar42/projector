@@ -18,7 +18,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #            those); \`pj check\` refuses a collision. Declare one for the axes you
 #            keep reaching for and leave the rest without — most axes want none
 #   closed:  values meaning no further work is expected, whatever the outcome
-#   expected: true  → a well-filed card carries this; the triage axis is built
+#   expected: true  → a well-filed note carries this; the triage axis is built
 #            from it
 #   inverse: what the other end of a relation is called — \`parent\` is answered by
 #            children. Omit it and the relation gets an editable row and no
@@ -29,7 +29,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #            that is not one of those, rather than drawing it grey. A bucket may declare one
 #            too, and it wins for a chip in that bucket, drawn filled rather than
 #            tinted. The palette is the app's; the choice is yours
-#   blocking: true  → while this axis is unsatisfied the card cannot proceed, and
+#   blocking: true  → while this axis is unsatisfied the note cannot proceed, and
 #            the blocked axis says so by this facet's name. A ref blocks while
 #            something it names is not closed; anything else blocks while it
 #            holds a value at all
@@ -47,7 +47,7 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #
 # The order of the facets themselves is also read, and in more places than the
 # order of a facet's values: it is the filter rail's resting order, the order of
-# the group/sort/facet pickers, and the order of the rows in a card's panel. The
+# the group/sort/facet pickers, and the order of the rows in a note's panel. The
 # panel additionally splits on type — every ref facet is drawn together with the
 # derived lists that point back along it — so a reference facet's position
 # matters only relative to the other reference facets.
@@ -100,7 +100,7 @@ due:
   key: d
 
 # Somebody else's move. A blocking facet, so it lands on the blocked axis beside
-# the dependency relation — while it holds any value at all, this card is parked.
+# the dependency relation — while it holds any value at all, this note is parked.
 # A label rather than a ref because a person does not *complete*: you clear the
 # axis, you do not mark them closed.
 waiting_on:
@@ -152,10 +152,10 @@ parent:
   inverse: Children
   key: a
 
-# What must finish before this card can move. Stored on the card that is stuck,
+# What must finish before this note can move. Stored on the note that is stuck,
 # pointing at what it is stuck on — the same direction as parent and project, and
-# the card you open when you are stuck is the card you note it on. The inverse,
-# what this card holds up, is derived and drawn beside it.
+# the note you open when you are stuck is the note you note it on. The inverse,
+# what this note holds up, is derived and drawn beside it.
 #
 # Its transitive closure is what the blocked axis and views/unblocked.yaml are
 # built from. Not worth grouping a board by.
@@ -172,7 +172,7 @@ export const SEED_VIEWS: { path: string; body: string }[] = [
   {
     path: 'home.yaml',
     body: `# Opened when nothing else is asked for. The filter is a default *selection*:
-# it shows as clearable chips in the sidebar rather than hiding cards silently.
+# it shows as clearable chips in the sidebar rather than hiding notes silently.
 shape: board
 title: Home
 filter:
@@ -186,7 +186,7 @@ show: [project, tech]
     path: 'due.yaml',
     body: `# Deadlines, soonest first. \`due\` is an ordered facet: it declares its own
 # buckets, computed against today, so this view never goes stale. The filter is
-# what keeps undated cards out — there is no separate policy for that.
+# what keeps undated notes out — there is no separate policy for that.
 shape: board
 title: Due
 filter:
@@ -217,7 +217,7 @@ show: [status, priority, project]
 #
 # \`blocked\` names one value per blocking facet, so \`clear\` means none of them
 # applies. A deadline outranks an intention, so \`due\` sorts
-# before \`priority\`: a card due tomorrow is next whatever bucket it was filed in.
+# before \`priority\`: a note due tomorrow is next whatever bucket it was filed in.
 shape: board
 title: Unblocked now
 filter:

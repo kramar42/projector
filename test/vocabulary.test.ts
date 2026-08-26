@@ -146,7 +146,7 @@ function seedFile(): string {
  * The other direction of the same constraint. The grep above proves no facet is
  * named; this proves the absence of every facet is a state the app can be in —
  * which is the claim that made `project` a built-in and moved triage policy into
- * a view, and which was false in three places before those changes: every card
+ * a view, and which was false in three places before those changes: every note
  * drew a `no project` warning, `triage` reported three gaps nothing could fill,
  * and no write of any kind was accepted.
  *
@@ -200,7 +200,7 @@ test('a vault with notes, views and no vocabulary is a working vault', () => {
     const { db, notes, unreadable, duplicates } = reindex(root);
     assert.equal(notes.size, 3);
 
-    // `pj check` is silent. It used to warn once per card about a missing
+    // `pj check` is silent. It used to warn once per note about a missing
     // project, in a vault that has no notion of projects.
     const issues = [
       ...validateVocabulary(declaredFacets(paths(root).facets), 'facets.yaml'),
@@ -235,12 +235,12 @@ test('a vault with notes, views and no vocabulary is a working vault', () => {
     );
 
     // `triage` is empty rather than permanently red: no facet is expected, so no
-    // card is missing one. That absence is the point of `expected:`.
+    // note is missing one. That absence is the point of `expected:`.
     const triage = payload.counts.find((c) => c.facet === 'triage')!;
     assert.deepEqual(
       triage.values.map((v) => v.value),
       ['complete'],
-      'nothing is expected, so every card is complete',
+      'nothing is expected, so every note is complete',
     );
   } finally {
     cleanup();

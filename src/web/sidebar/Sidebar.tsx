@@ -168,7 +168,7 @@ export function Sidebar({
 /**
  * What is on screen, and why it is not more.
  *
- * The worst failure mode of global filtering is "the card isn't there and I don't
+ * The worst failure mode of global filtering is "the note isn't there and I don't
  * know why", so the count of what is hidden and a one-click clear are always
  * visible — right under the filter that caused it.
  */
@@ -204,7 +204,7 @@ function ActiveStats({
           <>
             {' '}
             ·{' '}
-            <span title="a card whose grouped facet holds several values appears in each matching group">
+            <span title="a note whose grouped facet holds several values appears in each matching group">
               {data.placements - data.total} extra placements
             </span>
           </>

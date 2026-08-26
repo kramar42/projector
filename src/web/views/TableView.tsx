@@ -68,13 +68,13 @@ export function TableView({
    * The ids in the order the table draws them, which is what a shift-click
    * measures along.
    *
-   * Sections flattened, duplicates kept: a card whose grouped facet holds several
+   * Sections flattened, duplicates kept: a note whose grouped facet holds several
    * values gets a row under each, and a range has to be able to end on the second
    * one. That is why a row carries its index rather than its id alone.
    */
   const rows = sections.flatMap((section) => section.ids);
 
-  // What the bar writes — see `visibleSelection`. Rows can repeat a card, so this
+  // What the bar writes — see `visibleSelection`. Rows can repeat a note, so this
   // is taken against the result set rather than the drawn rows.
   const acting = visibleSelection(selection.ids, data.ids);
 
@@ -99,8 +99,8 @@ export function TableView({
             ))}
             {projects && (
               <>
-                <th className="num" title="cards naming this project directly / including nested projects">
-                  Cards
+                <th className="num" title="notes naming this project directly / including nested projects">
+                  Notes
                 </th>
                 <th className="num">Blocked</th>
                 <th className="num">Untriaged</th>

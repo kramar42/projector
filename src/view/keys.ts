@@ -73,7 +73,7 @@ export function isKeyShaped(key: string): boolean {
 export const RESERVED: readonly string[] = [
   'g', 'h', 'j', 'k', 'l', 'n', 'o', 'u', 'x',
   /**
-   * The regions of a card, reached by `g` — `gc` its body, `gf` its facets, `gy`
+   * The regions of a note, reached by `g` — `gc` its body, `gf` its facets, `gy`
    * its raw frontmatter, `gl` its links.
    *
    * They are reserved for the same reason `l` already was: `g` plus a letter is
@@ -142,7 +142,7 @@ export type Command =
    */
   | { kind: 'gotoInverse'; facet: string }
   /**
-   * A region of the open card: its links, its facet rows, its body, its raw
+   * A region of the open note: its links, its facet rows, its body, its raw
    * frontmatter.
    *
    * One command with a named region rather than four commands, because the
@@ -247,7 +247,7 @@ export interface KeyContext {
  *
  * There used to be two of these and they disagreed. `App`'s Escape handler tested
  * for a field before clearing the selection; `NotePanel`'s did not, and closed the
- * card on Escape whatever was being typed — which is why the panel's title editor
+ * note on Escape whatever was being typed — which is why the panel's title editor
  * still calls `stopPropagation` on a key it is handling itself. One predicate is
  * what lets that come out.
  */
@@ -322,7 +322,7 @@ const emit = (command: Command | null, pending: Pending | null = null): Dispatch
 });
 
 /**
- * The regions of a card `g` can reach, by letter.
+ * The regions of a note `g` can reach, by letter.
  *
  * In the client rather than the vault, and legitimately: a body is not a facet.
  * These are the parts every note has by construction, which is exactly the set
@@ -366,7 +366,7 @@ const RAIL_LETTERS: Record<string, { control: RailControl; takesFacet: boolean }
  * something about. The four early guards are the whole of "is this key mine",
  * and they are here rather than at three window listeners because that is what
  * they were — `App` tested for a text field, `NotePanel` did not, and the panel's
- * title editor has to `stopPropagation` to this day to avoid closing the card it
+ * title editor has to `stopPropagation` to this day to avoid closing the note it
  * is renaming.
  */
 export function bind(pending: Pending | null, stroke: KeyStroke, ctx: KeyContext): Dispatch {
@@ -400,7 +400,7 @@ export function bind(pending: Pending | null, stroke: KeyStroke, ctx: KeyContext
    * Escape was the tempting exception — it closes the panel, so surely it is the
    * app's — and it is exactly the key that must not be. The rail's search box
    * clears itself on Escape and the panel's title editor abandons a rename, so
-   * taking it here would close the card you were in the middle of renaming.
+   * taking it here would close the note you were in the middle of renaming.
    * `NotePanel`'s handler does take it, which is why that editor has to
    * `stopPropagation` on a key it is handling itself; one predicate in one place
    * is what lets that come out.
@@ -420,7 +420,7 @@ export function bind(pending: Pending | null, stroke: KeyStroke, ctx: KeyContext
 function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch {
   switch (pending.kind) {
     /**
-     * `g` is the goto prefix, and everything reachable from a card hangs off it.
+     * `g` is the goto prefix, and everything reachable from a note hangs off it.
      *
      * `gg` is vim's, kept. The rest is the vault's own vocabulary again: `g`
      * followed by an axis's `key:` follows that axis, and the **shifted** form
@@ -442,7 +442,7 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
       /**
        * The shifted region: the *door* rather than the room.
        *
-       * `gf` walks the facet rows a card already has; `gF` opens the list of the
+       * `gf` walks the facet rows a note already has; `gF` opens the list of the
        * ones it has not, which is the same axis of the same panel and so the same
        * letter. It is the one shifted completion that is not an inverse relation,
        * and it reads as one anyway — the rows you have, and the rows you do not.

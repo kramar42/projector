@@ -83,7 +83,7 @@ const commandOf = (keys: (string | KeyStroke)[], c?: KeyContext): Command | null
 test('the map claims twelve letters, so a vault has fourteen', () => {
   assert.equal(RESERVED.length, 12);
   assert.equal(new Set(RESERVED).size, 12, 'no letter reserved twice');
-  // The three regions of a card that `g` reaches. They have to be reserved
+  // The three regions of a note that `g` reaches. They have to be reserved
   // because `g` plus a letter is otherwise the axis namespace.
   for (const region of ['c', 'f', 'y']) assert.ok(isReserved(region), region);
 });
@@ -126,7 +126,7 @@ test('a key typed into a field belongs to the field', () => {
 /**
  * The tempting exception, and the one that must not be made. The rail's search
  * clears itself on Escape and the panel's title editor abandons a rename — so an
- * app-level Escape would close the card you were renaming.
+ * app-level Escape would close the note you were renaming.
  */
 test('a field owns every key it is given, Escape included', () => {
   assert.equal(bind(null, stroke('Escape'), ctx({ inField: true })).handled, false);
@@ -163,7 +163,7 @@ test('g alone consumes the key that follows rather than letting it act late', ()
   assert.equal(out.pending, null);
 });
 
-test('H and L walk the trail of cards the cursor has visited', () => {
+test('H and L walk the trail of notes the cursor has visited', () => {
   assert.deepEqual(commandOf(['H']), { kind: 'trail', delta: -1 });
   assert.deepEqual(commandOf(['L']), { kind: 'trail', delta: 1 });
 });
@@ -191,7 +191,7 @@ test('an ungrouped board has no columns to number, so a digit means nothing', ()
   assert.equal(out.command, null);
 });
 
-test('a facet key and a digit write that axis whether or not the card carries it', () => {
+test('a facet key and a digit write that axis whether or not the note carries it', () => {
   assert.deepEqual(commandOf(['p', '4']), {
     kind: 'setAxisValue',
     facet: 'priority',
@@ -513,7 +513,7 @@ test('a delta inverts to the opposite delta, without reading anything', () => {
   ]);
 });
 
-test('setting an axis inverts to each card’s own prior values', () => {
+test('setting an axis inverts to each note’s own prior values', () => {
   const before: Record<string, string[]> = { a: ['now'], b: ['month'], c: [] };
   const back = inverseOf(
     { ids: ['a', 'b', 'c'], facet: 'priority', values: ['backlog'], mode: 'set' },
@@ -522,14 +522,14 @@ test('setting an axis inverts to each card’s own prior values', () => {
   assert.deepEqual(back.sort((x, y) => x.ids[0]!.localeCompare(y.ids[0]!)), [
     { ids: ['a'], facet: 'priority', values: ['now'], mode: 'set' },
     { ids: ['b'], facet: 'priority', values: ['month'], mode: 'set' },
-    // A card that carried nothing is restored to nothing, not skipped — otherwise
+    // A note that carried nothing is restored to nothing, not skipped — otherwise
     // undoing a bulk write leaves the axis set on whatever had been empty.
     { ids: ['c'], facet: 'priority', values: [], mode: 'set' },
   ]);
 });
 
-/** Twelve cards that agreed are one request, not twelve. */
-test('cards that shared a prior value are put back together', () => {
+/** Twelve notes that agreed are one request, not twelve. */
+test('notes that shared a prior value are put back together', () => {
   const back = inverseOf(
     { ids: ['a', 'b', 'c'], facet: 'status', values: ['done'], mode: 'set' },
     (id) => (id === 'c' ? ['planning'] : ['active']),
@@ -569,8 +569,8 @@ test('the stack is capped, because git is what remembers Tuesday', () => {
 // ---------------------------------------------------------------- going somewhere
 
 /**
- * The gap that made `H` useless: a keyboard could reach every card the view drew
- * and no card it did not, so the only way out of a card was the mouse.
+ * The gap that made `H` useless: a keyboard could reach every note the view drew
+ * and no note it did not, so the only way out of a note was the mouse.
  */
 test('g plus an axis key follows that axis, and shifted follows it back', () => {
   assert.deepEqual(commandOf(['g', 'p']), { kind: 'gotoRef', facet: 'priority' });
@@ -584,7 +584,7 @@ test('g plus an axis key follows that axis, and shifted follows it back', () => 
  * read the other way round a vault would shadow one silently.
  */
 test('the shifted region is the door rather than the room', () => {
-  // `gf` walks the rows a card has; `gF` opens the list of the ones it has not.
+  // `gf` walks the rows a note has; `gF` opens the list of the ones it has not.
   assert.deepEqual(commandOf(['g', SHIFT, stroke('F')]), {
     kind: 'gotoRegion',
     region: 'addFacet',
@@ -596,7 +596,7 @@ test(', O flips the sort without touching what is sorted by', () => {
   assert.deepEqual(commandOf([',', 'o']), { kind: 'rail', control: 'sort' });
 });
 
-test('g plus a region letter reaches part of the card', () => {
+test('g plus a region letter reaches part of the note', () => {
   assert.deepEqual(commandOf(['g', 'f']), { kind: 'gotoRegion', region: 'facets' });
   assert.deepEqual(commandOf(['g', 'c']), { kind: 'gotoRegion', region: 'body' });
   assert.deepEqual(commandOf(['g', 'y']), { kind: 'gotoRegion', region: 'frontmatter' });

@@ -30,8 +30,8 @@ export interface QueryPayload {
    */
   savedSpec: ViewSpec | null;
   /**
-   * Keyed by id, because a card in three columns is one card. P1 embedded the
-   * whole card per group and shipped it three times.
+   * Keyed by id, because a note in three columns is one note. P1 embedded the
+   * whole note per group and shipped it three times.
    */
   notes: Record<string, NoteDTO>;
   ids: string[];
@@ -87,7 +87,7 @@ export function queryPayload(
 
   const shown = [...res.ids, ...res.context];
   const byId: Record<string, NoteDTO> = {};
-  // One walk for every card on screen, rather than the same walk once per card.
+  // One walk for every note on screen, rather than the same walk once per note.
   const inbound = inboundCounts(notes, facets);
   // Same bargain, for the aggregates every computed axis stands on.
   const computedOf = computedReader(notes, facets, today);

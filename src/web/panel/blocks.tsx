@@ -23,7 +23,7 @@ import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
  *
  * Each takes the slice of the writer it uses rather than the whole object, so
  * what a block can change is legible from its signature: `Facets` cannot delete
- * a card, and `Body` cannot touch an axis.
+ * a note, and `Body` cannot touch an axis.
  */
 
 /**
@@ -111,7 +111,7 @@ function AddAxis({
      * `gf` enters the facet grid and `j` steps down the axes; the last step lands
      * here, which is where it should land — the door is the bottom of that list in
      * every sense but the DOM's. Without this the only keyboard path to an axis
-     * the card carries nothing on was Tab, which is the gap the hints were
+     * the note carries nothing on was Tab, which is the gap the hints were
      * supposed to make visible rather than leave.
      */
     <div data-navlist="add" data-nav-flow="column">
@@ -162,7 +162,7 @@ function AddAxis({
 }
 
 /**
- * A list of notes this card did not choose: what blocks it, what is part of it.
+ * A list of notes this note did not choose: what blocks it, what is part of it.
  *
  * Capped, because it is unbounded and it is not why the panel was opened. A
  * project with sixteen children drew all sixteen — 569px, forty per cent of the
@@ -171,7 +171,7 @@ function AddAxis({
  *
  * It draws as a row of the same grid the editable axes use, because it is the
  * same kind of fact: a label, and the notes under it. What it does not get is
- * an add control, because the edit lives on the other card — which the `ƒ` says.
+ * an add control, because the edit lives on the other note — which the `ƒ` says.
  */
 function InboundRow({
   axis,
@@ -308,7 +308,7 @@ export function Facets({
       </div>
       <AddAxis
         label="+ facet"
-        title="a property this card carries nothing on"
+        title="a property this note carries nothing on"
         hidden={hidden}
         defs={defs}
         onPick={reveal}
@@ -385,7 +385,7 @@ export function Refs({
       </div>
       <AddAxis
         label="+ ref"
-        title="a reference this card names nothing on"
+        title="a reference this note names nothing on"
         hidden={hidden}
         defs={defs}
         onPick={reveal}
@@ -418,8 +418,8 @@ export function Links({
         <span className="section-do">
           <IconButton
             glyph="refresh"
-            title="Re-fetch every link on this card"
-            aria-label="Re-fetch every link on this card"
+            title="Re-fetch every link on this note"
+            aria-label="Re-fetch every link on this note"
             onClick={() => refresh(card.links.map((l) => l.raw))}
           />
         </span>
@@ -442,7 +442,7 @@ export function Frontmatter({
   onDirtyChange: (dirty: boolean) => void;
   /**
    * The readout this control sits above — the file, when it changed, and what the
-   * card inherits. It is the caller's markup because it owns no state, no write
+   * note inherits. It is the caller's markup because it owns no state, no write
    * and no load; this block is a module only because it owns the open flag and
    * the dirty guard.
    */
@@ -477,7 +477,7 @@ export function Frontmatter({
         </span>
       </h3>
       {children}
-      {/* No fetch. The yaml arrives with the card, from the same read as its
+      {/* No fetch. The yaml arrives with the note, from the same read as its
           mtime, so there is no second copy of this file to go stale — which is
           what used to make saving here revert whatever the chips had just done. */}
       {open && (

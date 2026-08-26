@@ -246,7 +246,7 @@ test('a diagonal drag names both axes and stays one intent', () => {
     toLane: 'now',
   });
   assert.ok(intent.kind === 'facet');
-  // One intent, so one request and one write per card — never a status write that
+  // One intent, so one request and one write per note — never a status write that
   // lands and a priority write that is refused.
   assert.deepEqual(intent.moves, [
     { facet: 'status', from: 'planning', to: 'active' },
@@ -354,7 +354,7 @@ test('connecting two nodes moves a hierarchy edge and adds an ordinary one', () 
 });
 
 /**
- * The self-blocking card that read `clear` on the axis while its own DTO said it
+ * The self-blocking note that read `clear` on the axis while its own DTO said it
  * blocked itself, ten times over — the SQL closure applied neither of the two
  * rules `refsOf` applies, and was depth-capped at 10.
  */

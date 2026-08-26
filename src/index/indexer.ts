@@ -13,7 +13,7 @@ export interface IndexResult {
   duplicates: { id: string; files: string[] }[];
 }
 
-/** Read every card file. Parse failures are collected, never thrown. */
+/** Read every note file. Parse failures are collected, never thrown. */
 export function readAll(cardsDir: string): {
   notes: Map<string, Note>;
   unreadable: { file: string; errors: string[] }[];
@@ -43,7 +43,7 @@ export function readAll(cardsDir: string): {
   return { notes, unreadable, duplicates };
 }
 
-/** Rebuild the whole index from the card files. */
+/** Rebuild the whole index from the note files. */
 export function reindex(dataRoot: string): IndexResult {
   const p = paths(dataRoot);
   const { notes, unreadable, duplicates } = readAll(p.notes);

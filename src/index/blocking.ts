@@ -8,10 +8,10 @@ import { isProject } from './project.ts';
  *
  * There were two. `refsOf` drops a self-reference and a value naming no note,
  * so the `blocked` axis obeyed both rules; the SQL closure in `queries.ts` obeyed
- * neither and was depth-capped at 10. In one payload, a card carrying
+ * neither and was depth-capped at 10. In one payload, a note carrying
  * `blocks: [itself]` therefore read `clear` on the axis while its own DTO said it
  * was blocked by itself and listed itself ten times as something it would unblock.
- * `pj check` rejects that card, so a tended vault never held it — but the app
+ * `pj check` rejects that note, so a tended vault never held it — but the app
  * rendered the contradiction rather than refusing it, which is a poor place to
  * keep an invariant.
  *
@@ -25,7 +25,7 @@ import { isProject } from './project.ts';
  *
  * The one place that rule is written — it had two spellings, both naming
  * `status` and `done` in code, and neither could see that the seeded vocabulary
- * also has `archived`. An archived card therefore blocked its dependents
+ * also has `archived`. An archived note therefore blocked its dependents
  * forever, which nothing anywhere had decided; it was what the literal happened
  * to say.
  *
@@ -76,8 +76,8 @@ export function blockingEdges(notes: Map<string, Note>, facets: Facets): { out: 
  *
  * A *local* read now. The relation used to be stored the other way round — a
  * blocker naming what it held up — so answering "what am I waiting on" meant
- * inverting the whole graph, and recording it meant editing the other card. Both
- * are gone: the edge lives on the card that is stuck, which is the card you open
+ * inverting the whole graph, and recording it meant editing the other note. Both
+ * are gone: the edge lives on the note that is stuck, which is the note you open
  * when you are stuck.
  *
  * Direct, not transitive: a blocker's own blockers are its problem, and the card

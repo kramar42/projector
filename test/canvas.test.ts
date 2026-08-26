@@ -207,7 +207,7 @@ test('an empty declared value gets no band', () => {
  */
 test('the root sits left whichever relation the canvas lays out by', () => {
   const nodes = [face('blocker'), face('blocked')];
-  // Stored on the card that is stuck, like every other reference.
+  // Stored on the note that is stuck, like every other reference.
   const chain = [{ src: 'blocked', dst: 'blocker', type: 'blocked_by' }];
   const placed = treeLayout(nodes, chain, 'LR', ['blocked_by']);
   assert.ok(

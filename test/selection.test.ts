@@ -58,13 +58,13 @@ test('anchor and click on the same row is that one row', () => {
 });
 
 /**
- * A card whose grouped facet holds several values is drawn once per matching
+ * A note whose grouped facet holds several values is drawn once per matching
  * section, so the same id appears at two indices. This is why `ranged` takes an
  * index and the drawn rows rather than an id: `indexOf` would have measured to
  * the first row every time, and a range ending on the second occurrence would
  * have run the wrong way or collapsed.
  */
-test('a repeated card is a row twice, and a range can end on either', () => {
+test('a repeated note is a row twice, and a range can end on either', () => {
   const rows = ['a', 'dup', 'b', 'dup', 'c'];
   assert.deepEqual(sorted(ranged(new Set(), rows, 3, 4)), ['c', 'dup'], 'the second occurrence');
   assert.deepEqual(sorted(ranged(new Set(), rows, 0, 1)), ['a', 'dup'], 'the first');

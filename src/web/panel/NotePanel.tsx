@@ -20,9 +20,9 @@ import { FLUSH_MS, whatMoved } from '../changed.ts';
  * here, because there is nothing to read about it beyond what it renders.
  *
  * There is no reset effect. `App` mounts this with `key={id}`, so switching
- * cards remounts the frame and every block — which means there is no list of
+ * notes remounts the frame and every block — which means there is no list of
  * state to keep in step, and therefore no list that can fall two entries behind
- * the way the old one had (it enumerated six of nine, so opening a card from a
+ * the way the old one had (it enumerated six of nine, so opening a note from a
  * reflink while the body editor was dirty left the scrim dead and Escape
  * prompting about text that no longer existed).
  */
@@ -42,7 +42,7 @@ export function whatIsUnsaved(u: { body: boolean; frontmatter: boolean }): strin
  * What `ƒ` means on a workshop row. One string, because it is now on five or more
  * of them and a per-row wording would be five chances to say it differently.
  */
-const INHERITED = 'resolved along the project facet and its chain, not stored on this card';
+const INHERITED = 'resolved along the project facet and its chain, not stored on this note';
 
 /**
  * The project's instruction blocks, behind a disclosure the app draws itself.
@@ -78,7 +78,7 @@ const HOLD_MS = FLUSH_MS;
  * That one word is the whole of "no blink": `useLive` keeps the outgoing payload
  * until the next lands, and the frame stays mounted on it — so walking `j` down a
  * list with the panel open turns the page rather than flashing `loading…` between
- * every pair of cards. Which is the same rule the board follows for a change of
+ * every pair of notes. Which is the same rule the board follows for a change of
  * query, stated in `useLive` itself.
  *
  * The key still does everything it did: the moment the new payload arrives the id
@@ -99,9 +99,9 @@ export function NotePanel(props: {
     <NoteCard
       key={data?.note.id ?? props.id}
       {...props}
-      // What is on screen, which during a switch is still the card you were
+      // What is on screen, which during a switch is still the note you were
       // reading. Writes follow it rather than the id being fetched, so a keystroke
-      // in the gap lands on the card under the cursor and not on one nobody has
+      // in the gap lands on the note under the cursor and not on one nobody has
       // seen yet.
       id={data?.note.id ?? props.id}
       data={data}
@@ -130,7 +130,7 @@ function NoteCard({
    *
    * The panel used to own an Escape listener of its own, which is why the title
    * editor still had to `stopPropagation` on a key it was handling itself —
-   * backing out of a rename closed the card. There is one key chain now, and it
+   * backing out of a rename closed the note. There is one key chain now, and it
    * needs this one fact from in here to ask the right question.
    */
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
@@ -292,7 +292,7 @@ function NoteCard({
         announcing it as a dialog would promise a focus trap that would break
         exactly that. It is an `<aside>`, which is what it is.
       */}
-      <aside className="panel" aria-label={card ? card.title : 'Card'}>
+      <aside className="panel" aria-label={card ? card.title : 'Note'}>
         {/*
           The one part of the panel that does not scroll, so it carries what a
           card face and a table row carry: the mark, then the title. Same glyph,
@@ -340,7 +340,7 @@ function NoteCard({
                     // shell's key chain treats a field's keys as the field's, so
                     // Escape never leaves this textarea. It used to be a window
                     // listener racing this handler, and backing out of a rename
-                    // closed the card.
+                    // closed the note.
                     if (e.key === 'Escape') setEditTitle(null);
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -453,19 +453,19 @@ function NoteCard({
            * Five tiers, not ten peers.
            *
            * The order is what the panel is opened for, and one rule decides it:
-           * a region whose height the card controls goes above one whose height
+           * a region whose height the note controls goes above one whose height
            * the *content* controls. Otherwise the thing you came to click moves
            * every time a body gets longer or a project gains a child.
            *
            *   facets      the properties — bounded, and the commonest edit
-           *   body        what the card says — unbounded, and why you came
+           *   body        what the note says — unbounded, and why you came
            *   links       what it points at — unbounded
            *   refs        the notes it names, and the notes that name it
            *   workshop    the raw file, what it inherits, and the rare action
            *
            * Two of those moved. **Body is above Links** because the rule cannot
            * rank them — both are unbounded, five enriched links run to 400px —
-           * so the tie breaks on what a card is for: PRODUCT.md asks that a card
+           * so the tie breaks on what a note is for: PRODUCT.md asks that a note
            * carry enough context for a Claude session to start unbriefed, and
            * that context is the prose, not the link list.
            *
@@ -473,7 +473,7 @@ function NoteCard({
            * both derived lists that point back. `Blocks` and `Blocked by` were
            * two names two letters apart with the whole body between them.
            *
-           * `Delete` used to be the first control in the panel, above the card's
+           * `Delete` used to be the first control in the panel, above the note's
            * own id, at the same size as everything else. Weight follows blast
            * radius, so it sits in the header's far corner now — which is also
            * where the project toggle is, and that pairing is not ideal: see the
@@ -497,14 +497,14 @@ function NoteCard({
             </div>
 
             {/*
-              The workshop: the raw file, everything the card inherits, and the
+              The workshop: the raw file, everything the note inherits, and the
               one rare action.
 
               This was two `kv` readouts one hairline apart — `Inherited` with the
               project chain, and an unheaded pair of `file` and `updated` sitting
               under the `Frontmatter` heading as though they were what `edit raw`
               edits. Only one of them was. Both lists answer the same question,
-              *what is true of this card that you do not set as a facet*, so they
+              *what is true of this note that you do not set as a facet*, so they
               are one list, and `ƒ` marks the rows that are resolved rather than
               stored — which is the distinction the two headings were reaching for
               and getting wrong in opposite directions.

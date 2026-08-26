@@ -506,7 +506,7 @@ function CardTile({
       /**
        * A roving tabindex, which is what makes this a keyboard path to a card at
        * all — the tile was a `div` with an `onClick`, and NEXT.md's "there is no
-       * keyboard path to open a card" was exactly this attribute being absent.
+       * keyboard path to open a note" was exactly this attribute being absent.
        *
        * Only the cursor's tile is tabbable. Sixty-eight cards each taking a tab
        * stop is not navigation, it is a wall, and the arrow keys are the way

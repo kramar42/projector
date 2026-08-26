@@ -21,7 +21,7 @@ import type { PatchCard } from '../api.ts';
  */
 
 /**
- * Everything the panel can change about one card.
+ * Everything the panel can change about one note.
  *
  * No variant carries an mtime and none carries a label, so a call site has
  * nothing to supply and therefore nothing to forget. `facet` names ONE axis: the
@@ -81,7 +81,7 @@ export type Plan =
  * `guard` to satisfy on a file that is going away — and it is the *type* that
  * says so, rather than a comment asking to be noticed.
  *
- * There is no `bulk` variant, which is what makes "the panel writes one card"
+ * There is no `bulk` variant, which is what makes "the panel writes one note"
  * structural rather than a habit.
  */
 export function planWrite(w: CardWrite, base: number): Plan {
@@ -117,7 +117,7 @@ export function planWrite(w: CardWrite, base: number): Plan {
  * window carries a pre-write mtime and 409s against the user's own preceding
  * change — reported, absurdly, as "probably a Claude session". Taking the write
  * unconditionally is worse: once it is set it never yields to a fresher read, so
- * an agent editing the card makes the panel permanently unwritable, and the
+ * an agent editing the note makes the panel permanently unwritable, and the
  * conflict banner's Reload cannot clear it.
  */
 export function baseOf(read: number | null, wrote: number | null): number | null {

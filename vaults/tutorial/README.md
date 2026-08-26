@@ -10,7 +10,7 @@ updated: 2026-08-26
 ---
 
 You are looking at a **projector vault**: a folder of markdown files. Everything in this
-folder is a card, this file included — there is no exempted filename, and no `notes/`
+folder is a note, this file included — there is no exempted filename, and no `notes/`
 subdirectory to put things in.
 
 The only thing projector adds is `.projector/`:

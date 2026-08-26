@@ -16,7 +16,7 @@ import { useDocumentEditor } from './useDocumentEditor.ts';
  * escape hatch for everything the panel does not draw.
  *
  * The server validates before writing and refuses on anything the indexer would
- * reject, so a bad edit fails loudly instead of producing a broken card.
+ * reject, so a bad edit fails loudly instead of producing a broken note.
  */
 export function FrontmatterEditor({
   cardId,

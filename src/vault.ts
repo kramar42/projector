@@ -37,7 +37,7 @@ export interface VaultEntry {
 
 export interface VaultInfo extends VaultEntry {
   exists: boolean;
-  /** Card count, or null when the vault is missing. */
+  /** Note count, or null when the vault is missing. */
   notes: number | null;
 }
 
@@ -92,7 +92,7 @@ export function normalise(p: string): string {
 }
 
 /**
- * How many cards a folder holds, for the picker and `pj vaults`.
+ * How many notes a folder holds, for the picker and `pj vaults`.
  *
  * Counted with the same walk the indexer uses. It used to be its own flat
  * `readdirSync` with its own exclusions, which meant the two could disagree — and
@@ -184,7 +184,7 @@ export function suggestName(path: string): string {
  * has a `.projector/`** is left alone: an absent `facets.yaml` is a vault
  * carrying the built-ins and nothing else, and a deleted `home.yaml` is a view
  * somebody deleted — re-running `--create` over it must not quietly put both
- * back. **One holding markdown** is somebody's notes: the cards are already
+ * back. **One holding markdown** is somebody's notes: the notes are already
  * there, so only the config is written, and nothing that was in the folder is
  * touched or moved. **An empty one** gets the same config and starts bare.
  *

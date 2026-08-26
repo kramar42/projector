@@ -67,7 +67,7 @@ step. The mechanisms a neighbouring product could not truthfully copy:
 - **Two surfaces, one engine.** The web app (`127.0.0.1:8092`, one process serving the built UI) and
   the `pj` CLI share one query compiler and one payload builder — `pj ls --json` is exactly what
   `GET /api/query` returns, so a view means the same thing in both.
-- **A vault** is a folder of markdown — the cards at the root, the vocabulary and the saved views
+- **A vault** is a folder of markdown — the notes at the root, the vocabulary and the saved views
   under `.projector/` — opened the way Obsidian opens one. It is a git repository, which is where
   `pj log` reads history from. Two ship in this one: `vaults/tutorial`, which a fresh clone opens
   onto, and `vaults/coverage`, the fixture.

@@ -13,7 +13,7 @@ documents it was designed in are gone: the design is the code now, and a second 
 only drift.
 
 One decision worth remembering: **`parent` is `single: true`.** Nothing had ever created a second
-parent and no note carried one, so it states what was already true. Flip the flag if a card genuinely
+parent and no note carried one, so it states what was already true. Flip the flag if a note genuinely
 needs to be part of two things.
 
 ## Not now
@@ -62,7 +62,7 @@ needs to be part of two things.
   groups and sorts; what is left is range filters on a raw date. The design already says which side
   this belongs on — the reason the five computed axes stay computed is that each covers something a
   facet *cannot* describe, and "the app-written `updated` field" is on that list. A facet is what a
-  person or an agent asserts about a card; `updated` is a fact about the file.
+  person or an agent asserts about a note; `updated` is a fact about the file.
 
   **If it is picked up, the shape is a raw value on a computed axis** — `Computed` gains an optional
   `raw`, so `staleness` *shows* the date and *filters* the bucket. That is the rule an ordered facet
@@ -78,7 +78,7 @@ needs to be part of two things.
   reference facet: which notes are siblings, which relation the bulk bar's "set …" button writes, and
   — for `single` alone, any type — which axes `pj log` narrates. `single` is a *structural* property
   doing semantic work, and it is a good proxy: one value is what makes a container a container, and a
-  card holding one value on an axis is a card whose change to it is a transition.
+  note holding one value on an axis is a note whose change to it is a transition.
 
   It has one failure that is easy to state. A vault declaring **two** single-valued reference facets
   gets the first for the button, by declaration order, arbitrarily — and siblings from both at once,
@@ -132,9 +132,9 @@ needs to be part of two things.
   written twice.
 
   What has changed is how much would be *left* for it. When it was filed, the palette was the answer
-  to "an axis with no letter", "an axis this card carries nothing on", and "a value I would rather
+  to "an axis with no letter", "an axis this note carries nothing on", and "a value I would rather
   type than walk to". The first two are gone: `gf` walks every drawn row and `g⇧F` adds one, so every
-  axis in the vocabulary is reachable whether or not it declares a `key:` and whether or not the card
+  axis in the vocabulary is reachable whether or not it declares a `key:` and whether or not the note
   carries it. What is left of the third is real but small — a project picked by typing three letters
   of its name rather than walked to — and `RecordPicker` already does that from the rail's Focus row
   and the bulk bar.
@@ -162,7 +162,7 @@ needs to be part of two things.
   What the critique asked for that did land: the panel no longer claims `role="dialog"` — it is an
   `<aside>`, which is what a non-modal reading surface is — the rename has a keyboard path, the filter
   rail's disclosure heads carry `aria-expanded`, and the board tile and table row are focusable with a
-  roving tabindex, which was the "no keyboard path to open a card" item.
+  roving tabindex, which was the "no keyboard path to open a note" item.
 
   What is genuinely still open is **focus restore**: closing the panel leaves focus wherever it was
   rather than returning it to the card. In practice the cursor is that card and `j` picks up from it,
@@ -177,9 +177,9 @@ needs to be part of two things.
   modality decision above, and nothing else.
 
 - **An open axis still draws its whole vocabulary.** `FacetEditor` renders `[...def.values,
-  ...extras]` whichever way `def.open` points, so a carried `tech` draws nine chips with the card's
+  ...extras]` whichever way `def.open` points, so a carried `tech` draws nine chips with the note's
   actual value merely lit. Pruning uncarried axes fixed the larger half of the "mostly empty chrome"
-  finding — thirteen label-only rows on a bare card became none — and this is what is left of it: a
+  finding — thirteen label-only rows on a bare note became none — and this is what is left of it: a
   carried label axis is as tall as its vocabulary rather than as tall as its values.
 
   The shape is already in the file. The `ref` and `date` branches open a `PopoverButton` instead of
@@ -313,4 +313,4 @@ facet unnoticed for two days: with no blocker data, an empty answer looked plaus
 The second has since been fixed rather than filed: **some of the `pj check` warnings were
 structural** — top-level containers belong to no project by construction — and the answer turned out
 not to be an exemption in the checker. Triage is a *view* now, `views/triage.yaml` narrows to
-`type: [plain]`, and `pj check` stopped judging how a card is filed at all.
+`type: [plain]`, and `pj check` stopped judging how a note is filed at all.

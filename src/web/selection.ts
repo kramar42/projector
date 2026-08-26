@@ -4,8 +4,8 @@ import { useCallback, useRef } from 'react';
  * Which notes a gesture has picked out, for the shapes that have to remember.
  *
  * Selection was a `useState` inside `BoardView` and a `BulkBar` declared beside
- * it, so a board could act on twelve cards at once and the other two shapes could
- * not act on any. Cleaning 130 imported cards is the same job whichever shape you
+ * it, so a board could act on twelve notes at once and the other two shapes could
+ * not act on any. Cleaning 130 imported notes is the same job whichever shape you
  * happen to be looking at.
  *
  * A canvas deliberately does **not** use this. React Flow already owns node
@@ -21,7 +21,7 @@ import { useCallback, useRef } from 'react';
  *
  * The set itself lives in the URL (`?sel=`), which is why the hook is handed one
  * rather than holding one. It was `useState` here, so switching shape unmounted
- * the view and took the selection with it — and picking the same twelve cards
+ * the view and took the selection with it — and picking the same twelve notes
  * again is the work you were trying to avoid.
  */
 
@@ -46,7 +46,7 @@ export function toggled(
 /**
  * Extend a selection along the rows a shape actually draws.
  *
- * Indices rather than ids, and the row list rather than the result set. A card
+ * Indices rather than ids, and the row list rather than the result set. A note
  * whose grouped facet holds several values is drawn once per matching section —
  * two rows, one id — so an id cannot say which of them was shift-clicked, and
  * `indexOf` would silently measure to the first.

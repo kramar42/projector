@@ -11,7 +11,7 @@ import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 /**
  * The sweep: every channel, from where it last got to.
  *
- * Two things are deliberately not here. It **writes no cards** — `pj add` and
+ * Two things are deliberately not here. It **writes no notes** — `pj add` and
  * `pj link` do that, after a human has agreed — and it **does not advance any
  * cursor**. A run that fetched is not a run that was resolved, and a sweep
  * abandoned halfway must not swallow what it had already listed. `pj intake
@@ -183,7 +183,7 @@ export function renderAdvance(a: { moved: Advanced[]; withoutPending: string[] }
 }
 
 /**
- * Which cards already carry each of these fingerprints or links.
+ * Which notes already carry each of these fingerprints or links.
  *
  * The fetched channels dedupe themselves, but Slack and Gmail are fetched by an
  * agent through MCP — so without this the one channel pair that cannot check

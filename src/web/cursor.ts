@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  *
  * It is **the only pointer**. `?note=` is described in `query.ts` as "where you
  * are looking, not what you are looking at", and that is this: with the panel
- * open it shows the cursor's card, so motion flips the panel down the list, and
+ * open it shows the cursor's note, so motion flips the panel down the list, and
  * following a reference simply moves the cursor. There is no second pointer to
  * keep in step, and so no rule about which of the two a write lands on.
  *
@@ -25,9 +25,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * ## Why it is an id and not an index
  *
  * An index is a fact about a result set, and the result set changes under you —
- * a filter, a regroup, a re-sort, an agent writing a card in another window. An
+ * a filter, a regroup, a re-sort, an agent writing a note in another window. An
  * id survives all four, and `motion.ts` re-derives the position from it. When the
- * card genuinely leaves the view, `stepped` answers with the first drawn row
+ * note genuinely leaves the view, `stepped` answers with the first drawn row
  * rather than nothing, so the failure mode is "the cursor goes home" instead of
  * "the arrow keys stopped working".
  */
@@ -38,11 +38,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * `j` and `k` do **not** record. Vim's jumplist works the same way and for the
  * same reason: if every step were a stop, walking down a column of forty would
  * bury the one place you actually want to get back to. What records is a *jump* —
- * following a reference out of the card you were reading, which is the only way
+ * following a reference out of the note you were reading, which is the only way
  * the cursor moves somewhere it cannot walk back from.
  *
- * That makes `H` mean exactly one thing: **the card I came from**. Which is the
- * whole of "follow a ref, change something on that card, and come back".
+ * That makes `H` mean exactly one thing: **the note I came from**. Which is the
+ * whole of "follow a ref, change something on that note, and come back".
  */
 export interface Cursor {
   id: string | null;
@@ -224,7 +224,7 @@ export function focusSoon(
    * What to do when it never turns up.
    *
    * A search that can fail has to be able to say so, or the key it belongs to is
-   * a silent no-op — which is exactly what `pp` was on an axis the card carries
+   * a silent no-op — which is exactly what `pp` was on an axis the note carries
    * nothing for: the row never appeared, the retries ran out, and nothing on
    * screen changed or explained why.
    */

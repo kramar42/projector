@@ -7,14 +7,14 @@ import { RESERVED as RESERVED_KEYS, isKeyShaped, isReserved } from './keys.ts';
 import { VIEW_KEYS, type ViewSpec } from './spec.ts';
 
 /**
- * Validating the two things a card's own schema cannot judge: the vocabulary's
+ * Validating the two things a note's own schema cannot judge: the vocabulary's
  * choice of *names*, and a saved view.
  *
  * Beside `ViewSpec` rather than in `src/schema/`, because neither is a schema
  * concern: both check against the facet vocabulary *and* against `COMPUTED`, so
  * putting them in `schema/` made the lowest layer import both `index/` and
- * `view/` — the floor reaching up two storeys. `src/schema/` is where a card's
- * shape is decided; a view is a query over cards, which is one level out.
+ * `view/` — the floor reaching up two storeys. `src/schema/` is where a note's
+ * shape is decided; a view is a query over notes, which is one level out.
  */
 
 /**
@@ -31,7 +31,7 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * The rest of `KEY_ORDER` cannot collide — frontmatter namespaces facets under
  * `facets:`, and `--set` reaches them by dotted path — but they are reserved
  * anyway. A vocabulary is read far more often than it is written, and an axis
- * called `links` beside a card's links is a sentence you have to stop and parse.
+ * called `links` beside a note's links is a sentence you have to stop and parse.
  *
  * A built-in's *name* is not on this list, because a vault may legitimately
  * declare one — to label it, colour it, or ask for it in triage. What it may not
@@ -179,7 +179,7 @@ function bucketHues(def: Record<string, unknown>): unknown[] {
 /**
  * Validate saved views against the loaded vocabulary.
  *
- * A card is checked against `facets.yaml`; a view was not checked against
+ * A note is checked against `facets.yaml`; a view was not checked against
  * anything. `pj next` filtered on `kind` — a facet P7 deleted — for two days,
  * and moving that query into `views/*.yaml` only relocates the failure unless
  * something reads it: a filter naming an axis the vocabulary lost matches

@@ -15,7 +15,7 @@ number.
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
 | C5 | Every shape is equally first-class | all three are editable, not just viewable |
-| C6 | The card body is free-form | description, links, files, images — no template |
+| C6 | The note body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
@@ -86,7 +86,7 @@ always correct.
 depth, with no `notes/` to put them in and no exempted filename. The other two live under
 `.projector/` along with the databases, so removing that one directory leaves the folder of markdown
 you started with. This is what lets a directory of notes that has never heard of projector be opened
-rather than imported: a file with no frontmatter is a card whose id is its filename and whose title
+rather than imported: a file with no frontmatter is a note whose id is its filename and whose title
 is its leading heading, and nothing is written back until you change something.
 
 **The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a view file and
@@ -583,7 +583,7 @@ root.**
 Three folders arrive and get three answers. One that already has a `.projector/` is left alone: an
 absent `facets.yaml` is a vault carrying the built-ins and nothing else, and a deleted `home.yaml` is a
 view somebody deleted, so re-running `--create` must not quietly restore either. One holding markdown
-gets the config and nothing else — the cards are already there, and none of them is touched or moved.
+gets the config and nothing else — the notes are already there, and none of them is touched or moved.
 An empty one gets the same config and starts bare. Anything else is somebody's documents and is
 refused.
 
@@ -597,9 +597,9 @@ directly — already loads the skill. Two documents stating the note format is o
 the format is now written down in exactly two places that cannot disagree: `src/schema/note.ts`, which
 parses it, and the skill, which explains it.
 
-`README.md` used to be excluded from the card walk by name, on the grounds that a folder full of
+`README.md` used to be excluded from the note walk by name, on the grounds that a folder full of
 markdown attracts one. That exclusion is gone: the folder full of markdown *is* the vault now, so the
-same observation is the reason a README should be a card. `listNoteFiles` skips two directories and no
+same observation is the reason a README should be a note. `listNoteFiles` skips two directories and no
 filenames — anything dotted, and `assets`, which is the one tree the app deletes from wholesale.
 
 ## The two vaults that ship
@@ -610,24 +610,24 @@ describes the author's own vault**, because a private folder is not evidence a r
 counting what is in it is a number that goes stale by working.
 
 **`vaults/tutorial`** is what a fresh clone opens onto, with no configuration — see *Why the registry
-is a file*. Eleven cards chosen as a tour: a project with members, a blocked card and its blocker, a
-card waiting on a person, one deliberately overdue, a note that is not work at all, a card in a
-subfolder, a `README.md` that is both the folder's readme and a card, and one file with no frontmatter
+is a file*. Eleven notes chosen as a tour: a project with members, a blocked note and its blocker, a
+note waiting on a person, one deliberately overdue, a note that is not work at all, a note in a
+subfolder, a `README.md` that is both the folder's readme and a note, and one file with no frontmatter
 whose id and title are derived. Its `facets.yaml` is one of the two vocabularies the key checker must
 pass — the other is `SEED_FACETS`, which is what created it.
 
 **`vaults/coverage`** carries every state the app can draw: every declared facet value, both ends of
 every bucket, a blocking chain and one whose blocker is finished, a link of every kind including two
 that cannot resolve. A real vault only exercises the states real work happens to produce, which is how
-`.chip.is-overdue` shipped with its text the same colour as its background — no card carried a `due`
+`.chip.is-overdue` shipped with its text the same colour as its background — no note carried a `due`
 date, so the rule had never rendered once.
 
-Its cards are committed markdown, but **its dates are derived**. `due` and `staleness` are computed
+Its notes are committed markdown, but **its dates are derived**. `due` and `staleness` are computed
 against today, so a fixed date stops meaning what it was chosen to mean: the `today` column empties
-tomorrow, and within seven weeks every dated card is overdue and four columns have collapsed into one.
+tomorrow, and within seven weeks every dated note is overdue and four columns have collapsed into one.
 Each date therefore names the band it demonstrates in a comment beside it — `due: ["2026-08-17"]  #
 overdue` — and `bun run redate` moves them all back to today. That is the whole of what the script
-does; the 690-line generator it replaced held every card as a JavaScript string literal, so adding a
+does; the 690-line generator it replaced held every note as a JavaScript string literal, so adding a
 state meant editing code rather than writing a note. Two tests guard the arrangement: every date must
 carry a band, and the bands must be exactly the buckets the vault's own `facets.yaml` declares.
 

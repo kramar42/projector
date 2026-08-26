@@ -20,9 +20,9 @@ delete process.env.PROJECTOR_DATA;
 delete process.env.PROJECTOR_VAULTS;
 
 /**
- * Arrangement — positions and card order — lives in a named view and nowhere
+ * Arrangement — positions and note order — lives in a named view and nowhere
  * else (C9). These lock the two rules that make that safe to use: a save merges
- * rather than replaces, and a card that has gone is the only thing dropped.
+ * rather than replaces, and a note that has gone is the only thing dropped.
  */
 function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-arr-'));
@@ -57,7 +57,7 @@ test('saving positions merges, so a filtered canvas cannot discard the rest', ()
   }
 });
 
-test('a position is dropped only when its card is gone', () => {
+test('a position is dropped only when its note is gone', () => {
   const { root, cleanup } = vault(
     { graph: 'shape: canvas\nnodes:\n  a: {x: 1, y: 1}\n  ghost: {x: 2, y: 2}\n' },
     ['a'],
@@ -70,7 +70,7 @@ test('a position is dropped only when its card is gone', () => {
   }
 });
 
-test('card order merges per column and rounds positions', () => {
+test('note order merges per column and rounds positions', () => {
   const { root, cleanup } = vault({ board: 'shape: board\norder:\n  now: [a, b]\n  later: [c]\n' });
   try {
     saveArrangement(root, 'board', { order: { now: ['b', 'a'] } });
@@ -138,7 +138,7 @@ test('writing arrangement to a view that does not exist is refused', () => {
   }
 });
 
-test('stored order pins its cards and never loses the others', () => {
+test('stored order pins its notes and never loses the others', () => {
   // The query's own order, with three of them pinned.
   assert.deepEqual(applyOrder(['a', 'b', 'c', 'd'], ['c', 'a']), ['c', 'a', 'b', 'd']);
   // An id that is no longer in the column is skipped, not left as a hole.

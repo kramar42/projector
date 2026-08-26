@@ -56,7 +56,7 @@ test('doc refs resolve against the vault, and absolutely when absolute', () => {
 
   assert.equal(resolveDoc('inside.md', dir).path, pathJoin(dir, 'inside.md'));
   // A doc outside the vault is reached with `../` — relative means relative to
-  // the vault, not to the card file.
+  // the vault, not to the note file.
   assert.equal(resolveDoc(`../${basename(outside)}`, dir).path, resolve(outside));
   assert.equal(resolveDoc(outside, dir).path, resolve(outside));
   // A miss reports what it tried, so the message can say where it looked.
@@ -81,7 +81,7 @@ test('markdown is enough to open a folder as a vault, and never enough to walk u
   try {
     assert.equal(looksLikeVault(dir), false, 'an empty folder is nobody’s vault');
 
-    // A README is a card like any other file, so a folder holding only one is a
+    // A README is a note like any other file, so a folder holding only one is a
     // folder of markdown — there is no exempted filename left.
     writeFileSync(pathJoin(dir, 'README.md'), '# Notes\n', 'utf8');
     assert.equal(looksLikeVault(dir), true, 'markdown is a vault you can open');
@@ -154,7 +154,7 @@ test('a new vault is seeded with a vocabulary and views, and no prose', () => {
     assert.ok(existsSync(paths(root).facets));
     assert.ok(existsSync(paths(root).notes));
     assert.ok(existsSync(paths(root).views));
-    // No card-conventions README. That text was a copy of the `pj-about` skill,
+    // No note-conventions README. That text was a copy of the `pj-about` skill,
     // which an agent already has — and two places stating the format is one
     // place to drift out of date.
     assert.equal(existsSync(pathJoin(paths(root).notes, 'README.md')), false);
@@ -177,7 +177,7 @@ test('a new vault is seeded with a vocabulary and views, and no prose', () => {
  * A folder of somebody's notes, opened.
  *
  * The three properties that make this *opening* rather than importing: nothing is
- * moved, every markdown file is a card including the README, and the config
+ * moved, every markdown file is a note including the README, and the config
  * arrives beside them rather than around them.
  */
 test('opening a folder of markdown adds a .projector and touches nothing else', () => {
@@ -195,7 +195,7 @@ test('opening a folder of markdown adds a .projector and touches nothing else', 
     assert.ok(existsSync(paths(root).facets), 'a folder of markdown is seeded, not left blank');
     assert.ok(existsSync(pathJoin(paths(root).views, 'home.yaml')));
 
-    // Three cards: the README is one of them, and so is the one in a subfolder.
+    // Three notes: the README is one of them, and so is the one in a subfolder.
     assert.equal(countNotes(root), 3, 'no exempted filename, and any depth');
     assert.equal(readFileSync(pathJoin(root, 'README.md'), 'utf8'), before, 'nothing rewritten');
     assert.equal(existsSync(pathJoin(root, 'notes')), false, 'and nothing moved');
@@ -238,11 +238,11 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
   const root = shippedVaults()[0]!.path;
   const { notes, unreadable, duplicates } = readAll(paths(root).notes);
   assert.deepEqual(unreadable, [], 'every file in it parses');
-  assert.deepEqual(duplicates, [], 'and no two cards claim one id');
+  assert.deepEqual(duplicates, [], 'and no two notes claim one id');
   assert.ok(notes.size >= 8, 'enough of a tour to be worth opening');
 
   // The two things the layout claims, asserted against the vault a stranger sees
-  // first: a card with no frontmatter at all, and a README that is a card.
+  // first: a note with no frontmatter at all, and a README that is a note.
   const bare = [...notes.values()].filter((r) => !r.body.startsWith('---'));
   assert.ok(
     bare.some((r) => r.id === 'getting-started'),
@@ -250,7 +250,7 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
   );
   assert.ok(
     [...notes.values()].some((r) => basename(r.file) === 'README.md'),
-    'and a README that is a card like any other file',
+    'and a README that is a note like any other file',
   );
 });
 
@@ -259,7 +259,7 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
  * `bun run redate` able to reach them.
  *
  * Every date in it names the band it demonstrates in a comment beside it, which
- * is how the re-dater knows where to put it back without a table of card ids. A
+ * is how the re-dater knows where to put it back without a table of note ids. A
  * date written without that comment is invisible to the re-dater: it will sit
  * there going stale while everything around it moves, and the column it was
  * meant to fill quietly empties. That is the failure the fixture exists to
@@ -288,9 +288,9 @@ test('every date in the coverage vault says which band it is demonstrating', () 
     }
   }
 
-  // And every band still has a card, so none of them can be quietly dropped.
-  for (const b of DUE) assert.ok(claimed.has(`due:${b}`), `no card demonstrates due ${b}`);
-  for (const b of WHEN) assert.ok(claimed.has(`when:${b}`), `no card demonstrates staleness ${b}`);
+  // And every band still has a note, so none of them can be quietly dropped.
+  for (const b of DUE) assert.ok(claimed.has(`due:${b}`), `no note demonstrates due ${b}`);
+  for (const b of WHEN) assert.ok(claimed.has(`when:${b}`), `no note demonstrates staleness ${b}`);
 });
 
 /**
@@ -345,7 +345,7 @@ test('seeding a fresh vault is not the same act as adopting one', () => {
     assert.equal(existsSync(paths(root).facets), false, 'no vocabulary was re-seeded');
     assert.equal(existsSync(pathJoin(paths(root).views, 'home.yaml')), false, 'and no view');
 
-    // And the folder is still a working vault: `cards/` is what says so.
+    // And the folder is still a working vault: `notes/` is what says so.
     assert.ok(looksLikeVault(root));
   } finally {
     rmSync(root, { recursive: true, force: true });

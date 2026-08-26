@@ -1,5 +1,5 @@
 /**
- * Enrichment is strictly additive. Nothing in the card model, the index, the
+ * Enrichment is strictly additive. Nothing in the note model, the index, the
  * boards or the canvas depends on it: a link renders as its raw ref, and an
  * enrichment — when one arrives — replaces that with something richer. If every
  * fetcher here were deleted the app would behave exactly as it did in P2.

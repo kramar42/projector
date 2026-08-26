@@ -43,7 +43,7 @@ export function split(text: string): Split {
  *
  * Only the *leading* one, not the first one anywhere: a heading further down is a
  * section. That narrowness is what lets the panel drop this line when it renders
- * the body — otherwise a bare note's title would appear twice, once as the card's
+ * the body — otherwise a bare note's title would appear twice, once as the note's
  * name and once as its opening line — so the reader and the renderer have to
  * agree about which line it is, and they agree by both asking here.
  */
@@ -92,7 +92,7 @@ function keyName(key: unknown): string {
 
 /**
  * Put scalar arrays and small repo maps on one line — `priority: [now]` rather
- * than a three-line block. A card's frontmatter is read far more often than it
+ * than a three-line block. A note's frontmatter is read far more often than it
  * is written.
  */
 function applyFlow(doc: Document): void {
@@ -131,7 +131,7 @@ export function serialize(value: unknown): string {
 }
 
 /**
- * Patch keys in a standalone YAML file — a view config, not a card.
+ * Patch keys in a standalone YAML file — a view config, not a note.
  *
  * Deliberately separate from `patchKey`: that one expects a `---` fenced
  * frontmatter block and treats everything after it as an untouchable body. Given

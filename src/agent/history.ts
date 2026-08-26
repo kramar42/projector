@@ -5,15 +5,15 @@ import { isNotePath, parseNote } from '../schema/note.ts';
 import type { Note } from '../schema/types.ts';
 
 /**
- * What happened to the cards recently, read out of git.
+ * What happened to the notes recently, read out of git.
  *
- * The vault is git-tracked and every card write is a commit-shaped change to one
+ * The vault is git-tracked and every note write is a commit-shaped change to one
  * file (C1), so the history of the work is already on disk — it was simply never
  * read. Nothing here is stored: `updated` is a single overwritten date and can
- * only ever say *when* a card last moved, never *what* it did.
+ * only ever say *when* a note last moved, never *what* it did.
  *
  * The transitions come from comparing the two versions of each file through the
- * real card parser, not from scraping `+`/`-` lines out of a diff. A diff line
+ * real note parser, not from scraping `+`/`-` lines out of a diff. A diff line
  * only reads if the frontmatter happens to be block style, and
  * `facets: { status: [done] }` is just as valid — so the cheap answer and the
  * exact one differ, and this takes the exact one. `git log --raw` names both
@@ -33,7 +33,7 @@ export type Change =
    * watching could not have one.
    *
    * Every **single-valued** facet is narrated, which is the derivable form of the
-   * choice those two names were making: a card holds one value on such an axis,
+   * choice those two names were making: a note holds one value on such an axis,
    * so changing it is a transition. A multi-valued axis accumulates, and "tech
    * gained k8s" is not an event in the same sense.
    */
@@ -114,7 +114,7 @@ interface RawCommit {
   files: RawChange[];
 }
 
-/** `:100644 100644 <before> <after> M\tcards/x.md` — one line per changed file. */
+/** `:100644 100644 <before> <after> M\tnotes/x.md` — one line per changed file. */
 const RAW = /^:\d+ \d+ ([0-9a-f]+) ([0-9a-f]+) [A-Z]\d*\t(.+)$/;
 
 function parseLog(out: string): RawCommit[] {
@@ -139,7 +139,7 @@ function parseLog(out: string): RawCommit[] {
  * Fetch every blob named, in one `git cat-file --batch`.
  *
  * The batch protocol answers each request with `<sha> blob <size>\n<size bytes>\n`,
- * so the reply is walked by byte count rather than by line — a card body holds
+ * so the reply is walked by byte count rather than by line — a note body holds
  * newlines and a line-oriented read would resynchronise on one of them.
  */
 function readBlobs(root: string, shas: Set<string>): Map<string, string> {
@@ -148,9 +148,9 @@ function readBlobs(root: string, shas: Set<string>): Map<string, string> {
   if (!wanted.length) return out;
 
   // Walked as bytes, because `<size>` is a byte count. Decoding first and
-  // slicing the string walked UTF-16 code units instead: one em dash in a card
+  // slicing the string walked UTF-16 code units instead: one em dash in a note
   // put the walk two bytes into the next record's header, and every blob after
-  // the drift was misread or lost — a modified card whose `after` goes missing
+  // the drift was misread or lost — a modified note whose `after` goes missing
   // narrates as deleted.
   const raw = gitBytes(root, ['cat-file', '--batch'], wanted.join('\n') + '\n');
   let at = 0;
@@ -167,7 +167,7 @@ function readBlobs(root: string, shas: Set<string>): Map<string, string> {
   return out;
 }
 
-/** Parse a blob as a card, or null when it is absent or unreadable. */
+/** Parse a blob as a note, or null when it is absent or unreadable. */
 function recordOf(text: string | undefined, path: string): Note | null {
   if (text === undefined) return null;
   const res = parseNote(path, text);
@@ -180,17 +180,17 @@ function valueOf(rec: Note | null, facet: string): string | null {
 }
 
 /**
- * Card changes since `since` — anything `git log --since` accepts: `1 week ago`,
+ * Note changes since `since` — anything `git log --since` accepts: `1 week ago`,
  * `2026-08-01`, `yesterday`.
  */
 export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
   const facets = loadFacets(paths(dataRoot).facets);
-  // The axes a card holds one of, so moving one is a transition rather than an
+  // The axes a note holds one of, so moving one is a transition rather than an
   // accumulation. Declaration order, so a log reads in the vocabulary's order.
   const watched = Object.entries(facets)
     .filter(([, def]) => def.single)
     .map(([name]) => name);
-  // The whole vault: the cards are the repository's contents now, not a folder
+  // The whole vault: the notes are the repository's contents now, not a folder
   // inside it. A pathspec is still passed rather than dropped, so `--` keeps
   // separating paths from revisions.
   const cards = '.';
@@ -273,7 +273,7 @@ export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
 export function formatHistory(r: HistoryReport): string {
   const L: string[] = [`# since ${r.since}\n`];
   if (!r.commits.length) {
-    L.push('no card changes committed in this window');
+    L.push('no note changes committed in this window');
     return L.join('\n');
   }
   for (const c of r.commits) {

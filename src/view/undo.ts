@@ -60,7 +60,7 @@ export interface Step {
  *
  * `before` is asked per note, so this makes no assumption that a selection was
  * uniform — which it routinely is not. It is the same reason `nextValues` is
- * applied per card on the server rather than the client sending final values.
+ * applied per note on the server rather than the client sending final values.
  */
 export function inverseOf(
   write: FacetWrite,

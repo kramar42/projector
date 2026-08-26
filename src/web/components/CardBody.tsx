@@ -274,7 +274,7 @@ export function tallyMeans(role: Role, n: number): string {
  * different source. It read the `type` computed axis, whose `node` value means
  * "named by **any** reference facet", while the mark was drawn from a count of the
  * `parent` facet alone — so the two disagreed on every note named only through
- * `blocks` or `project`. Measured on the 27-card fixture, the rail reported
+ * `blocks` or `project`. Measured on the 27-note fixture, the rail reported
  * 3 / 4 / 20 beside the glyphs `▣ ○ •` while the app drew 3 / 1 / 23: a ribbon
  * saying "4 linked nodes" next to the single `○` on screen.
  *
@@ -294,7 +294,7 @@ export function tallyRoles(cards: Marked[]): Record<Role, number> {
  * The two facts a mark is read from.
  *
  * Narrower than `NoteDTO` on purpose: a reference facet resolves to a title and
- * these two, not to a whole card, and the panel drawing its own two-way
+ * these two, not to a whole note, and the panel drawing its own two-way
  * `isProject ? ▣ : ·` was how `○` went missing from every reference — a note
  * you are looking at *because* something names it is referenced by definition, so
  * the one mark that should have been commonest never appeared at all.

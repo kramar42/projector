@@ -4,18 +4,18 @@
  *   bun run redate [<vault>]        # default: vaults/coverage
  *
  * `vaults/coverage` carries every state the app can draw, and two of its axes are
- * computed against the current date rather than stored: `due` sorts a card into
+ * computed against the current date rather than stored: `due` sorts a note into
  * overdue / today / week / later, and `staleness` reads `updated` as week / month
  * / older. A committed date is therefore a date that stops meaning what it was
  * chosen to mean. The `today` column empties tomorrow; within seven weeks every
- * dated card is overdue and four columns have collapsed into one.
+ * dated note is overdue and four columns have collapsed into one.
  *
  * That is not a hypothetical. `.chip.is-overdue` once shipped with its text the
- * same colour as its background, because no card in a real vault carried a `due`
+ * same colour as its background, because no note in a real vault carried a `due`
  * date and the rule had never rendered once. A fixture whose date buckets go
  * empty is a fixture that cannot catch it happening again.
  *
- * So the cards are committed — they are markdown, and adding a state should mean
+ * So the notes are committed — they are markdown, and adding a state should mean
  * writing a note rather than editing a string literal in a script — and only the
  * dates are derived. **Each date says which band it is demonstrating**, in a
  * comment beside it:
@@ -23,8 +23,8 @@
  *     due: ["2026-08-17"]  # overdue
  *     updated: 2026-08-25  # fresh
  *
- * which is why this script needs no table of card ids, and why a person reading
- * the card can see what the date is for. Run it before looking at the vault; it
+ * which is why this script needs no table of note ids, and why a person reading
+ * the note can see what the date is for. Run it before looking at the vault; it
  * rewrites nothing but the dates, so its diff is the whole of what it did.
  */
 import { readFileSync, writeFileSync, globSync } from 'node:fs';
