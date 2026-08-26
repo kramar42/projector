@@ -97,33 +97,44 @@ export function prepareWorkspace(
   return repos.map((r) => addWorktree(r, workspace, branch, git));
 }
 
-/**
- * Escape a string for an AppleScript double-quoted literal.
- *
- * Shell quoting alone is not enough: `shlex`-style quoting of a string
- * containing an apostrophe emits a double quote, which would end the
- * AppleScript literal early. Escape backslashes and double quotes on top of it.
- */
-export function appleScriptQuote(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
 /** Single-quote for the shell, the POSIX way. */
 export function shellQuote(text: string): string {
   return `'${text.replace(/'/g, `'\\''`)}'`;
 }
 
-export function terminalScript(workspace: string, prompt: string): string {
-  const cmd = `cd ${shellQuote(workspace)} && claude ${shellQuote(prompt)}`;
-  return [
-    'tell application "Terminal"',
-    '\tactivate',
-    `\tdo script "${appleScriptQuote(cmd)}"`,
-    'end tell',
-  ].join('\n');
+/**
+ * The one prompt a prepared workspace is opened with.
+ *
+ * Here rather than at the two call sites because it is the other half of a
+ * contract: `buildBriefing` writes the file this sentence names, so a rename of
+ * one that missed the other would leave a session told to read nothing.
+ */
+export const BRIEFING_PROMPT = 'Read AGENT_BRIEFING.md and follow it exactly.';
+
+/**
+ * How a prepared workspace is opened: the desktop app's own deep link.
+ *
+ * `claude://code/new` is the route the app exposes for starting a session that
+ * does not exist yet — it takes `folder` (repeatable) and `prompt`, and lands on
+ * the same surface `claude://claude.ai/epitaxy/<id>` reaches for a session that
+ * does. So a note already opens its *past* sessions in the app (see
+ * `enrich/claudeSession.ts`); this is the same door for its next one, rather than
+ * a second idea of where work happens.
+ *
+ * One `folder`, not one per repo: every worktree is a directory *inside* the
+ * workspace, and `AGENT_BRIEFING.md` sits at its root — so the workspace is the
+ * only path that makes the prompt above resolvable.
+ *
+ * No shell quoting anywhere in it, which is the point of preferring this over the
+ * `osascript` it replaced: a URL is percent-encoded by `URLSearchParams`, so a
+ * branch or a project name carrying a quote is no longer two escaping layers deep.
+ */
+export function desktopLink(workspace: string, prompt: string): string {
+  const params = new URLSearchParams({ folder: workspace, prompt });
+  return `claude://code/new?${params}`;
 }
 
-/** Branch name for a card: the project's template, a lone Jira key, else the id. */
+/** Branch name for a note: the project's template, a lone Jira key, else the id. */
 export function branchFor(
   cardId: string,
   opts: { template?: string; jiraKeys?: string[] },

@@ -54,6 +54,8 @@ import {
   saveView,
   deleteView,
 } from './mutate.ts';
+import { noteContext } from '../agent/context.ts';
+import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { watch } from 'chokidar';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
@@ -586,6 +588,38 @@ app.get('/api/asset/*', (c) => {
       ext
     ] ?? 'application/octet-stream';
   return new Response(readFileSync(file), { headers: { 'Content-Type': type } });
+});
+
+// ---------------------------------------------------------------- starting work
+//
+// Deliberately *not* in the writes block above, and this is the one route where
+// that distinction is worth a comment: it writes nothing inside the vault. It
+// lays out git worktrees under `$PROJECTOR_WORKSPACES` and an `AGENT_BRIEFING.md`
+// beside them — outside every repo and outside the vault — and it changes no note,
+// so it carries no base mtime and there is nothing here for `mutate.ts` to guard.
+//
+// It is also not a write to an external system (`C2`). Nothing is sent anywhere:
+// the deep link comes back in the response and *following* it is the browser's
+// move, exactly as it is for the `claude://` link a session chip already offers.
+
+app.post('/api/note/:id/work', async (c) => {
+  const root = vaultOf(c);
+  try {
+    const id = c.req.param('id');
+    const ctx = noteContext(id, root);
+    if (!ctx) return c.json({ error: `no note "${id}"` }, 404);
+
+    // `commit` is opt-in, so a request that forgets to say prepares nothing. The
+    // panel asks twice on purpose: once to find out where the worktrees would go,
+    // so its confirm can name the directory and the branch, and again to do it.
+    const body = (await c.req.json().catch(() => ({}))) as { commit?: boolean };
+    const plan = planWork(ctx, root);
+    if (body.commit !== true) return c.json({ ...plan, briefing: plannedBriefing(ctx, plan) });
+    return c.json(startWork(ctx, plan));
+  } catch (err) {
+    if (err instanceof NotWorkable) return c.json({ error: err.message }, 400);
+    return c.json({ error: (err as Error).message }, 500);
+  }
 });
 
 // ---------------------------------------------------------------- enrichment

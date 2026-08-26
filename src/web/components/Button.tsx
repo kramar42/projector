@@ -138,6 +138,44 @@ const GLYPH = {
     px: 15,
     path: 'M3 13L4.1 9.7L10.9 2.9L13.1 5.1L6.3 11.9ZM4.1 9.7L6.3 11.9',
   },
+  /**
+   * The fourth drawing: start work on this note.
+   *
+   * A play triangle, because the act is *begin* — lay out the worktrees and hand
+   * the note to a session — and no other mark for beginning is as unambiguous at
+   * 15px. It is also the only one of the four whose meaning a reader already knows
+   * before seeing this app.
+   *
+   * A drawing rather than a character on the grounds the other three established.
+   * Four candidates measured on the stack `.icon-button` actually resolves to
+   * (`ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`), by
+   * `measureText` at 1000px: `▶` 0.801em, `►` 0.880em, `▸` and `‣` both 0.429em.
+   * The family's own advance is 0.604em — `+`, the one character in this table
+   * that sits on it — so not one of the four is served by this face, and each
+   * would draw differently on another machine. That is the same objection that
+   * ruled out `⟳ ⟲ ⥁ ⭮` for `refresh` and `✎ ✏ 🖉 🖊` for `edit`.
+   *
+   * Stroked, not filled, and that is the weight decision. Rasterised at 15px
+   * against its two nearest neighbours on the same instrument: this is an ink box
+   * of 9×11 at 30.5 lit px, against `refresh` at 11×12 / 29.3 and `edit` at 11×11
+   * / 31.4. So it sits *between* them in coverage and matches `edit`'s height
+   * exactly — it reads at their weight, and nowhere near `trash`'s 55.3, which is
+   * nearly twice as heavy because it destroys. A filled triangle measured 61 and
+   * would have been the heaviest mark in the set for the one act that is purely
+   * constructive.
+   *
+   * 9 wide against their 11 is the one number that does not match, and cannot: a
+   * triangle pointing right is narrower than a square-ish mark at equal height.
+   * Per `edit`'s own note, the box is not the thing a reader sees; the weight is.
+   *
+   * The bounding box centres at 8.8 rather than 8 — pushed 0.8 units right of the
+   * grid centre on purpose. A right-pointing triangle carries its mass on the
+   * base, so a geometrically centred one reads as sitting left.
+   */
+  start: {
+    px: 15,
+    path: 'M4.9 2.7L12.7 8L4.9 13.3Z',
+  },
 } as const;
 
 export type GlyphName = keyof typeof GLYPH;

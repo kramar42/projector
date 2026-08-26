@@ -339,6 +339,36 @@ test('an unbound key is left alone', () => {
   assert.equal(bind(null, stroke('q'), ctx({ facetKeys: {} })).handled, false);
 });
 
+// ---------------------------------------------------------------- starting work
+
+test('`!` starts work, and is a stroke no vocabulary can reach', () => {
+  assert.deepEqual(bind(null, stroke('!'), ctx({ facetKeys: {} })).command, { kind: 'work' });
+  // The whole argument for the mark over a letter: a vault claiming every letter
+  // it is allowed to still cannot shadow it, because a key is one letter a-z.
+  assert.ok(!isKeyShaped('!'));
+  const everyLetter = Object.fromEntries(
+    'abcdefghijklmnopqrstuvwxyz'.split('').map((k) => [k, `axis_${k}`]),
+  );
+  assert.deepEqual(bind(null, stroke('!'), ctx({ facetKeys: everyLetter })).command, { kind: 'work' });
+});
+
+test('starting work cost the reserved set nothing', () => {
+  // `w` in particular. The seeded vocabulary spends it on `waiting_on` and `,w`
+  // is the Focus row, which is why the binding is not `g w`.
+  assert.ok(!isReserved('w'));
+  assert.deepEqual(
+    bind({ kind: 'goto', fallback: null }, stroke('w'), ctx({ facetKeys: { w: 'waiting_on' } })).command,
+    { kind: 'gotoRef', facet: 'waiting_on' },
+  );
+});
+
+test('a prefix swallows `!` rather than starting work mid-sequence', () => {
+  // `g` then `!` is not a region and not an axis, so it produces nothing — and
+  // must not fall through to launching, which would make an abandoned `g` a
+  // keystroke that creates worktrees.
+  assert.equal(bind({ kind: 'goto', fallback: null }, stroke('!'), ctx({ facetKeys: {} })).command, null);
+});
+
 // ---------------------------------------------------------------- the cheatsheet
 
 /**
@@ -354,10 +384,10 @@ test('every plain key the cheatsheet lists actually does something', () => {
   // reading it as two keys is how this test first failed.
   // A row is a *sequence* when it starts with a prefix, and its letters mean
   // nothing on their own: `, v` is the rail leader and `g f` is a region of the
-  // card. Reading either as two independent keys is how this test first failed.
+  // note. Reading either as two independent keys is how this test first failed.
   const isSequence = (keys: string) => /^(,|g) /.test(keys);
   const plainRows = KEYMAP.flatMap((s) => s.rows).filter(
-    (r) => !isSequence(r.keys) && /^[a-zA-Z./?*[\]](\s[a-zA-Z./?*[\]])*$/.test(r.keys),
+    (r) => !isSequence(r.keys) && /^[a-zA-Z./?*![\]](\s[a-zA-Z./?*![\]])*$/.test(r.keys),
   );
   const singles = plainRows.flatMap((r) => r.keys.split(' '));
   assert.ok(singles.length > 10, 'the map should be mostly single keys');
@@ -370,7 +400,7 @@ test('every plain key the cheatsheet lists actually does something', () => {
 test('the cheatsheet has a row for every section a reader would look under', () => {
   assert.deepEqual(
     KEYMAP.map((s) => s.section),
-    ['The cursor', 'Into a card', 'In a list', 'Choosing', 'Writing', 'The view'],
+    ['The cursor', 'Into a note', 'In a list', 'Choosing', 'Writing', 'The view'],
   );
   for (const section of KEYMAP) assert.ok(section.rows.length > 0, section.section);
 });

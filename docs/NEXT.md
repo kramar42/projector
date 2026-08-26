@@ -286,6 +286,17 @@ needs to be part of two things.
   checked by reading, and the guard covers type and shape but not rhythm. Say so rather than implying
   the stylesheet is fully policed.
 
+- **`⏎` on a Tab-focused panel action.** Tab reaches the panel corner's two buttons, but `⏎` is claimed
+  by the key map and resolved as `open`, which activates a focused item only when it sits inside a
+  `[data-navlist]`. The corner is not one, so tabbing to the trash or to Start and pressing `⏎` opens
+  the cursor's note instead of pressing the button under focus.
+
+  Predates the Start control — the trash has behaved this way since `⏎` became the map's — and it fails
+  safe in both cases, so it is a wart rather than a bug. The fix is either to make the corner a navlist
+  (which would also put Delete in the `j`/`k` walk, and it is not obvious that it should be) or to have
+  `open` press any focused button in the panel. Neither is worth deciding while the buttons are also
+  reachable by `!` and by mouse.
+
 ## The model is done for now
 
 P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the

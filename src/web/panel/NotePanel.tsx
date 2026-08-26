@@ -4,6 +4,7 @@ import { useLive } from '../useLive.ts';
 import { ProjectMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
+import { useWorkStarter } from './useWorkStarter.ts';
 import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
 import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
@@ -195,6 +196,17 @@ function NoteCard({
   const card = data?.note;
 
   /**
+   * Starting work: the one thing the panel does that writes nothing in the vault,
+   * and so the one thing that is not `write`. See `useWorkStarter` for why the two
+   * are siblings rather than one door.
+   */
+  const work = useWorkStarter({ id, title: card?.title ?? id });
+
+  /** The head's one banner slot — see the comment where it renders. */
+  const banner: { tone: string; message: string; canReload?: boolean } | null =
+    write.banner ?? work.banner;
+
+  /**
    * Which parts of this note moved without you, held long enough to see.
    *
    * `useLive` keeps the outgoing payload until the next one lands, so both sides of
@@ -352,25 +364,46 @@ function NoteCard({
                 </div>
               </div>
             ))}
-          {write.busy && <span className="panel-busy">{write.busy}…</span>}
+          {(write.busy ?? work.busy) && <span className="panel-busy">{write.busy ?? work.busy}…</span>}
           {/* The panel is closed by Escape or by clicking outside it, which is
-              how it was actually being closed — so the corner goes to the one
-              action that had nowhere good to live. It keeps its confirm, and it
-              is the only control in the panel drawn in `bad`. */}
+              how it was actually being closed — so the corner goes to the two
+              actions that had nowhere good to live: the one that ends this note's
+              life and the one that starts its work. Both confirm, and only the
+              first is drawn in `bad`.
+
+              Start is to the left of the trash on the ordinary grounds — the
+              destructive control sits at the very end, so a reach for the corner
+              that overshoots lands on nothing rather than on Delete. */}
           {card && (
-            <IconButton
-              glyph="trash"
-              tone="danger"
-              size="normal"
-              extra="panel-x"
-              aria-label={`Delete ${card.title}`}
-              title={`Delete "${card.title}" — the file is in git, so it can be recovered`}
-              onClick={() => {
-                if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
-                  return;
-                write.remove();
-              }}
-            />
+            <div className="panel-acts">
+              <IconButton
+                glyph="start"
+                size="normal"
+                extra="panel-x"
+                // The one control the `!` key presses. It aims at the button
+                // rather than calling the hook itself, so there is one path from
+                // the gesture to the act and the confirm cannot be skipped by
+                // arriving from the keyboard.
+                data-act="work"
+                disabled={!!work.busy}
+                aria-label={`Start work on ${card.title}`}
+                title={`Start work on "${card.title}" — a worktree workspace and a Claude session (!)`}
+                onClick={work.start}
+              />
+              <IconButton
+                glyph="trash"
+                tone="danger"
+                size="normal"
+                extra="panel-x"
+                aria-label={`Delete ${card.title}`}
+                title={`Delete "${card.title}" — the file is in git, so it can be recovered`}
+                onClick={() => {
+                  if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
+                    return;
+                  write.remove();
+                }}
+              />
+            </div>
           )}
           </div>
 
@@ -388,10 +421,16 @@ function NoteCard({
             below the fold. `write.busy` was already up here: one write announced
             its start in a fixed place and its failure in a place that scrolled
             away.
+
+            **Still one banner**, now that two things can raise one. `write` wins
+            when both have something to say, and the reason is which of the two is
+            about *this file*: a refused write means the note on screen is not the
+            note on disk, and that has to be readable until it is dealt with. A
+            launch that failed cost nothing but the launch.
           */}
-          {write.banner && (
-          <div className={`banner is-${write.banner.tone}`}>
-            {write.banner.canReload ? (
+          {banner && (
+          <div className={`banner is-${banner.tone}`}>
+            {banner.canReload ? (
               <>
                 <b>Changed on disk.</b> Something else — probably a Claude session — wrote this
                 file after it was loaded here. Nothing was overwritten.
@@ -400,7 +439,7 @@ function NoteCard({
                 </Button>
               </>
             ) : (
-              write.banner.message
+              banner.message
             )}
           </div>
           )}

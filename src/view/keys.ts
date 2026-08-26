@@ -152,6 +152,26 @@ export type Command =
    * mean anything: reading it needs no cursor.
    */
   | { kind: 'gotoRegion'; region: 'links' | 'facets' | 'body' | 'frontmatter' | 'addFacet' }
+  /**
+   * Start work on the note under the cursor: a worktree workspace, a briefing,
+   * and a Claude session opened on it.
+   *
+   * The one command in the map that **acts** on something outside the vault, and
+   * the only one that is not reached through a prefix. Both follow from what it
+   * is. It is not a `gotoRegion` because it does not put the keyboard anywhere —
+   * `g` means "go there", and this goes nowhere; and it is not a letter because a
+   * letter is a vault's to claim, where `!` can never be one (`isKeyShaped`). So
+   * it costs no vocabulary anything and needs no entry in `RESERVED`.
+   *
+   * `!` rather than any other free mark, on vim's reading of it: `!` is the key
+   * that hands what you have to an external program. That is exactly this — the
+   * note goes to a session that is not the app.
+   *
+   * The safety is a confirm rather than a second keystroke, and it has to be:
+   * this is one stroke and it creates directories and branches. The dialog names
+   * the workspace and the branch before either exists.
+   */
+  | { kind: 'work' }
   /** Step within whatever list of chips currently holds focus. */
   | { kind: 'listMove'; delta: number }
   | { kind: 'open' }
@@ -575,6 +595,16 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
       return emit({ kind: 'help' });
     case 'n':
       return emit({ kind: 'newCard' });
+    /**
+     * Hand this note to a session. See `Command`'s `work` for why it is a bare
+     * mark and why that mark is this one.
+     *
+     * Above the facet fallthrough like every other case here, but uniquely
+     * safe there: `!` is not a letter, so no vocabulary can reach it and this is
+     * not shadowing anything even in principle.
+     */
+    case '!':
+      return emit({ kind: 'work' });
   }
 
   /**
@@ -627,22 +657,25 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: 'h l', does: 'across columns' },
       { keys: '[ ]', does: 'across lanes' },
       { keys: 'gg G', does: 'first / last' },
-      { keys: '⏎ o', does: 'open the card' },
+      { keys: '⏎ o', does: 'open the note' },
       { keys: 'H L', does: 'back / forward through visited cards' },
       { keys: 'esc', does: 'close · leave a list · deselect' },
     ],
   },
   {
-    section: 'Into a card',
+    section: 'Into a note',
     rows: [
       { keys: 'g ⟨axis⟩', does: 'the note it names there' },
-      { keys: 'g ⇧⟨axis⟩', does: 'what names this card there' },
+      { keys: 'g ⇧⟨axis⟩', does: 'what names this note there' },
       { keys: 'g f', does: 'its facet rows' },
       { keys: 'g ⇧F', does: 'add an axis it lacks' },
       { keys: 'g l', does: 'its links' },
       { keys: 'g c', does: 'edit the body' },
       { keys: 'g y', does: 'edit the frontmatter' },
       { keys: '⟨axis⟩⟨axis⟩', does: 'one axis’s row' },
+      // The one row here that acts rather than reaching, which the wording has to
+      // carry on its own: every other line in this section moves the keyboard.
+      { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
     ],
   },
   {

@@ -469,8 +469,8 @@ second relative size, and therefore its own pair of measured constants — same 
 pair, written down beside them.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
-tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for the three drawn
-glyphs, `trash`, `refresh` and `edit`) so they read as one family — but
+tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for every drawn glyph —
+`trash`, `refresh`, `edit`, `start`) so they read as one family — but
 those metrics deliberately do **not** live here. The glyph set is closed, so the table in
 `src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
 a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
@@ -811,6 +811,18 @@ looks broken and is not, the carve-out is under **Accepted Exceptions** below.
 
 Audited twice now; nothing crosses these lines. The rule is a note of a distinction that already
 holds.
+
+**`start` is the counterweight, and it is why weight is measured rather than eyeballed.** The panel's
+far corner holds the two controls that act on a whole note: the trash, and the play triangle that
+starts work on it. They confirm for the same reason — both are one gesture with consequences outside
+this screen — but only one is destructive, and the ink says which. `trash` rasterises at 55.3 lit px
+against `start`'s 30.5 on the same instrument, so the destructive mark is nearly twice the weight of
+the constructive one at the same nominal size and the same hit target. A *filled* triangle measured 61
+and would have made the one purely constructive act the heaviest mark in the app. The glyph table in
+`src/web/components/Button.tsx` carries the measurements; this is the rule they serve.
+
+`start` is also the reason the corner became a group. Destructive controls sit at the very end of a
+row, so a reach for the corner that overshoots lands on nothing rather than on Delete.
 
 The bulk bar's **Merge…** is the case that looks like it crosses one and does not. It removes files,
 several of them — but the word opens a chooser, and a control that asks a question is not the act.

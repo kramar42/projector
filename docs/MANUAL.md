@@ -605,10 +605,25 @@ is one overwritten date and only ever says that *something* changed. The vault i
 the answer was already on disk — this reads the two versions of every changed file through the note
 parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
-**`pj work <id>`** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
-with the note's full context embedded, and a terminal running a Claude session in it. Reopening is
-idempotent, and one repo failing does not stop the others. **`PROJECTOR_WORKSPACES` is required** —
-worktrees are real directories on disk, so where they go is told, never guessed.
+**Starting work** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
+with the note's full context embedded, and a Claude session opened on it in the desktop app — the same
+place the `claude:` link on a note reopens a *past* session, so work happens in one app rather than
+two. Reopening is idempotent, and one repo failing does not stop the others.
+**`PROJECTOR_WORKSPACES` is required** — worktrees are real directories on disk, so where they go is
+told, never guessed.
+
+Three ways in, one act behind them:
+
+| | |
+|---|---|
+| the ▶ in the panel's top-right corner | beside the trash, and confirmed like it |
+| `!` with a note under the cursor | opens the panel if it is shut, then presses the same control |
+| `pj work <id>` | prints what it prepared, then hands the link to `open` |
+
+The confirm names the workspace directory, the branch and every repo *before* any of them exists,
+which is the whole of the safety on a one-keystroke launch. Backing out of it creates nothing.
+`pj work --dry-run` prints the same plan plus the entire briefing and touches nothing; `--no-open`
+prepares the workspace and prints the link instead of following it.
 
 The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
 before planning or writing code. Its last step links the session back to the note, so a note
@@ -687,7 +702,7 @@ one.
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
 | `pj context <id> [--json]` | everything known about a note, assembled |
-| `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, terminal |
+| `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, a session in the app |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
@@ -823,6 +838,13 @@ drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one d
 | `g` `c` | edit the body. `⌘S` saves, `Esc` leaves it |
 | `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
 | `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
+| `!` | **start work** on the cursor's note: worktrees, a briefing, a session in the app. Confirmed first, and the confirm names what it is about to create |
+
+`!` is the odd one out here: every other key in this section *reaches* something, and `!` does
+something. It reads that way from vim, where `!` is the key that hands what you have to an external
+program — which is exactly the act. It is also a mark rather than a letter on purpose: a facet's `key:`
+is one letter `a`–`z`, so `!` is a keystroke no vocabulary can claim and it cost the reserved set
+nothing. `w` for "work" would have cost `waiting_on` its letter.
 
 `g f` is how you reach an axis that declares **no** `key:` — walk to its row and pick a value.
 **`g ⇧F` adds one**: the list of axes the card carries nothing on opens with focus already in it, and

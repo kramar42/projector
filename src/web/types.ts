@@ -72,3 +72,24 @@ export interface NoteDetail {
   inbound: Record<string, { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[]>;
   project: ResolvedProject | null;
 }
+
+/**
+ * `POST /api/note/:id/work`, both answers.
+ *
+ * One type for the plan and the result because the plan *is* the result minus
+ * what happened: `workspace`, `branch` and `repos` are the same three facts
+ * either way, and `results` and `link` are the only things a commit adds. Two
+ * types would have let a caller read `link` off a plan that never created one.
+ */
+export interface WorkResult {
+  workspace: string;
+  branch: string;
+  repos: { path: string; base?: string }[];
+  /** The briefing text, on a plan only — the commit writes it to a file instead. */
+  briefing?: string;
+  /** One entry per declared repo, on a commit only. */
+  results?: { name: string; path: string; created: boolean; error: string | null }[];
+  /** The `claude://` deep link that opens the prepared workspace. Commit only. */
+  link?: string;
+  briefingPath?: string;
+}

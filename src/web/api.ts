@@ -1,6 +1,6 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
-import type { NoteDetail, Meta, QueryResponse, Resolved } from './types.ts';
+import type { NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
 import { foreignOf } from './changed.ts';
 export { FLUSH_MS } from './changed.ts';
 
@@ -131,6 +131,21 @@ export const api = {
     stampSelfWrite(id),
     req<{ removedEdges: number }>('DELETE', `/api/note/${encodeURIComponent(id)}`)
   ),
+
+  /**
+   * Start work on a note: a worktree workspace, a briefing, and a link that opens
+   * it in the desktop app.
+   *
+   * No `stampSelfWrite`, and that is not an omission. Nothing inside the vault
+   * changes — the worktrees and the briefing live under `$PROJECTOR_WORKSPACES` —
+   * so there is no note write for the watcher to mistake for someone else's.
+   *
+   * `commit: false` is the plan and touches nothing, which is what the confirm is
+   * built from: a dialog that names the directory it is about to create is worth
+   * one extra round trip against localhost.
+   */
+  work: (id: string, commit: boolean) =>
+    req<WorkResult>('POST', `/api/note/${encodeURIComponent(id)}/work`, { commit }),
 
   bulk: (input: {
     ids: string[];

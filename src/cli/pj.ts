@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { paths, resolveCliVault, resolvePath } from '../config.ts';
-import { settingsFor } from '../settings.ts';
+import { mkdirSync } from 'node:fs';
+import { paths, resolveCliVault } from '../config.ts';
 import { formatReport, probe, writeTemplate } from '../setup.ts';
 import { jiraConfig } from '../sources/jira.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
@@ -34,8 +32,8 @@ import {
   sweep,
 } from '../intake/run.ts';
 import { resetWatermark } from '../intake/db.ts';
-import { buildBriefing } from '../agent/briefing.ts';
-import { branchFor, prepareWorkspace, terminalScript, workspacePath } from '../agent/worktree.ts';
+import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
+import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
 import { createNote, deleteNote, mergeNotes, patchNote, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
@@ -821,80 +819,65 @@ try {
         console.error('pj work <id>');
         process.exit(1);
       }
-      const jiraKeys = ctx.links.filter((l) => l.kind === 'jira').map((l) => l.ref);
-      const branch = branchFor(ctx.id, { template: ctx.project?.branch, jiraKeys });
-      // Required, with no fallback. `pj work` creates real worktrees on disk, and a
-      // guessed parent directory puts them somewhere the user did not choose and
-      // will not think to look. Being told is cheap; being surprised is not.
-      const workspaces = settingsFor(root).workspaces;
-      if (!workspaces) {
-        console.error(
-          '`pj work` has not been told where worktrees go. Run `pj setup`, put\n' +
-            '`workspaces: ~/Code/wt` in .projector/config.yaml, or export\n' +
-            'PROJECTOR_WORKSPACES.',
-        );
-        process.exit(1);
-      }
-      const parentDir = resolvePath(workspaces, process.cwd());
-      const workspace = workspacePath(parentDir, ctx.project?.key ?? 'no-project', branch);
-      const repos = ctx.project?.repos ?? [];
-
-      if (!repos.length) {
-        console.error(
-          `"${ctx.id}" has no repos: its project declares none, or it has no project.\n` +
-            `Add repos to the project note's frontmatter, then try again.`,
-        );
+      /**
+       * Deciding and doing are both `agent/work.ts` now, because the app reaches
+       * the same act through `POST /api/note/:id/work` and the two must not be
+       * able to disagree about which branch, which directory or which link. What
+       * is left here is printing.
+       */
+      let plan;
+      try {
+        plan = planWork(ctx, root);
+      } catch (err) {
+        if (!(err instanceof NotWorkable)) throw err;
+        console.error(err.message);
         process.exit(1);
       }
 
-      console.log(`workspace  ${workspace}`);
-      console.log(`branch     ${branch}`);
-      for (const r of repos) console.log(`repo       ${r.path}${r.base ? ` @ ${r.base}` : ''}`);
+      console.log(`workspace  ${plan.workspace}`);
+      console.log(`branch     ${plan.branch}`);
+      for (const r of plan.repos) console.log(`repo       ${r.path}${r.base ? ` @ ${r.base}` : ''}`);
 
       if (flags.has('dry-run')) {
-        const briefing = buildBriefing({
-          ctx,
-          workspace,
-          branch,
-          // Preview the worktree paths a real run would create. The source
-          // checkout is exactly the path the briefing forbids touching, so
-          // printing it here made the dry run contradict its own text.
-          repos: repos.map((r) => {
-            const name = r.path.split('/').pop()!;
-            return { name, path: join(workspace, name), created: false, error: null };
-          }),
-        });
         console.log('\n--- AGENT_BRIEFING.md (dry run) ---\n');
-        console.log(briefing);
+        console.log(plannedBriefing(ctx, plan));
         break;
       }
 
-      const results = prepareWorkspace(workspace, repos, branch);
-      for (const r of results) {
-        console.log(`  ${r.error ? '✗' : r.created ? '+' : '='} ${pad(r.name, 26)} ${r.error ?? r.path}`);
-      }
-      if (!results.some((r) => !r.error)) {
-        console.error('\nno worktree could be created; not launching');
+      let started;
+      try {
+        started = startWork(ctx, plan);
+      } catch (err) {
+        if (!(err instanceof NotWorkable)) throw err;
+        console.error(`\n${err.message}`);
         process.exit(1);
       }
-
-      const briefing = buildBriefing({ ctx, workspace, branch, repos: results });
-      const briefingPath = join(workspace, 'AGENT_BRIEFING.md');
-      writeFileSync(briefingPath, briefing, 'utf8');
-      console.log(`\nwrote ${briefingPath}`);
+      for (const r of started.results) {
+        console.log(`  ${r.error ? '✗' : r.created ? '+' : '='} ${pad(r.name, 26)} ${r.error ?? r.path}`);
+      }
+      console.log(`\nwrote ${started.briefingPath}`);
 
       if (flags.has('no-open')) {
-        console.log('not opening a terminal (--no-open)');
+        console.log(`not opening the app (--no-open)\n  ${started.link}`);
         break;
       }
+      /**
+       * The desktop app, not a terminal.
+       *
+       * A note already opens its past sessions in the app — `enrich/claudeSession.ts`
+       * mints a `claude://` link for every one it can — so the session that is
+       * about to exist opens the same way, rather than in a second place with its
+       * own idea of what a session is. `open` hands the URL to whatever registered
+       * the scheme; the fallback below is the CLI, for a machine with no app.
+       */
       try {
-        execFileSync('osascript', ['-e', terminalScript(workspace, 'Read AGENT_BRIEFING.md and follow it exactly.')], {
-          stdio: ['ignore', 'ignore', 'pipe'],
-        });
-        console.log('opened a Terminal running claude there');
+        execFileSync('open', [started.link], { stdio: ['ignore', 'ignore', 'pipe'] });
+        console.log('opened the workspace in Claude');
       } catch (err) {
-        console.error(`could not open Terminal: ${(err as Error).message}`);
-        console.log(`run it yourself:\n  cd ${workspace} && claude "Read AGENT_BRIEFING.md and follow it exactly."`);
+        console.error(`could not open the app: ${(err as Error).message}`);
+        console.log(
+          `run it yourself:\n  cd ${shellQuote(started.workspace)} && claude ${shellQuote(BRIEFING_PROMPT)}`,
+        );
       }
       break;
     }

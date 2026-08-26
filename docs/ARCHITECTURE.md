@@ -111,7 +111,7 @@ the two are expected to be editing the same note at the same time.
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
 | `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
-| `src/agent/` | note context assembly, worktree workspaces, briefings, git history |
+| `src/agent/` | note context assembly, worktree workspaces, briefings, git history — and `work.ts`, the plan-and-launch both `pj work` and `POST /api/note/:id/work` reach, so the CLI and the panel cannot disagree about which branch, which directory or which link |
 | `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
 
 ## The query compiler
@@ -458,7 +458,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
-| `pj work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo |
+| `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
 
@@ -483,7 +483,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
 | `<vault>/.projector/intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
-| `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
+| `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 
 Every note write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
 sees half a file. The registry is written the same way.
@@ -496,7 +496,7 @@ sees half a file. The registry is written the same way.
 | `~/Library/Application Support/Claude/claude-code-sessions/<org>/<account>/*.json` | the Claude Desktop store — a different vendor surface with its own `local_` id space, for a `claude:` link whose session lives there | read-only |
 | any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
 | any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
-| a project's declared `repos` | `pj work`, through `git`; `pj intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
+| a project's declared `repos` | starting work, through `git`; `pj intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
 
 `doc:` and the folder picker are the two places a path outside the vault is reachable, and both are
 deliberate: a `doc:` ref is something you typed, and a picker that cannot leave one directory cannot
@@ -504,11 +504,13 @@ pick a folder. Neither reads anything you have not named.
 
 **Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `pj log`, and
 `log`/`branch`/`config`/`remote` in declared repos for `pj intake git`),
-`gh` (`pr view`, `api` GETs), `osascript` (opening a terminal, `pj work` only), and `ps` (one `ppid`
+`gh` (`pr view`, `api` GETs), `open` (handing one `claude://` deep link to the desktop app, `pj work`
+only), and `ps` (one `ppid`
 read per level, walking up the process tree to find which live Claude session is asking). No shell —
 `execFile`/`execFileSync`/`spawnSync`, always with an argument array, so
-nothing is interpolated into a command line. AppleScript quoting is applied on top of shell quoting,
-because a path may contain a quote.
+nothing is interpolated into a command line. There is no quoting layer left in the launch path: the
+workspace and the prompt travel as URL parameters, and the one shell string — the `cd … && claude …`
+printed when `open` fails — is never executed by this code.
 
 **Where configuration lives.** A vault's own `.projector/config.yaml` holds which channels it
 sweeps, whether its links are enriched, and the credentials those need — read by `src/settings.ts`,
@@ -527,7 +529,7 @@ or a one-off run needs:
 |---|---|
 | `PROJECTOR_DATA` | the vault, for the CLI |
 | `PROJECTOR_PORT` | server port (default 8092) |
-| `PROJECTOR_WORKSPACES` | where `pj work` puts worktrees. **Required** — `pj work` refuses rather than guessing a directory to create real worktrees in |
+| `PROJECTOR_WORKSPACES` | where worktrees go. **Required** — starting work refuses rather than guessing a directory to create real worktrees in, from the CLI and from the panel alike |
 | `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
 | `PROJECTOR_INTAKE_JQL` | overrides the JQL `pj intake jira` searches with |
 | `PROJECTOR_GIT_AUTHOR` | whose commits `pj intake git` looks for (default: each repo's own `user.email`) |
@@ -659,9 +661,9 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 
 | | |
 |---|---|
-| `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
+| `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — the desktop deep link and the one shell string left beside it, base-branch fallback, worktree preparation, both of `planWork`'s refusals, a dry run naming worktrees rather than checkouts, and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
 | `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
-| `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a card lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
+| `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, and the layout following only the relation shown |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
 | `cli.test.ts` | every command refusing an unknown flag, `--json` being the payload the app receives, the registry, exit codes |

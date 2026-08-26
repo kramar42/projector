@@ -2537,8 +2537,18 @@ textarea { resize: vertical; font-family: inherit; }
   margin: 0;
 }
 
-.panel-x {
+/* The head's far corner, where every control that acts on the whole note lives.
+   The push belongs to the group: it was `margin-left: auto` on the trash itself,
+   which worked while the trash was alone and put all the slack *between* the pair
+   the moment a second button joined it. */
+.panel-acts {
   margin-left: auto;
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.panel-x {
   flex: none;
 }
 

@@ -36,13 +36,15 @@ function dispatch(id: string, p: Plan): Promise<{ mtime?: number; warnings?: str
 }
 
 /**
- * One door for everything the panel writes about one card.
+ * One door for everything the panel writes about one note.
  *
  * What a caller must know:
  *
  * - **Every write carries a base mtime**, stamped by `planWrite`. There is no
- *   unstamped path, and after this the panel imports no `api` at all, so there is
- *   nothing left to make one with.
+ *   unstamped path, and this is the only door in the panel through which a note is
+ *   changed, so there is nothing left to make an unstamped one with. `useWorkStarter`
+ *   is the sibling door and reaches `api` too — it carries no base because it
+ *   changes no note, and that is stated there rather than being an exception here.
  * - **The base is read at call time**, through refs. This is not tidiness: the
  *   body editor builds its ⌘S handler once at mount and closes over whatever it
  *   was handed, so a handler frozen at mount and one built this render must be

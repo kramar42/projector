@@ -1105,6 +1105,47 @@ function run(command: Command, s: KeyState): void {
       }, 10);
     }
 
+    /**
+     * Start work on the note under the cursor.
+     *
+     * Presses the panel's own button rather than calling the endpoint, and that is
+     * the decision rather than a shortcut: the button owns the plan-confirm-launch
+     * sequence and the banner that reports it, so a keystroke that called the API
+     * itself would be a second path to the same act — one that could skip the
+     * confirm, and one more place to keep the wording of a refusal.
+     *
+     * The panel is opened when it is shut, on `gotoRegion`'s reasoning: everything
+     * this can say afterwards is said in the panel's head, so a launch reported to
+     * a surface that is not on screen is a launch reported nowhere. `focusSoon`
+     * covers the load.
+     *
+     * `orElse` matters here more than anywhere else it is used. Every other search
+     * in this file fails when a row is absent; this one fails when the *cursor* is
+     * — press `!` on an empty board and there is nothing to work on, which has to
+     * say so rather than look broken.
+     */
+    case 'work': {
+      const on = openNote ?? cursor.id;
+      if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
+      if (!openNote) setOpenNote(on);
+      return focusSoon(
+        () => {
+          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="work"]');
+          if (!button) return null;
+          button.click();
+          // Returned so `focusSoon` **stops**, which is the load-bearing part: it
+          // retries while the search comes back empty, and a retry here would be a
+          // second launch. The `focus()` it then does is incidental and does not
+          // stick — the control goes `disabled` while the plan is in flight, and a
+          // disabled element cannot hold focus. That is also a third guard against
+          // a double launch, after the hook's own and the confirm: `.click()` on a
+          // disabled button does nothing, so a second `!` mid-flight is inert.
+        },
+        10,
+        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was started' }),
+      );
+    }
+
     case 'moveTo':
       return goTo(command.end === 'first' ? first(grid) : last(grid));
 
