@@ -105,7 +105,11 @@ test('worktree prune runs even when the folder already exists', () => {
     calls.push(args.join(' '));
     return { ok: true, out: '', err: '' };
   };
-  addWorktree({ path: '/Users' }, '/Users', 'b', git); // /Users/Users won't exist
+  // The repo has to exist or addWorktree bails before pruning; the target must
+  // not, or it takes the already-prepared path instead. A fresh temp dir is both.
+  const repo = mkdtempSync(pathJoin(tmpdir(), 'projector-worktree-'));
+  addWorktree({ path: repo }, repo, 'b', git); // <repo>/<basename repo> won't exist
+  rmSync(repo, { recursive: true, force: true });
   assert.ok(calls.some((c) => c === 'worktree prune'), calls.join(' | '));
 });
 
