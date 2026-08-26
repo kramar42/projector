@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -20,6 +20,7 @@ import {
   saveAsset,
 } from '../src/server/mutate.ts';
 import { readAll } from '../src/index/indexer.ts';
+import { paths } from '../src/config.ts';
 
 /**
  * The write gate.
@@ -36,9 +37,9 @@ import { readAll } from '../src/index/indexer.ts';
 
 function vault(cards: Record<string, string> = {}): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'pj-mutate-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
   writeFileSync(
-    join(root, 'facets.yaml'),
+    paths(root).facets,
     'priority: { label: Priority, values: [now, month, backlog], open: false }\n' +
       'status: { label: Status, values: [planning, done], open: false, single: true }\n' +
       'tech: { label: Tech, values: [kafka], open: true }\n' +
@@ -46,7 +47,7 @@ function vault(cards: Record<string, string> = {}): { root: string; cleanup: () 
     'utf8',
   );
   for (const [id, body] of Object.entries(cards)) {
-    writeFileSync(join(root, 'notes', `${id}.md`), body, 'utf8');
+    writeFileSync(join(paths(root).notes, `${id}.md`), body, 'utf8');
   }
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -55,7 +56,7 @@ const card = (id: string, facets: string) =>
   `---\nid: ${id}\ntitle: ${id.toUpperCase()}\nfacets: { ${facets} }\n---\nbody of ${id}\n`;
 
 const facetsOf = (root: string, id: string) =>
-  readAll(join(root, 'notes')).notes.get(id)?.facets ?? {};
+  readAll(paths(root).notes).notes.get(id)?.facets ?? {};
 
 // ---------------------------------------------------------------- bulkMove
 
@@ -117,10 +118,10 @@ test('a move writes only the facet it names', () => {
 test('a move that changes nothing writes nothing', () => {
   const v = vault({ a: card('a', 'priority: [month]') });
   try {
-    const before = mtimeOf(join(v.root, 'notes', 'a.md'));
+    const before = mtimeOf(join(paths(v.root).notes, 'a.md'));
     const move = [{ facet: 'priority', from: 'now', to: 'month' }];
     assert.equal(bulkMove(v.root, ['a'], move, 'add').changed, 0);
-    assert.equal(mtimeOf(join(v.root, 'notes', 'a.md')), before, 'the file was not touched');
+    assert.equal(mtimeOf(join(paths(v.root).notes, 'a.md')), before, 'the file was not touched');
   } finally {
     v.cleanup();
   }
@@ -244,12 +245,12 @@ test('a narrow write touches one axis and leaves an agent’s concurrent edit al
   const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
   try {
     // What the browser read, and what it still believes the map to be.
-    const base = mtimeOf(join(v.root, 'notes', 'a.md'));
+    const base = mtimeOf(join(paths(v.root).notes, 'a.md'));
 
     // An agent edits another axis. Within the guard's tolerance, so no conflict:
     // this is the race that has no 409 to catch it.
     writeFileSync(
-      join(v.root, 'notes', 'a.md'),
+      join(paths(v.root).notes, 'a.md'),
       card('a', 'priority: [now], tech: [kafka, quarkus]'),
       'utf8',
     );
@@ -294,10 +295,10 @@ test('a narrow write clears an axis by naming it empty, and validates the values
 test('a toggle removes the value it names without reverting one added beside it', () => {
   const v = vault({ a: card('a', 'tech: [kafka]') });
   try {
-    const base = mtimeOf(join(v.root, 'notes', 'a.md'));
+    const base = mtimeOf(join(paths(v.root).notes, 'a.md'));
 
     // The user's panel rendered with tech: [kafka]. An agent then adds one.
-    writeFileSync(join(v.root, 'notes', 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
+    writeFileSync(join(paths(v.root).notes, 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
 
     // The user clicks `kafka` off. Under `set` this would send [] and take
     // `quarkus` with it.
@@ -397,7 +398,7 @@ test('a reference facet refuses a cycle, and self-reference, given the notes', (
     mid: card('mid', 'status: [planning]'),
   });
   try {
-    const notes = readAll(join(v.root, 'notes')).notes;
+    const notes = readAll(paths(v.root).notes).notes;
 
     // `top` already points at `mid`; pointing `mid` back closes a loop.
     assert.throws(
@@ -421,7 +422,7 @@ test('a reference facet refuses a cycle, and self-reference, given the notes', (
 test('frontmatter is written whole, and a stale mtime is a conflict', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
-    const file = join(v.root, 'notes', 'a.md');
+    const file = join(paths(v.root).notes, 'a.md');
     const res = putFrontmatter(v.root, 'a', 'id: a\ntitle: Renamed\nfacets: { priority: [month] }\n');
     assert.ok(typeof res.mtime === 'number');
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['month']);
@@ -429,6 +430,58 @@ test('frontmatter is written whole, and a stale mtime is a conflict', () => {
 
     // A write carrying an mtime from before someone else's edit is refused.
     assert.throws(() => putFrontmatter(v.root, 'a', 'id: a\ntitle: X\n', 1), (e) => e instanceof Conflict);
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- bare notes
+
+/**
+ * The first write to a file that carried no frontmatter.
+ *
+ * `patchKey` was always happy to invent a fence, so the naive version of this
+ * wrote `updated:` alone — a file with frontmatter, no `id`, and a body it could
+ * no longer be found by. Identity has to go in *with* the first key, and it has
+ * to be the identity the card was already answering to.
+ */
+test('writing to a note that carried no frontmatter freezes the name it was going by', () => {
+  const v = vault();
+  try {
+    const file = join(paths(v.root).notes, 'Reading Notes.md');
+    writeFileSync(file, '# Monday reading\n\nWe talked about the thing.\n', 'utf8');
+
+    // Found by the id the parser derived, without anything having written it.
+    patchNote(v.root, 'reading-notes', { facets: { status: ['planning'] } });
+
+    const rec = readAll(paths(v.root).notes).notes.get('reading-notes')!;
+    assert.deepEqual(rec.facets.status, ['planning']);
+    assert.equal(rec.title, 'Monday reading', 'the heading it was already titled by');
+
+    const text = readFileSync(file, 'utf8');
+    assert.match(text, /^---\nid: reading-notes\ntitle: Monday reading\n/, 'identity, written down');
+    assert.match(text, /We talked about the thing\.\n$/, 'and the body is untouched');
+
+    // Which is the whole point: the file can now be renamed without renaming the
+    // card, so a reference pointing at it survives.
+    renameSync(file, join(paths(v.root).notes, 'archive-me.md'));
+    assert.ok(readAll(paths(v.root).notes).notes.get('reading-notes'), 'still the same card');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a body written to a bare note leaves it bare until the identity lands', () => {
+  const v = vault();
+  try {
+    const file = join(paths(v.root).notes, 'thought.md');
+    writeFileSync(file, 'just prose\n', 'utf8');
+    patchNote(v.root, 'thought', { body: 'different prose\n' });
+
+    const text = readFileSync(file, 'utf8');
+    assert.equal(text.startsWith('---\n'), true, 'the write that follows a body edit adds identity');
+    assert.match(text, /different prose\n$/);
+    assert.equal(text.includes('undefined'), false, 'and never the string "undefined"');
   } finally {
     v.cleanup();
   }
@@ -444,7 +497,7 @@ test('an asset is stored by content hash under its card, and its type is checked
     // The path returned is relative to `cards/`, since that is where a card body
     // resolves it from.
     assert.match(first.path, /^assets\/a\/[0-9a-f]{12}\.png$/, first.path);
-    assert.ok(existsSync(join(v.root, 'notes', first.path)), 'stored under cards/');
+    assert.ok(existsSync(join(paths(v.root).notes, first.path)), 'stored under cards/');
 
     // The same bytes hash to the same name rather than accumulating copies.
     assert.equal(saveAsset(v.root, 'a', 'image/png', png).path, first.path);
@@ -461,8 +514,8 @@ test('a bulk delete removes the files and reports how many', () => {
   const v = vault({ a: card('a', 'priority: [now]'), b: card('b', 'priority: [now]') });
   try {
     assert.equal(bulkDelete(v.root, ['a', 'ghost']).deleted, 1, 'a missing id is not a failure');
-    assert.ok(!existsSync(join(v.root, 'notes', 'a.md')));
-    assert.ok(existsSync(join(v.root, 'notes', 'b.md')));
+    assert.ok(!existsSync(join(paths(v.root).notes, 'a.md')));
+    assert.ok(existsSync(join(paths(v.root).notes, 'b.md')));
   } finally {
     v.cleanup();
   }
@@ -471,23 +524,23 @@ test('a bulk delete removes the files and reports how many', () => {
 test('linking bumps updated, and unlinking an absent ref refuses', () => {
   const root = mkdtempSync(join(tmpdir(), 'projector-link-'));
   try {
-    mkdirSync(join(root, 'notes'), { recursive: true });
+    mkdirSync(paths(root).config, { recursive: true });
     writeFileSync(
-      join(root, 'notes', 'a.md'),
+      join(paths(root).notes, 'a.md'),
       '---\nid: a\ntitle: Card A\nupdated: 2020-01-01\n---\nbody\n',
       'utf8',
     );
-    writeFileSync(join(root, 'facets.yaml'), 'status: { values: [planning, done] }\n', 'utf8');
+    writeFileSync(paths(root).facets, 'status: { values: [planning, done] }\n', 'utf8');
 
     patchNote(root, 'a', { links: ['jira:FOO-1'] });
-    const after = readFileSync(join(root, 'notes', 'a.md'), 'utf8');
+    const after = readFileSync(join(paths(root).notes, 'a.md'), 'utf8');
     assert.match(after, /links: \[jira:FOO-1\]/);
     assert.doesNotMatch(after, /updated: 2020-01-01/, 'a write that leaves `updated` alone is the bug');
     assert.match(after, /updated: \d{4}-\d{2}-\d{2}/);
 
     // Emptying the array drops the key rather than storing `links: []`.
     patchNote(root, 'a', { links: [] });
-    assert.doesNotMatch(readFileSync(join(root, 'notes', 'a.md'), 'utf8'), /links:/);
+    assert.doesNotMatch(readFileSync(join(paths(root).notes, 'a.md'), 'utf8'), /links:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -563,7 +616,7 @@ test('the delete cascade takes only the dangling reference off a bystander', () 
     // Change the bystander on disk after it would have been snapshotted by an
     // earlier read, then delete. The cascade must keep what it finds there.
     writeFileSync(
-      join(v.root, 'notes', 'holder.md'),
+      join(paths(v.root).notes, 'holder.md'),
       card('holder', 'parent: [target], tech: [kafka], priority: [backlog]'),
       'utf8',
     );
@@ -620,7 +673,7 @@ test('the write paths that carry a guard are the ones the document names', () =>
 
   // And the document says so, in the table rather than in a sentence that reads
   // like a promise about everything.
-  const doc = readFileSync(new URL('../ARCHITECTURE.md', import.meta.url), 'utf8');
+  const doc = readFileSync(new URL('../docs/ARCHITECTURE.md', import.meta.url), 'utf8');
   assert.match(doc, /Conflicts are refused where a base is sent/, 'the scoped claim');
   assert.doesNotMatch(
     doc,
@@ -646,7 +699,7 @@ test('the write paths that carry a guard are the ones the document names', () =>
 test('a base from our own preceding write is accepted; one from before a foreign write is not', () => {
   const v = vault({ shared: card('shared', 'priority: [now]') });
   try {
-    const file = join(v.root, 'notes', 'shared.md');
+    const file = join(paths(v.root).notes, 'shared.md');
     const first = mtimeOf(file);
 
     // Our write, carrying the mtime we read. Accepted, and it returns the new one.
@@ -701,7 +754,7 @@ test('a delta folds into what is on disk, so a concurrent value survives it', ()
   try {
     // Somebody else adds a value we never saw.
     writeFileSync(
-      join(v.root, 'notes', 'shared.md'),
+      join(paths(v.root).notes, 'shared.md'),
       card('shared', 'tech: [kafka, aws]'),
       'utf8',
     );
@@ -738,7 +791,7 @@ const noteFile = (id: string, front = '', body = '') =>
   `---\nid: ${id}\ntitle: ${id.toUpperCase()}\n${front}---\n${body}`;
 
 const bodyOf = (root: string, id: string) =>
-  readAll(join(root, 'notes')).notes.get(id)?.body ?? null;
+  readAll(paths(root).notes).notes.get(id)?.body ?? null;
 
 test('a merge folds bodies into sections, combines links, and removes the files', () => {
   const v = vault({
@@ -748,7 +801,7 @@ test('a merge folds bodies into sections, combines links, and removes the files'
   try {
     const res = mergeNotes(v.root, 'keep', ['gone', 'keep']);
     assert.deepEqual(res, { merged: 1, repointed: 0 });
-    const notes = readAll(join(v.root, 'notes')).notes;
+    const notes = readAll(paths(v.root).notes).notes;
     assert.equal(notes.has('gone'), false, 'the absorbed file is gone');
     // The survivor's own lifecycle is untouched — it did not inherit `done`.
     assert.deepEqual(notes.get('keep')!.facets.status, ['planning']);
@@ -810,7 +863,7 @@ test('a merge that would close a loop is refused, and writes nothing first', () 
   });
   try {
     assert.throws(() => mergeNotes(v.root, 'keep', ['gone']), /reach itself through "parent"/);
-    const notes = readAll(join(v.root, 'notes')).notes;
+    const notes = readAll(paths(v.root).notes).notes;
     assert.equal(notes.has('gone'), true, 'the absorbed file is still there');
     assert.deepEqual(notes.get('middle')!.facets.parent, ['gone'], 'nothing was repointed');
     assert.equal(bodyOf(v.root, 'keep'), '', 'the survivor’s body was not composed');
@@ -826,7 +879,7 @@ test('a merge carries the fingerprints of what it absorbed', () => {
   });
   try {
     mergeNotes(v.root, 'keep', ['gone']);
-    const rec = readAll(join(v.root, 'notes')).notes.get('keep')!;
+    const rec = readAll(paths(v.root).notes).notes.get('keep')!;
     assert.deepEqual(rec.absorbed_fingerprints, ['slack:C1/1']);
     assert.equal(rec.source_fingerprint, 'jira:PROJ-1');
   } finally {
@@ -847,7 +900,7 @@ test('a card can answer for a message that extended it, without claiming to have
   const v = vault({ chore: noteFile('chore', 'source_fingerprint: gmail:ORIGIN\n') });
   try {
     patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'] } });
-    const rec = readAll(join(v.root, 'notes')).notes.get('chore')!;
+    const rec = readAll(paths(v.root).notes).notes.get('chore')!;
     assert.deepEqual(rec.absorbed_fingerprints, ['gmail:LATER']);
     // Where it came from is not what extended it: overwriting the origin would
     // lose the only record of which sweep first found this work.
@@ -883,7 +936,7 @@ test('a fingerprint answers for exactly one card', () => {
       (e: unknown) => e instanceof Invalid && /already came from/.test((e as Error).message),
     );
     // Refused means unwritten, not half-written.
-    assert.equal(readAll(join(v.root, 'notes')).notes.get('other')!.absorbed_fingerprints, undefined);
+    assert.equal(readAll(paths(v.root).notes).notes.get('other')!.absorbed_fingerprints, undefined);
   } finally {
     v.cleanup();
   }
@@ -895,7 +948,7 @@ test('a fingerprint can be handed back, and handing back one that is not held is
   try {
     patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'], mode: 'remove' } });
     // Dropped to nothing, rather than left as an empty list nobody can read.
-    assert.equal(readAll(join(v.root, 'notes')).notes.get('chore')!.absorbed_fingerprints, undefined);
+    assert.equal(readAll(paths(v.root).notes).notes.get('chore')!.absorbed_fingerprints, undefined);
     assert.throws(
       () => patchNote(v.root, 'chore', { absorb: { values: ['gmail:LATER'], mode: 'remove' } }),
       (e: unknown) => e instanceof Invalid && /does not answer for/.test((e as Error).message),
@@ -914,11 +967,11 @@ test('absorbed assets move to the survivor and the body’s paths move with them
   const v = vault({ keep: noteFile('keep'), gone: noteFile('gone') });
   try {
     const { path } = saveAsset(v.root, 'gone', 'image/png', Buffer.from('pretend-png'));
-    writeFileSync(join(v.root, 'notes', 'gone.md'), noteFile('gone', '', `\n![shot](${path})\n`), 'utf8');
+    writeFileSync(join(paths(v.root).notes, 'gone.md'), noteFile('gone', '', `\n![shot](${path})\n`), 'utf8');
     mergeNotes(v.root, 'keep', ['gone']);
     const moved = path.replace('assets/gone/', 'assets/keep/');
-    assert.equal(existsSync(join(v.root, 'notes', moved)), true, 'the file moved');
-    assert.equal(existsSync(join(v.root, 'notes', 'assets', 'gone')), false, 'the old folder went');
+    assert.equal(existsSync(join(paths(v.root).notes, moved)), true, 'the file moved');
+    assert.equal(existsSync(join(paths(v.root).notes, 'assets', 'gone')), false, 'the old folder went');
     assert.match(bodyOf(v.root, 'keep')!, new RegExp(moved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   } finally {
     v.cleanup();

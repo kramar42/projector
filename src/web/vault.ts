@@ -34,10 +34,18 @@ export interface VaultInfo {
   notes: number | null;
 }
 
+export interface BrowseEntry {
+  name: string;
+  isVault: boolean;
+  configured: boolean;
+}
+
 export interface Inspection {
   path: string;
   exists: boolean;
   isVault: boolean;
+  /** It has a `.projector/` — opened before, rather than merely openable. */
+  configured: boolean;
   notes: number;
   empty: boolean;
   suggestedName: string;
@@ -57,7 +65,7 @@ export const vaultApi = {
 
   browse: (path: string) =>
     fetch(`/api/vaults/browse?path=${encodeURIComponent(path)}`).then((r) =>
-      json<{ path: string; entries: { name: string; isVault: boolean }[] }>(r),
+      json<{ path: string; entries: BrowseEntry[] }>(r),
     ),
 
   inspect: (path: string) =>

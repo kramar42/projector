@@ -15,6 +15,7 @@ import { listTranscripts, pickSession, describeTranscript, type LiveSession } fr
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
+import { paths } from '../src/config.ts';
 
 /**
  * Intake is the one part of projector holding state that is not derived from the
@@ -25,9 +26,9 @@ import type { IntakeContext } from '../src/intake/types.ts';
 
 function vault(cards: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'pj-intake-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
   for (const [name, body] of Object.entries(cards)) {
-    writeFileSync(join(root, 'notes', `${name}.md`), body, 'utf8');
+    writeFileSync(join(paths(root).notes, `${name}.md`), body, 'utf8');
   }
   return root;
 }
@@ -489,7 +490,7 @@ test('the watermark store migrates in place rather than being replaced', () => {
   const root = vault({});
   try {
     commitWatermark(root, 'jira', '2026-08-18T13:32:49.967+0000', { seen: 1 });
-    const file = join(root, '.intake.db');
+    const file = paths(root).intakeDb;
     const raw = new DatabaseSync(file);
     const before = raw
       .prepare('SELECT channel, cursor, ran_at, seen, captured FROM watermark')

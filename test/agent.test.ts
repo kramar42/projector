@@ -15,6 +15,7 @@ import { buildBriefing } from '../src/agent/briefing.ts';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
+import { paths } from '../src/config.ts';
 
 
 /**
@@ -125,11 +126,11 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-git-'));
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
   try {
-    mkdirSync(pathJoin(root, 'notes'), { recursive: true });
+    mkdirSync(paths(root).config, { recursive: true });
     // The vocabulary decides what is watched and what "finished" means. Nothing
     // in the log names a facet or a value any more.
     writeFileSync(
-      pathJoin(root, 'facets.yaml'),
+      paths(root).facets,
       'status: { values: [planning, done], single: true, closed: [done] }\n' +
         'due: { type: date, single: true }\n' +
         'tech: { values: [], open: true }\n',
@@ -139,7 +140,7 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
     git('config', 'user.email', 't@t');
     git('config', 'user.name', 'T');
 
-    const card = pathJoin(root, 'notes', 'ship.md');
+    const card = pathJoin(paths(root).notes, 'ship.md');
     writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [planning] }\n---\n', 'utf8');
     git('add', '-A');
     git('commit', '-qm', 'add ship');

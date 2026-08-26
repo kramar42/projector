@@ -17,6 +17,7 @@ import { parseSpec } from '../src/view/spec.ts';
 import { COMPUTED } from '../src/index/query.ts';
 import { LINK_KINDS } from '../src/schema/links.ts';
 import { channelNames } from '../src/intake/run.ts';
+import { paths } from '../src/config.ts';
 
 /**
  * The constraint the whole model rests on: **no facet is special.**
@@ -156,30 +157,30 @@ function bareVault(): { root: string; cleanup: () => void } {
   initVault(root, SEED_FACETS, SEED_VIEWS);
   // Seeded, then emptied: this is the vault somebody made and then deleted the
   // vocabulary from, not one the app has never touched.
-  writeFileSync(join(root, 'facets.yaml'), '# nothing declared here yet\n', 'utf8');
+  writeFileSync(paths(root).facets, '# nothing declared here yet\n', 'utf8');
   // The seeded views all name axes this vault no longer has, so they go too.
   // What is left is one view naming nothing but a shape.
   for (const { file } of viewFiles(root)) rmSync(file);
   writeFileSync(
-    join(root, 'views', 'home.yaml'),
+    join(paths(root).views, 'home.yaml'),
     'shape: board\ntitle: Everything\nsort: [updated:desc]\n',
     'utf8',
   );
 
   const card = (id: string, body: string) =>
     writeFileSync(
-      join(root, 'notes', `${id}.md`),
+      join(paths(root).notes, `${id}.md`),
       `---\nid: ${id}\ntitle: ${id}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\n${body}\n`,
       'utf8',
     );
   card('plain', 'A note with no facets, which is now every note.');
   writeFileSync(
-    join(root, 'notes', 'linked.md'),
+    join(paths(root).notes, 'linked.md'),
     '---\nid: linked\ntitle: linked\nlinks: [jira:PROJ-1]\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA link, so the `linked` axis has something.\n',
     'utf8',
   );
   writeFileSync(
-    join(root, 'notes', 'owner.md'),
+    join(paths(root).notes, 'owner.md'),
     '---\nid: owner\ntitle: owner\nproject: {}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA project block, which is not a facet.\n',
     'utf8',
   );
@@ -190,7 +191,7 @@ function bareVault(): { root: string; cleanup: () => void } {
 test('a vault with notes, views and no vocabulary is a working vault', () => {
   const { root, cleanup } = bareVault();
   try {
-    const facets = loadFacets(join(root, 'facets.yaml'));
+    const facets = loadFacets(paths(root).facets);
     // The built-ins, and nothing else. This is the whole vocabulary.
     assert.deepEqual(Object.keys(facets), Object.keys(BUILTIN_FACETS));
 
@@ -200,7 +201,7 @@ test('a vault with notes, views and no vocabulary is a working vault', () => {
     // `pj check` is silent. It used to warn once per card about a missing
     // project, in a vault that has no notion of projects.
     const issues = [
-      ...validateVocabulary(declaredFacets(join(root, 'facets.yaml')), 'facets.yaml'),
+      ...validateVocabulary(declaredFacets(paths(root).facets), 'facets.yaml'),
       ...validate(notes, facets, root, { unreadable, duplicates }),
       ...validateViews(
         viewFiles(root).map(({ name, file }) => ({

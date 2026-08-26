@@ -226,6 +226,72 @@ test('a yaml date in a facet round-trips as a date, not a timestamp', () => {
   assert.match(renderNote({ ...res.rec }), /due: \[2026-09-01\]/);
 });
 
+// ---------------------------------------------------------------- bare notes
+
+/**
+ * A markdown file is a card, and a card need say nothing about itself.
+ *
+ * This is what lets a folder of somebody's existing notes be *opened* rather than
+ * imported. Every assertion here is about a file nobody wrote for projector.
+ */
+test('a file with no frontmatter is a note, named by its heading and its filename', () => {
+  const res = parseNote('/vault/Reading Notes.md', '# Monday reading\n\nWe talked about the thing.\n');
+  assert.ok(res.ok, 'no frontmatter is not a parse failure');
+  assert.equal(res.rec.id, 'reading-notes', 'the filename, lowercased, dashes for the rest');
+  assert.equal(res.rec.title, 'Monday reading', 'the leading heading');
+  assert.deepEqual(res.rec.facets, {});
+  assert.deepEqual(res.rec.links, []);
+  // The body is the whole file, byte for byte — the heading included. Dropping it
+  // is the *renderer's* business, and only when it duplicates the title.
+  assert.equal(res.rec.body, '# Monday reading\n\nWe talked about the thing.\n');
+});
+
+test('a note names itself by its filename when the body has no leading heading', () => {
+  // A heading further down is a section, not a title.
+  const res = parseNote('/vault/kafka-retention.md', 'Some prose first.\n\n# Not the title\n');
+  assert.ok(res.ok);
+  assert.equal(res.rec.title, 'kafka-retention');
+});
+
+test('frontmatter that says nothing about identity still gets some', () => {
+  // The case that matters: an Obsidian note with properties and no `id`. Requiring
+  // one the moment a fence exists would reject exactly the vaults this is for.
+  const res = parseNote('/vault/2026 review.md', '---\ntags: [year]\n---\n\n# The year\n');
+  assert.ok(res.ok, `should parse: ${res.ok ? '' : res.errors.join('; ')}`);
+  assert.equal(res.rec.id, '2026-review');
+  assert.equal(res.rec.title, 'The year');
+});
+
+test('a derived id is always a legal id, whatever the filename was', () => {
+  const id = (f: string) => {
+    const res = parseNote(f, 'x');
+    return res.ok ? res.rec.id : null;
+  };
+  assert.equal(id('/v/Meeting — 12 Aug (draft).md'), 'meeting-12-aug-draft');
+  assert.equal(id('/v/__private__.md'), 'private', 'no leading or trailing dash');
+  assert.equal(id('/v/日記.md'), 'note', 'a name with nothing to keep still gets one');
+  // Every one of them satisfies the schema's own rule for a written id.
+  for (const f of ['/v/Meeting — 12 Aug (draft).md', '/v/__private__.md', '/v/日記.md']) {
+    assert.match(id(f)!, /^[a-z0-9][a-z0-9-]*$/);
+  }
+});
+
+test('a bare note keeps its identity when it is written down', () => {
+  // What `patchAll` materialises has to be what the reader was already using, or
+  // the first write renames the card and orphans every reference to it.
+  const res = parseNote('/vault/Reading Notes.md', '# Monday reading\n\nbody\n');
+  assert.ok(res.ok);
+  const written = renderNote({ ...res.rec, facets: {}, links: [] });
+  const reread = parseNote('/vault/Reading Notes.md', written);
+  assert.ok(reread.ok);
+  assert.equal(reread.rec.id, res.rec.id, 'the same id, not a fresh one');
+  assert.equal(reread.rec.title, res.rec.title);
+  // And it survives the rename that a derived id would not have.
+  const moved = parseNote('/vault/renamed.md', written);
+  assert.ok(moved.ok);
+  assert.equal(moved.rec.id, 'reading-notes');
+});
+
 // ---------------------------------------------------------------- validation
 
 function facetsFile(body: string): string {

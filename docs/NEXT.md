@@ -8,7 +8,7 @@ canvas. Then facets got a `type` — `label · ref · date · number` — so `du
 filters work on any ordered one, the type picks the editing control, and project instructions moved out
 of the body into the `project:` block.
 
-All of it is described in [README.md](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md). The phase
+All of it is described in [MANUAL.md](MANUAL.md) and [ARCHITECTURE.md](ARCHITECTURE.md). The phase
 documents it was designed in are gone: the design is the code now, and a second place saying so would
 only drift.
 

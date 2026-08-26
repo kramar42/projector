@@ -118,7 +118,7 @@ test('every size token declared is used', () => {
  * a generator reads and that a person looks up.
  */
 test('DESIGN.md names the same size tokens the stylesheet does', () => {
-  const doc = readFileSync(fileURLToPath(new URL('../DESIGN.md', import.meta.url)), 'utf8');
+  const doc = readFileSync(fileURLToPath(new URL('../docs/DESIGN.md', import.meta.url)), 'utf8');
   const frontmatter = doc.match(/^---\n([\s\S]*?)\n---\n/);
   assert.ok(frontmatter, 'DESIGN.md should open with YAML frontmatter');
 
@@ -170,7 +170,7 @@ test('the scale is not redefined per theme', () => {
  * defect that actually occurred: a document naming something that is not there.
  */
 test('every token reference in DESIGN.md components resolves', () => {
-  const doc = readFileSync(fileURLToPath(new URL('../DESIGN.md', import.meta.url)), 'utf8');
+  const doc = readFileSync(fileURLToPath(new URL('../docs/DESIGN.md', import.meta.url)), 'utf8');
   const frontmatter = doc.match(/^---\n([\s\S]*?)\n---\n/);
   assert.ok(frontmatter, 'DESIGN.md should open with YAML frontmatter');
   const fm = frontmatter[1]!;
@@ -534,7 +534,7 @@ test('every className resolves to a rule', () => {
  * came to ask.
  */
 test('ARCHITECTURE.md names the tests that exist', () => {
-  const doc = readFileSync(fileURLToPath(new URL('../ARCHITECTURE.md', import.meta.url)), 'utf8');
+  const doc = readFileSync(fileURLToPath(new URL('../docs/ARCHITECTURE.md', import.meta.url)), 'utf8');
   const named = new Set([...doc.matchAll(/`([a-z]+\.test\.ts)`/g)].map((m) => m[1]!));
   const real = new Set(
     readdirSync(fileURLToPath(new URL('../test/', import.meta.url))).filter((f) => f.endsWith('.test.ts')),

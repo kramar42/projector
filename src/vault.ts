@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { appRoot, looksLikeVault, paths, resolvePath } from './config.ts';
+import { appRoot, isConfigured, looksLikeVault, paths, resolvePath } from './config.ts';
+import { listNoteFiles } from './schema/note.ts';
 
 /**
  * Vaults — a directory of notes, opened the way Obsidian opens a folder.
@@ -40,8 +41,33 @@ export interface VaultInfo extends VaultEntry {
   notes: number | null;
 }
 
+/**
+ * What an install knows about before anyone has configured it: the example vault
+ * that ships in the repository.
+ *
+ * **The registry is never committed, and this is why it does not have to be.** A
+ * checked-in `vaults.json` could not work anyway — entries hold absolute paths,
+ * so the one file would name the machine it was committed from. Deriving the
+ * example's path from `appRoot` at read time gets it right in every clone, and
+ * leaves the real registry untracked, so opening your own vaults never shows up
+ * as a change to the repository.
+ *
+ * It is a *synthesised row*, not a seeded file: nothing is written until you open
+ * something. Which also means `pj vaults forget` works on it — that write
+ * materialises the file, and an empty list is then an empty list.
+ *
+ * `PROJECTOR_VAULTS` opts out. Pointing the registry somewhere else says this
+ * list is mine, and a test asserting on `no vaults yet` should not have to know
+ * what the repository ships with.
+ */
+export function shippedVaults(): VaultEntry[] {
+  const path = join(appRoot, 'example');
+  if (process.env.PROJECTOR_VAULTS || !isConfigured(path)) return [];
+  return [{ path, name: suggestName(path), addedAt: 0 }];
+}
+
 function readRegistry(): VaultEntry[] {
-  if (!existsSync(registryFile())) return [];
+  if (!existsSync(registryFile())) return shippedVaults();
   try {
     const j = JSON.parse(readFileSync(registryFile(), 'utf8')) as { vaults?: VaultEntry[] };
     return (j.vaults ?? []).filter((v) => v && typeof v.path === 'string');
@@ -62,18 +88,16 @@ export function normalise(p: string): string {
 }
 
 /**
- * A directory is a vault when it holds the things a vault is made of.
+ * How many cards a folder holds, for the picker and `pj vaults`.
  *
- * `README.md` is excluded because a folder full of markdown attracts one — not
- * because the app puts one there. It no longer seeds a card-conventions README:
- * that text was a copy of the `projector` skill, which an agent already has, and
- * two places saying the same thing is one place to drift.
+ * Counted with the same walk the indexer uses. It used to be its own flat
+ * `readdirSync` with its own exclusions, which meant the two could disagree — and
+ * they did, about anything in a subfolder. One question, one answer.
  */
 export function countNotes(path: string): number {
-  const dir = paths(path).notes;
-  if (!existsSync(dir)) return 0;
+  if (!existsSync(path)) return 0;
   try {
-    return readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').length;
+    return listNoteFiles(paths(path).notes).length;
   } catch {
     return 0;
   }
@@ -150,10 +174,22 @@ export function suggestName(path: string): string {
 }
 
 /**
- * Create the skeleton of a new vault. Refuses to touch a non-empty directory.
+ * Give a folder the `.projector/` it needs to be opened as a vault.
  *
- * Views are part of the skeleton: a vault with no board would open onto nothing,
- * which is a dead end rather than a fresh start.
+ * Three folders arrive here and each gets a different answer. **One that already
+ * has a `.projector/`** is left alone: an absent `facets.yaml` is a vault
+ * carrying the built-ins and nothing else, and a deleted `home.yaml` is a view
+ * somebody deleted — re-running `--create` over it must not quietly put both
+ * back. **One holding markdown** is somebody's notes: the cards are already
+ * there, so only the config is written, and nothing that was in the folder is
+ * touched or moved. **An empty one** gets the same config and starts bare.
+ *
+ * Anything else is somebody's documents, and is refused.
+ *
+ * Views are part of the config rather than an optional extra: a vault with no
+ * board would open onto nothing, which is a dead end rather than a fresh start.
+ * That is why a folder of markdown is seeded too — the whole point of opening one
+ * is to see it arranged.
  */
 export function initVault(
   path: string,
@@ -161,25 +197,15 @@ export function initVault(
   seedViews: { path: string; body: string }[] = [],
 ): void {
   const p = paths(path);
-  // Adopting a folder that is already a vault, or making one out of an empty
-  // folder. Anything else is somebody's documents.
-  const adopting = looksLikeVault(path);
-  if (existsSync(path) && !adopting) {
+  const configured = isConfigured(path);
+  if (existsSync(path) && !looksLikeVault(path)) {
     const entries = readdirSync(path).filter((f) => !f.startsWith('.'));
     if (entries.length) throw new Error(`${path} is not empty and does not look like a vault`);
   }
   mkdirSync(p.notes, { recursive: true });
-  mkdirSync(p.assets, { recursive: true });
-  mkdirSync(p.views, { recursive: true });
+  if (configured) return ensureIgnore(path);
 
-  // The starter vocabulary and views go into a *new* vault only.
-  //
-  // They used to go in whenever the file was missing, which was the same thing
-  // while a vault could not do without them. It is not any more: an absent
-  // `facets.yaml` is a vault that carries the built-ins and nothing else, and a
-  // deleted `home.yaml` is a view somebody deleted. Re-running `--create` over
-  // an existing vault would have put both back, silently, as a fresh start.
-  if (adopting) return ensureIgnore(path);
+  mkdirSync(p.views, { recursive: true });
   if (!existsSync(p.facets)) writeFileSync(p.facets, seedFacets, 'utf8');
   for (const v of seedViews) {
     const target = join(p.views, v.path);
@@ -189,15 +215,16 @@ export function initVault(
   ensureIgnore(path);
 }
 
-/** The databases and scratch files a vault should never commit. */
+/**
+ * The databases and scratch files a vault should never commit.
+ *
+ * One line covers the three databases now that they live together — they used to
+ * need six, at the root, next to the notes.
+ */
 function ensureIgnore(path: string): void {
   const ignore = join(path, '.gitignore');
   if (!existsSync(ignore)) {
-    writeFileSync(
-      ignore,
-      '.index.db\n.index.db-*\n.enrich.db\n.enrich.db-*\n.intake.db\n.intake.db-*\n*.tmp-*\n.DS_Store\n',
-      'utf8',
-    );
+    writeFileSync(ignore, '.projector/*.db*\n*.tmp-*\n.DS_Store\n', 'utf8');
   }
 }
 
@@ -219,16 +246,35 @@ export function resolveDoc(ref: string, root: string): { path: string | null; tr
   return { path: ok ? candidate : null, tried: [candidate] };
 }
 
-/** Immediate subdirectories, for the folder picker. */
-export function browse(path: string): { path: string; entries: { name: string; isVault: boolean }[] } {
+/**
+ * Immediate subdirectories, for the folder picker.
+ *
+ * Both halves of "is this a vault" are reported, because they look different to a
+ * person browsing: `configured` is one they have opened before, `isVault` is any
+ * folder holding markdown — which, since the layout stopped requiring a `notes/`,
+ * includes `~/Documents` and every source repository. Marking those identically
+ * to a real vault would be the picker asserting something it does not know.
+ */
+export function browse(
+  path: string,
+): { path: string; entries: { name: string; isVault: boolean; configured: boolean }[] } {
   const p = path.trim() ? normalise(path) : homedir();
   if (!existsSync(p) || !statSync(p).isDirectory()) {
     throw new Error(`not a directory: ${p}`);
   }
   const entries = readdirSync(p, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-    .map((e) => ({ name: e.name, isVault: looksLikeVault(join(p, e.name)) }))
-    .sort((a, b) => Number(b.isVault) - Number(a.isVault) || a.name.localeCompare(b.name));
+    .map((e) => ({
+      name: e.name,
+      isVault: looksLikeVault(join(p, e.name)),
+      configured: isConfigured(join(p, e.name)),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.configured) - Number(a.configured) ||
+        Number(b.isVault) - Number(a.isVault) ||
+        a.name.localeCompare(b.name),
+    );
   return { path: p, entries };
 }
 

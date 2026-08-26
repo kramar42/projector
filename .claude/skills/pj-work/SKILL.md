@@ -6,7 +6,7 @@ description: Start work on a projector card — prepare a multi-repo git worktre
 # Work on a card
 
 Prepare a workspace and hand the card to a session that starts with everything it needs. Read the
-`projector` skill first.
+`pj-about` skill first.
 
 ## 1. Identify the card
 

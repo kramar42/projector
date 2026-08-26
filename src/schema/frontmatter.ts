@@ -38,6 +38,30 @@ export function split(text: string): Split {
   return { yaml, body: rest };
 }
 
+/**
+ * A leading `# Heading`, which is what a note with no `title:` calls itself.
+ *
+ * Only the *leading* one, not the first one anywhere: a heading further down is a
+ * section. That narrowness is what lets the panel drop this line when it renders
+ * the body — otherwise a bare note's title would appear twice, once as the card's
+ * name and once as its opening line — so the reader and the renderer have to
+ * agree about which line it is, and they agree by both asking here.
+ */
+export function headingOf(body: string): string | null {
+  for (const line of body.split('\n')) {
+    if (!line.trim()) continue;
+    return /^#\s+(.+?)\s*$/.exec(line)?.[1] ?? null;
+  }
+  return null;
+}
+
+/** The body without that leading heading, for a renderer that has shown it already. */
+export function withoutHeading(body: string): string {
+  const lines = body.split('\n');
+  const at = lines.findIndex((l) => l.trim());
+  return at === -1 ? body : lines.slice(at + 1).join('\n');
+}
+
 /** Re-join frontmatter and body. */
 export function join(yamlText: string, body: string): string {
   const y = yamlText.endsWith('\n') ? yamlText : yamlText + '\n';

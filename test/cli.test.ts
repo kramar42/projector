@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { paths } from '../src/config.ts';
 
 /**
  * The CLI, run as a binary.
@@ -29,16 +30,16 @@ interface Run {
 
 function vault(): { root: string; registry: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'pj-cli-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
   writeFileSync(
-    join(root, 'facets.yaml'),
+    paths(root).facets,
     'status: { label: Status, values: [planning, active, done], open: false, single: true }\n' +
       'priority: { label: Priority, values: [now, later], open: false, single: true }\n' +
       'parent: { label: Part of, type: ref, single: true }\n',
     'utf8',
   );
   const card = (id: string, body: string) =>
-    writeFileSync(join(root, 'notes', `${id}.md`), body, 'utf8');
+    writeFileSync(join(paths(root).notes, `${id}.md`), body, 'utf8');
   card('alpha', '---\nid: alpha\ntitle: Alpha\nfacets: { status: [planning], priority: [now] }\n---\nfirst\n');
   card('beta', '---\nid: beta\ntitle: Beta\nfacets: { status: [active] }\n---\nsecond\n');
   // The registry is redirected so `pj vaults` cannot touch the real one.
@@ -180,8 +181,8 @@ test('help prints without a vault, and says which one it would use', () => {
   try {
     // Two registered and none named: resolution is ambiguous, help must still print.
     const two = join(v.root, 'other');
-    mkdirSync(join(two, 'notes'), { recursive: true });
-    writeFileSync(join(two, 'facets.yaml'), 'status: { values: [planning] }\n', 'utf8');
+    mkdirSync(paths(two).config, { recursive: true });
+    writeFileSync(paths(two).facets, 'status: { values: [planning] }\n', 'utf8');
     run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: v.registry });
     run(['vaults', 'add', two], { PROJECTOR_VAULTS: v.registry });
 
@@ -281,8 +282,8 @@ test('check exits 1 on an error and 0 on warnings alone', () => {
     assert.equal(run(['--vault', v.root, 'check']).code, 0, 'a sound vault passes');
 
     // A view naming an axis the vocabulary does not have.
-    mkdirSync(join(v.root, 'views'), { recursive: true });
-    writeFileSync(join(v.root, 'views', 'broken.yaml'), 'shape: board\nfilter:\n  kind: [task]\n', 'utf8');
+    mkdirSync(paths(v.root).views, { recursive: true });
+    writeFileSync(join(paths(v.root).views, 'broken.yaml'), 'shape: board\nfilter:\n  kind: [task]\n', 'utf8');
     const bad = run(['--vault', v.root, 'check']);
     assert.equal(bad.code, 1);
     assert.match(bad.out, /no facet or computed axis "kind"/);

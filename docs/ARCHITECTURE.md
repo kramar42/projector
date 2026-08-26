@@ -1,7 +1,7 @@
 # Architecture
 
-How projector works inside, and the invariants to preserve when changing it. For what the app *is* and
-how to use it, see [README.md](README.md).
+How projector works inside, and the invariants to preserve when changing it. For what the app *is*,
+see [README.md](../README.md); for how to use it, [MANUAL.md](MANUAL.md).
 
 ## Principles
 
@@ -28,9 +28,9 @@ number.
 flowchart TB
   subgraph vault["The vault — your files, git-tracked, the source of truth (C1)"]
     direction LR
-    notes["notes/*.md<br/>facets · links · body"]
-    fac["facets.yaml<br/>type · values · single · buckets"]
-    vw["views/*.yaml<br/>saved query + arrangement"]
+    notes["*.md at the root<br/>facets · links · body"]
+    fac[".projector/facets.yaml<br/>type · values · single · buckets"]
+    vw[".projector/views/*.yaml<br/>saved query + arrangement"]
   end
 
   you["You, in a browser"]
@@ -82,7 +82,14 @@ vocabulary that constrains them, and a view is a saved query plus the arrangemen
 else to live. Everything below the vault box is derived: delete both caches and `pj reindex` is
 always correct.
 
-**The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a `views/*.yaml` file and
+**Only one of the three is at the root.** The notes are the vault — a folder of markdown, at any
+depth, with no `notes/` to put them in and no exempted filename. The other two live under
+`.projector/` along with the databases, so removing that one directory leaves the folder of markdown
+you started with. This is what lets a directory of notes that has never heard of projector be opened
+rather than imported: a file with no frontmatter is a card whose id is its filename and whose title
+is its leading heading, and nothing is written back until you change something.
+
+**The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a view file and
 a set of `pj` flags parse into the same thing, so `pj ls --view unblocked` and opening that view in
 the browser are the same query by construction rather than by discipline.
 
@@ -257,10 +264,10 @@ nowhere to hang a label, a weight or a reason on a relationship. `Edge` was `{ty
 used more, and a reason for a blocker belongs in the body — accepted knowingly, since it is the one
 thing the collapse gave up.
 
-**Three SQLite files, three lifecycles.** `.index.db` is derived from the note files and rebuilt from
-scratch whenever they change — C1 means it can never be the authority, so it needs no migration.
-`.enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of data that took a second
-to fetch. `.intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
+**Three SQLite files, three lifecycles.** `.projector/index.db` is derived from the note files and
+rebuilt from scratch whenever they change — C1 means it can never be the authority, so it needs no
+migration. `.projector/enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of
+data that took a second to fetch. `.projector/intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
 the last three months, so it cannot be rebuilt from anything and cannot be thrown away casually.
 
 Merging any two of them breaks whichever has the shorter life: enrichment in the index would be
@@ -425,19 +432,19 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
 | `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
-| `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one, and `notes/assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten |
+| `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one, and `assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten |
 | `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block | never touches the body |
-| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside `notes/` |
+| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside the vault |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id, plus `layout: manual` whenever positions are sent | never drops an entry whose note still exists |
 | `DELETE /api/view/:name` | one view file | never touches the notes it selected |
-| `POST /api/note/:id/asset` | one file under `notes/assets/<id>/` | never overwrites: the name is a content hash |
+| `POST /api/note/:id/asset` | one file under `assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
-| `pj intake` | `.index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
-| `pj intake commit` | one row in `.intake.db` | never a note, and never on its own initiative |
+| `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
+| `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
-| everything else | `.index.db`, `.enrich.db` and `.intake.db` only | never touches a note file |
+| everything else | the three databases under `.projector/` only | never touches a note file |
 
 The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
 mutation functions, so there is no code path to write back.
@@ -454,10 +461,11 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 
 | Path | What | When |
 |---|---|---|
-| `<vault>/notes/**` | note files, and assets under `notes/assets/<id>/` | you create or edit a note |
-| `<vault>/views/*.yaml` | saved views | you save a view or its arrangement |
-| `<vault>/.index.db`, `<vault>/.enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
+| `<vault>/**/*.md` | note files | you create or edit a note |
+| `<vault>/assets/<id>/` | images pasted into a body | you paste one |
+| `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
+| `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<note>/` (required; no default) | `pj work` worktrees and `AGENT_BRIEFING.md` | only `pj work` |
 
@@ -524,19 +532,58 @@ git finds a repository, so `pj` works inside any vault whether or not the app ha
 registry is then only the browser's memory of which folders you use — delete it and you lose the list,
 nothing else.
 
+The walk-up reads `.projector/` and nothing else, and that strictness is load-bearing. `looksLikeVault`
+answers *could this be opened* and says yes to any folder holding markdown; `isConfigured` answers
+*which vault am I standing in* and says yes only to one somebody has opened. If the walk-up used the
+loose test, `pj set` run anywhere inside a source repository would take that repository for its vault
+and write frontmatter into its documentation.
+
+`vaults.json` is never committed, and cannot usefully be: entries hold absolute paths, so one checked
+into the repository would name the machine it was committed from. Instead an absent registry *means*
+the example vault in `example/`, resolved against `appRoot` at read time — a synthesised row, not a
+seeded file, so nothing is written until you open something and `pj vaults forget` works on it like any
+other entry. `PROJECTOR_VAULTS` opts out, which is what keeps the tests from having to know what the
+repository ships with.
+
 ## Vault seeding
 
-`initVault` writes `notes/`, `notes/assets/`, `views/`, `facets.yaml`, five starter views — `home`,
-`due`, `projects`, `unblocked`, `everything` — and a `.gitignore`. **No prose.**
+`initVault` writes `.projector/facets.yaml`, `.projector/views/` with five starter views — `home`,
+`due`, `projects`, `unblocked`, `everything` — and a `.gitignore`. **No prose, and nothing at the
+root.**
+
+Three folders arrive and get three answers. One that already has a `.projector/` is left alone: an
+absent `facets.yaml` is a vault carrying the built-ins and nothing else, and a deleted `home.yaml` is a
+view somebody deleted, so re-running `--create` must not quietly restore either. One holding markdown
+gets the config and nothing else — the cards are already there, and none of them is touched or moved.
+An empty one gets the same config and starts bare. Anything else is somebody's documents and is
+refused.
+
+The starter views are not optional garnish: a vault with no board opens onto nothing, which is why a
+folder of somebody's existing notes is seeded too. The whole point of opening one is to see it
+arranged.
 
 It used to also write `notes/README.md`, a per-vault conventions document from `SEED_README`. That was
-a near-verbatim copy of the `projector` skill, and its only audience — an agent editing note files
+a near-verbatim copy of the `pj-about` skill, and its only audience — an agent editing note files
 directly — already loads the skill. Two documents stating the note format is one document to drift, so
 the format is now written down in exactly two places that cannot disagree: `src/schema/note.ts`, which
 parses it, and the skill, which explains it.
 
-`listCardFiles` and `countCards` still exclude `README.md` by name. That guard stays because a folder
-full of markdown attracts a README, not because the app puts one there.
+`README.md` used to be excluded from the card walk by name, on the grounds that a folder full of
+markdown attracts one. That exclusion is gone: the folder full of markdown *is* the vault now, so the
+same observation is the reason a README should be a card. `listNoteFiles` skips two directories and no
+filenames — anything dotted, and `assets`, which is the one tree the app deletes from wholesale.
+
+## The example vault
+
+`example/` is a real vault, committed, and the only one that ships. A clone opens it without
+configuring anything, and the tests read its `facets.yaml` as one of the two vocabularies that must
+validate — the other being `SEED_FACETS`, which is what created it.
+
+It carries eleven cards chosen to be a tour rather than a fixture: a project with members, a blocked
+card and its blocker, a card waiting on a person, one deliberately overdue, a note that is not work at
+all, a card in a subfolder, a `README.md` that is both the folder's readme and a card, and one file
+with no frontmatter whose id and title are derived. `.vaults/states` remains the exhaustive fixture and
+is still generated, because dates that must read `overdue` cannot be committed.
 
 ## Stack
 

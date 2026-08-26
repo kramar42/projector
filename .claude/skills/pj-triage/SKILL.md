@@ -5,7 +5,7 @@ description: Triage projector cards that are missing a project, priority or stat
 
 # Triage
 
-Give incomplete cards a project, a priority and a status. Read the `projector` skill first if you have
+Give incomplete cards a project, a priority and a status. Read the `pj-about` skill first if you have
 not — the facet rules there are binding.
 
 **You propose. You do not apply.** Present a table, stop, and wait. This exists because a wrong

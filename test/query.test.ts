@@ -10,6 +10,7 @@ import { adjacency, refsOf } from '../src/index/refs.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { SEED_VIEWS } from '../src/server/seed.ts';
 import { parse } from 'yaml';
+import { paths } from '../src/config.ts';
 
 /**
  * A vault of its own, so these assert the engine rather than whatever the real
@@ -103,17 +104,17 @@ waiting_on: { label: Waiting on, values: [], open: true, blocking: true }
 
 function vault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-query-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
   for (const [id, text] of Object.entries(CARDS)) {
-    writeFileSync(join(root, 'notes', `${id}.md`), text, 'utf8');
+    writeFileSync(join(paths(root).notes, `${id}.md`), text, 'utf8');
   }
-  writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
+  writeFileSync(paths(root).facets, FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 function open(root: string) {
   const { db, notes } = reindex(root);
-  const facets = loadFacets(join(root, 'facets.yaml'));
+  const facets = loadFacets(paths(root).facets);
   return (query: Query, connect?: string) =>
     runQuery(db, notes, facets, query, { today: '2026-08-20', connect });
 }
@@ -240,7 +241,7 @@ test('a done blocker stops blocking', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'notes', 'blocker.md'),
+      join(paths(root).notes, 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -326,7 +327,7 @@ test('grouping puts a multi-valued card in every matching column', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'notes', 'kc-realms.md'),
+      join(paths(root).notes, 'kc-realms.md'),
       CARDS['kc-realms']!.replace('priority: [month]', 'priority: [now, month]'),
       'utf8',
     );
@@ -778,11 +779,11 @@ updated: 2026-08-19
 
 function datedVault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-dated-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
   for (const [name, text] of Object.entries(DATED)) {
-    writeFileSync(join(root, 'notes', `${name}.md`), text, 'utf8');
+    writeFileSync(join(paths(root).notes, `${name}.md`), text, 'utf8');
   }
-  writeFileSync(join(root, 'facets.yaml'), FACETS, 'utf8');
+  writeFileSync(paths(root).facets, FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -873,7 +874,7 @@ test('a value naming a note that does not exist is not a reference', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(root, 'notes', 'orphan.md'),
+      join(paths(root).notes, 'orphan.md'),
       '---\nid: orphan\ntitle: Orphan\nfacets: { project: [gone] }\n---\n',
       'utf8',
     );
@@ -891,7 +892,7 @@ test('a value naming a note that does not exist is not a reference', () => {
 test('only a label facet declares a vocabulary of its own', () => {
   const { root, cleanup } = vault();
   try {
-    const def = loadFacets(join(root, 'facets.yaml')).project!;
+    const def = loadFacets(paths(root).facets).project!;
     // Only a `label` has a declared vocabulary: a reference's is the vault and
     // an ordered facet's is unbounded, so both imply `open` and a declared list
     // on either is dropped rather than half-honoured.
@@ -925,7 +926,7 @@ test('the blocked axis names the facet that is failing, and closed stops blockin
   try {
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     writeFileSync(
-      join(root, 'notes', 'blocker.md'),
+      join(paths(root).notes, 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -1143,7 +1144,7 @@ test('a negation keeps every note the axis says nothing about', () => {
 test('a positive and a negative on one axis are both applied', () => {
   const { root, cleanup } = vault();
   try {
-    const both = join(root, 'notes', 'both.md');
+    const both = join(paths(root).notes, 'both.md');
     writeFileSync(
       both,
       `---\nid: both\ntitle: Both\nfacets: { project: [project-b, keycloak] }\nupdated: 2026-08-19\n---\n`,
@@ -1197,7 +1198,7 @@ test('a range can be negated', () => {
   try {
     const dated = (id: string, due: string) =>
       writeFileSync(
-        join(root, 'notes', `${id}.md`),
+        join(paths(root).notes, `${id}.md`),
         `---\nid: ${id}\ntitle: ${id}\nfacets: { due: [${due}] }\nupdated: 2026-08-19\n---\n`,
         'utf8',
       );

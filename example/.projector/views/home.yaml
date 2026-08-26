@@ -1,0 +1,9 @@
+# Opened when nothing else is asked for. The filter is a default *selection*:
+# it shows as clearable chips in the sidebar rather than hiding cards silently.
+shape: board
+title: Home
+filter:
+  status: [planning, active]
+groupBy: [priority]
+sort: [updated:desc]
+show: [project, tech]

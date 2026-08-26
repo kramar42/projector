@@ -57,6 +57,28 @@ test('a card body cannot smuggle markup into the panel', () => {
   assert.match(renderBody('- one\n- two'), /<li/);
 });
 
+/**
+ * A bare note is titled by its leading heading, and the panel has already drawn
+ * that as the card's name — so rendering it again prints the title twice.
+ *
+ * The reader and the renderer have to agree about which line that is, and they
+ * agree by both calling `headingOf`. Only an exact match is dropped: a first
+ * heading that says something else is saying something else.
+ */
+test('the heading a note is named by is not printed under its own name', () => {
+  const body = '# Monday reading\n\nWe talked about the thing.\n';
+  const shown = renderBody(body, 'Monday reading');
+  assert.doesNotMatch(shown, /<h1/, 'the title is the panel’s to draw, once');
+  assert.match(shown, /We talked about the thing/, 'and the rest of the body survives');
+
+  // A card that says something else in its first heading keeps it.
+  assert.match(renderBody(body, 'Something else'), /<h1/);
+  // As does one nobody passed a title for.
+  assert.match(renderBody(body), /<h1/);
+  // A heading further down is a section, never the title, so it always renders.
+  assert.match(renderBody('Prose first.\n\n# A section\n', 'A section'), /<h1/);
+});
+
 test('a relative asset path is rewritten to the server route', () => {
   assert.match(renderBody('![x](assets/card/shot.png)'), /src="\/api\/asset\/assets\/card\/shot\.png"/);
   // An absolute one is left alone.

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
-import { parseNote } from '../schema/note.ts';
+import { isNotePath, parseNote } from '../schema/note.ts';
 import type { Note } from '../schema/types.ts';
 
 /**
@@ -123,7 +123,7 @@ function parseLog(out: string): RawCommit[] {
     const files: RawChange[] = [];
     for (const line of (nl === -1 ? '' : chunk.slice(nl + 1)).split('\n')) {
       const m = RAW.exec(line);
-      if (m) files.push({ before: m[1]!, after: m[2]!, path: m[3]! });
+      if (m && isNotePath(m[3]!)) files.push({ before: m[1]!, after: m[2]!, path: m[3]! });
     }
     if (files.length) commits.push({ sha, date, author, subject, files });
   }
@@ -180,7 +180,10 @@ export function history(dataRoot: string, since = '1 week ago'): HistoryReport {
   const watched = Object.entries(facets)
     .filter(([, def]) => def.single)
     .map(([name]) => name);
-  const cards = paths(dataRoot).notes.replace(dataRoot + '/', '');
+  // The whole vault: the cards are the repository's contents now, not a folder
+  // inside it. A pathspec is still passed rather than dropped, so `--` keeps
+  // separating paths from revisions.
+  const cards = '.';
   const raw = parseLog(
     git(dataRoot, [
       'log',

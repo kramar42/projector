@@ -1,0 +1,4 @@
+# Every note as a graph, laid out from the roots.
+shape: canvas
+title: Everything
+show: [parent, blocked_by]

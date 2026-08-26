@@ -1,10 +1,25 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
-import { frontmatterSchema, listNoteFiles, loadNote, renderNote, writeNoteFile } from '../schema/note.ts';
-import { join as joinFm, parseDoc, patchKey, patchYamlFile, serialize, split } from '../schema/frontmatter.ts';
+import {
+  frontmatterSchema,
+  idFromFile,
+  listNoteFiles,
+  loadNote,
+  renderNote,
+  writeNoteFile,
+} from '../schema/note.ts';
+import {
+  headingOf,
+  join as joinFm,
+  parseDoc,
+  patchKey,
+  patchYamlFile,
+  serialize,
+  split,
+} from '../schema/frontmatter.ts';
 import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
 import { wouldCycle } from '../index/refs.ts';
@@ -113,10 +128,36 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * The id and title a bare note has been answering to, so a write can write them
+ * down.
+ *
+ * A file with no frontmatter is a card whose identity is derived from its name
+ * (see `parseNote`), and derived identity is only as stable as the filename. The
+ * moment anything is stored on the card, that stops being good enough: a
+ * reference facet somewhere else now points at this id, and a rename would
+ * orphan it. So the first write freezes what the file has been called all along —
+ * the same id, never a new one — and every later rename moves a file rather than
+ * a card.
+ *
+ * Nothing is written for a card that already says who it is, which is every card
+ * projector itself created.
+ */
+function identity(text: string, file: string): Record<string, string> {
+  const { yaml, body } = split(text);
+  const fm = (yaml === null ? {} : ((parseDoc(yaml).toJS() ?? {}) as Record<string, unknown>));
+  const out: Record<string, string> = {};
+  if (typeof fm.id !== 'string') out.id = idFromFile(file);
+  if (typeof fm.title !== 'string') out.title = headingOf(body) ?? basename(file, '.md');
+  return out;
+}
+
 /** Apply several frontmatter keys in one atomic write, bumping `updated`. */
 function patchAll(file: string, patch: Record<string, unknown>): void {
   let text = readFileSync(file, 'utf8');
-  for (const [key, value] of Object.entries(patch)) text = patchKey(text, key, value);
+  for (const [key, value] of Object.entries({ ...identity(text, file), ...patch })) {
+    text = patchKey(text, key, value);
+  }
   text = patchKey(text, 'updated', today());
   writeNoteFile(file, text);
 }
@@ -131,7 +172,10 @@ function patchAll(file: string, patch: Record<string, unknown>): void {
  */
 function putBody(file: string, body: string): void {
   const { yaml } = split(readFileSync(file, 'utf8'));
-  writeNoteFile(file, `---\n${yaml}---\n${body}`);
+  // A bare note stays bare: writing an empty fence here would be this function
+  // inventing frontmatter, and it is the one call that promised not to touch it.
+  // The `patchAll` that follows every body write materialises the identity.
+  writeNoteFile(file, yaml === null ? body : `---\n${yaml}---\n${body}`);
 }
 
 /**

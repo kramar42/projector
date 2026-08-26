@@ -68,8 +68,9 @@ step. The mechanisms a neighbouring product could not truthfully copy:
 - **Two surfaces, one engine.** The web app (`127.0.0.1:8092`, one process serving the built UI) and
   the `pj` CLI share one query compiler and one payload builder — `pj ls --json` is exactly what
   `GET /api/query` returns, so a view means the same thing in both.
-- **A vault** is a folder holding `notes/`, `facets.yaml` and `views/`, opened the way Obsidian opens
-  one. It is a git repository, which is where `pj log` reads history from. The live work vault holds
+- **A vault** is a folder of markdown — the cards at the root, the vocabulary and the saved views
+  under `.projector/` — opened the way Obsidian opens one. It is a git repository, which is where
+  `pj log` reads history from. The live work vault holds
   a couple of hundred notes and a dozen saved views.
 - **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL — plus Slack and
   Gmail, which have no fetcher here and are read by an agent through MCP. Sweeps propose and stop;

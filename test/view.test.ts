@@ -13,6 +13,7 @@ import { reindex } from '../src/index/indexer.ts';
 import { COMPUTED, runQuery } from '../src/index/query.ts';
 import { queryPayload } from '../src/view/payload.ts';
 import { SEED_FACETS } from '../src/server/seed.ts';
+import { paths } from '../src/config.ts';
 
 
 /**
@@ -189,13 +190,13 @@ test('a note field outranks a facet wearing its name, whatever the facet type', 
 
   for (const decl of ['updated: { type: date }', 'updated: { values: [a, b] }']) {
     const root = mkdtempSync(join(tmpdir(), 'projector-shadow-'));
-    mkdirSync(join(root, 'notes'), { recursive: true });
-    writeFileSync(join(root, 'notes', 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
-    writeFileSync(join(root, 'notes', 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
-    writeFileSync(join(root, 'facets.yaml'), decl + '\n', 'utf8');
+    mkdirSync(paths(root).config, { recursive: true });
+    writeFileSync(join(paths(root).notes, 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
+    writeFileSync(join(paths(root).notes, 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
+    writeFileSync(paths(root).facets, decl + '\n', 'utf8');
 
     const { db, notes } = reindex(root);
-    const out = runQuery(db, notes, loadFacets(join(root, 'facets.yaml')), { sort: ['updated:asc'] });
+    const out = runQuery(db, notes, loadFacets(paths(root).facets), { sort: ['updated:asc'] });
     assert.deepEqual(out.ids, ['older', 'newer'], `${decl}: the note field must decide`);
     rmSync(root, { recursive: true, force: true });
   }
@@ -263,10 +264,12 @@ test('a key is normalised to the letter the keyboard actually sends', () => {
   assert.equal(loadFacets(file).mood!.key, 'p');
 });
 
-test('the seeded vault and the work vault declare keys that hold', () => {
+test('the seeded vault and the example vault declare keys that hold', () => {
   // The two vocabularies that actually ship. A collision here is a `pj check`
   // error the first time anyone opens them, which is not how a seed should read.
-  for (const file of ['work/facets.yaml', undefined]) {
+  // The example vault is in the repository, so this holds in a fresh clone —
+  // it used to read `work/`, which is gitignored and exists on one machine.
+  for (const file of [paths('example').facets, undefined]) {
     const path = file ?? facetsFile(SEED_FACETS);
     assert.deepEqual(
       validateVocabulary(declaredFacets(path), path),
@@ -330,15 +333,15 @@ test('every axis `show` accepts arrives on the card, computed or stored', () => 
   // the reserved-name check exists to prevent, one level out.
   const root = mkdtempSync(join(tmpdir(), 'projector-show-'));
   try {
-    mkdirSync(join(root, 'notes'), { recursive: true });
+    mkdirSync(paths(root).config, { recursive: true });
     writeFileSync(
-      join(root, 'notes', 'a.md'),
+      join(paths(root).notes, 'a.md'),
       '---\nid: a\ntitle: A\nfacets: {status: [active]}\nupdated: 2026-08-18\n---\n\n',
       'utf8',
     );
-    writeFileSync(join(root, 'facets.yaml'), 'status:\n  values: [active, done]\n  expected: true\n', 'utf8');
+    writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  expected: true\n', 'utf8');
 
-    const facets = loadFacets(join(root, 'facets.yaml'));
+    const facets = loadFacets(paths(root).facets);
     const { db, notes } = reindex(root);
     const payload = queryPayload(
       { facets, db, notes, views: [], today: '2026-08-20' },

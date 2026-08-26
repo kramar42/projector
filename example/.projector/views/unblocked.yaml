@@ -1,0 +1,12 @@
+# Actionable now: open, nobody waited on, no unfinished blocker.
+#
+# `blocked` names one value per blocking facet, so `clear` means none of them
+# applies. A deadline outranks an intention, so `due` sorts
+# before `priority`: a card due tomorrow is next whatever bucket it was filed in.
+shape: board
+title: Unblocked now
+filter:
+  status: [planning, active]
+  blocked: [clear]
+sort: [due:asc, priority:asc, updated:desc]
+show: [project, priority]

@@ -1,5 +1,5 @@
 ---
-name: projector
+name: pj-about
 description: How to read and write everything in a projector vault — the markdown notes, the facet vocabulary in facets.yaml, and the saved views. Use whenever a request involves notes, projects, facets, views, the board, the canvas, the table, or the `pj` CLI: creating a note, changing its facets or project, adding or changing a facet axis, writing or fixing a saved view, linking a Jira issue / PR / Claude session / doc, finding what to work on next, or answering "what's on my plate". Read this before hand-editing any file in a vault — it is the only place the note format is written down.
 ---
 
@@ -9,13 +9,23 @@ A personal work-management app. One markdown note database, projected as a board
 a table — whichever the current query asks for. The project's `README.md` describes the app; **this file is
 where the note format itself is written down**, so nothing in a vault restates it.
 
-**A vault holds three editable things**, and this skill covers all three:
+**A vault is a folder of markdown.** The notes sit at its root, at any depth; everything the app owns
+is under `.projector/`. This skill covers all three editable things:
 
 | | | |
 |---|---|---|
-| `notes/*.md` | the notes | mostly `pj` |
-| `facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
-| `views/*.yaml` | saved queries and their arrangement | hand-edit |
+| `<vault>/**/*.md` | the notes | mostly `pj` |
+| `<vault>/.projector/facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
+| `<vault>/.projector/views/*.yaml` | saved queries and their arrangement | hand-edit |
+
+**Every markdown file is a note, with no exceptions** — a `README.md` included, and one in a
+subfolder. Folders are the user's to arrange and mean nothing to the app.
+
+**A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
+turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
+"fix" such a file by adding frontmatter to it: the derived identity is deliberate, and any `pj` write
+writes down the same id anyway. The one thing to know is that until that happens, **renaming the file
+renames the card** — so if other notes reference it, use `pj` rather than a rename.
 
 **`<vault>` below is whichever folder is in play — never a path written down here.** `pj` resolves it
 the way git finds a repository: `--vault <path>` wins, then `$PROJECTOR_DATA`, then a walk up from the
@@ -119,7 +129,7 @@ refilling the inbox.
 - **An unknown flag is an error.** `pj` used to drop them silently, so a typo looked like success.
 - **Closed facets reject unknown values.** `priority` is `now|month|backlog|someday`; `status` is
   `planning|active|on-hold|done|archived`; `energy` is `deep|shallow|decide|delegate`. Check
-  `<vault>/facets.yaml` before inventing a value; `pj set` will refuse anyway.
+  `<vault>/.projector/facets.yaml` before inventing a value; `pj set` will refuse anyway.
 - **Never write `status: blocked` or `status: waiting`.** They are not values. If something is blocked
   by another note, set `blocked_by` **on the blocked note** naming the blocker; if it is waiting on a
   person, set `waiting_on`. Both surface on the `blocked` axis, under their own facet names, without
@@ -136,11 +146,11 @@ refilling the inbox.
   outside Project A.
 - **Never set a `project` value with no matching project note.** Either use an existing id or
   propose creating the note — do not invent membership that resolves to nothing.
-- **Positions are never on a note.** Canvas `x/y` lives in `<vault>/views/canvas/*.yaml`.
+- **Positions are never on a note.** Canvas `x/y` lives in `<vault>/.projector/views/*.yaml`.
 - **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a note
   operation. Links are references, not copies.
 
-## The vocabulary — `facets.yaml`
+## The vocabulary — `.projector/facets.yaml`
 
 Three things live in a vault, and notes are only one. **`facets.yaml` is the vocabulary**: which axes
 exist, what order their values come in, and what a value is allowed to be. It is the single place
@@ -188,7 +198,7 @@ dropping them, which is the behaviour you want when a rename is half-done.
 absence, a note's links, the app-written `updated`. They filter and group exactly like declared
 facets. Never try to write one onto a note.
 
-## Views — `views/*.yaml`
+## Views — `.projector/views/*.yaml`
 
 **A view is a query, not a place.** `view = filter × focus × shape × show`. The same file describes
 what a URL and `pj ls` flags describe, so a saved view and a live query are the same object.

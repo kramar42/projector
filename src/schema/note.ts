@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, renameSync, readdirSync, statSync } from 'node:fs';
-import { join as pathJoin } from 'node:path';
+import { basename, join as pathJoin } from 'node:path';
 import { z } from 'zod';
-import { KEY_ORDER, join, parseDoc, serialize, split } from './frontmatter.ts';
+import { KEY_ORDER, headingOf, join, parseDoc, serialize, split } from './frontmatter.ts';
 import { parseLink } from './links.ts';
 import type { ProjectBlock, Note } from './types.ts';
 
@@ -23,8 +23,8 @@ const projectSchema = z.object({
 });
 
 export const frontmatterSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug'),
-  title: z.string().min(1),
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lowercase slug').optional(),
+  title: z.string().min(1).optional(),
   facets: z.record(z.string(), z.unknown()).optional(),
   links: z.array(z.string()).optional(),
   project: projectSchema.optional(),
@@ -64,15 +64,54 @@ function asDate(v: unknown): string | undefined {
   return String(v).slice(0, 10);
 }
 
+/**
+ * A note's id when its file does not carry one: the filename, lowercased, with
+ * every run of anything else becoming a dash.
+ *
+ * Deliberately not `slugify`, which drops stop words and truncates at six — good
+ * for turning a sentence into a name, wrong here, where the id's whole job is to
+ * correspond to the file you can see. `notes-on-the-2026-plan.md` keeps every
+ * word.
+ *
+ * A derived id is only stable while the filename is. That is the trade a bare
+ * note makes, and it ends the moment the note gains any structure: every write
+ * materialises the id it was being called by, so a rename after that renames a
+ * file rather than a card.
+ */
+export function idFromFile(file: string): string {
+  const stem = basename(file, '.md');
+  return stem.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'note';
+}
+
+/**
+ * Parse a card file.
+ *
+ * **A markdown file is a card.** No frontmatter is not an error — it is a note
+ * that has not said anything about itself yet, so the file says it instead: the
+ * filename is the id and a leading heading is the title. That is what makes a
+ * folder of ordinary markdown — an Obsidian vault, a directory of meeting notes —
+ * something you can open rather than something you have to import.
+ *
+ * The same fallback applies key by key rather than only to a file with no
+ * frontmatter at all, because the file that most needs it has frontmatter for
+ * something else. An Obsidian note carrying `tags:` and no `id:` is the ordinary
+ * case, not a malformed card.
+ *
+ * The cost is named: a mistyped `idd:` no longer fails `pj check`, it quietly
+ * derives an id instead. That is the price of a format with no required keys, and
+ * it is the right way round — a vault should open, and a typo should cost you a
+ * name rather than a file.
+ */
 export function parseNote(file: string, text: string): ParseResult {
   const { yaml, body } = split(text);
-  if (yaml === null) return { ok: false, file, errors: ['no frontmatter block'] };
 
-  let raw: unknown;
-  try {
-    raw = parseDoc(yaml).toJS();
-  } catch (err) {
-    return { ok: false, file, errors: [`invalid YAML: ${(err as Error).message}`] };
+  let raw: unknown = {};
+  if (yaml !== null) {
+    try {
+      raw = parseDoc(yaml).toJS() ?? {};
+    } catch (err) {
+      return { ok: false, file, errors: [`invalid YAML: ${(err as Error).message}`] };
+    }
   }
 
   const parsed = frontmatterSchema.safeParse(raw);
@@ -87,8 +126,8 @@ export function parseNote(file: string, text: string): ParseResult {
   return {
     ok: true,
     rec: {
-      id: fm.id,
-      title: fm.title,
+      id: fm.id ?? idFromFile(file),
+      title: fm.title ?? headingOf(body) ?? basename(file, '.md'),
       facets: normaliseFacets(fm.facets),
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
@@ -106,7 +145,22 @@ export function loadNote(file: string): ParseResult {
   return parseNote(file, readFileSync(file, 'utf8'));
 }
 
-/** Every `.md` under cards/, excluding assets/ and README.md. */
+/**
+ * What the card walk does not descend into, and neither is an exception to what a
+ * card is.
+ *
+ * Anything dotted is the app's own state — `.projector/` above all. `assets` is
+ * the one tree projector *writes into and deletes from*, wholesale, when a card
+ * is removed or merged: a markdown file in there would be deleted along with the
+ * images it sits among, so it is not offered as a card in the first place.
+ *
+ * `README.md` used to be skipped too, and no longer is. The reason it was there —
+ * a folder full of markdown attracts a README — is exactly the reason it should
+ * be a card now that the folder full of markdown *is* the vault.
+ */
+const skipped = (name: string): boolean => name === 'assets' || name.startsWith('.');
+
+/** Every `.md` in the vault, at any depth. */
 export function listNoteFiles(cardsDir: string): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
@@ -117,14 +171,27 @@ export function listNoteFiles(cardsDir: string): string[] {
       return;
     }
     for (const name of entries) {
-      if (name === 'assets' || name.startsWith('.')) continue;
+      if (skipped(name)) continue;
       const full = pathJoin(dir, name);
       if (statSync(full).isDirectory()) walk(full);
-      else if (name.endsWith('.md') && name !== 'README.md') out.push(full);
+      else if (name.endsWith('.md')) out.push(full);
     }
   };
   walk(cardsDir);
   return out.sort();
+}
+
+/**
+ * Whether a vault-relative path is a card, without a filesystem to walk.
+ *
+ * `pj log` needs this: it reads paths out of `git log`, where the vault is the
+ * whole repository and the diff carries `.projector/facets.yaml` alongside the
+ * cards. Sharing `skipped` with the walk is the point — a path git names and a
+ * path the indexer finds have to be the same set, or the log narrates changes to
+ * files that are not cards.
+ */
+export function isNotePath(rel: string): boolean {
+  return rel.endsWith('.md') && !rel.split('/').some(skipped);
 }
 
 export function renderNote(rec: Omit<Note, 'file'>): string {

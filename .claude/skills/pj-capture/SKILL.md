@@ -6,7 +6,7 @@ description: Sweep Claude sessions, git branches, Jira, Slack and Gmail for thin
 # Capture
 
 Turn what has accumulated elsewhere into cards — or into links and new facts on the cards that already
-cover it. Read the `projector` skill first.
+cover it. Read the `pj-about` skill first.
 
 **You propose. You do not apply.** Present the candidates, stop, wait.
 
@@ -109,7 +109,7 @@ about the world; it is never authoritative about what he intends to do next.
 | `source` — add the channel that just spoke, keep the ones already there | `blocked_by`, `waiting_on` |
 | `due` — **only onto a card that has none** | |
 
-`due` sits on the left for the reason the `projector` skill gives: "`priority` says what you intend to
+`due` sits on the left for the reason the `pj-about` skill gives: "`priority` says what you intend to
 do next; `due` says what the world expects regardless of intent." A mail saying AWS stops the instance
 on 5 Sep *is* the world speaking, and it knows the date better than the vault does. But **fill an empty
 `due`, never overwrite a set one** — a stored deadline that disagrees with a message is a flag, not
@@ -186,7 +186,7 @@ The fingerprint lands in `absorbed_fingerprints`, never on `source_fingerprint`:
 from this message, it merely answers for it now. `pj` refuses a fingerprint another card already holds
 and names the holder — if that fires, you are looking at the duplicate you were about to create.
 
-Appending to a body has no flag; edit the file under `<vault>/notes/`, adding to the end and leaving
+Appending to a body has no flag; edit the note's file in the vault, adding to the end and leaving
 what is there alone.
 
 Then, **and only once the proposal is resolved** — approved, or explicitly declined:

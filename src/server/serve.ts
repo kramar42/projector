@@ -19,7 +19,7 @@ import { split } from '../schema/frontmatter.ts';
 import { loadNote } from '../schema/note.ts';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { paths } from '../config.ts';
+import { isConfigured, paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import type { Facets, Note } from '../schema/types.ts';
 import { reindex } from '../index/indexer.ts';
@@ -162,6 +162,7 @@ app.get('/api/vaults/inspect', (c) => {
     path,
     exists,
     isVault: exists && looksLikeVault(path),
+    configured: exists && isConfigured(path),
     cards: exists && looksLikeVault(path) ? countNotes(path) : 0,
     empty: exists ? readdirSync(path).filter((f) => !f.startsWith('.')).length === 0 : true,
     suggestedName: suggestName(path),
@@ -176,13 +177,20 @@ app.post('/api/vaults', async (c) => {
     if (!body.path?.trim()) return c.json({ error: 'path is required' }, 400);
     const path = normalise(body.path);
 
-    if (!looksLikeVault(path)) {
+    // Anything without a `.projector/` has to be set up, and that includes a
+    // folder of markdown — the cards are already there, but the vocabulary and
+    // the views are not, and a vault with no board opens onto nothing. `create`
+    // is still required for all of them: writing into somebody's notes folder is
+    // a decision they make, not one an inspection makes for them.
+    if (!isConfigured(path)) {
       if (!body.create) {
         return c.json(
           {
-            error: existsSync(path)
-              ? `${path} is not a vault — pass create to set one up there`
-              : `${path} does not exist — pass create to make it a vault`,
+            error: !existsSync(path)
+              ? `${path} does not exist — pass create to make it a vault`
+              : looksLikeVault(path)
+                ? `${path} holds markdown but has no .projector/ — pass create to set one up`
+                : `${path} is not a vault — pass create to set one up there`,
             needsCreate: true,
             path,
           },
@@ -690,13 +698,34 @@ function notesTouched(root: string, changed?: string): string[] | undefined {
   }
 }
 
+/**
+ * Anything dotted, below one of the roots being watched.
+ *
+ * The cards are the vault now, so the watched tree *is* the vault — which is the
+ * whole of it, `.git/` and `.projector/` included. Watching those is not merely
+ * wasteful: the index writes `.projector/index.db-wal` continuously, so a watcher
+ * that sees it reports a change caused by reading, and every client refetches
+ * forever. The two paths under `.projector/` that must be watched are named
+ * explicitly below, and reach the watcher as roots rather than as children.
+ */
+const derived = (path: string, roots: string[]): boolean => {
+  // The *longest* matching root, because the vault root contains the other two:
+  // measured against it, every watched view is below a dot-folder and would be
+  // ignored on the spot.
+  const below = roots
+    .filter((r) => path === r || path.startsWith(r + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+  if (below === undefined) return false;
+  return path.slice(below.length + 1).split('/').some((seg) => seg.startsWith('.'));
+};
+
 function ensureWatched(root: string): void {
   if (watched.has(root)) return;
   const p = paths(root);
-  const w = watch([p.notes, p.views, p.facets], {
+  const roots = [p.notes, p.views, p.facets];
+  const w = watch(roots, {
     ignoreInitial: true,
-    ignored: (path: string) =>
-      path.includes('.tmp-') || path.endsWith('.index.db') || path.endsWith('.enrich.db'),
+    ignored: (path: string) => path.includes('.tmp-') || derived(path, roots),
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
   }).on('all', (_event: string, changed?: string) => bump(root, notesTouched(root, changed)));
   watched.set(root, w);

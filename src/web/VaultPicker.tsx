@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { vaultApi, type Inspection, type VaultInfo } from './vault.ts';
+import { vaultApi, type BrowseEntry, type Inspection, type VaultInfo } from './vault.ts';
 import { plural } from './plural.ts';
 import { Button } from './components/Button.tsx';
 
@@ -24,7 +24,7 @@ export function VaultPicker({
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [inspection, setInspection] = useState<Inspection | null>(null);
-  const [listing, setListing] = useState<{ path: string; entries: { name: string; isVault: boolean }[] } | null>(null);
+  const [listing, setListing] = useState<{ path: string; entries: BrowseEntry[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,8 +86,8 @@ export function VaultPicker({
       <div className="vaultgate-card">
         <h1>Open a vault</h1>
         <p className="vaultgate-lede">
-          A vault is a folder holding <code>notes/</code>, <code>facets.yaml</code> and{' '}
-          <code>views/</code>. Point at one you already have, or at an empty folder to set one up.
+          A vault is a folder of markdown. Point at notes you already keep, at a vault you have
+          opened before, or at an empty folder to start one.
         </p>
         {reason && <div className="banner is-conflict">{reason}</div>}
         {error && <div className="banner is-bad">{error}</div>}
@@ -120,11 +120,11 @@ export function VaultPicker({
             <input
               autoFocus
               value={path}
-              placeholder="/Users/you/notes/my-vault  or  ~/vault"
+              placeholder="/Users/you/notes  or  ~/vault"
               onChange={(e) => setPath(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter' || !inspection) return;
-                void open(inspection.path, !inspection.isVault);
+                void open(inspection.path, !inspection.configured);
               }}
             />
             <input
@@ -137,23 +137,29 @@ export function VaultPicker({
 
           {inspection && (
             <div className="vaultgate-verdict">
-              {inspection.isVault ? (
+              {inspection.configured ? (
                 <>
                   <b className="tone-good">A vault.</b> {plural(inspection.notes, 'card')}.{' '}
                   {inspection.registered ? 'Already in your list.' : ''}
                 </>
+              ) : inspection.isVault ? (
+                <>
+                  <b className="tone-good">A folder of markdown.</b> {plural(inspection.notes, 'card')}
+                  . Opening it adds <code>.projector/</code> for the vocabulary and the views; your
+                  files are not touched or moved.
+                </>
               ) : inspection.exists && !inspection.empty ? (
                 <>
                   <b className="tone-bad">Not a vault, and not empty.</b> Pick an empty folder, or one
-                  that already holds <code>notes/</code>.
+                  that holds markdown.
                 </>
               ) : (
                 <>
                   <b className="tone-warn">
                     {inspection.exists ? 'Empty folder.' : 'Does not exist yet.'}
                   </b>{' '}
-                  Opening it will create <code>notes/</code>, <code>facets.yaml</code> and{' '}
-                  <code>views/</code>.
+                  Opening it will create <code>.projector/</code>, with a starter vocabulary and
+                  views.
                 </>
               )}
             </div>
@@ -163,13 +169,15 @@ export function VaultPicker({
             <Button
               tone="primary"
               disabled={busy || !inspection || (inspection.exists && !inspection.empty && !inspection.isVault)}
-              onClick={() => inspection && void open(inspection.path, !inspection.isVault)}
+              onClick={() => inspection && void open(inspection.path, !inspection.configured)}
             >
               {busy
                 ? 'opening…'
-                : inspection?.isVault
+                : inspection?.configured
                   ? 'Open vault'
-                  : 'Create vault here'}
+                  : inspection?.isVault
+                    ? 'Open these notes'
+                    : 'Create vault here'}
             </Button>
             {onCancel && (
               <Button onClick={onCancel} disabled={busy}>
@@ -191,11 +199,13 @@ export function VaultPicker({
                 listing.entries.map((e) => (
                   <button
                     key={e.name}
-                    className={`truncate browse-item ${e.isVault ? "is-vault" : ""}`}
+                    className={`truncate browse-item ${e.configured ? "is-vault" : ""}`}
                     onClick={() => into(e.name)}
-                    title={e.isVault ? 'looks like a vault' : ''}
+                    title={
+                      e.configured ? 'a vault' : e.isVault ? 'holds markdown — can be opened' : ''
+                    }
                   >
-                    {e.isVault ? '▣' : '›'} {e.name}
+                    {e.configured ? '▣' : e.isVault ? '▫' : '›'} {e.name}
                   </button>
                 ))
               ) : (

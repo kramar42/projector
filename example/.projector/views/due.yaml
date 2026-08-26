@@ -1,0 +1,11 @@
+# Deadlines, soonest first. `due` is an ordered facet: it declares its own
+# buckets, computed against today, so this view never goes stale. The filter is
+# what keeps undated cards out — there is no separate policy for that.
+shape: board
+title: Due
+filter:
+  status: [planning, active]
+  due: [overdue, today, week]
+groupBy: [due]
+sort: [due:asc]
+show: [project, priority]

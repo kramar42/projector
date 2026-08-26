@@ -1,8 +1,12 @@
 # Components
 
-**Status: note.** Written as the input to a whole-app `extract` pass; this is what that
-pass established. Where the draft was wrong, the correction is kept alongside it, because a
-document that quietly fixes itself teaches nothing about how it went wrong.
+The tier between a token and a screen: which token, in which arrangement, for which job. A peer of
+[DESIGN.md](DESIGN.md), which owns the tokens themselves.
+
+Two sections are history rather than reference, and are kept deliberately. **The families** records
+which merges were rejected and why — a difference that is load-bearing is the kind of decision that
+gets re-proposed once it is forgotten. **Settled** records where the original draft was wrong, because
+a document that quietly fixes itself teaches nothing about how it went wrong.
 
 ## Why this exists
 
@@ -102,7 +106,7 @@ direction.
 | a control the app names — `Merge…`, `Delete`, `Clear selection`, `Save current as…`, `Set a facet…` | capital | the app is naming a thing it offers |
 | a heading — `Facets`, `Focus`, `Group by`, `Saved views`, `Recent` | capital | same, one rung up |
 | a sentence — `Not a vault, and not empty.` `Empty. Switch to edit to write something.` | capital, with a full stop | it is prose |
-| a vocabulary string — `Part of`, `Blocked by`, `now`, `jira`, `created`, `notes/` | whatever declared it | the vault owns its axes and the format owns its keys; the app quotes them |
+| a vocabulary string — `Part of`, `Blocked by`, `now`, `jira`, `created` | whatever declared it | the vault owns its axes and the format owns its keys; the app quotes them |
 | a state readout — `loading…`, `starting…`, `unsaved`, `stale`, `drawn`, `blocked by 2` | lower | a condition is not a name. These sit in the quiet registers, beside numbers |
 | an empty state — `nothing here`, `no notes match`, `nothing to filter on` | lower | same: it reports, it does not label |
 | a field placeholder — `search title and body`, `view name`, `title, ⏎ to create` | lower | it is a hint inside a control, not the control's name |
@@ -327,7 +331,7 @@ proposed consolidations were dropped rather than built.
 
 ---
 
-## The families, and what happened to them
+## The families, and what was decided about each
 
 | family | draft said | outcome |
 |---|---|---|
@@ -459,8 +463,10 @@ colour, contrast, and the register rules above. Prose is still what drifts.
 
 ## How this relates to the other documents
 
-- `PRODUCT.md` — who reads this and why.
-- `DESIGN.md` — the tokens, the rules that govern them, and now the **Accepted Exceptions**: the
-  cases where a rule appears broken and is not, with what would have to change for each to go.
-- `ARCHITECTURE.md` — the mechanisms the components display.
+- [DESIGN.md](DESIGN.md) — the tokens, the rules that govern them, and the **Accepted Exceptions**:
+  the cases where a rule appears broken and is not, with what would have to change for each to go.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the mechanisms the components display.
+- [PRODUCT.md](PRODUCT.md) — who reads this and why.
 - This document — the tier between a token and a screen.
+
+[README.md](README.md) has the boundaries written out.

@@ -551,7 +551,7 @@ export function Body({
           onSave={write.body}
         />
       ) : card.body.trim() ? (
-        <div className="md" dangerouslySetInnerHTML={{ __html: renderBody(card.body) }} />
+        <div className="md" dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title) }} />
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>
       )}

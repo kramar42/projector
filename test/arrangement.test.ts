@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { saveArrangement, saveView, deleteView } from '../src/server/mutate.ts';
 import { loadViews } from '../src/server/views.ts';
 import { applyOrder } from '../src/view/payload.ts';
-import { resolveCliVault, vaultAbove } from '../src/config.ts';
+import { paths, resolveCliVault, vaultAbove } from '../src/config.ts';
 
 /**
  * Vault resolution reads the environment, so these tests have to start from a
@@ -26,19 +26,19 @@ delete process.env.PROJECTOR_VAULTS;
  */
 function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-arr-'));
-  mkdirSync(join(root, 'notes'), { recursive: true });
-  mkdirSync(join(root, 'views'), { recursive: true });
+  mkdirSync(paths(root).config, { recursive: true });
+  mkdirSync(paths(root).views, { recursive: true });
   for (const id of cards) {
-    writeFileSync(join(root, 'notes', `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
+    writeFileSync(join(paths(root).notes, `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
   }
   for (const [name, body] of Object.entries(views)) {
-    writeFileSync(join(root, 'views', `${name}.yaml`), body, 'utf8');
+    writeFileSync(join(paths(root).views, `${name}.yaml`), body, 'utf8');
   }
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 const read = (root: string, name: string) =>
-  parse(readFileSync(join(root, 'views', `${name}.yaml`), 'utf8')) as Record<string, unknown>;
+  parse(readFileSync(join(paths(root).views, `${name}.yaml`), 'utf8')) as Record<string, unknown>;
 
 test('saving positions merges, so a filtered canvas cannot discard the rest', () => {
   const { root, cleanup } = vault({
@@ -153,8 +153,8 @@ test('the CLI finds a vault from the working directory, without a registry', () 
   try {
     // Standing inside one, or anywhere below it — the way git finds a repo.
     assert.equal(vaultAbove(root), root);
-    assert.equal(vaultAbove(join(root, 'notes')), root);
-    assert.equal(vaultAbove(join(root, 'views')), root);
+    assert.equal(vaultAbove(paths(root).notes), root);
+    assert.equal(vaultAbove(paths(root).views), root);
     // A folder that is not a vault and has none above it.
     assert.equal(vaultAbove(tmpdir()), null);
 
@@ -163,7 +163,7 @@ test('the CLI finds a vault from the working directory, without a registry', () 
     // is one.
     const cwd = process.cwd();
     try {
-      process.chdir(join(root, 'notes'));
+      process.chdir(paths(root).notes);
       assert.deepEqual(resolveCliVault([], []), { root: realpathSync(root) });
     } finally {
       process.chdir(cwd);
