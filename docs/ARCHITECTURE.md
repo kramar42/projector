@@ -112,6 +112,7 @@ the two are expected to be editing the same note at the same time.
 | `src/enrich/` | read-only link fetchers, each with a TTL |
 | `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
 | `src/agent/` | note context assembly, worktree workspaces, briefings, git history |
+| `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
 
 ## The query compiler
 
