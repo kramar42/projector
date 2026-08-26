@@ -12,19 +12,20 @@ The name is the pun it looks like. A **project** is a collection of items with a
 **projection** is one way of looking at something that has more dimensions than any single view can
 show. The app is named after doing both.
 
-**The same query, three shapes.** Planning starts on the board:
+**The same query, three shapes** — same filter, same grouping, one control moved. Click any of them
+for full size.
 
-![Open work grouped by priority, as a board](docs/img/board.png)
+<p align="center">
+  <a href="docs/img/board.png"><img src="docs/img/board.png" height="170" alt="Open work grouped by priority, as a board"></a>
+  <a href="docs/img/table.png"><img src="docs/img/table.png" height="170" alt="The same query as a table"></a>
+  <a href="docs/img/canvas.png"><img src="docs/img/canvas.png" height="170" alt="The same query as a canvas"></a>
+</p>
 
-Too many cards to scan at once, and the table is the natural summary — same filter, same grouping,
-one control changed:
-
-![The same query as a table](docs/img/table.png)
-
-Deciding what to pick up next is a question about relations, so the same query again as a canvas —
-`parent` lays out the tree, and the unfinished blocker is the dashed red edge:
-
-![The same query as a canvas](docs/img/canvas.png)
+<p align="center">
+  <sub><b>board</b> — planning, grouped by priority &nbsp;·&nbsp; <b>table</b> — the natural summary once
+  there are too many to scan &nbsp;·&nbsp; <b>canvas</b> — relations, where <code>parent</code> lays out
+  the tree and an unfinished blocker is a dashed red edge</sub>
+</p>
 
 ## Why it exists
 
