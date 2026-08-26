@@ -61,7 +61,7 @@ conversation, not a judgement call.
 | how a person uses it — a control, a flag, a key, the file format | [docs/MANUAL.md](docs/MANUAL.md) |
 | a mechanism, a route, an invariant, the set of tests | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | a token, a colour, a rule about type or spacing | [docs/DESIGN.md](docs/DESIGN.md) |
-| which token a component uses, or two components that diverged | [docs/COMPONENTS.md](docs/COMPONENTS.md) |
+| which token a component uses, or two components that diverged | [docs/DESIGN.md](docs/DESIGN.md) — *Named rules* |
 | decided against something, or deferred it | [docs/NEXT.md](docs/NEXT.md) |
 
 [docs/README.md](docs/README.md) has the boundaries between them written out.

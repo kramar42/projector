@@ -1,14 +1,13 @@
 # The documents
 
-Six documents, split by the question they answer. Each one is the only place its answer lives; where
+One document per question it answers. Each one is the only place its answer lives; where
 two of them touch, the boundary is named below.
 
 | | | |
 |---|---|---|
 | [MANUAL.md](MANUAL.md) | **how do I use it?** | the glossary, the model, the query language, the three shapes, links, intake, the CLI, the keymap, the file format, the toolchain |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **how does it work, and what must I not break?** | the principles `C1`–`C11`, the shape of the system, the query compiler, the index memo, the invariants, what it writes, the tests |
-| [DESIGN.md](DESIGN.md) | **what should it look like?** | the palette, the type scale, surfaces, the component rules, and the exceptions that were accepted rather than fixed |
-| [COMPONENTS.md](COMPONENTS.md) | **which token, in which arrangement, for which job?** | the tier between a token and a screen |
+| [DESIGN.md](DESIGN.md) | **what should it look like — and which token, for which job?** | the palette, the type scale, surfaces, the named rules that decide which token a component spends, and the exceptions accepted rather than fixed |
 | [PRODUCT.md](PRODUCT.md) | **who reads this, and why?** | audience, purpose, positioning, the commitments that follow from them |
 | [NEXT.md](NEXT.md) | **why isn't it doing X?** | where the model landed, and what is deliberately not being done |
 
@@ -22,11 +21,12 @@ manual; if you need it to *change* the app without breaking it, it is in ARCHITE
 says a saved view is a query; ARCHITECTURE says why a URL, a `views/*.yaml` file and a set of `pj`
 flags parse into one object.
 
-**DESIGN names tokens, COMPONENTS spends them.** DESIGN owns the palette and the scale and the rules
-that govern them. COMPONENTS owns the tier above: which of those tokens a count, a chip or a section
-heading actually uses, and where two things that look alike are one pattern versus two that must stay
-apart. A rule that turned out to be load-bearing after all is recorded in DESIGN's **Accepted
-Exceptions**, not in COMPONENTS.
+**DESIGN names the tokens and spends them.** Its early sections own the palette, the scale and the
+rules that govern them; its **Named rules** own the tier above — which of those tokens a count, a chip
+or a section heading actually uses, and where two things that look alike are one pattern versus two
+that must stay apart. A rule that turned out to be load-bearing after all is recorded under **Accepted
+Exceptions** rather than deleted. These were two documents until the second tier stopped being a
+record of one design pass and became a set of rules; git holds the pass itself.
 
 **The note format is written down once, and not here.** It lives in the `pj-about` skill, because its
 audience is an agent editing files directly and an agent already loads that. MANUAL's *File format*

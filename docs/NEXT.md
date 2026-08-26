@@ -203,7 +203,7 @@ needs to be part of two things.
   step, a raw radius, an untokenised frontmatter colour, uppercase not taken via the Label step, a
   browser-drawn control, a breakpoint, a hue no vocabulary names, a `className` that resolves to no
   rule, and a `<button>` carrying no font family. It says nothing about whether two colours can be
-  read against each other, and `COMPONENTS.md` names that as the gap.
+  read against each other, which is the one gap `DESIGN.md`'s named rules cannot close by being read.
 
   There has been exactly one regression of this kind and it was caught by hand: `style.css:1827`
   records a `dt` label receding by `opacity: 0.72` and landing at 3.16:1, under the floor, found by

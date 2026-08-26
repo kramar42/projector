@@ -787,6 +787,300 @@ inherited. The panel header is the one place it does not: there the mark is a co
 A 44px × 4px `surface-3` track with a `2px` radius and an `ok` fill, followed by a tabular number.
 Used for a project's roll-up. It is the only bar in the system.
 
+## Named rules
+
+The sections above name the tokens. These name **which token, in which arrangement, for which job** —
+the tier between a token and a screen, where two things that look alike are either one component or
+two that must stay apart. Each rule is stated in one line, then the cases that tested it. Where a rule
+looks broken and is not, the carve-out is under **Accepted Exceptions** below.
+
+### The Removal Rule
+
+**`✕` unlinks. The trash destroys. A `danger` word destroys many.**
+
+- **`✕` (`glyph="close"`)** — severs an association. A reference chip stops naming that note; a
+  link leaves the note; a focus is cleared; a vault stops being tracked. No file is destroyed and
+  nothing is confirmed. The first three are lost only until a second click; the fourth is a
+  persisted write — `vaultApi.forget` drops the folder from the tracked list, so undoing it means
+  re-entering the path through the vault picker, which is why it is the one `✕` the code grew a
+  failure banner for.
+- **The trash (`glyph="trash"`)** — destroys one note. Always confirmed, always says the file is
+  in git.
+- **A `danger`-toned word** — destroys many. The bulk bar, in all three shapes, where the object is
+  a selection rather than a thing on screen and a glyph would have nothing to sit beside.
+
+Audited twice now; nothing crosses these lines. The rule is a note of a distinction that already
+holds.
+
+The bulk bar's **Merge…** is the case that looks like it crosses one and does not. It removes files,
+several of them — but the word opens a chooser, and a control that asks a question is not the act.
+What destroys is the row you pick inside it, behind the same confirm the trash uses. The ellipsis is
+doing the work: it is the difference between a button that acts and a button that asks, which is also
+why *Set a facet…* wears one and `Delete` does not.
+
+The adjacent distinction it is easy to break: **a disabled button takes `cursor: default`, a
+disabled field takes `not-allowed`.** The pass found one violation — `.pop-pick.is-missing`, a
+genuinely `disabled` button wearing the field's cursor, the only button in the app doing so.
+
+### The One Casing Rule
+
+**A string is cased once, wherever it appears. A surface reaches the uppercase register for a
+vocabulary string by taking the Label type step, never by transforming that string at some other
+step.**
+
+The second sentence is the whole rule, and the draft did not see it. `facets.yaml` says
+`label: Part of`; four places rendered a vocabulary string in uppercase, and only one of them was
+wrong:
+
+| site | verdict |
+|---|---|
+| the panel's axis label | **violation.** `text-transform: uppercase` plus `0.1em` at the *Chip* step — the Label register at the wrong size, i.e. a third register. Now renders `Part of`. |
+| the table's column header | permitted. On the Label step, which the Typography Hierarchy above names. |
+| the table's section head | permitted, same reason. |
+| the board's lane head | permitted — and it was not actually *on* the step the Typography Hierarchy assigns it. Corrected from `--text-chip` to `--text-label` at weight 500. |
+
+The draft also claimed one facet value appeared "in 5 casings". It appears in six places in
+**two** casings, and the two uppercase ones are both legitimate. Direction right, arithmetic wrong.
+
+One uppercase transform sits off the Label step and is not a vocabulary string: the panel's `kv`
+keys (`.kv dt`, at the *Meta* step, which the Typography Hierarchy above commits by name). A
+link row's field keys were a second, at the *Micro* step and recorded nowhere; that one is gone.
+
+#### And the case a string is *in* is its author's
+
+The rule above says a string is cased once. This says who does the casing: **the app's own words
+take a capital, a vocabulary string is rendered exactly as whatever declared it cased it, and a
+readout of a condition is lowercase.** Nothing is re-cased on the way to the screen in either
+direction.
+
+| what | case | why |
+|---|---|---|
+| a control the app names — `Merge…`, `Delete`, `Clear selection`, `Save current as…`, `Set a facet…` | capital | the app is naming a thing it offers |
+| a heading — `Facets`, `Focus`, `Group by`, `Saved views`, `Recent` | capital | same, one rung up |
+| a sentence — `Not a vault, and not empty.` `Empty. Switch to edit to write something.` | capital, with a full stop | it is prose |
+| a vocabulary string — `Part of`, `Blocked by`, `now`, `jira`, `created` | whatever declared it | the vault owns its axes and the format owns its keys; the app quotes them |
+| a state readout — `loading…`, `starting…`, `unsaved`, `stale`, `drawn`, `blocked by 2` | lower | a condition is not a name. These sit in the quiet registers, beside numbers |
+| an empty state — `nothing here`, `no notes match`, `nothing to filter on` | lower | same: it reports, it does not label |
+| a field placeholder — `search title and body`, `view name`, `title, ⏎ to create` | lower | it is a hint inside a control, not the control's name |
+
+The sweep that wrote this found the app breaking it in both directions at once, on the same string.
+`facets.yaml` says `Part of`; three call sites in the panel's reference editor and two in the bulk
+bar rendered `def.label.toLowerCase()`, to fit a label into a sentence — so one axis appeared as
+`Part of` in the rail and `part of` in the picker directly under it. That is the first rule's second
+sentence in the other direction, and the fix is the same shape: build the sentence around the string
+(`set Part of on all selected…`) rather than over it.
+
+It also found the reason the vocabulary looked ragged: `blocked_by` declared `label: blocked by`
+while its own `inverse:` said `Blocks` and every other axis was capitalised — and it came from
+`server/seed.ts`, so **every vault the app had ever created** started with one lowercase axis. The
+card face's `blocked by 2` is a different string, hardcoded, and correctly lowercase: it is the
+readout row, not the label.
+
+One control is a genuine coin-toss and is worth recording: a `<select>`'s empty option. It behaves
+like a placeholder, which would make it lowercase, and it is also the control's only name, which
+makes it a label. It is a label — `Set a facet…` — because a placeholder sits inside a field the
+user is about to type into, and nobody types into a select.
+
+### The Count Rule
+
+**What a number means picks its treatment, and there are five treatments. A count is quiet unless it
+is the only thing saying a filter is on. Every counter is mono, because a count is the app speaking.**
+
+A whole-app pass over every number this interface draws — the rail, the board, the table, the note
+face, the panel, the bulk bar, the pickers — found the families below. They were already there; what
+was missing was anyone having written down which was which, so the differences between them read as
+drift and two real defects hid among them.
+
+**Quiet** — a bare numeral beside the thing it counts. `.quietcount`: mono, `--text-micro`, `ink-3`,
+no fill, and each site adds only how it sits in its row. This is most of them, and it is the one that
+was already extracted.
+
+**Marked** — the accent, and the only family allowed it: a count of something *the reader caused*.
+`.facet-badge` is how many values of this axis you checked, which is the only signal that a filter is
+narrowing what you see, and `.bulkbar-count` is the sentence *"N selected"*. Nothing the server merely
+computed may wear the accent — that is The App Voice Rule reaching the counters.
+
+**A heading's own type** — `.lane-count` and `.section-count`, which declare colour and position and
+*nothing else*, so the number reads as part of the heading's type run rather than as a badge beside
+it. Giving either a step from the scale would break it on purpose.
+
+**Filled** — a count that has to separate itself from things on *both* sides. `.column-count` sits
+between a flexing column name and a 20px add button; `.count` sits in a table title cell between a
+title and the cell edge. Both now take `--radius-pill`, which is the rung whose token comment says
+"a count badge, a canvas band" — `.count` was on `--radius-xl`, the container rung, so one of the two
+filled counts was shaped like a popover and neither token's enumeration was true.
+
+**A column read vertically** — the roll-ups, `.table .num` and `.num-total`: right-aligned, `nowrap`,
+compared down the column rather than across the row. The one place the tabular guard's *stated*
+purpose is the actual purpose.
+
+And a sixth group that is **not** counting at all, which is what dissolves most of the apparent drift:
+`.pop-annotation`, `.popbtn`'s label, `.facet-more`, the table's `Updated` column, a numeric facet
+value in a table cell. The discriminator is **position, not content** — a slot defined by where it
+sits, which sometimes holds digits. `.pop-annotation` is the right-hand slot on a popover row, so it
+renders a note count at one site and the word `board` at another; `.facet-more` and `.popbtn` are
+control labels, which is why they are sans and why that is not a Mono Label Rule violation.
+
+Two defects here were invisible because they were about a guard rather than
+a rendering. `.facet-count` was named in the hoisted rule's own preamble and was not in the rule — it
+held the guard only because one JSX template string happened to render `quietcount facet-count`
+together. And `.popbtn`, the single counter in the app that is *not* mono and therefore the only one
+whose digits can actually shift the words after them, was the one the rule had never reached.
+`test/theme.test.ts` now pins the membership set and checks the `font:`-shorthand reset that had
+already removed the guard twice. No tallies here: how many counters there are changes by working, and
+the set that changes by deciding is in the test.
+
+### The Drawn Control Rule
+
+**Nothing on screen is drawn by the browser.**
+
+Now actually true. The audit below found three checkboxes and two stray selects and missed a sixth
+case entirely: the project's instruction blocks in the note panel were a native
+`<details>`/`<summary>`, the only browser-drawn disclosure left in an app that draws its own caret in
+two other places. It is a `.facet-more` button now — the control the panel and the rail already use
+for "there is more of this list", which is the same sentence.
+
+The draft named two offending sites and claimed selects were already fine. Both halves were wrong.
+There were **three** checkboxes and **two** stray selects:
+
+- the filter rail's value — once per value, down the whole rail
+- the facets popover's row — which had no `appearance: none` at all, so the shared field rule was
+  dressing an OS checkbox in an input's border, radius and `5px 8px` padding
+- a markdown task list in a card body — content rather than a control, which is why the draft's
+  wording missed it, and the most visually foreign of the three
+- the bulk bar's select and the canvas toolbar's select — the draft asserted "every `<select>`
+  already takes `appearance: none`"; the shared field rule has none, so only `.rail-select` did.
+  Three selects, three type steps, two of them OS controls.
+
+All five are drawn now — and a later pass found two the rule had never reached, because the shared
+field rule declared no `appearance` at all: `input[type=search]` in the rail and `input[type=date]`
+in the panel both measured `appearance: auto`. `appearance` now sits on that shared rule rather than
+on nine classes, the select treatment stays declared **on the element**, and the search field's UA
+cancel button — the app's own Escape handler drawn twice — is hidden. The date field's picker
+indicator stays, because it is the only way to open the calendar; `color-scheme` is what themes it,
+and nothing had declared that either.
+
+Two mechanics worth keeping: `box-sizing: border-box` is global, so a `width: 0` box floors at its
+padding plus border — a hidden input needs `padding: 0; border: 0` as well. And the `font:`
+shorthand resets every sub-property it does not name, `font-variant-numeric` included, which is how
+a hoisted tabular rule can be silently undone by a rule further down the file.
+
+### The Note Reference Rule
+
+**A note carries its mark wherever you meet it, the mark's size resolves against the type it
+precedes, and a reference to it is drawn as a note rather than as a value.**
+
+The picker row now carries the real `RecordMark` rather than a bare span holding `markOf(r).glyph`
+— the size had coincided, but it carried neither the per-glyph optical nudge nor the `means` string,
+in the one place a reader is choosing between notes.
+
+The second clause is new, and is a measurement. The Shapes section says the mark sits at "`0.8em` of
+whatever type it precedes… the 13px card face". On a face it did not: the mark is a flex *sibling*
+of the title, so `0.8em` resolved against the row's inherited `--text-root` 14px and the mark came
+out at 11.2px beside 13px text — a ratio of 0.862. Since the nudge is
+`centre(glyph) × markSize − 0.254 × textSize`, that under-corrected by 0.255px. The head now names
+its own step and the ratio is 0.8 exactly. Sub-pixel and invisible — but a measurement applied
+against the wrong size is not a measurement.
+
+The third clause is the same rule reaching colour. A reference facet's value was a *value* on two
+surfaces and a *note* on a third: a card face and a table cell drew `parent` as a purple chip and
+`project` as a blue-declared-but-purple-drawn one, while the panel drew both as `.refchip` — a neutral
+box holding a mark and a title, with a comment claiming a face already did the same. `src/web/hue.ts`
+is now the one place that decides, and it answers for the chip *and* for the canvas edge, which were
+two implementations with two different ideas of what an undeclared axis meant. Four registers: the
+app's own axis (`project`, the accent), a reference (neutral), a declared family, and hueless. What a
+reference axis's `hue:` still colours is its edge — the line, where the relation is the subject rather
+than the note at the end of it.
+
+`theme.test.ts` holds both seams shut now: every register the client can ask for has a rule behind it,
+and every link kind names a family the palette defines. Neither was checked before, and both are the
+kind of miss that renders as *almost* right — an unstyled chip is a transparent box with body text in
+it, and a mistyped hue is a prefix that quietly inherits its container's colour.
+
+**Finished since:** `.reflink` (the panel's inbound lists) and the focus pill drew a note with no
+mark at all, and the reason looked structural — `blockedBy` and `children` shipped as
+`{ id, title }`, and the child count sat on the wrong side of an import boundary. Moving the inbound
+count into `src/index/refs.ts` for the `○` change dissolved it: `blockedBy` and `children` now ship
+`isProject` and `refCount`, and there are six `RecordMark` call sites for the six places a note
+appears. See **Still open**.
+
+### The Word-or-Glyph Rule
+
+**A control is a glyph when a mark exists that reads unambiguously at its measured optical size and
+collides with nothing else in the set. Otherwise it is a word — and "otherwise" is a measurement,
+not an inventory.**
+
+The draft called this the weakest of these rules, because it amounted to "whatever is in the set",
+and gave `refresh` as a word for want of a glyph. That was an honest state and the wrong
+conclusion: `refresh` beside a trash can and a `✕` is the same mistake as spelling those two.
+
+The set grew by one, measured. Four candidate characters sit on advances of 0.68 / 0.68 / 0.56 /
+0.60 em against the family's 0.6021, so each is served by a substituted face and would draw
+differently on another machine. Two more (`↺`, `↷`) are exact mirrors of `↶`, which is the one glyph
+refresh must not be confused with. `↻` is on the family's own advance and at 14px matches `✕` for
+ink — 28.8 against 29.7 lit pixels in an identical 8×8 box — but on the pixel grid its arrowhead
+survives as about two pixels, so it reads as a broken ring and collides with `○`, the container
+note mark.
+
+So `refresh` is a drawn path, on the precedent `trash` already sets, at 15px: an ink box of 11×12
+identical to `trash`, so the two drawn glyphs are the same size as each other, and 30.1 lit pixels,
+which sits with `✕` and `+` so it reads at the characters' weight. The arrowhead is filled because a
+stroked chevron renders about 1.1px here and does not read as an arrow at all.
+
+The set grew by one again, the same way, and it is worth recording that the rule *held* the second
+time. `edit` replaces two controls with one — the Body's `read` / `edit` tab pair and the
+frontmatter's `edit raw` / `hide` word, which were two grammars for the identical act of revealing an
+editor over a readout. No character was available on the terms the last four were rejected on: `✎`
+`✏` `🖉` `🖊` sit on advances of 0.72 / 0.80 / 0.60 / 0.60 em against the family's 0.6021, and the two
+that match are Miscellaneous-Symbols codepoints with no coverage in any face this stack resolves to —
+tofu without a fallback emoji font and *colour* emoji with one, which is the objection that ruled out
+`🗑`. So: a drawn parallelogram on the 45° axis the other two avoid, with a collar stroke, at 15px.
+Rasterised beside its neighbours on one instrument: 10.5×10.5 at 34.7 lit px, against `refresh` at
+10.5×11.8 and 33.4, and `trash` at 11.5×11.5 and 57.6. It reads at `refresh`'s weight and nowhere near
+`trash`'s, which is twice as heavy because it destroys. Three shaft lengths were drawn; the longer two
+square the bounding box up at 36.4 and 37.0 lit px, buying a tidier box by moving the coverage away
+from the glyph it has to match. The box is not what a reader sees.
+
+So `refresh` was the last control in the app spelled out for about as long as it took to find the next
+one. That sentence is the rule working, not failing: "otherwise is a measurement, not an inventory"
+means the set is open to anything that measures, and closed to anything that does not.
+
+Every member's metric lives beside its character in `Button.tsx`. A new glyph is a row there.
+
+### The One Pattern Rule
+
+**Two things that look alike are one component, unless the difference is written down.**
+
+The test is not "are they identical" but "is the difference load-bearing". This pass put twelve
+candidate families through an adversarial pass, and roughly half survived. Four merges were
+rejected. Two of the four — the reference chip against the reference row, and the four group
+headings — are written down under **Accepted Exceptions** below, with what would have to change
+for each to go; the other two (the two disclosure heads, the five clickable rows) are so far
+recorded only in the families table below — which is the point: a rediscovered difference reads as
+drift, and a recorded one reads as a decision.
+
+### The Shared Register Rule
+
+**When several sites do one job at different sizes, the register is shared and the fit is local.**
+
+The shape every extraction in this pass took, and worth naming because the alternative is tempting
+and wrong. `.truncate` carries `min-width: 0; overflow: hidden; text-overflow: ellipsis;
+white-space: nowrap` — the idiom, repeated at ten sites — while each site keeps its own answer to
+*where it cuts*: `flex: 1` to take the rest of a row, `130px` on a link chip, `26ch` on a reference
+chip, `40%` on a picker's project column, and nothing at all on a grid cell already 180px wide.
+Those five differ because their containers differ. `.quietcount` and `.emptystate` are the same
+shape: one register, per-site positioning.
+
+`.field-recessed` and `.checkbox` are the same shape again: a recessed field's register — fill,
+border, radius, type and its accent-border focus exception — with `flex: 1`, `width: 120px` and
+`width: 100%` as the three fits; and a drawn 11px box shared by the filter rail and the facets
+popover, whose state comes off the input by sibling selector so neither surface has to coordinate
+with the other.
+
+The corollary is that a merge which needs a variant per site has not found a component. It is why
+the two disclosure heads stayed apart — and, in the second verification pass, why three of the six
+proposed consolidations were dropped rather than built.
+
 ## Do's and Don'ts
 
 ### Do:
