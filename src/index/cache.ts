@@ -26,6 +26,7 @@ import { paths } from '../config.ts';
 
 interface Entry<T> {
   stamp: string;
+  handle: string;
   value: T;
 }
 
@@ -70,6 +71,32 @@ export function stampOf(root: string): string {
 }
 
 /**
+ * Which `index.db` the cached value has open, by identity rather than content.
+ *
+ * `stampOf` skips dotfiles on purpose, so it cannot see the index at all — and
+ * it should not, since the index is this memo's own output. But the index is
+ * *derived and disposable* (C1), which means any other process may throw it away
+ * and write a new one: `reindex` opens it `fresh`, and that unlinks the file
+ * along with its `-wal` and `-shm`. A `pj reindex` or a plain `pj ls` in another
+ * terminal therefore leaves this process holding a `DatabaseSync` onto an
+ * unlinked inode, and every read through it fails with `disk I/O error` until
+ * the server is restarted.
+ *
+ * The inode is the exact discriminator. Writes through our own handle do not
+ * change it; a replacement always does. Content, size and mtime all move under
+ * normal use — WAL checkpoints included — so any of those would rebuild on a
+ * request that changed nothing.
+ */
+function handleOf(root: string): string {
+  try {
+    const st = statSync(paths(root).db);
+    return `${st.dev}:${st.ino}`;
+  } catch {
+    return 'absent';
+  }
+}
+
+/**
  * `build(root)` unless nothing it reads has changed since last time.
  *
  * `dispose` is called with the superseded value. **The caller must use the
@@ -82,11 +109,21 @@ export function stampOf(root: string): string {
 export function cached<T>(root: string, build: (root: string) => T, dispose?: (value: T) => void): T {
   const stamp = stampOf(root);
   const hit = entries.get(root) as Entry<T> | undefined;
-  if (hit && hit.stamp === stamp) return hit.value;
+  if (hit && hit.stamp === stamp && hit.handle === handleOf(root)) return hit.value;
 
   const value = build(root);
-  entries.set(root, { stamp, value });
-  if (hit) dispose?.(hit.value);
+  // After `build`, which is what created the file whose identity this is.
+  entries.set(root, { stamp, handle: handleOf(root), value });
+  if (hit) {
+    try {
+      dispose?.(hit.value);
+    } catch {
+      // Closing a database whose file was unlinked under it can fail, and that
+      // is precisely the case this rebuild exists to recover from. The stale
+      // value is already unreachable; failing here would turn one broken route
+      // into every route.
+    }
+  }
   return value;
 }
 

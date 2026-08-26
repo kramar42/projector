@@ -185,8 +185,23 @@ or a heuristic, so C1 is intact: if any of those bytes could have changed, the a
 Mutating routes additionally call `invalidate` through `bump`, so our own writes never depend on mtime
 resolution being finer than a burst of them.
 
+The stamp skips dotfiles, because the index is the memo's own output and counting it would make
+every rebuild invalidate itself. That leaves one gap the stamp cannot close by construction: the index
+is *derived and disposable* (C1), so another process is entitled to delete it and write a new one
+without touching a single source byte. `reindex` opens it `fresh`, which unlinks the file along with
+its `-wal` and `-shm` — so a `pj reindex`, or a plain `pj ls` in another terminal, used to leave the
+server holding a `DatabaseSync` on an unlinked inode. Every read through it failed with `disk I/O
+error` until the process was restarted, and because only some routes touch the database, `/api/meta`
+died while `/api/query` went on answering.
+
+So an entry also records **which** index file it has open, by inode. Writes through our own handle do
+not change it and a replacement always does, which is why it is the inode rather than the size, the
+mtime or a checksum — all of those move under normal use, WAL checkpoints included, and would rebuild
+on a request that changed nothing.
+
 The memo also disposes the superseded `DatabaseSync`, which the per-request version leaked once per
-request.
+request. That dispose is allowed to fail: the value being closed is sometimes the broken one this
+rebuild exists to replace, and letting the failure out would turn one dead route into every route.
 
 **Callers must not `await` between `load()` and their last read of what it returns**, or a concurrent
 request could rebuild and dispose it mid-handler. Every call site today is a GET handler that returns
@@ -635,6 +650,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 |---|---|
 | `agent.test.ts` | branch naming, AppleScript quoting through both layers, base-branch fallback, worktree preparation, and `pj log` reading every single-valued axis out of git diffs |
 | `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
+| `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a card lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, and the layout following only the relation shown |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets |
 | `cli.test.ts` | every command refusing an unknown flag, `--json` being the payload the app receives, the registry, exit codes |
