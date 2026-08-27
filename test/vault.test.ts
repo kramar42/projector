@@ -110,6 +110,17 @@ test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
   assert.deepEqual(resolveCliVault('/v/x', two), { root: '/v/x' });
   // One registered vault needs no flag.
   assert.deepEqual(resolveCliVault(null, one), { root: '/v/one' });
+
+  // A registered *name* is the first reading of the flag, and beats a folder of
+  // that name in the working directory — `pj -v two` used to mean `./two`, so
+  // running it one level above a vault's folder silently acted on a directory
+  // that was not there. The name is exact: a near miss is a path, not a guess at
+  // which vault was meant.
+  assert.deepEqual(resolveCliVault('two', two), { root: '/v/two' });
+  assert.deepEqual(resolveCliVault('tw', two), { root: resolve(process.cwd(), 'tw') });
+  // With nothing registered under that name it is a path, which is what keeps
+  // `--vault ../elsewhere` pointing at a vault the app has never opened.
+  assert.deepEqual(resolveCliVault('two', []), { root: resolve(process.cwd(), 'two') });
   // Several, with no choice made, must ask rather than guess.
   const ambiguous = resolveCliVault(null, two);
   assert.ok('error' in ambiguous && /--vault/.test(ambiguous.error));

@@ -556,10 +556,18 @@ Verified behaviour: an unregistered path gets 428, and a cross-origin request is
 the custom header forces a CORS preflight that no origin of ours answers, and a mutating request with a
 foreign `Origin` is rejected outright.
 
-The CLI does not depend on the registry at all: `vaultAbove` walks up from the working directory the way
-git finds a repository, so `pj` works inside any vault whether or not the app has ever opened it. The
-registry is then only the browser's memory of which folders you use — delete it and you lose the list,
-nothing else.
+The CLI does not depend on the registry to *find* a vault: `vaultAbove` walks up from the working
+directory the way git finds a repository, so `pj` works inside any vault whether or not the app has ever
+opened it. It reads the registry for one thing only — `--vault` resolves a registered name before it
+resolves a path, so `-v work` means the vault you called `work` rather than `./work`. Delete the
+registry and you lose the list and that spelling; every other route to a vault is unaffected.
+
+Name-before-path is the fix for a failure that had no symptom. `--vault` was a path only, so `-v work`
+run from the *parent* of that vault's folder resolved to a directory that did not exist — and a missing
+folder reads as an empty one to everything downstream, so `reindex` walked no files and `ls` and
+`search` reported zero matches and exited 0. The registry already held the name, and the CLI was the one
+party not consulting it. The second half is `vaultOrExit` refusing a resolved root that is not on disk:
+existence is the only test it applies, since an empty folder is a legitimate target for a first note.
 
 The walk-up reads `.projector/` and nothing else, and that strictness is load-bearing. `looksLikeVault`
 answers *could this be opened* and says yes to any folder holding markdown; `isConfigured` answers
@@ -666,7 +674,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, and the leniency an adopted vault depends on — a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
-| `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--json` being the payload the app receives, the registry, exit codes |
+| `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |

@@ -311,6 +311,40 @@ test('a single registered vault is used without --vault', () => {
   }
 });
 
+/**
+ * `--vault` names a vault or a path, and a vault that is not there is an error.
+ *
+ * Both halves of one bug. The flag was a path only, so naming a vault the way the
+ * registry names it resolved against the working directory instead, where no such
+ * folder was — and since every reader treats a missing folder as an empty one,
+ * `ls` and `search` printed no matches and exited 0. The name is now the first
+ * reading, and a resolved root that is not on disk is refused, so neither the
+ * wrong vault nor a typo can go on looking like an empty one.
+ */
+test('--vault takes a registered name, and a vault that is not there is refused', () => {
+  const v = vault();
+  try {
+    const env = { PROJECTOR_VAULTS: v.registry };
+    // A name that is deliberately not a directory relative to the test's working
+    // directory: reaching the notes proves the registry answered, not the path.
+    run(['vaults', 'add', v.root, '--name', 'by-name-only'], env);
+    assert.match(run(['-v', 'by-name-only', 'ls'], env).out, /2 note\(s\)/);
+    assert.match(run(['--vault', 'by-name-only', 'search', 'first'], env).out, /1 match\(es\)/);
+    // A path still works, for a vault the app has never opened.
+    assert.match(run(['-v', v.root, 'ls'], env).out, /2 note\(s\)/);
+
+    // A near miss is not quietly resolved to the vault it resembles, and not
+    // quietly resolved to nothing either.
+    const typo = run(['-v', 'by-name-onlyy', 'ls'], env);
+    assert.equal(typo.code, 1, typo.out);
+    assert.match(typo.out, /no vault at/);
+    assert.match(typo.out, /by-name-only/, 'the registered names are the hint');
+    assert.doesNotMatch(typo.out, /note\(s\)/, 'it must not report an empty vault');
+  } finally {
+    v.cleanup();
+  }
+});
+
 // ---------------------------------------------------------------- exit codes
 
 test('check exits 1 on an error and 0 on warnings alone', () => {

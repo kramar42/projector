@@ -709,12 +709,17 @@ the only thing written outside a vault; delete it and you lose the list, nothing
 pj vaults                                  # list
 pj vaults add <path> [--name n] [--create] # open a folder as a vault
 pj vaults forget <path>                    # stop tracking it; the folder is untouched
-pj --vault <path> <command>                # act on a specific one, or -v <path>
+pj --vault <name|path> <command>           # act on a specific one, or -v <name|path>
 ```
 
-The CLI does not need the list at all: run `pj` anywhere inside a vault and it finds it by walking up,
-the way git finds a repository. Otherwise `--vault`, then `PROJECTOR_DATA`, then the single registered
-one.
+Run `pj` anywhere inside a vault and it finds it by walking up, the way git finds a repository.
+Otherwise `--vault`, then `PROJECTOR_DATA`, then the single registered one.
+
+`--vault` takes **a registered name or a path, name first**: `-v work` is the vault you called `work`
+wherever it lives, and only a folder called `work` next to you if nothing is registered under that
+name. The name must match exactly — a near miss is read as a path, never as a guess at which vault you
+meant. A `--vault` that resolves to a folder that is not there is refused, because every reader treats
+a missing vault as an empty one, so a typo would otherwise come back as `0 match(es)` and exit 0.
 
 ---
 

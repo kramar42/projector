@@ -42,14 +42,6 @@ export const paths = (root: string) => ({
 });
 
 /**
- * The vault a command-line invocation should act on.
- *
- * `--vault <path>` wins, then `PROJECTOR_DATA`. Otherwise, if exactly one vault is
- * registered, that one — a single-vault setup should not have to say so. With
- * several registered and no choice made, the caller is asked to pick rather than
- * guessing.
- */
-/**
  * Whether this folder has ever been opened as a vault — it holds a `.projector/`.
  *
  * The strict half of the question, and the only one a *write* is allowed to
@@ -106,17 +98,35 @@ export function vaultAbove(from: string): string | null {
  * The order of precedence, given whatever `--vault` said — `null` when it was not
  * passed.
  *
+ * `--vault` wins, then `PROJECTOR_DATA`, then the vault the working directory is
+ * inside, then the single registered one — a single-vault setup should not have to
+ * say so. With several registered and no choice made, the caller is asked to pick
+ * rather than guessing.
+ *
  * It takes the value rather than argv because argv has one reader, in the CLI,
  * and the flag has more spellings than its own name: this used to scan for the
  * literal `--vault`, which `-v` and `--vau` walk straight past, leaving the CLI
  * acting on a vault nobody asked for while its own parse had already found the
  * right one.
+ *
+ * **A registered name wins over a folder of that name.** `--vault` used to be a
+ * path and only a path, so naming a vault the way its own registry entry names it
+ * resolved against the working directory instead — and one level above that
+ * vault's folder there is no such directory. Every command then acted on an empty
+ * vault: `search` and `ls` printed no matches and exited 0, because a vault with
+ * no notes and a vault that is not there are the same reading to everything
+ * downstream. The registry already holds the name, and the CLI was the one party
+ * not consulting it. A path is the fallback spelling, which keeps
+ * `--vault ../elsewhere` working for a vault the app has never opened.
  */
 export function resolveCliVault(
   given: string | null,
   registered: { path: string; name: string }[],
 ): { root: string } | { error: string } {
-  if (given) return { root: resolvePath(given, process.cwd()) };
+  if (given) {
+    const named = registered.find((v) => v.name === given);
+    return { root: named ? named.path : resolvePath(given, process.cwd()) };
+  }
   if (process.env.PROJECTOR_DATA) {
     return { root: resolvePath(process.env.PROJECTOR_DATA, process.cwd()) };
   }
@@ -133,7 +143,7 @@ export function resolveCliVault(
   }
   return {
     error:
-      `several vaults are registered — run from inside one or pass --vault <path>:\n` +
+      `several vaults are registered — run from inside one or pass --vault <name|path>:\n` +
       registered.map((v) => `  ${v.name}  ${v.path}`).join('\n'),
   };
 }

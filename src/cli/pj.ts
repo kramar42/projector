@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync } from 'node:fs';
-import { paths, resolveCliVault } from '../config.ts';
+import { existsSync, paths, resolveCliVault } from '../config.ts';
 import { formatReport, probe, writeTemplate } from '../setup.ts';
 import { jiraConfig } from '../sources/jira.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
@@ -160,10 +160,31 @@ if (vaultAt !== -1 && (vaultGiven === null || FLAG.test(vaultGiven))) {
 const cliArgs = vaultAt === -1 ? rawArgs : [...rawArgs.slice(0, vaultAt), ...rawArgs.slice(vaultAt + 2)];
 const [rawCmd, ...rawArgv] = cliArgs;
 
+/**
+ * A resolved vault that is not there is refused here rather than downstream.
+ *
+ * Every reader treats a missing folder as an empty one: `reindex` walks nothing,
+ * so `search` and `ls` print zero matches and exit 0. A `--vault` naming a folder
+ * that is not there was therefore indistinguishable from a vault with nothing in
+ * it — the one failure a full vault and a typo report identically. Existence is
+ * the only test applied: an empty folder is a legitimate target for a first note,
+ * so the guard catches the mistake without inventing a rule about what a vault
+ * must already contain.
+ */
 function vaultOrExit(): string {
-  const res = resolveCliVault(vaultGiven, listVaults().filter((v) => v.exists));
+  const registered = listVaults().filter((v) => v.exists);
+  const res = resolveCliVault(vaultGiven, registered);
   if ('error' in res) {
     console.error(res.error);
+    process.exit(1);
+  }
+  if (!existsSync(res.root)) {
+    const named = registered.map((v) => v.name);
+    console.error(
+      `no vault at ${res.root}` +
+        (vaultGiven && vaultGiven !== res.root ? ` — ${vaultGiven} is not a registered name` : '') +
+        (named.length ? `.\nRegistered: ${named.join(', ')}` : '.'),
+    );
     process.exit(1);
   }
   return res.root;
