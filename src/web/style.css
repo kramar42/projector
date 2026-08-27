@@ -330,29 +330,33 @@ body {
 /* ---------------------------------------------------------------- shell */
 
 /*
- * Three tracks: the rail, the view, and the panel's dock.
+ * Two tracks: the rail, and the view.
  *
- * The dock holds nothing — `.panel` is `position: fixed` and paints over it — and
- * that is the whole of it: a fixed overlay is invisible to layout, so the width it
- * covers has to be taken out of the view by hand or the view keeps drawing cards
- * underneath it. The cursor is what turned that from cosmetic into a bug.
- * `scrollIntoView` calls a card in view when it is inside the scrollport, and the
- * scrollport ran to the window's edge, so `l` walked the cursor into 560px of
- * board nobody could see and `nearest` had nothing to fix — see `useCursorFocus`.
+ * There was a third — the panel's dock, `minmax(0, var(--dock-w))`, widened to
+ * `--panel-w` while a note was open. It existed because a `position: fixed`
+ * overlay is invisible to layout, so a covered view keeps drawing cards nobody can
+ * see; and the cursor is what made that a bug rather than a blemish, since
+ * `scrollIntoView` calls a card in view whenever it is inside the scrollport.
  *
- * Two independent switches on one template rather than a template per state, which
- * is what kept the collapsed rail's copy from having to know about the panel.
+ * Reserving the width fixed the cursor and broke the drawing. Taking a track out of
+ * the grid reflows the middle one, which a board and a canvas absorb by scrolling
+ * and a table cannot: every column width recomputed the moment a note opened, so
+ * reading one row rearranged the table under it. Two shapes hid the cost and the
+ * third paid it.
  *
- * `minmax(0, …)` on the dock rather than a bare width, because a track that cannot
- * shrink overflows the shell in a narrow window: this is the clamp, done by track
- * sizing instead of by hand. The panel covers the view again once the window is too
- * narrow to seat both, which is the same trade `min(560px, 92vw)` already makes.
+ * So the panel covers, and `scroll-padding-right` keeps the cursor out from under
+ * it — see `.shell.panel-is-open`, which now widens nothing and declares a reach.
+ * That is the same lever the sticky table head and the bulk bar already use for
+ * the block axis, on the axis `inline: 'nearest'` aims along.
+ *
+ * The rail keeps its switch, and the transition with it: `--rail-w` is a real
+ * track and collapsing it is a real reflow, which is the animation this was
+ * written for.
  */
 .shell {
   display: grid;
   --rail-w: 248px;
-  --dock-w: 0px;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, var(--dock-w));
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
   height: 100%;
   transition: grid-template-columns 140ms ease;
 }
@@ -361,10 +365,26 @@ body {
   --rail-w: 38px;
 }
 
-/* The panel docks rather than covers. It is still `position: fixed` — this is only
-   the space it is fixed over, so nothing is drawn beneath it. */
+/*
+ * The panel covers the view; it does not take a track from it.
+ *
+ * It docked, and the dock was the wrong answer to a real problem. Taking the
+ * width out of the grid *reflows* whatever is in the middle track, and a table is
+ * the shape that shows it: opening a note recomputed every column width, so the
+ * act of looking at one row rearranged the whole table under it. A board and a
+ * canvas scroll rather than reflow, so the same reflow was invisible in two of the
+ * three shapes and nothing said which was the anomaly.
+ *
+ * The problem the dock solved was the cursor, not the drawing: a fixed overlay is
+ * invisible to `scrollIntoView`, so `l` walked into board that was on screen only
+ * in the sense that its coordinates were. That is what `scroll-padding` is for,
+ * and the reach needs no measuring here — the panel is `fixed`, flush `right: 0`,
+ * and exactly `--panel-w` wide, so its reach into a track that runs to the
+ * window's edge *is* `--panel-w`. `useEdgeInset` measures because a bulk bar's
+ * height depends on its contents; this one is a token.
+ */
 .shell.panel-is-open {
-  --dock-w: var(--panel-w);
+  --covered-right: var(--panel-w);
 }
 
 /* The sidebar *is* the view: sections grouped by purpose, and exactly one of
@@ -3885,7 +3905,22 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 7;
+  /*
+   * Above everything that covers content, which is a longer list than `7` knew.
+   *
+   * It sat below `.panel` at `21`, so the message about what a keystroke just did
+   * to the view was painted *under* the note you had open — half of it visible
+   * past the panel's edge, the informative half not. `.scrim` (20),
+   * `.cheatsheet-scrim` (39) and `.cheatsheet` (40) had the same relationship
+   * with it.
+   *
+   * Not above `.popover` at 60, and that is the one exception rather than an
+   * oversight: a popover is a control you are *inside*, and this box is clickable
+   * — it dismisses on click. A transient report on something that has already
+   * happened must not be able to eat a click meant for a control that is still
+   * open. Everything below 41 covers content; the popover is content.
+   */
+  z-index: 41;
   cursor: pointer;
   max-width: min(560px, calc(100% - 24px));
   box-shadow: 0 6px 20px rgba(20, 15, 35, 0.16);
@@ -3931,6 +3966,57 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .column-body {
   scroll-padding-top: calc(var(--covered-top, 0px) + var(--ring-out, 0px));
   scroll-padding-bottom: calc(var(--covered-bottom, 0px) + var(--ring-out, 0px));
+  /* The open panel, on the axis `inline: 'nearest'` aims along. Declared from a
+     token rather than measured — see `.shell.panel-is-open`. */
+  scroll-padding-right: calc(var(--covered-right, 0px) + var(--ring-out, 0px));
+}
+
+/*
+ * …and the room to act on it, which `scroll-padding` cannot provide.
+ *
+ * `scroll-padding` moves where a scroll *aims*; it cannot invent scroll range that
+ * does not exist. At maximum scroll a scroller's content ends flush with its own
+ * right edge — which, under a covering panel, is 560px inside the panel. So the
+ * last column of a board and the last columns of a table were unreachable: the aim
+ * was correct and there was nowhere left to scroll to. Measured on the seeded
+ * board, the cursor's card sat at `693…967` against a panel starting at `720`.
+ *
+ * Real padding at the end is the room. It appears only while the panel is open,
+ * it is drawn under the panel where nothing can see it, and it is exactly the
+ * width being covered — so every card can now be brought clear of the panel, which
+ * is what the grid's dock used to achieve by making the view narrower instead.
+ *
+ * `.table-wrap` takes it as padding, which works because the thing that overflows
+ * is its own child `<table>`: end-side padding on a block scroll container is part
+ * of its scrollable overflow, so `scrollWidth` grows and the last column can be
+ * brought clear — measured at a table right edge of 698 against a panel at 720.
+ *
+ * `.board-scroll` cannot, and this is the one place the two shapes need different
+ * code. What overflows there is `.board`, a nested flex row whose *children*
+ * overflow *it*, so the scroller's `scrollWidth` is decided by the last column's
+ * right edge and the scroller's own padding is not in it: adding 572px moved
+ * `scrollWidth` not at all, and squeezed `.board` from 1020px to 448px for
+ * nothing. The room has to be an item in the row that overflows.
+ *
+ * Not `.column-body`: it scrolls vertically, so its right edge is not an axis and
+ * padding there would narrow the cards rather than extend a scroll.
+ */
+.table-wrap {
+  padding-right: calc(12px + var(--covered-right, 0px));
+}
+
+/*
+ * The board's version of that room: an empty last item in the row.
+ *
+ * Behind `.panel-is-open` rather than sized from `--covered-right` unconditionally,
+ * because `.board` spaces its columns with `gap` — a zero-width pseudo-element is
+ * still an item, so an always-present one would hang a permanent 12px off the end
+ * of every board for the sake of a panel that is not open.
+ */
+.shell.panel-is-open .board::after {
+  content: '';
+  flex: 0 0 var(--covered-right, 0px);
+  align-self: stretch;
 }
 
 /*
@@ -3951,11 +4037,23 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .board-scroll,
 .column-body {
   --ring-out: 3px;
-  /* The same three pixels on the axis the board scrolls sideways along. Inert in a
-     column body, which scrolls one way, and declared once for both rather than
-     leaving one of the two edges of a card ringed and the other clipped. */
+  /*
+   * The left edge only, and the asymmetry is the point.
+   *
+   * The rule above already sums `--ring-out` into every edge a *cover* can land on
+   * — top, bottom and right — so declaring `scroll-padding-right: var(--ring-out)`
+   * here re-declared the same property later in the file and won, which silently
+   * dropped the open panel's 560px and left the board clearing three pixels for a
+   * ring in front of a panel it could not see. That is the second time this pair
+   * has cost something: `--ring-out` was invented because the ring is painted
+   * outside the box `scrollIntoView` aims at, and a cover has the same shape of
+   * problem, so the two have to *add* rather than take turns.
+   *
+   * Left is the one edge nothing floats over, so it is the one edge this can own.
+   * The three pixels are inert in a column body, which scrolls one way, and are
+   * declared for both because a card's two side edges are ringed alike.
+   */
   scroll-padding-left: var(--ring-out);
-  scroll-padding-right: var(--ring-out);
 }
 
 /* Where a reordered card will land. Only rendered on a saved view, since that is

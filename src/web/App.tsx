@@ -49,6 +49,17 @@ import type { Edit, ViewSpec } from './types.ts';
 import type { Meta, NoteDTO, QueryResponse } from './types.ts';
 
 /**
+ * How long a keynotice stays.
+ *
+ * Long enough to read a sentence and short enough that nobody reaches for the
+ * mouse to clear it. It is not `FLUSH_MS`: that is how long a *changed region*
+ * stays washed, and it is welded to the length of a write. These two have nothing
+ * to keep in step, so sharing a constant would be a coincidence pretending to be
+ * a rule.
+ */
+const NOTICE_MS = 4000;
+
+/**
  * One route.
  *
  * P1 routed `/board/:name` and `/canvas/:name`, because a view was a place you
@@ -154,6 +165,26 @@ export function App() {
    * should be told about.
    */
   const [notice, setNotice] = useState<{ tone: 'bad' | 'info'; text: string } | null>(null);
+  /**
+   * The notice goes on its own, which the stylesheet had claimed for some time.
+   *
+   * `.keynotice`'s comment called it "transient, centred and self-dismissing" and
+   * used that as the reason it writes no `scroll-padding` — but nothing ever
+   * dismissed it. `showing what names this note on Part of` sat over the board
+   * until it was clicked or Escape was pressed, which is a modal's behaviour on a
+   * message that is already history by the time it is read.
+   *
+   * Keyed on the notice *object* rather than on its text, so the same message
+   * arriving twice restarts the clock: every `notify` call builds a fresh object,
+   * so identity is the "this is a new notice" signal without a sequence number.
+   * Click and Escape still dismiss it early; the cleanup is what stops a dismissed
+   * notice's timer clearing the next one.
+   */
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [helpOpen, setHelpOpen] = useState(false);
   /**
    * The column `n` asked to create a card in.
@@ -507,11 +538,10 @@ export function App() {
           cannot disagree about what colour an axis is. */}
       <VocabularyProvider facets={meta.facets}>
       {/*
-        The panel's width is a *track* of this grid, not just a fixed overlay —
-        `.shell.panel-is-open` reserves it, so an open panel takes space out of the
-        view instead of covering two columns of it. The cursor is the reason: a
-        fixed overlay is invisible to `scrollIntoView`, so `l` used to walk into
-        board that was on screen only in the sense that its coordinates were.
+        `panel-is-open` no longer reserves a track — the panel covers the view and
+        declares how far it reaches, so the cursor still cannot hide under it while
+        the view keeps its width. `.shell` carries the whole argument, and why
+        reserving the width was the wrong half of it.
       */}
       <div
         className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${

@@ -478,12 +478,15 @@ type scale, which is why the scale test does not police them.
 
 ## Layout
 
-**The shell** is a three-track CSS grid: the rail at `248px`, collapsing to `38px`; the view at
-`minmax(0, 1fr)`; and a dock at `minmax(0, var(--panel-w))` that is `0` until the panel opens. The
-dock holds nothing — the panel is `position: fixed` and paints over it — and exists so that an open
-panel *takes* its width from the view rather than covering it. Two switches on one template, so the
-collapsed rail and the open panel do not have to know about each other. There is no top
-bar. The sidebar *is* the view — vault switcher, shape and grouping controls, search, then the filter
+**The shell** is a two-track CSS grid: the rail at `248px`, collapsing to `38px`, and the view at
+`minmax(0, 1fr)`. **The panel covers the view rather than taking a track from it.** There was a third
+track — a dock at `minmax(0, var(--panel-w))`, `0` until the panel opened — so that an open panel took
+its width from the view instead of covering it. It fixed the right problem the wrong way: reserving the
+width reflows the middle track, which a board and a canvas absorb by scrolling and a table cannot, so
+opening a note recomputed every column width and reading one row rearranged the table under it. The
+problem it was solving was the cursor, not the drawing, and `scroll-padding-right` is the lever for
+that — the same one the sticky table head and the bulk bar already use on the block axis. There is no
+top bar. The sidebar *is* the view — vault switcher, shape and grouping controls, search, then the filter
 panel — and the footer carries the counts. The canvas floats its own transient toolbar rather than
 adding a chrome row that would be empty in the other two shapes.
 
@@ -498,13 +501,19 @@ calls a card in view when it is inside the scrollport, which is a box and not a 
 table head and the floating bulk bar are painted over that box without displacing it, so a card
 half behind either one counted as visible and `nearest` moved nothing. Every scroller the cursor
 scrolls therefore reads `scroll-padding` from `--covered-top` / `--covered-bottom`, which the covering
-element measures and writes on the surface it floats on (`useEdgeInset`). Nothing covering it means
-`0px` and no behaviour. A board's scrollers add three pixels on every edge for the cursor's own ring:
+element measures and writes on the surface it floats on (`useEdgeInset`), and from `--covered-right`,
+which the shell *declares* while the panel is open — the panel is fixed, flush to the right edge and
+exactly `--panel-w` wide, so its reach is a token rather than a measurement, and that reach is what
+replaced the grid's dock. Nothing covering it means `0px` and no behaviour. A board's scrollers add three pixels on every edge for the cursor's own ring:
 the ring is `outline: 2px` at `outline-offset: 1px`, an outline is painted outside the box, and the
 box is what the scroll aims at — so the first and last card in a column landed with their ring clipped
 until the aim accounted for it. A table's cursor is drawn from inset shadows and needs none of it, and
-the keynotice is deliberately left out: it is transient, centred and self-dismissing, and it would be
-writing over the edge the table head already owns.
+the keynotice is deliberately left out: it is transient, centred and self-dismissing after
+four seconds, and it would be writing over the edge the table head already owns. That last clause was
+true of the design and not of the code for a while — the notice had no timer at all and sat over the
+board until it was clicked, which is a modal's behaviour on a message that is history by the time it is
+read. It also sat *under* the panel at `z-index: 7`; it is `41` now, above everything that covers
+content and below the popover alone, which is the one thing above it that a stray click would break.
 
 **The board** is a flex row of fixed 292px columns with a 12px gutter, `align-items: flex-start` so a
 short column does not stretch. Notes stack 7px apart in an 8px-padded body. A single-lane board lets
@@ -515,8 +524,9 @@ sliver. That cap was a fixed fraction of the viewport, which only added up for t
 strip under the last one that nothing could use. Lanes are 14px apart, and a lane head is
 `position: sticky; left: 0` so its name survives horizontal scroll.
 
-**The panel** is fixed to the right edge at `--panel-w` (`min(560px, 92vw)`, the same token the
-shell's dock reserves, so the two cannot drift) over a `rgba(10, 8, 14, 0.34)` scrim,
+**The panel** is fixed to the right edge at `--panel-w` (`min(560px, 92vw)`, the same token the shell
+declares as `--covered-right` while it is open, so the width it covers and the width it clears cannot
+drift) over a `rgba(10, 8, 14, 0.34)` scrim,
 with `0 0 30px` of padding on the scrolling body and `10px` on every tier inside it — the deep bottom
 pad so the last section clears the viewport edge when scrolled. **The tier owns its padding**, which is
 what lets its divider reach the panel's edges instead of stopping 20px short at both ends; the panel
@@ -557,7 +567,8 @@ interchangeable: the offset points away from the edge the element is attached to
 ### Shadow Vocabulary
 
 - **Panel** (`box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18)`): the note panel, thrown leftward from
-  the right edge it is docked to.
+  the right edge it is fixed to — and the one shadow that has to carry weight, since it is now the
+  whole of what separates the panel from the view it covers.
 - **Popover** (`box-shadow: 0 12px 32px rgba(20, 15, 35, 0.18)`): portalled menus, which sit furthest
   from the plane and so cast furthest.
 - **Picker** (`box-shadow: 0 8px 28px rgba(8, 6, 12, 0.22)`): the note picker — smaller throw,
