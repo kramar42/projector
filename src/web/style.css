@@ -3972,48 +3972,52 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 }
 
 /*
- * …and the room to act on it, which `scroll-padding` cannot provide.
+ * …and, for a board only, the room to act on it.
  *
  * `scroll-padding` moves where a scroll *aims*; it cannot invent scroll range that
- * does not exist. At maximum scroll a scroller's content ends flush with its own
- * right edge — which, under a covering panel, is 560px inside the panel. So the
- * last column of a board and the last columns of a table were unreachable: the aim
- * was correct and there was nowhere left to scroll to. Measured on the seeded
- * board, the cursor's card sat at `693…967` against a panel starting at `720`.
+ * does not exist. At maximum scroll a board's content ends flush with the
+ * scroller's right edge — which, under a covering panel, is 560px inside the
+ * panel — so the last column could not be brought clear whatever the aim said.
+ * Measured before the fix: the cursor's card at `693…967` against a panel starting
+ * at `720`.
  *
- * Real padding at the end is the room. It appears only while the panel is open,
- * it is drawn under the panel where nothing can see it, and it is exactly the
- * width being covered — so every card can now be brought clear of the panel, which
- * is what the grid's dock used to achieve by making the view narrower instead.
+ * A board needs this because its cursor is a *card*, one column of several, and a
+ * card can be wholly hidden. **A table does not, and must not have it.** Its
+ * cursor is a full-width row, so there is no horizontal clearance to win — a row
+ * spans the scrollport in every scroll position — and buying room for one costs
+ * the thing the panel was made to stop covering:
  *
- * `.table-wrap` takes it as padding, which works because the thing that overflows
- * is its own child `<table>`: end-side padding on a block scroll container is part
- * of its scrollable overflow, so `scrollWidth` grows and the last column can be
- * brought clear — measured at a table right edge of 698 against a panel at 720.
+ * `.table-wrap` did take end padding, and it worked in the sense that `scrollWidth`
+ * grew. But `.table` is `width: 100%`, so its width resolves against the *padded*
+ * content box: 572px of padding narrowed the box from 998px to 438px and the table
+ * with it. On the seeded Projects view the table went from 1008px to 600px and its
+ * title column from 286px to 107px the moment a note opened — which is the reflow
+ * the dock was removed to prevent, reintroduced by the fix for something else. It
+ * survived a first check only because the other seeded table overflows anyway at
+ * 1244px, so the one view that could not show the bug was the one measured.
  *
- * `.board-scroll` cannot, and this is the one place the two shapes need different
- * code. What overflows there is `.board`, a nested flex row whose *children*
- * overflow *it*, so the scroller's `scrollWidth` is decided by the last column's
- * right edge and the scroller's own padding is not in it: adding 572px moved
- * `scrollWidth` not at all, and squeezed `.board` from 1020px to 448px for
- * nothing. The room has to be an item in the row that overflows.
+ * So the table keeps its 12px and lets the panel cover its right-hand columns,
+ * which is the trade the panel is: the view does not move when you open a note.
  *
- * Not `.column-body`: it scrolls vertically, so its right edge is not an axis and
- * padding there would narrow the cards rather than extend a scroll.
- */
-.table-wrap {
-  padding-right: calc(12px + var(--covered-right, 0px));
-}
-
-/*
- * The board's version of that room: an empty last item in the row.
- *
- * Behind `.panel-is-open` rather than sized from `--covered-right` unconditionally,
- * because `.board` spaces its columns with `gap` — a zero-width pseudo-element is
- * still an item, so an always-present one would hang a permanent 12px off the end
- * of every board for the sake of a panel that is not open.
+ * Not `.column-body` either: it scrolls vertically, so its right edge is not an
+ * axis and padding there would narrow the cards rather than extend a scroll.
  */
 .shell.panel-is-open .board::after {
+  /*
+   * An empty last item in the row that actually overflows.
+   *
+   * `.board-scroll` cannot take this as padding: what overflows there is `.board`,
+   * a nested flex row whose *children* overflow *it*, so the scroller's
+   * `scrollWidth` is decided by the last column's right edge and the scroller's own
+   * padding is not in it — adding 572px moved `scrollWidth` not at all, and
+   * squeezed `.board` from 1020px to 448px for nothing.
+   *
+   * Behind `.panel-is-open` rather than sized from `--covered-right`
+   * unconditionally, because `.board` spaces its columns with `gap`: a zero-width
+   * pseudo-element is still an item, so an always-present one would hang a
+   * permanent 12px off the end of every board for a panel that is not open. And
+   * unlike the table, nothing here reflows — a column is `flex: 0 0 292px`.
+   */
   content: '';
   flex: 0 0 var(--covered-right, 0px);
   align-self: stretch;

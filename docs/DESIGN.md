@@ -485,8 +485,9 @@ its width from the view instead of covering it. It fixed the right problem the w
 width reflows the middle track, which a board and a canvas absorb by scrolling and a table cannot, so
 opening a note recomputed every column width and reading one row rearranged the table under it. The
 problem it was solving was the cursor, not the drawing, and `scroll-padding-right` is the lever for
-that — the same one the sticky table head and the bulk bar already use on the block axis. There is no
-top bar. The sidebar *is* the view — vault switcher, shape and grouping controls, search, then the filter
+that — the same one the sticky table head and the bulk bar already use on the block axis. **The
+governing rule is that a view does not move when a note opens**, and it is worth stating because the
+first fix for the cursor broke it a second time, from the other side. There is no top bar. The sidebar *is* the view — vault switcher, shape and grouping controls, search, then the filter
 panel — and the footer carries the counts. The canvas floats its own transient toolbar rather than
 adding a chrome row that would be empty in the other two shapes.
 
@@ -504,7 +505,16 @@ scrolls therefore reads `scroll-padding` from `--covered-top` / `--covered-botto
 element measures and writes on the surface it floats on (`useEdgeInset`), and from `--covered-right`,
 which the shell *declares* while the panel is open — the panel is fixed, flush to the right edge and
 exactly `--panel-w` wide, so its reach is a token rather than a measurement, and that reach is what
-replaced the grid's dock. Nothing covering it means `0px` and no behaviour. A board's scrollers add three pixels on every edge for the cursor's own ring:
+replaced the grid's dock. Nothing covering it means `0px` and no behaviour.
+
+**Aim is not room, and only a board needs the room.** `scroll-padding` moves where a scroll aims; it
+cannot invent scroll range, and at maximum scroll a board's last column ends flush with the scroller's
+right edge — 560px inside the panel. So `.board` grows an empty trailing flex item while the panel is
+open, which costs nothing because a column is `flex: 0 0 292px`. **A table gets none of this**: its
+cursor is a full-width row, so there is no horizontal clearance to win, and `.table` is `width: 100%`
+— end padding on the wrap resolves into the table and reflows every column, which is the exact reflow
+removing the dock was meant to stop. The table keeps its width and lets the panel cover its right-hand
+columns. A board's scrollers add three pixels on every edge for the cursor's own ring:
 the ring is `outline: 2px` at `outline-offset: 1px`, an outline is painted outside the box, and the
 box is what the scroll aims at — so the first and last card in a column landed with their ring clipped
 until the aim accounted for it. A table's cursor is drawn from inset shadows and needs none of it, and
