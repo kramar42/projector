@@ -429,6 +429,16 @@ never changes shape because of a field it happens to carry. Drag handle-to-handl
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw first — decomposition (`parent`) or membership (`project`).
 
+Two kinds of line, told apart by geometry before colour: the relation the canvas is laid out by
+flows left → right with the ranks and steps around corners, and every other relation — a blocker,
+a second hierarchy — attaches top and bottom and curves. A fan of edges out of one note spreads
+into parallel channels rather than fusing into a trunk. **A line you cannot trace is a click away
+from an answer**: clicking an edge selects the two notes it joins, and while anything is selected,
+every edge touching none of the selection recedes — so the lines left on screen are the selection's
+own. The first paint is capped both ways, never past 1:1 and never below reading size; when the
+query has a `focus`, it frames the focused note and its first ring rather than the whole graph —
+the minimap covers the rest.
+
 Filtering a graph means **match plus context**: unmatched ancestors are kept so the tree stays
 connected, drawn muted and counted separately, so a filtered graph still reads as a graph. They are
 walked along the relation the canvas is *laid out by*, so a portfolio canvas never pulls in context
@@ -453,7 +463,7 @@ exactly the code path that changes its priority.
 |---|---|
 | Note panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
-| Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, bulk bar |
+| Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, click a line to select the pair it joins, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
 | Keyboard | the cursor, the digits, the trail, and the rail leader |
 

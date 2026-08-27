@@ -33,6 +33,13 @@ export interface EdgeSpec {
   types: string[];
   /** The one that decides how the line looks. */
   lead: string;
+  /**
+   * This edge's ordinal among the edges leaving the same source, in emitted
+   * order. The appearance layer staggers parallel channels by it — a project
+   * fanning out to forty members used to draw forty identical paths through one
+   * corridor, which read as a single line with no origins at all.
+   */
+  lane: number;
 }
 
 export function edgesFor(
@@ -53,8 +60,14 @@ export function edgesFor(
     else byPair.set(key, { src: e.dst, dst: e.src, types: [e.type] });
   }
 
-  return [...byPair.values()].map((pair) => ({
-    ...pair,
-    lead: [...pair.types].sort((a, b) => rank(a) - rank(b))[0]!,
-  }));
+  const fanned = new Map<string, number>();
+  return [...byPair.values()].map((pair) => {
+    const lane = fanned.get(pair.src) ?? 0;
+    fanned.set(pair.src, lane + 1);
+    return {
+      ...pair,
+      lead: [...pair.types].sort((a, b) => rank(a) - rank(b))[0]!,
+      lane,
+    };
+  });
 }

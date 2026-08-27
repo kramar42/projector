@@ -57,10 +57,19 @@ function RecordNode({ data }: NodeProps) {
   return (
     <div className={context ? 'is-context' : undefined}>
       {/* React Flow attaches edges to handles. Without them a custom node renders
-          fine and every edge is silently dropped. */}
-      <Handle type="target" position={Position.Left} />
+          fine and every edge is silently dropped.
+
+          Two pairs, because attachment is the first thing a line says: the
+          layout relation flows left → right with the ranks, and every other
+          relation attaches top and bottom — so a blocked edge and a membership
+          edge differ in geometry before colour or dash has to be read. An edge
+          naming a handle id that does not exist is silently dropped, so these
+          four ids and `buildEdges` must agree. */}
+      <Handle id="tree-in" type="target" position={Position.Left} />
+      <Handle id="cross-in" type="target" position={Position.Top} />
       <CardBody card={card} showFacets={show} onOpen={onOpen} />
-      <Handle type="source" position={Position.Right} />
+      <Handle id="tree-out" type="source" position={Position.Right} />
+      <Handle id="cross-out" type="source" position={Position.Bottom} />
     </div>
   );
 }
@@ -106,21 +115,34 @@ function buildEdges(
   facets: Meta['facets'],
   layout: string | null,
 ): Edge[] {
-  return edgesFor(raw, facets).map(({ src, dst, types, lead }) => {
+  return edgesFor(raw, facets).map(({ src, dst, types, lead, lane }) => {
     // Through `hue.ts`, which is also what a chip asks — so a relation's line and
     // its axis's values cannot disagree about the family, and the app's own axis
     // draws its edges in the accent rather than falling to grey.
     const colour = edgeColour(facets[lead]);
     const named = types.filter((t) => t !== layout);
+    const tree = lead === layout;
     return {
       id: `${types.join('+')}:${src}->${dst}`,
       source: src,
       target: dst,
-      type: 'smoothstep',
+      // Two path families, matching the two handle pairs on `RecordNode`: the
+      // layout relation steps with the ranks, everything else curves — so the
+      // two kinds of line cannot fuse in one corridor and be read as one.
+      type: tree ? 'smoothstep' : 'default',
+      sourceHandle: tree ? 'tree-out' : 'cross-out',
+      targetHandle: tree ? 'tree-in' : 'cross-in',
+      // The stagger. Same-source step edges once turned at the same distance
+      // from the node and fused into a single trunk; `lane` spreads the turns
+      // across the rank gap (ranksep 110), cycling so a wide fan stays inside
+      // it. Curved edges vary curvature instead, for the same reason.
+      pathOptions: tree
+        ? { offset: 16 + (lane % 12) * 8 }
+        : { curvature: 0.35 + (lane % 4) * 0.1 },
       style: {
         stroke: colour,
-        strokeWidth: lead === layout ? 1.6 : 1.4,
-        strokeDasharray: lead === layout ? undefined : '6 4',
+        strokeWidth: tree ? 1.6 : 1.4,
+        strokeDasharray: tree ? undefined : '6 4',
       },
       // An arrowhead per type, so direction is legible without reading a label.
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: colour },
@@ -133,7 +155,7 @@ function buildEdges(
       labelBgPadding: [4, 2] as [number, number],
       labelBgBorderRadius: 3,
       data: { types, src, dst },
-    } satisfies Edge;
+    } satisfies Edge & { pathOptions?: { offset?: number; curvature?: number } };
   });
 }
 
@@ -335,6 +357,37 @@ export function CanvasView({
   const acting = visibleSelection(selection.ids, data.ids);
 
   /**
+   * Selection is a spotlight. With notes selected, an edge touching none of them
+   * recedes, so what remains on screen is the answer to "what do these connect
+   * to" — the question a selection on a canvas is usually asking. Computed here
+   * rather than in `buildEdges` so a click does not rebuild the graph.
+   */
+  const edges = useMemo(() => {
+    if (!selection.ids.size) return built.edges;
+    return built.edges.map((e) =>
+      selection.ids.has(e.source) || selection.ids.has(e.target)
+        ? e
+        : { ...e, className: 'is-muted' },
+    );
+  }, [built.edges, selection.ids]);
+
+  /**
+   * What the first paint frames: the focused note and its first ring, when the
+   * query has a focus — the rest of the graph is what the minimap is for. Without
+   * a focus the whole graph fits, floored so fifty notes cannot open as slivers.
+   */
+  const fitTarget = useMemo(() => {
+    const id = data.spec.query.focus?.id;
+    if (!id || !data.notes[id]) return null;
+    const near = new Set([id]);
+    for (const r of data.relations) {
+      if (r.src === id) near.add(r.dst);
+      if (r.dst === id) near.add(r.src);
+    }
+    return [...near].map((n) => ({ id: n }));
+  }, [data]);
+
+  /**
    * Positions go to the view file, never to a card: views own arrangement, so the
    * same card can sit at a different place on each saved view.
    *
@@ -425,14 +478,38 @@ export function CanvasView({
       <div className="canvas">
         <ReactFlow
           nodes={nodes}
-          edges={built.edges}
+          edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onConnect={onConnect}
-          fitView
+          /*
+           * The first paint is capped both ways: never enlarged past 1:1, never
+           * fitted below readability — a keycloak-sized view used to open at 5%,
+           * which said "there is a column" and nothing else. When the query has
+           * a focus the fit frames that instead of the universe, in `onInit`,
+           * so the plain `fitView` is off for that case rather than flashing
+           * one framing before the other.
+           */
+          fitView={!fitTarget}
+          fitViewOptions={{ maxZoom: 1, minZoom: 0.4 }}
+          onInit={(inst) => {
+            if (fitTarget) void inst.fitView({ nodes: fitTarget, maxZoom: 1, minZoom: 0.4, padding: 0.15 });
+          }}
           minZoom={0.02}
           maxZoom={2}
           elementsSelectable
+          /*
+           * A line you cannot trace is a question; clicking it is the answer.
+           * Selecting the edge's two ends puts the ring on exactly the pair the
+           * line joins — and, through the spotlight above, dims every other
+           * edge. Context nodes stay out: they are not selectable by click and
+           * a bulk action must not reach a note the query never matched.
+           */
+          onEdgeClick={(_, edge) => {
+            const picked = [edge.source, edge.target].filter((id) => data.ids.includes(id));
+            if (picked.length) selection.replace(new Set(picked));
+          }}
+          elevateEdgesOnSelect
           /*
            * React Flow deletes the selected nodes on Backspace by default, and
            * `elementsSelectable` means there is always something selected to

@@ -1696,6 +1696,21 @@ input:focus-visible + .checkbox {
   opacity: 0;
 }
 
+/* Selection is a spotlight: an edge touching no selected note recedes, leaving
+   the survivors as the answer to "what do these connect to". The class is put
+   on by `CanvasView`, derived from `?sel=` — nothing stores it. */
+.react-flow__edge.is-muted {
+  opacity: 0.12;
+}
+
+/* A line under the pointer, or one whose click just selected its pair, answers
+   in its own weight — the 20px hit area React Flow gives an edge is invisible,
+   so the thickening is what says "this is a thing you can click". */
+.react-flow__edge:hover .react-flow__edge-path,
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.2;
+}
+
 /* A canvas edge label. Neutral rather than the edge's own hue, because a label
    inherits its edge's colour as a fill otherwise and a red word floating over a
    graph reads as an error — `buildEdges` used to say this inline, where the type

@@ -105,6 +105,25 @@ test('agreeing relations collapse to one edge, and the structural type leads', (
   assert.equal(edges[0]!.lead, 'project');
 });
 
+test('edges fanning out of one note take successive lanes', () => {
+  // Forty members of one project used to draw forty identical paths through one
+  // corridor — a single visible line with no origins. The lane is what the
+  // appearance layer staggers the turns by, counted per drawn source.
+  const edges = edgesFor([
+    { src: 'a', dst: 'p', type: 'project' },
+    { src: 'b', dst: 'p', type: 'project' },
+    { src: 'c', dst: 'p', type: 'project' },
+    { src: 'a', dst: 'q', type: 'blocked_by' },
+  ]);
+  const byId = new Map(edges.map((e) => [`${e.src}->${e.dst}`, e.lane]));
+  assert.deepEqual(
+    [byId.get('p->a'), byId.get('p->b'), byId.get('p->c')],
+    [0, 1, 2],
+    'one fan, three lanes',
+  );
+  assert.equal(byId.get('q->a'), 0, 'a different source starts its own count');
+});
+
 test('every edge points the way the graph opens', () => {
   // A reference is stored on the note that depends and points at what it
   // depends on, so drawing it means turning it round — all of them, with nothing
