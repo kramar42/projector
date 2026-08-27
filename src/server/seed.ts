@@ -252,6 +252,29 @@ show: [project, priority]
 `,
   },
   {
+    path: 'intake.yaml',
+    body: `# What a sweep left for you, and nobody has judged yet.
+#
+# \`intake\` is a built-in axis holding one value: a sweep writes it onto a
+# candidate it materialised, and judging the note is removing it. So this view
+# needs no state of its own — it is a filter, which is what keeps the queue a
+# board you already know how to use rather than a second kind of place.
+#
+# Grouped by \`source\` because the channels are the columns: a run of your own
+# commits reads as one stack instead of interleaving with everything else.
+#
+# Nothing has to be excluded from the other seeded views — every one of them
+# filters on \`status\`, and a candidate has none until you give it one.
+shape: board
+title: Intake
+filter:
+  intake: [unjudged]
+groupBy: [source]
+sort: [updated:desc]
+show: [project, priority, status]
+`,
+  },
+  {
     path: 'everything.yaml',
     body: `# Every note as a graph, laid out from the roots.
 shape: canvas

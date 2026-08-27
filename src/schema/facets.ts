@@ -46,6 +46,34 @@ export const BUILTIN_FACETS: Facets = {
     // to name it does not stop notes pointing along it.
     inverse: 'Members',
   },
+  /**
+   * A candidate a sweep materialised and nobody has judged yet.
+   *
+   * Built in for the same reason `project` is: the intake pipeline writes this
+   * value and reads it back to know what is still waiting, so a vault retyping it
+   * or adding values to it would strand the sweep with no way to say so. It is a
+   * *flag* wearing a facet's clothes — presence is the whole meaning — and it is a
+   * facet anyway because that is what makes `views/intake.yaml` a saved query
+   * instead of a new page, and what lets the board, the panel, the bulk bar and
+   * the cursor all reach it without one of them being taught about intake (C9).
+   *
+   * Judging a candidate **removes** the axis. Nothing else about the note has to
+   * change, which is why there is no `judged` value: a second value would be a
+   * state the vault stores and the vault can already answer by absence (C11).
+   *
+   * A vault that declared `expected: true` here would mark every judged note as
+   * needing one, which is backwards. Nothing refuses it; `expected` is a vault's
+   * business on every other axis and inventing a third class of unchangeable key
+   * for one footgun costs more than the footgun.
+   */
+  intake: {
+    label: 'Intake',
+    type: 'label',
+    values: ['unjudged'],
+    open: false,
+    single: true,
+    builtin: true,
+  },
 };
 
 /**

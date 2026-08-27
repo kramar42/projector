@@ -1,7 +1,13 @@
 import { reindex } from '../index/indexer.ts';
 import { ago } from '../sources/run.ts';
 import { claudeChannel } from './claude.ts';
-import { commitWatermark, recordPending, watermarkFor, watermarks } from './db.ts';
+import {
+  commitWatermark,
+  recordPending,
+  suppressedFingerprints,
+  watermarkFor,
+  watermarks,
+} from './db.ts';
 import { gitChannel } from './git.ts';
 import { jiraChannel } from './jira.ts';
 import { gmailChannel, slackChannel } from './mcp.ts';
@@ -32,7 +38,10 @@ export function channelNames(): string[] {
 
 export const DEFAULT_LIMIT = 25;
 
-type VaultRead = Pick<IntakeContext, 'root' | 'db' | 'notes' | 'fingerprints' | 'links'>;
+type VaultRead = Pick<
+  IntakeContext,
+  'root' | 'db' | 'notes' | 'fingerprints' | 'links' | 'suppressed'
+>;
 
 /**
  * The vault, read once for all channels.
@@ -57,7 +66,7 @@ function readVault(root: string): VaultRead {
       links.set(l.raw, [...(links.get(l.raw) ?? []), rec.id]);
     }
   }
-  return { root, db, notes, fingerprints, links };
+  return { root, db, notes, fingerprints, links, suppressed: suppressedFingerprints(root) };
 }
 
 export interface SweepOptions {
@@ -103,7 +112,7 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
 
     const report = await channel.collect({ ...vault, since: usable, cursor: mark?.cursor ?? null, limit });
     const resolved: ChannelReport = {
-      ...report,
+      ...withoutSuppressed(report, vault.suppressed),
       // The cursor may only move to a boundary with nothing unexamined behind
       // it. A truncated run has exactly that, so it keeps the old one and the
       // next sweep resumes from the same place.
@@ -115,6 +124,32 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
     recordPending(root, channel.name, resolved.nextCursor, seenIn(resolved));
   }
   return { reports, unknown };
+}
+
+/**
+ * Move already-judged candidates out of the proposal and into the declined list.
+ *
+ * Central rather than per-channel: every channel would need the same three lines,
+ * and a channel that forgot them would quietly re-offer work its reader has
+ * already said no to — the failure this whole table exists to stop.
+ *
+ * They become `skipped` rather than disappearing, so `seenIn` still counts them
+ * and `--verbose` still names them. A sweep that silently dropped a third of what
+ * it fetched would read as a quiet channel, which is the one reading that must not
+ * be available.
+ */
+function withoutSuppressed(r: ChannelReport, suppressed: Set<string>): ChannelReport {
+  if (!suppressed.size) return r;
+  const kept: ChannelReport['candidates'] = [];
+  const declined = [...r.skipped];
+  for (const c of r.candidates) {
+    if (suppressed.has(c.fingerprint)) {
+      declined.push({ fingerprint: c.fingerprint, title: c.title, why: 'suppressed earlier' });
+    } else {
+      kept.push(c);
+    }
+  }
+  return { ...r, candidates: kept, skipped: declined };
 }
 
 /** What the run examined: everything it proposed, plus everything it declined. */

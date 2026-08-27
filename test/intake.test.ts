@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
-import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, watermarkFor, watermarks } from '../src/intake/db.ts';
+import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
@@ -16,6 +16,7 @@ import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
 import type { IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
+import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 
 /**
  * Intake is the one part of projector holding state that is not derived from the
@@ -47,6 +48,7 @@ function context(root: string, over: Partial<IntakeContext> = {}): IntakeContext
     notes,
     fingerprints,
     links,
+    suppressed: new Set<string>(),
     since: new Date(0),
     cursor: null,
     limit: 25,
@@ -658,4 +660,130 @@ test('the asking process excludes itself', () => {
   const pick = pickSession({ cwd: '/Users/x/repo', self: 901, sessions, parents: [] });
   assert.ok(pick.found);
   assert.equal(pick.found.sessionId, 'other', 'excluding one sibling leaves the other unambiguous');
+});
+
+/**
+ * Suppression: the half of resolving a sweep that used to have nowhere to go.
+ *
+ * `pj add` records a yes and leaves a note behind. A no left nothing but a moved
+ * cursor, so "seen and declined" was indistinguishable from "never fetched" —
+ * except that the first could never come back. These pin the properties that make
+ * the table safe to rely on and safe to lose.
+ */
+
+test('a declined candidate survives the cursor moving past it', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:abc', reason: 'my own commit', channel: 'git' });
+    commitWatermark(root, 'git', '2026-01-01T00:00:00.000Z');
+
+    // The cursor has moved past it and the note was never written, and the
+    // rejection is still readable — which is the whole point.
+    const rows = suppressions(root);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.fingerprint, 'git:abc');
+    assert.equal(rows[0]!.reason, 'my own commit');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a suppressed candidate is declined by the sweep, not silently dropped', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    const first = await sweep(root, { only: ['claude', 'git'], limit: 3 });
+    const seen = first.reports.flatMap((r) => r.candidates);
+    // The fixture vault may legitimately produce nothing to propose; the
+    // invariant only has teeth when there is a candidate to suppress.
+    if (!seen.length) return;
+
+    const victim = seen[0]!;
+    suppress(root, { fingerprint: victim.fingerprint, reason: 'noise', channel: victim.channel });
+
+    const second = await sweep(root, { only: ['claude', 'git'], limit: 3 });
+    const proposed = second.reports.flatMap((r) => r.candidates.map((c) => c.fingerprint));
+    assert.ok(!proposed.includes(victim.fingerprint), 'a suppressed candidate is not re-proposed');
+
+    // It moves to `skipped` rather than vanishing: a run that quietly dropped
+    // what it fetched would read as a quiet channel, and that reading must not
+    // be available.
+    const declined = second.reports.flatMap((r) => r.skipped.map((s) => s.fingerprint));
+    assert.ok(declined.includes(victim.fingerprint), 'and it is named as declined');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('suppressing again replaces the reason rather than failing', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:abc', reason: 'first answer' });
+    suppress(root, { fingerprint: 'git:abc', reason: 'second answer' });
+    const rows = suppressions(root);
+    assert.equal(rows.length, 1, 'one row per fingerprint');
+    assert.equal(rows[0]!.reason, 'second answer', 'the current judgement wins');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a suppression is reversible, because suppressing wrongly costs the item', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:abc', reason: 'noise' });
+    assert.ok(suppressedFingerprints(root).has('git:abc'));
+    assert.equal(unsuppress(root, 'git:abc'), true);
+    assert.equal(suppressedFingerprints(root).size, 0);
+    assert.equal(unsuppress(root, 'git:abc'), false, 'and un-suppressing twice is not an error');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('losing the suppression table is noisier, never wrong', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:abc', reason: 'noise' });
+    assert.equal(suppressions(root).length, 1);
+
+    // Same argument the watermark makes about itself: what stops a duplicate note
+    // is `source_fingerprint` on the notes, not this table. Dropping it re-opens
+    // the proposal and creates nothing.
+    closeIntakeDb(root);
+    rmSync(paths(root).intakeDb, { force: true });
+    assert.equal(suppressions(root).length, 0);
+    assert.equal(suppressedFingerprints(root).size, 0);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the intake axis is built in, so a vault cannot strand the sweep', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const defs = loadFacets(paths(root).facets);
+
+    /**
+     * The set, pinned. Which axes the app owns changes by *deciding* rather than
+     * by working, and MANUAL.md names them in three places — so a built-in added
+     * or dropped without the document following fails here.
+     */
+    assert.deepEqual(
+      Object.keys(BUILTIN_FACETS).sort(),
+      ['intake', 'project'],
+      'a built-in was added or removed — MANUAL.md’s "The built-ins" names them',
+    );
+    assert.equal(defs.intake?.builtin, true);
+    assert.deepEqual(defs.intake?.values, ['unjudged']);
+    assert.equal(defs.intake?.single, true);
+    assert.equal(defs.intake?.open, false, 'a vault may not add a second meaning to it');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

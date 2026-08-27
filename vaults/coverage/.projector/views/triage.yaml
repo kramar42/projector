@@ -1,6 +1,12 @@
 # All four triage values, including `complete`.
+#
+# `intake: ['(none)']` excludes the unjudged queue. An unjudged candidate is
+# missing every expected facet by construction, so without this the intake
+# backlog would swamp the board that exists to find notes a person half-filed.
 shape: board
 title: Triage
+filter:
+  intake: ['(none)']
 groupBy: [triage]
 sort: [updated:desc]
 show: [project, priority, status]

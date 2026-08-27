@@ -320,6 +320,145 @@ needs to be part of two things.
   `open` press any focused button in the panel. Neither is worth deciding while the buttons are also
   reachable by `!` and by mouse.
 
+- **The half of the intake queue that judges.** The queue itself is built: `intake: [unjudged]` is a
+  built-in axis, `views/intake.yaml` is an ordinary board, and a decline is durable through `pj intake
+  suppress` instead of vanishing behind a cursor. What is not built is the thing that decides — today a
+  person or the `/pj-capture` skill judges each candidate, and the queue is only as quiet as whoever
+  last swept.
+
+  That is the whole remaining question, and it is a volume question rather than a taste one. Every
+  Claude session and every commit on this machine is a candidate, and their *evidence* is uniformly
+  excellent — a commit in a declared repo by the configured author matches perfectly and is still
+  usually nothing to file. So evidence cannot rank the queue: it answers whether something is already
+  tracked, not whether it matters, and ordering by it puts your own progress at the top. Suppression is
+  the job, and only a judgement about relevance does it.
+
+  The cheap shape first, and it needs no app code: a scheduled `claude -p` running the capture skill,
+  writing notes with plain file writes (C3) and recording its declines with `pj intake suppress`. If
+  the per-sweep cost or the latency hurts, the next shape is a small model called once per candidate,
+  which is a runtime dependency the app does not have today and would have to degrade to nothing when
+  absent. Likely both in the end, split by channel: the volume is in `git` and `claude`, which `pj`
+  fetches itself, while `slack` and `gmail` need an agent for the fetch anyway.
+
+  Whichever runs it, the constraint is written down in ARCHITECTURE and is the part to keep: a score may
+  gate and order, and may not become a facet or a badge.
+
+- **How a candidate says which note it wants to extend.** `Evidence.matches` already names the notes a
+  candidate is probably more work on, and `pj merge` already does the accept — it drops the reference
+  that pointed at the target, keeps the target's own facets, and absorbs the candidate's fingerprint, so
+  nothing has to be built for the operation itself.
+
+  What has no answer is which axis a materialised candidate should carry to say so. `parent` is the only
+  single-valued reference every vault has, and it means "part of", which is not what a candidate means —
+  and using it would put the candidate into the membership graph and the rollups for as long as it sat
+  unjudged. A dedicated axis would be vault vocabulary for something the app writes, which is the
+  argument that made `intake` built in. Left open deliberately rather than guessed at, since the fixture
+  would otherwise teach whichever answer was convenient.
+
+- **Telling you without you looking.** A local notification — the browser's, from the tab already open,
+  or the OS's from the server — is the version that costs nothing and collides with nothing. A push to
+  a private Telegram bot is also fine and is a **rewording of C2**, not an exception to it: the rule
+  denies writing where somebody else reads, and the enumerated channels — Jira, GitHub, Trello, Slack —
+  are exactly the shared ones. A sink only you read is not one of them. The summary column currently
+  says "everything external is read-only", which reads as banning it.
+
+  Both wait on the paragraph above. A notification is only worth having once something decides what
+  deserves one; wired to an unjudged queue it would fire on every commit, and the first thing anyone
+  would do is turn it off.
+
+## Ideas from elsewhere
+
+[Watchtower](https://github.com/Ruben-M-D/Watchtower) is a public MIT-licensed triage agent: it polls
+Jira, Gmail, IMAP and GitHub read-only, scores every item with a local model, and pushes what clears a
+threshold to a private bot. It answers the question intake answers, from the other end — a background
+daemon with a durable queue where projector has a sweep and a cursor. That difference is a change to
+the model and not one of these; what follows is the smaller, separable things it does better.
+
+- **A hard rule the source only asserts in a comment.** C2 says no code path writes to Jira, GitHub,
+  Trello or Slack. `src/sources/jira.ts` says `Only GET is ever issued (C2)` in a docstring, and that
+  is the whole enforcement — nothing greps for a write verb, and the write-path table pins concurrency
+  guards on *vault* writes, which is a different claim. Watchtower's `scripts/audit_readonly.sh` fails
+  its build on a non-GET verb in a source adapter, with two details worth copying: a negative lookbehind
+  so a local route decorator is not mistaken for an outbound write, and per-file patterns, so a method
+  name that is a write in one API is not flagged in a file that cannot call it.
+
+  Its weakness is a hardcoded list of watched files — add a source and it is silently unaudited — which
+  is exactly the half our table already gets right. So the pairing is the work: assert that every file
+  under `src/sources/` and `src/enrich/` appears in the table, then grep those files for a verb other
+  than GET. That is one test, and C2 would be checked rather than trusted.
+
+- **A verb allow-list checked before the subprocess spawns.** Watchtower's read-only git module keeps
+  a frozen set of safe verbs and refuses anything outside it *before* spawning, plus a
+  separate set of flags that are writes wearing a safe verb — `branch -D`, `remote add`,
+  `config --global`. `src/agent/` runs git for worktrees and history and does not have this shape.
+  Worth having wherever a verb is assembled rather than literal.
+
+- **Calibration from decisions already made.** Watchtower turns every Mark into "should have scored
+  high" and every Skip into "should have scored low", pulls the recent N of each, and injects them into
+  the classifier prompt as few-shot examples, with the instruction that a new item resembling a skipped
+  one scores low *even if its subject looks urgent*. It converges on a person's taste without a
+  prompt-tuning step.
+
+  Not buildable here, and the reason is structural rather than an ordering preference: **there is
+  nowhere to keep a rejection.** A candidate examined and not captured sits behind the cursor once the
+  sweep commits, and `source_fingerprint` only stops what became a note — so the corpus this needs does
+  not exist and cannot be reconstructed. It is downstream of a durable queue, not independent of it.
+
+  Two flaws to leave behind if it ever lands. It shuffles the examples, so the prompt differs run to
+  run and the zero temperature buys nothing reproducible. And it stamps two synthetic scores on them,
+  so a model learns two buckets rather than an ordering.
+
+- **A prior per person, with a cold start that makes it honest.** Counts of marked/skipped/done per
+  sender, offered to the classifier as rates with an explicit *"a prior, not a rule — override it when
+  the content diverges"*, and below a few observations it returns nothing at all so the base rubric
+  applies cleanly. The cold-start null is the part that makes it more than a gimmick.
+
+  The aging-view argument applies verbatim, and for once it is the same sentence: `owner` is set on one
+  note and `waiting_on` on almost nothing, so a per-person prior would ship computing over an empty
+  table and prove nothing — the `blocked_by` failure again, where an empty answer looked plausible
+  because there was no data to contradict it.
+
+- **A form that renders from the source's own schema.** Each Watchtower source declares its connect
+  form as JSON Schema, and the accounts page draws it — a new source is one file and one import, with
+  no frontend change. Two non-standard keys carry most of the value: a `help_url` and `help_label` that
+  link straight to the page where the credential is minted.
+
+  `Channel` in `src/intake/types.ts` declares `name`, `defaultDays` and `collect`, and everything about
+  *how to configure it* lives in `src/setup.ts` and in the `/pj-setup` skill's prose instead. A channel
+  that declared its own required credentials and where to get them would move that to the one place
+  that already knows.
+
+- **Enforce the hard rule in code, then say that you did.** A trusted-sender floor is applied *after*
+  the model returns rather than asked for in the prompt, and when it fires the stored reason is
+  prefixed with the address that caused it — so a dull item that surfaced anyway explains itself. The
+  general form: never ask a model to honour a rule that can be applied deterministically, and make the
+  override visible where its effect shows.
+
+- **Two orthogonal columns instead of one overloaded status.** Watchtower keeps "was pushed" on
+  `notified_at`, separate from the triage `status` the person owns, and the notifier never touches the
+  latter. Quiet hours are then not a state at all — they leave the timestamp null, so the item is
+  visible, the next poll will not re-push it, and nothing has to lie. The same split is why the
+  notifier can decline to ping something already acted on in the UI. Worth remembering as the shape
+  for any "surfaced" axis, which is a thing an intake queue would need and no facet describes.
+
+- **Optional integrations that are absent rather than broken.** Its optional executor client raises
+  three distinct types — not configured, configured but unreachable, and a structured upstream error
+  carrying status, detail and URL — and unconfigured resolves to a feature that is simply off, with no
+  broken control and no console error. Stated in the docstring as a goal: someone who never heard of
+  the other tool gets a working app. `pj intake`'s `fetched: false` with a `reason` is the same
+  instinct already; the three-way split is what the enrich fetchers and the Jira credential do not
+  have.
+
+- **A launcher that checks its own build.** `scripts/start.sh` refuses to start a second instance and
+  names why — two pollers would double every notification and race on one SQLite file — and it compares
+  the mtime of the UI sources against the built output before serving, because *"a stale build silently
+  means API up, no dashboard."*
+
+  We document that footgun instead of closing it: `serve` serves `dist/`, and CLAUDE.md spends a
+  paragraph warning that a reading at 8092 which says the fix did not take is almost always a stale
+  bundle. A staleness check in the script would retire the paragraph. It is the only one of these that
+  needs no design thought at all.
+
 ## The model is done for now
 
 P6 removed what was stored twice, P7 collapsed relations into facets, P8 typed them. Nothing in the

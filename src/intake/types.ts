@@ -103,6 +103,14 @@ export interface IntakeContext {
   fingerprints: Map<string, string[]>;
   /** A link's raw text → note ids carrying it. */
   links: Map<string, string[]>;
+  /**
+   * Fingerprints somebody already judged as "not a note".
+   *
+   * Handed to channels for completeness — `sweep` drops these centrally, so a
+   * channel needs no code to honour it and cannot forget to. A channel that wants
+   * to stop *fetching* something it knows is suppressed may still read it.
+   */
+  suppressed: Set<string>;
   since: Date;
   cursor: string | null;
   limit: number;

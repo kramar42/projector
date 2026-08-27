@@ -23,7 +23,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
 | **ref** | one value of a relation — a pointer *inside* the vault, traversable |
 | **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
-| **project** | a note carrying a `project:` block of configuration, which its members inherit. The one built-in facet points at them |
+| **project** | a note carrying a `project:` block of configuration, which its members inherit. A built-in facet points at them |
 | **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
@@ -67,7 +67,7 @@ list does not declare, and `single: true` refuses a second value at all — beca
 done]` is not a note in two columns, it is a note in no coherent state, and the thing writing most of
 these files is an agent.
 
-There is one built-in facet, `project`, described [below](#the-one-built-in). Everything else,
+Two facets are built in — `project` and `intake`, described [below](#the-built-ins). Everything else,
 relations included, is yours: "group by project" and "group by priority" are the same board with one
 control moved rather than two boards to keep in sync.
 
@@ -605,6 +605,10 @@ pj intake claude git --json
 pj intake status
 pj intake known claude:abc-123          # which notes already carry this
 pj intake commit --advance --captured 2 # promote what that sweep recorded
+
+pj intake suppress git:abc --reason "my own commit"   # a no, recorded
+pj intake suppressed                                  # what a no hid, and why
+pj intake unsuppress git:abc                          # offer it again
 ```
 
 **`pj intake` creates no note and moves no cursor.** `pj add`/`pj link` do the first after a human
@@ -615,6 +619,23 @@ What a sweep *does* write is where it **would** move each cursor to, alongside h
 examined. `--advance` promotes them. A pending proposal is inert until then, and promoting it
 spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
 between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
+
+**Saying no is a step too.** Capturing a candidate leaves a note carrying its fingerprint, and no later
+sweep offers it again. Declining one used to leave nothing at all — the cursor moved past it and that
+was the whole record, so the same commit could not be declined once and stay declined, and nothing you
+rejected could inform anything later. `pj intake suppress <fingerprint> --reason "…"` records the no.
+Later sweeps list it as declined rather than proposing it, which keeps it in the counts instead of
+quietly shrinking them.
+
+Read the pile back with `pj intake suppressed` and undo any of it with `pj intake unsuppress`. Both
+matter more than they look: getting the order wrong costs you some scrolling, and hiding the wrong
+thing costs you the item — so a no is always reversible and the pile is always readable.
+
+Two ways to say no, and they are not the same. **Suppressing** leaves no file, which is what you want
+for the volume a sweep of your own commits produces. **Archiving** — capturing it and setting
+`status: archived` — keeps the note and its fingerprint, which is what you want for one considered
+rejection you would like to find again. Deleting a captured note does neither: it destroys the
+fingerprint, and the next sweep proposes it all over again.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
@@ -719,7 +740,7 @@ Nothing is moved, converted, or written back until you change something —
 and the first change writes down the id the note was already going by, so a later rename moves a file
 rather than a note. There is no exempted filename: a `README.md` is a note like the rest.
 
-Opening a folder that has no `.projector/` sets one up — a facet vocabulary, six starter views, and a
+Opening a folder that has no `.projector/` sets one up — a facet vocabulary, seven starter views, and a
 `.gitignore` for the databases. If the folder already has a `.gitignore`, which an adopted repository
 usually does, the missing lines are appended to it and nothing already there is touched or repeated.
 That is all it writes: the folder's own files are not touched. A
@@ -765,6 +786,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
+| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back · put one back in |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
@@ -1175,12 +1197,16 @@ axis is an ordinary one you can filter, group and sort by.
 `pj check` rejects a declaration that cannot take effect: an `inverse:` on a facet that is not a
 reference, a `hue:` outside the palette, a `closed:` value the vocabulary does not list.
 
-## The one built-in
+## The built-ins
 
-`project` is the exception, and the only one. Its definition is not read from `facets.yaml`: config
-inheritance walks it as a relation, so its shape is fixed. It is still a *facet* — injected into the
-vocabulary, so the filter rail, the panel, the pickers and drag-and-drop reach it through the same loop
-as everything else, and it filters, groups and drags exactly like an axis you declared.
+Two axes are the app's rather than the vault's, and for the same reason: the app writes them and reads
+them back, so a vault redefining the shape would strand something with no way to say so. Both are still
+*facets* — injected into the vocabulary, so the filter rail, the panel, the pickers and drag-and-drop
+reach them through the same loop as everything else, and they filter, group and drag exactly like an
+axis you declared.
+
+`project` is the older one. Its definition is not read from `facets.yaml` because config inheritance
+walks it as a relation, so its shape is fixed.
 
 A vault may declare `project:` to set what is its to set — its label, its hue, whether triage asks for
 it, what its other end is called — and `pj check` errors only if the declaration touches the shape:
@@ -1197,6 +1223,28 @@ It is the one relation that brings its own `inverse`. Every other relation gets 
 the vault names one, because nothing computes an inverse it has no word for — but a vault cannot name
 this one's, since the definition is not read from the file. So `Members` is the default rather than an
 omission, and renaming it is a vault's business like the label.
+
+`intake` is the other, and it holds one value, `unjudged`. A sweep writes it onto a candidate it
+materialised; you remove it when you have judged the note. Presence is the whole meaning, which is why
+there is no second value — "judged" is the axis being absent, and storing it as well would be storing
+something the vault can already answer.
+
+It is a facet rather than a flag on the file so that the queue is a *view*: `filter: {intake:
+[unjudged]}` is a board like any other, and the panel, the bulk bar, the cursor and `pj ls` all reach
+it without any of them being taught what intake is. The other side of that is worth setting up
+deliberately — an unjudged candidate is missing every expected facet by construction, so a triage view
+wants `filter: {intake: ['(none)']}` or the queue will swamp it:
+
+```yaml
+# views/intake.yaml — what a sweep left for you
+shape: board
+filter: { intake: [unjudged] }
+groupBy: [source]
+
+# views/triage.yaml — notes you started and left, and not the queue
+filter: { intake: ['(none)'] }
+groupBy: [triage]
+```
 
 # Theme
 

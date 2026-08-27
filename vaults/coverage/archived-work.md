@@ -11,5 +11,10 @@ updated: 2025-07-22  # older
 ---
 
 Renders: `status: archived`, the fifth lifecycle value, and a note carrying a
-`source_fingerprint` — which is why a rejected candidate is archived instead of
-deleted. Deleting it destroys the fingerprint and the next sweep recreates it.
+`source_fingerprint`.
+
+Archiving is for a rejection worth **keeping as a record** — the note stays, and
+its fingerprint stays with it, so the next sweep does not recreate it. A rejection
+not worth a file uses `pj intake suppress` instead, which records the fingerprint
+and the reason without leaving a note behind. Deleting the file and doing neither
+is the one option that loses the fingerprint and gets the candidate back.

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { paths } from '../config.ts';
 
@@ -40,6 +40,31 @@ CREATE TABLE IF NOT EXISTS watermark (
   pending_seen   INTEGER,
   pending_at     TEXT
 );
+
+-- A candidate somebody judged as "not a note", so a later sweep stops offering it.
+--
+-- Only *judgements* land here, never a channel's own mechanical skip. The
+-- difference is reproducibility: a channel declining a merge commit or a session
+-- with no prompt re-derives that answer identically on every sweep, so storing it
+-- would be storing something derivable (C11). A judgement about whether work
+-- matters is not reproducible — a different threshold or a different model
+-- answers differently — and that is precisely why it needs somewhere to live.
+--
+-- Still not load-bearing, on the same argument as the watermark: lose this table
+-- and a re-sweep re-proposes what was declined. Noisier, never wrong, and never a
+-- duplicate note, because \`source_fingerprint\` on the notes is what stops those.
+CREATE TABLE IF NOT EXISTS suppressed (
+  -- The candidate's fingerprint, which is derived from the thing itself and not
+  -- its wording, so a re-sweep matches what was judged rather than something that
+  -- merely reads like it.
+  fingerprint TEXT PRIMARY KEY,
+  channel     TEXT,
+  title       TEXT,
+  -- Never null. A suppression with no reason cannot be reviewed, and the whole
+  -- safety of a threshold is that the pile it hides stays readable.
+  reason      TEXT NOT NULL,
+  at          TEXT NOT NULL
+);
 `;
 
 /**
@@ -64,12 +89,35 @@ function migrate(conn: DatabaseSync): void {
 
 const connections = new Map<string, DatabaseSync>();
 
+/**
+ * Remove a write-ahead log whose database is gone.
+ *
+ * This store is in WAL mode, so it is three files. Deleting the database and
+ * leaving the sidecars — which is what deleting "the file" looks like to anyone
+ * who has not thought about WAL — makes the next open fail outright with a disk
+ * I/O error. That would break the property the whole design rests on: losing this
+ * store is meant to cost a wider sweep, never a working command.
+ *
+ * Narrow on purpose. It fires only when the database itself is absent and a
+ * sidecar is present, which is unambiguously "somebody deleted it" and has
+ * nothing left to lose — the authoritative file is already gone. Any other I/O
+ * failure, a full disk or a permission problem, still raises where the caller can
+ * see it rather than being swept up as a stale log.
+ */
+function dropOrphanedWal(file: string): void {
+  if (existsSync(file)) return;
+  for (const suffix of ['-wal', '-shm']) {
+    if (existsSync(file + suffix)) rmSync(file + suffix, { force: true });
+  }
+}
+
 /** One connection per vault, as with enrichment: a shared handle would answer for the wrong vault. */
 export function openIntakeDb(dataRoot: string): DatabaseSync {
   const file = paths(dataRoot).intakeDb;
   const existing = connections.get(file);
   if (existing) return existing;
   mkdirSync(dirname(file), { recursive: true });
+  dropOrphanedWal(file);
   const conn = new DatabaseSync(file);
   conn.exec('PRAGMA journal_mode = WAL;');
   conn.exec(SCHEMA);
@@ -172,11 +220,15 @@ export function watermarkFor(dataRoot: string, channel: string): Watermark | nul
  * Move a channel's cursor forward.
  *
  * Called **after** a proposal has been resolved, never after fetching: a sweep
- * abandoned halfway must not swallow what it had already listed. The consequence
- * is deliberate — once committed, an item declined as "not a note" does not come
- * back, and the cursor is the only note that it was ever considered. A
- * rejection worth keeping belongs on a note with `status: archived`, which keeps
- * its fingerprint.
+ * abandoned halfway must not swallow what it had already listed.
+ *
+ * Once committed, an item declined as "not a note" is behind the cursor. What
+ * keeps that from losing it is `suppress` — a declined candidate recorded by
+ * fingerprint, with its reason, readable afterwards through `suppressions` and
+ * reversible through `unsuppress`. Before that table existed the cursor was the
+ * only trace that anything had been considered, and the advice was to keep the
+ * rejection as a note with `status: archived` — which is still right for one
+ * considered no, and absurd at the volume a sweep of your own commits produces.
  */
 export function commitWatermark(
   dataRoot: string,
@@ -216,4 +268,101 @@ export function resetWatermark(dataRoot: string, channel?: string): number {
     return n;
   }
   return conn.prepare('DELETE FROM watermark WHERE channel = ?').run(channel).changes as number;
+}
+
+// --------------------------------------------------------------- suppressions
+
+export interface Suppression {
+  fingerprint: string;
+  channel: string | null;
+  title: string | null;
+  reason: string;
+  at: string;
+}
+
+/**
+ * Record that a candidate was judged not to deserve a note.
+ *
+ * The counterpart to `pj add`: capture says yes and writes a file, this says no
+ * and writes a row. Both are needed for a sweep to converge, and only one of them
+ * existed — a declined candidate used to leave nothing behind but a moved cursor,
+ * so nothing could tell "seen and rejected" from "never fetched", and the
+ * rejection could not inform anything later.
+ *
+ * Re-suppressing the same fingerprint replaces the reason rather than failing:
+ * the second judgement is the current one, and a caller re-running a sweep should
+ * not have to care whether it already answered for this item.
+ */
+export function suppress(
+  dataRoot: string,
+  entry: { fingerprint: string; reason: string; channel?: string; title?: string },
+): Suppression {
+  const at = new Date().toISOString();
+  openIntakeDb(dataRoot)
+    .prepare(
+      `INSERT INTO suppressed (fingerprint, channel, title, reason, at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(fingerprint) DO UPDATE SET
+         channel = COALESCE(excluded.channel, suppressed.channel),
+         title   = COALESCE(excluded.title, suppressed.title),
+         reason  = excluded.reason,
+         at      = excluded.at`,
+    )
+    .run(entry.fingerprint, entry.channel ?? null, entry.title ?? null, entry.reason, at);
+  return {
+    fingerprint: entry.fingerprint,
+    channel: entry.channel ?? null,
+    title: entry.title ?? null,
+    reason: entry.reason,
+    at,
+  };
+}
+
+/**
+ * Un-hide a candidate, so the next sweep offers it again.
+ *
+ * The reason this exists at all is an asymmetry worth stating: getting the
+ * ordering wrong costs a reader some scrolling, and suppressing wrongly costs them
+ * the item. So every suppression has to be reversible and the pile has to be
+ * readable, or raising a threshold is an act of faith.
+ */
+export function unsuppress(dataRoot: string, fingerprint: string): boolean {
+  return (
+    (openIntakeDb(dataRoot)
+      .prepare('DELETE FROM suppressed WHERE fingerprint = ?')
+      .run(fingerprint).changes as number) > 0
+  );
+}
+
+/** Everything suppressed, newest judgement first. `channel` narrows it. */
+export function suppressions(dataRoot: string, channel?: string): Suppression[] {
+  const conn = openIntakeDb(dataRoot);
+  const rows = (
+    channel
+      ? conn
+          .prepare(
+            `SELECT fingerprint, channel, title, reason, at FROM suppressed
+              WHERE channel = ? ORDER BY at DESC`,
+          )
+          .all(channel)
+      : conn
+          .prepare(
+            `SELECT fingerprint, channel, title, reason, at FROM suppressed ORDER BY at DESC`,
+          )
+          .all()
+  ) as unknown as Suppression[];
+  return rows;
+}
+
+/**
+ * Every suppressed fingerprint, for the sweep to drop candidates against.
+ *
+ * A set rather than a query per candidate, for the reason `readVault` gives about
+ * the index: one round trip answers for a whole run.
+ */
+export function suppressedFingerprints(dataRoot: string): Set<string> {
+  const rows = openIntakeDb(dataRoot)
+    .prepare('SELECT fingerprint FROM suppressed')
+    .all() as unknown as { fingerprint: string }[];
+  return new Set(rows.map((r) => r.fingerprint));
 }

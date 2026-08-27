@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from 'yaml';
 import { SEED_FACETS, SEED_VIEWS } from '../src/server/seed.ts';
+import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import {
   countNotes,
   initVault,
@@ -160,7 +161,7 @@ test('every seeded file parses as what it claims to be', () => {
   // of a reader.
   assert.deepEqual(
     SEED_VIEWS.map((v) => v.path).sort(),
-    ['due.yaml', 'everything.yaml', 'home.yaml', 'projects.yaml', 'unblocked.yaml', 'week.yaml'],
+    ['due.yaml', 'everything.yaml', 'home.yaml', 'intake.yaml', 'projects.yaml', 'unblocked.yaml', 'week.yaml'],
   );
 });
 
@@ -355,10 +356,18 @@ test('the coverage vault declares exactly the due buckets the re-dater fills', (
 test('the seeded vocabulary covers every facet the seeded views use', () => {
   const facets = parse(SEED_FACETS) as Record<string, unknown>;
   const computed = new Set(['type', 'blocked', 'triage', 'due', 'staleness']);
+  // A built-in is in every vault's vocabulary without the file saying so, which
+  // is the whole point of it being built in. `intake` is the first one a seeded
+  // view filters on; `project` had only ever appeared in a `show` list, which
+  // this loop does not read.
+  const builtin = new Set(Object.keys(BUILTIN_FACETS));
   for (const view of SEED_VIEWS) {
     const y = parse(view.body) as { filter?: Record<string, unknown>; groupBy?: string[]; chips?: string[] };
     for (const name of [...Object.keys(y.filter ?? {}), ...(y.groupBy ?? []), ...(y.chips ?? [])]) {
-      assert.ok(name in facets || computed.has(name), `${view.path} uses unknown facet "${name}"`);
+      assert.ok(
+        name in facets || computed.has(name) || builtin.has(name),
+        `${view.path} uses unknown facet "${name}"`,
+      );
     }
   }
 });

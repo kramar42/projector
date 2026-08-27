@@ -31,7 +31,12 @@ import {
   renderSweep,
   sweep,
 } from '../intake/run.ts';
-import { resetWatermark } from '../intake/db.ts';
+import {
+  resetWatermark,
+  suppress,
+  suppressions,
+  unsuppress,
+} from '../intake/db.ts';
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
@@ -248,6 +253,9 @@ const HELP = `pj — projector CLI${vaultNote}
   pj intake commit --channel c --cursor v
      [--seen n] [--captured n]                         or say where by hand
   pj intake known <fingerprint>...                     which notes already carry these refs
+  pj intake suppress <fp>... --reason <why>             record a "not a note", so sweeps stop offering it
+  pj intake suppressed [--channel c] [--json]          what a judgement hid, and why
+  pj intake unsuppress <fp>...                         offer it again
   pj intake reset [--channel c]                        forget a cursor, back to the default window
 
   pj context <id> [--json]                             everything known about a note, assembled
@@ -700,6 +708,8 @@ try {
         'seen',
         'captured',
         'advance',
+        'reason',
+        'title',
       ], ['json', 'verbose', 'advance']);
       const [sub, ...channels] = rest;
 
@@ -743,6 +753,64 @@ try {
         if (!channels.length) fail('pj intake known <fingerprint-or-ref>...');
         for (const row of known(root, channels)) {
           console.log(`${pad(row.ref, 46)} ${row.cards.length ? row.cards.join(', ') : '—'}`);
+        }
+        break;
+      }
+
+      /**
+       * The other half of resolving a sweep. `pj add` records a yes; this records
+       * a no, so the next sweep stops offering it and the reason survives to be
+       * read back. Without it a decline left nothing behind but a moved cursor.
+       */
+      if (sub === 'suppress') {
+        const reason = flags.get('reason')?.[0];
+        if (!channels.length || !reason) {
+          fail('pj intake suppress <fingerprint>... --reason <why> [--channel c] [--title t]');
+        }
+        for (const fp of channels) {
+          const s = suppress(root, {
+            fingerprint: fp,
+            reason: reason!,
+            ...(flags.get('channel')?.[0] ? { channel: flags.get('channel')![0]! } : {}),
+            ...(flags.get('title')?.[0] ? { title: flags.get('title')![0]! } : {}),
+          });
+          console.log(`suppressed ${s.fingerprint} — ${s.reason}`);
+        }
+        break;
+      }
+
+      /**
+       * The pile a threshold hides, kept readable on purpose: getting the order
+       * wrong costs some scrolling and suppressing wrongly costs the item, so the
+       * only thing that makes a threshold safe to raise is being able to read what
+       * it swallowed.
+       */
+      if (sub === 'suppressed') {
+        const rows = suppressions(root, flags.get('channel')?.[0]);
+        if (flags.has('json')) {
+          console.log(JSON.stringify(rows, null, 2));
+          break;
+        }
+        if (!rows.length) {
+          console.log('nothing suppressed');
+          break;
+        }
+        for (const r of rows) {
+          console.log(
+            `${pad(r.fingerprint, 40)} ${pad(r.channel ?? '—', 8)} ${pad((r.title ?? '').slice(0, 40), 42)} ${r.reason}`,
+          );
+        }
+        break;
+      }
+
+      if (sub === 'unsuppress') {
+        if (!channels.length) fail('pj intake unsuppress <fingerprint>...');
+        for (const fp of channels) {
+          console.log(
+            unsuppress(root, fp)
+              ? `${fp} — back in the next sweep`
+              : `${fp} — was not suppressed`,
+          );
         }
         break;
       }

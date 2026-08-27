@@ -1,0 +1,12 @@
+# The queue: candidates a sweep materialised and nobody has judged yet.
+#
+# A board rather than a table because judging is a gesture — drag to set a facet,
+# clear `intake` to accept, delete to decline. Grouped by source so a run of your
+# own commits reads as one column instead of interleaving with everything else.
+shape: board
+title: Intake
+filter:
+  intake: [unjudged]
+groupBy: [source]
+sort: [updated:desc]
+show: [project, priority, status]

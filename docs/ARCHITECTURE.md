@@ -293,6 +293,14 @@ migration. `.projector/enrich.db` is a cache: TTL'd, clearable, and losing it co
 data that took a second to fetch. `.projector/intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
 the last three months, so it cannot be rebuilt from anything and cannot be thrown away casually.
 
+It holds two tables, and they are the two halves of resolving a sweep: `watermark` is how far each
+channel has been read, and `suppressed` is which candidates somebody judged not to deserve a note.
+Same lifecycle, so the same file — both are answers a person gave that no note records, and both
+degrade a sweep rather than breaking it when lost. It is in WAL mode, so it is three files on disk;
+deleting the database and leaving the sidecars used to fail the next open outright, which is why
+`openIntakeDb` clears an orphaned log before opening (see `dropOrphanedWal`). A property that only
+holds when you delete the right three files is not the property the paragraph above claims.
+
 Merging any two of them breaks whichever has the shorter life: enrichment in the index would be
 discarded on every reindex, and watermarks in the enrichment cache would be discarded by
 `clearEnrichment`.
@@ -312,6 +320,33 @@ fingerprint dedup rather than through the cursor. `pj intake` is also the only c
 external state and writes nothing of its own — it rebuilds the derived index the way every read does,
 and advancing a cursor is a separate explicit step, because a run that fetched is not a run that was
 resolved.
+
+**A sweep has two answers, and only one of them used to have somewhere to go.** `pj add` records a
+yes and leaves a note carrying the candidate's fingerprint, so no later sweep offers it again. A no
+left nothing behind but a moved cursor — which made "seen and declined" indistinguishable from "never
+fetched", except that the first could never come back, and it meant a rejection could not inform
+anything afterwards. `pj intake suppress` is the missing half: a fingerprint, a reason, and a
+timestamp, dropped from the candidates of every later sweep. `unsuppress` puts it back.
+
+Only *judgements* are stored. A channel declining a merge commit or a session with no prompt re-derives
+that answer identically on every run, so keeping it would be storing something derivable (C11). A
+judgement about whether work matters is not reproducible — a different threshold or a different reader
+answers differently — and that is exactly why it needs a home. A suppressed candidate is moved into
+the run's `skipped` list rather than dropped silently, so the count still includes it and `--verbose`
+still names it: a sweep that quietly discarded a third of what it fetched would read as a quiet
+channel, and that reading must not be available.
+
+**Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
+computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
+as fact. It has never governed the judgement of whether a candidate is worth filing: that belongs to
+the `/pj-capture` skill and always has, which is a model making the call. So classifying candidates at
+fetch time rather than in a conversation moves **when and where** the judgement runs, not who makes it,
+and no principle moves with it.
+
+What C8 does constrain is the residue. A relevance score may gate a candidate and order a queue; it may
+not become a facet, and it may not render as a badge beside computed ones, because what C8 buys is that
+a badge can be trusted. Its durable form is prose — a reason on a suppression, which is the shape
+`Skipped.why` already had.
 
 **Enrichment and intake are mirror images that share only the way out.** Enrichment is given a ref and
 answers how to display it; intake is given a channel and a cursor and answers which refs nobody has
@@ -465,6 +500,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
+| `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
@@ -488,7 +524,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to | only `pj intake commit`; gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to, and which candidates were declined | `pj intake commit` and `pj intake suppress`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 
