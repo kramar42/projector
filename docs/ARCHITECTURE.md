@@ -105,12 +105,12 @@ the two are expected to be editing the same note at the same time.
 | `src/schema/` | note and facet types, frontmatter read/write, validation, how notes fold together |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, `dropOutcome.ts`, what a drag means, `keys.ts`, what a keystroke means and which letters a vault may not claim, and `undo.ts`, the write that puts a write back |
-| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding |
+| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding, and `poll.ts` — the sweep on a timer |
 | `src/web/` | React: sidebar, three shapes, note panel. `cursor.ts` is where the keyboard is and `views/motion.ts` is where it can go |
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
-| `src/intake/` | channels that discover refs the vault does not have, and where each last got to |
+| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined, and `materialise.ts` — a candidate becoming a note |
 | `src/agent/` | note context assembly, worktree workspaces, briefings, git history — and `work.ts`, the plan-and-launch both `pj work` and `POST /api/note/:id/work` reach, so the CLI and the panel cannot disagree about which branch, which directory or which link |
 | `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
 
@@ -336,6 +336,30 @@ the run's `skipped` list rather than dropped silently, so the count still includ
 still names it: a sweep that quietly discarded a third of what it fetched would read as a quiet
 channel, and that reading must not be available.
 
+**A sweep with nobody standing there writes the candidate down, and that is what earns the cursor.**
+`pj intake` and the poller run the same channels through the same code; the difference is who is
+available to answer. A person is right there, so a manual sweep proposes and stops. A timer is not, so
+the poller materialises each candidate as a note carrying `intake: unjudged` and leaves the answer for
+later.
+
+That difference decides which of them may advance a watermark. The rule has always been that a cursor
+may only pass a boundary with nothing unexamined behind it — and a proposing run cannot satisfy it,
+because what it examined exists only in a terminal buffer. A materialising run can: everything behind
+its new boundary is a file, or was already answered for. **So the queue now guarantees what the cursor
+was being asked to**, and the cursor is demoted to what it should always have been — where to resume
+fetching. A truncated run still holds, unchanged and for the original reason.
+
+One channel failing is that channel's news. A thrown `collect` used to take the whole run with it, so a
+lapsed token meant no git candidates either; it now lands as `fetched: false` with the reason, which is
+the shape the report already had for Slack and Gmail. That matters more with nobody reading the output.
+
+**The poller does not make the queue quiet, and nothing pretends it does.** Every session and every
+commit becomes a note, because deciding that one of them does not matter is a judgement and there is
+not one in the codebase yet. `materialise` acts only on facts about the vault — a candidate already
+linked, or already captured — and never on whether the work matters. Which is why `poll.enabled`
+defaults to off: a vault polling by default would fill with its owner's own progress, and the first
+thing anyone would do is turn it off.
+
 **Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
 computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
 as fact. It has never governed the judgement of whether a candidate is worth filing: that belongs to
@@ -501,6 +525,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
+| the poller (`src/server/poll.ts`), when a vault sets `poll.enabled` | one note per candidate, through `createNote` like any other write, plus that channel's cursor | writes nothing for a candidate the vault already answers for, and advances only channels it actually fetched. Off unless the vault asks |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
@@ -520,7 +545,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 
 | Path | What | When |
 |---|---|---|
-| `<vault>/**/*.md` | note files | you create or edit a note |
+| `<vault>/**/*.md` | note files | you create or edit a note — or the poller materialises a candidate, when the vault turned it on |
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
@@ -562,6 +587,9 @@ holds several vaults open and none of them may answer with another's token. `pj 
 (`src/setup.ts`) writes the file, adds it to the vault's `.gitignore`, and probes each channel by
 making the request rather than checking that a value is present: configured-and-wrong and
 never-configured look identical otherwise.
+
+It also holds `poll:`, which is the one key that makes the app write notes nobody asked for. It is
+off unless a vault sets it, and that default is load-bearing rather than cautious — see below.
 
 The registry beside the app stays what it was — a list of paths, holding nothing secret.
 

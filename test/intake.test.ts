@@ -9,12 +9,15 @@ import { reindex } from '../src/index/indexer.ts';
 import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
-import { advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
+import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
+import { materialise } from '../src/intake/materialise.ts';
+import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
+import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
-import type { IntakeContext } from '../src/intake/types.ts';
+import type { Candidate, Channel, ChannelReport, IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 
@@ -783,6 +786,216 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
     assert.equal(defs.intake?.single, true);
     assert.equal(defs.intake?.open, false, 'a vault may not add a second meaning to it');
   } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Polling: the same sweep with nobody standing there to answer it.
+ *
+ * The difference is not the fetching, which is identical — it is that a
+ * materialising run writes each candidate down, and therefore earns the right to
+ * move a cursor that a proposing run does not have.
+ */
+
+/** A report shaped like a channel's, without needing a channel to produce one. */
+function report(channel: string, candidates: Candidate[]): ChannelReport {
+  return {
+    channel,
+    cursor: null,
+    nextCursor: '2026-01-01T00:00:00.000Z',
+    fetched: true,
+    candidates,
+    skipped: [],
+  };
+}
+
+const candidate = (fp: string, title: string, over: Partial<Candidate> = {}): Candidate => ({
+  channel: 'git',
+  fingerprint: fp,
+  title,
+  links: [],
+  ...over,
+});
+
+test('a materialised candidate is an ordinary note carrying the intake axis', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const res = materialise(root, report('git', [candidate('git:1', 'A thing that happened')]));
+    assert.equal(res.created.length, 1);
+
+    const rec = [...reindex(root).notes.values()].find((n) => n.id === res.created[0]);
+    assert.ok(rec, 'the note exists');
+    assert.deepEqual(rec!.facets.intake, ['unjudged']);
+    assert.equal(rec!.source_fingerprint, 'git:1', 'and it carries what it came from');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('materialising the same report twice creates nothing the second time', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const r = report('git', [candidate('git:1', 'A thing that happened')]);
+    assert.equal(materialise(root, r).created.length, 1);
+
+    // Convergence is a property of the write, not of the caller remembering.
+    // A poller on a timer re-fetches the same window constantly.
+    const second = materialise(root, r);
+    assert.deepEqual(second.created, []);
+    assert.equal(second.skipped, 1);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a candidate the vault already answers for is not written again', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const res = materialise(
+      root,
+      report('git', [
+        candidate('git:1', 'Already linked', { evidence: { linkedTo: ['a'] } }),
+        candidate('git:2', 'Already captured', { evidence: { capturedAs: ['a'] } }),
+      ]),
+    );
+    // Both are mechanical facts about the vault rather than judgements about
+    // whether the work matters, which is why acting on them here is allowed.
+    assert.deepEqual(res.created, []);
+    assert.equal(res.skipped, 2);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a suppressed candidate never reaches materialisation', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:1', reason: 'noise' });
+    // `sweep` drops it, so the report handed to `materialise` cannot contain it —
+    // the poller needs no code of its own to honour a suppression.
+    const r = report('git', [candidate('git:1', 'noise')]);
+    const filtered = { ...r, candidates: r.candidates.filter((c) => !suppressedFingerprints(root).has(c.fingerprint)) };
+    assert.deepEqual(materialise(root, filtered).created, []);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('polling is off unless the vault asks for it', () => {
+  const root = vault({ a: card('a') });
+  try {
+    assert.equal(startPolling(root), false, 'a vault with no config is not polled');
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 120\n', 'utf8');
+    assert.equal(startPolling(root), true);
+    assert.equal(startPolling(root), true, 'and starting twice does not double the rate');
+  } finally {
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a poll interval is floored, so a typo cannot spin', () => {
+  const root = vault({ a: card('a') });
+  try {
+    // A small positive number is somebody meaning it, and gets the floor.
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 5\n', 'utf8');
+    assert.equal(settingsFor(root).poll.everySeconds, 60);
+
+    // Zero or nonsense is nobody meaning anything, and gets the default — which
+    // is the safer of the two readings: a floor would honour half a typo.
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 0\n', 'utf8');
+    assert.equal(settingsFor(root).poll.everySeconds, 900);
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: soon\n', 'utf8');
+    assert.equal(settingsFor(root).poll.everySeconds, 900);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a channel that throws is that channel’s news, not the sweep’s', async () => {
+  const root = vault({ a: card('a') });
+  const boom: Channel = {
+    name: 'boom',
+    defaultDays: 1,
+    collect() {
+      throw new Error('credential expired');
+    },
+  };
+  CHANNELS.push(boom);
+  try {
+    const { reports } = await sweep(root, { only: ['boom', 'git'] });
+    const failed = reports.find((r) => r.channel === 'boom');
+    assert.ok(failed, 'the failing channel still reports');
+    assert.equal(failed!.fetched, false);
+    assert.match(failed!.reason ?? '', /credential expired/);
+    assert.equal(failed!.nextCursor, null, 'and it holds its cursor, having examined nothing');
+
+    // The point: the other channel still ran. Before this, one bad credential
+    // meant no git candidates either.
+    assert.ok(reports.some((r) => r.channel === 'git'), 'the healthy channel still ran');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(boom), 1);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unreachable channel is reported and its cursor is not advanced', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    // Slack and Gmail have no credential here by design, so they are the honest
+    // fixture for "could not fetch".
+    const res = await pollOnce(root);
+    const names = res.unreachable.map((u) => u.channel);
+    assert.ok(names.includes('slack') && names.includes('gmail'), 'both are named, with reasons');
+    for (const u of res.unreachable) assert.ok(u.reason, `${u.channel} says why`);
+    assert.ok(!res.advanced.includes('slack'), 'and nothing it did not fetch is advanced');
+  } finally {
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a materialising run advances the cursor, because nothing is left unrecorded', async () => {
+  const root = vault({ a: card('a') });
+  const fake: Channel = {
+    name: 'fake',
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: 'fake',
+      cursor: ctx.cursor,
+      nextCursor: '2026-02-02T00:00:00.000Z',
+      fetched: true,
+      candidates: [candidate('fake:1', 'Something that happened', { channel: 'fake' })],
+      skipped: [],
+    }),
+  };
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
+  try {
+    // A sweep run by a person proposes and holds — it wrote nothing down, so
+    // passing the boundary would step over candidates that exist only on screen.
+    await sweep(root, { only: ['fake'] });
+    assert.equal(watermarkFor(root, 'fake')?.cursor, null, 'proposing does not advance');
+
+    // A poll writes each candidate into the vault, so every item behind the new
+    // boundary is a file. That is what earns the advance.
+    const res = await pollOnce(root);
+    assert.equal(res.created.length, 1);
+    assert.ok(res.advanced.includes('fake'));
+    assert.equal(watermarkFor(root, 'fake')?.cursor, '2026-02-02T00:00:00.000Z');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }

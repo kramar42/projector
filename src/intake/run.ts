@@ -110,7 +110,12 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
     const since = opts.since ?? (mark?.cursor ? new Date(mark.cursor) : daysAgo(channel.defaultDays));
     const usable = Number.isFinite(since.getTime()) ? since : daysAgo(channel.defaultDays);
 
-    const report = await channel.collect({ ...vault, since: usable, cursor: mark?.cursor ?? null, limit });
+    const report = await collectSafely(channel, {
+      ...vault,
+      since: usable,
+      cursor: mark?.cursor ?? null,
+      limit,
+    });
     const resolved: ChannelReport = {
       ...withoutSuppressed(report, vault.suppressed),
       // The cursor may only move to a boundary with nothing unexamined behind
@@ -124,6 +129,37 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
     recordPending(root, channel.name, resolved.nextCursor, seenIn(resolved));
   }
   return { reports, unknown };
+}
+
+/**
+ * One channel failing is that channel's news, not the sweep's.
+ *
+ * A thrown `collect` used to take the whole run with it: a lapsed Jira token
+ * meant no git candidates either, and the reason surfaced as a stack trace rather
+ * than against the channel that caused it. `fetched: false` with a `reason` is
+ * the shape the report already had for "pj cannot reach this" — Slack and Gmail
+ * report it every run — so a failure lands there instead of inventing a second
+ * way to say the same thing.
+ *
+ * It matters more once a poller is running unattended, where nobody is reading a
+ * stack trace and one expired credential would otherwise stop everything.
+ */
+async function collectSafely(channel: Channel, ctx: IntakeContext): Promise<ChannelReport> {
+  try {
+    return await channel.collect(ctx);
+  } catch (e) {
+    return {
+      channel: channel.name,
+      cursor: ctx.cursor,
+      // Nothing was examined, so there is no boundary to move to. Holding the
+      // cursor is what makes the next run pick the window back up.
+      nextCursor: null,
+      fetched: false,
+      reason: e instanceof Error ? e.message : String(e),
+      candidates: [],
+      skipped: [],
+    };
+  }
 }
 
 /**

@@ -60,6 +60,8 @@ import { watch } from 'chokidar';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
+import { startPolling } from './poll.ts';
+import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
 
@@ -771,6 +773,17 @@ function ensureWatched(root: string): void {
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
   }).on('all', (_event: string, changed?: string) => bump(root, notesTouched(root, changed)));
   watched.set(root, w);
+
+  /**
+   * A vault that asked to be swept on a timer starts here, for the same reason
+   * the watcher does: the first time it is actually used, not for every path in
+   * the registry. It writes note files through the same gate as everything else,
+   * so the watcher above turns each one into the SSE the open board already
+   * listens for — a candidate appears without the client learning anything new.
+   */
+  if (startPolling(root, (msg) => console.log(msg))) {
+    console.log(`polling ${root} every ${settingsFor(root).poll.everySeconds}s`);
+  }
 }
 
 app.get('/api/events', (c) =>

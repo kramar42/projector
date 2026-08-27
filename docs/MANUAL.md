@@ -620,6 +620,30 @@ examined. `--advance` promotes them. A pending proposal is inert until then, and
 spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
 between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
 
+**Sweeping without being asked.** A vault can have the server sweep on a timer and write what it finds
+straight into the queue, so the intake board fills on its own:
+
+```yaml
+# .projector/config.yaml
+poll:
+  enabled: true
+  every: 900        # seconds; floored at 60, and 900 is the default
+channels: [git, claude, jira]
+```
+
+It starts when the vault is first opened, and each candidate lands as an ordinary note carrying
+`intake: unjudged` — so an open board shows it appear without doing anything. Running twice writes
+nothing twice: a fingerprint the vault already holds short-circuits. Slack and Gmail are skipped with a
+reason, having no credential here.
+
+Unlike `pj intake`, a poll **does** move each channel's cursor — it can, because everything behind the
+new boundary is a file rather than a line in a terminal you have already closed.
+
+**It is off by default, and you should know why before turning it on.** Nothing yet decides whether a
+candidate is worth having, so polling proposes at whatever rate your commits and sessions happen — turn
+it on for a vault whose channels are quiet, or expect to see your own afternoon in the queue. Until
+something judges, the way the queue gets shorter is you judging it.
+
 **Saying no is a step too.** Capturing a candidate leaves a note carrying its fingerprint, and no later
 sweep offers it again. Declining one used to leave nothing at all — the cursor moved past it and that
 was the whole record, so the same commit could not be declined once and stay declined, and nothing you
@@ -787,6 +811,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back · put one back in |
+| `poll:` in `.projector/config.yaml` | sweep on a timer and write candidates into the queue. Off unless set; nothing judges them yet |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |

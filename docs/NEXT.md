@@ -320,11 +320,13 @@ needs to be part of two things.
   `open` press any focused button in the panel. Neither is worth deciding while the buttons are also
   reachable by `!` and by mouse.
 
-- **The half of the intake queue that judges.** The queue itself is built: `intake: [unjudged]` is a
-  built-in axis, `views/intake.yaml` is an ordinary board, and a decline is durable through `pj intake
-  suppress` instead of vanishing behind a cursor. What is not built is the thing that decides — today a
-  person or the `/pj-capture` skill judges each candidate, and the queue is only as quiet as whoever
-  last swept.
+- **The half of the intake queue that judges.** The queue is built and so is the poller: `intake:
+  [unjudged]` is a built-in axis, `views/intake.yaml` is an ordinary board, a decline is durable through
+  `pj intake suppress` instead of vanishing behind a cursor, and a vault setting `poll.enabled` has the
+  server sweep on a timer and materialise what it finds. What is not built is the thing that decides —
+  so the board fills at whatever rate the channels produce, and the only thing that shortens it is a
+  person. A first run against this repository proposed two notes, both of them the author's own
+  commits, one of them the commit that added the queue. That is the shape of the problem, exactly.
 
   That is the whole remaining question, and it is a volume question rather than a taste one. Every
   Claude session and every commit on this machine is a candidate, and their *evidence* is uniformly

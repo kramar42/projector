@@ -47,6 +47,17 @@ export interface Settings {
   workspaces: string | null;
   /** A template like `cursor://file{path}` for opening a `doc:` ref. */
   docUrl: string | null;
+  /**
+   * Sweeping on a timer, in the server, writing candidates into the vault.
+   *
+   * **Off unless a vault asks**, and that is not timidity. Everything else here
+   * changes how a command answers when you run it; this one makes the app write
+   * notes you did not ask for, at whatever rate your commits and sessions happen.
+   * Nothing judges them yet, so a vault that turned it on by default would fill
+   * with its owner's own progress and the first thing anyone would do is turn it
+   * off — which is a worse outcome than never having offered it.
+   */
+  poll: { enabled: boolean; everySeconds: number };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -63,6 +74,7 @@ interface Raw {
   git?: { author?: unknown };
   doc?: { url?: unknown };
   workspaces?: unknown;
+  poll?: { enabled?: unknown; every?: unknown };
 }
 
 const str = (v: unknown): string | null => {
@@ -152,6 +164,13 @@ export function settingsFor(root: string): Settings {
       return w ? resolvePath(w, root) : null;
     })(),
     docUrl: str(env.PROJECTOR_DOC_URL) ?? str(raw.doc?.url),
+    poll: {
+      enabled: raw.poll?.enabled === true,
+      // Floored so a typo cannot turn the loop into a spin. The default is
+      // fifteen minutes: a sweep reads `git log` and a Jira search, and the
+      // things it looks for do not happen faster than that.
+      everySeconds: Math.max(60, Number(raw.poll?.every ?? 900) || 900),
+    },
   };
 
   cache.set(root, { key, value });
