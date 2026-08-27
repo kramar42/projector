@@ -109,3 +109,16 @@ export interface Declined {
   /** `model` when the classifier decided, `person` when you did. */
   decidedBy: 'model' | 'person';
 }
+
+/**
+ * One page of the declined pile.
+ *
+ * Paged because it only grows: every sweep that declines something adds a row and
+ * nothing removes one but a rescue. `more` says there is another page behind this
+ * one; `total` ignores the search, because it is what the sidebar counts.
+ */
+export interface DeclinedPage {
+  rows: Declined[];
+  more: boolean;
+  total: number;
+}

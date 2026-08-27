@@ -460,6 +460,7 @@ export function App() {
     toggleRail: () => setSidebarCollapsed((c) => !c),
     helpOpen,
     setHelpOpen,
+    setDeclined,
     doStep,
     history,
     applyStep,
@@ -693,6 +694,8 @@ interface KeyState {
   newCardIn: (column: string) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
+  /** Open or close the declined surface. See `setDeclined` for why it is a URL edit. */
+  setDeclined: (open: boolean) => void;
   /** Go to a note and record it on the trail — what `H` comes back from. */
   follow: (id: string) => void;
   /** Edit the view itself, for the traversal `g⇧⟨key⟩` sets and the rail leader. */
@@ -1291,6 +1294,38 @@ function run(command: Command, s: KeyState): void {
      * — press `!` on an empty board and there is nothing to work on, which has to
      * say so rather than look broken.
      */
+    /**
+     * Fold a candidate into what it extends.
+     *
+     * Aims at the button rather than doing the merge here, exactly as `work`
+     * does and for the same reason: one path from the gesture to the act, so the
+     * confirm cannot be skipped by arriving from the keyboard. The button only
+     * exists on a note carrying `extends`, so a press on anything else finds
+     * nothing and says so instead of doing something surprising.
+     */
+    case 'fold': {
+      const on = openNote ?? cursor.id;
+      if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
+      if (!openNote) setOpenNote(on);
+      return focusSoon(
+        () => {
+          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="fold"]');
+          if (!button) {
+            s.notify({ tone: 'info', text: 'this note does not extend another one' });
+            // Returned so `focusSoon` stops: the absence is the answer, not a
+            // panel that has not opened yet.
+            return null;
+          }
+          button.click();
+        },
+        10,
+        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was folded' }),
+      );
+    }
+
+    case 'declined':
+      return s.setDeclined(true);
+
     case 'work': {
       const on = openNote ?? cursor.id;
       if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });

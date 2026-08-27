@@ -686,7 +686,11 @@ which is what the classifier itself does, for everything it drops.
 **Archive it** — keep the note and set `status: archived`. For one considered rejection you would like
 to find again; the note and its fingerprint both stay.
 
-Read the pile back with `pj intake suppressed` and undo any of it with `pj intake unsuppress`. Both
+Read the pile back with **`,d`** in the browser — or `pj intake suppressed` — and undo any of it with
+`bring back`, or `pj intake unsuppress`. The pile only ever grows, so both are paged and searchable:
+the search reaches the reason as well as the title, because someone hunting for a card they
+half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI, a box and a
+`more` button in the panel. Both
 matter more than they look: getting the order wrong costs you some scrolling, and hiding the wrong
 thing costs you the item — so a no is always reversible and the pile is always readable. Each row says
 whether the model or you decided, because a model's no is a guess you may want to check and yours is
@@ -842,7 +846,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
-| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back · put one back in |
+| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · put one back in |
 | `poll:` · `classify:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
@@ -984,6 +988,7 @@ drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one d
 | `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
 | `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
 | `!` | **start work** on the cursor's note: worktrees, a briefing, a session in the app. Confirmed first, and the confirm names what it is about to create |
+| `+` | **fold in** a candidate that `extends` another note: its body, links and fingerprint move across and its card goes. Confirmed first; nothing happens on a note that extends nothing |
 
 `!` is the odd one out here: every other key in this section *reaches* something, and `!` does
 something. It reads that way from vim, where `!` is the key that hands what you have to an external
@@ -1068,6 +1073,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,w` | focus — walk from a note |
 | `,c` | clear the filters |
 | `,\` | collapse the rail |
+| `,d` | what a sweep declined, and why — paged and searchable |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |
 | `/` | the search box |
 | `?` | the cheatsheet |
@@ -1300,7 +1306,9 @@ pj merge <candidate> --into <target>
 
 The target keeps its own facets; the candidate brings its body, links and fingerprint across, and its
 file goes. The reference pointing at the target is dropped on the way, so nothing has to be tidied
-first. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
+first. In the panel it is a **✓** in the corner beside Start and the trash, drawn only on a note that
+extends one — or **`+`** from the keyboard, which presses that button rather than merging by a second
+route, so the confirmation cannot be skipped by arriving from the keys. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
 to a real note would sit in that note's children and roll-ups while it waited. Nothing walks
 `extends`.
 

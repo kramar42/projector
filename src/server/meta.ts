@@ -75,7 +75,8 @@ export function meta(
 /** A count, not the rows — the surface fetches those when it opens. */
 function declinedCount(root: string): number {
   try {
-    return suppressions(root).length;
+    // The total, not a page: the footer is counting everything.
+    return suppressions(root).total;
   } catch {
     // Meta must answer even if the intake store cannot be opened; a missing
     // count is a missing footer line, not a vault that will not load.

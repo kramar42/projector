@@ -256,7 +256,8 @@ const HELP = `pj — projector CLI${vaultNote}
   pj intake known <fingerprint>...                     which notes already carry these refs
   pj intake poll                                       sweep, judge, and write what deserves a note
   pj intake suppress <fp>... --reason <why>             record a "not a note", so sweeps stop offering it
-  pj intake suppressed [--channel c] [--json]          what a judgement hid, and why
+  pj intake suppressed [--channel c] [--q text] [--limit n] [--json]
+                                                       what a judgement hid, and why
   pj intake unsuppress <fp>...                         offer it again
   pj intake reset [--channel c]                        forget a cursor, back to the default window
 
@@ -712,6 +713,7 @@ try {
         'advance',
         'reason',
         'title',
+        'q',
       ], ['json', 'verbose', 'advance']);
       const [sub, ...channels] = rest;
 
@@ -810,20 +812,30 @@ try {
        * it swallowed.
        */
       if (sub === 'suppressed') {
-        const rows = suppressions(root, flags.get('channel')?.[0]);
+        const page = suppressions(root, {
+          ...(flags.get('channel')?.[0] ? { channel: flags.get('channel')![0]! } : {}),
+          ...(flags.get('q')?.[0] ? { q: flags.get('q')![0]! } : {}),
+          ...(flags.get('limit')?.[0] ? { limit: Number(flags.get('limit')![0]) } : {}),
+        });
+        const rows = page.rows;
         if (flags.has('json')) {
-          console.log(JSON.stringify(rows, null, 2));
+          console.log(JSON.stringify(page, null, 2));
           break;
         }
         if (!rows.length) {
-          console.log('nothing suppressed');
+          console.log(page.total ? 'nothing matching' : 'nothing suppressed');
           break;
         }
         for (const r of rows) {
           console.log(
-            `${pad(r.fingerprint, 40)} ${pad(r.channel ?? '—', 8)} ${pad((r.title ?? '').slice(0, 40), 42)} ${r.reason}`,
+            `${pad(r.decidedBy === 'model' ? 'model' : 'you', 6)} ${pad(r.channel ?? '—', 8)} ${pad((r.title ?? r.fingerprint).slice(0, 44), 46)} ${r.reason}`,
           );
         }
+        // The pile only grows, so a page that stops has to say so — otherwise the
+        // last line reads as the end of the list.
+        console.log(
+          `${rows.length} of ${page.total}${page.more ? ' — more behind this page; narrow with --q or raise --limit' : ''}`,
+        );
         break;
       }
 

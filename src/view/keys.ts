@@ -195,6 +195,18 @@ export type Command =
    * the workspace and the branch before either exists.
    */
   | { kind: 'work' }
+  /**
+   * Fold this candidate into the note it extends.
+   *
+   * Only meaningful on a note carrying `extends`, and the dispatcher does not
+   * check: the panel draws the control only when there is one, and pressing the
+   * key with nothing to fold says so rather than doing something else. Same shape
+   * as `work` — the key aims at the button so the confirm cannot be skipped by
+   * arriving from the keyboard.
+   */
+  | { kind: 'fold' }
+  /** Open the declined pile — what a sweep turned down, and why. */
+  | { kind: 'declined' }
   /** Step within whatever list of chips currently holds focus. */
   | { kind: 'listMove'; delta: number }
   | { kind: 'open' }
@@ -491,6 +503,15 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
     }
 
     case 'rail': {
+      /**
+       * The declined pile is under the leader but is not a rail control.
+       *
+       * `,` is "the app's own controls", which is the right namespace for it —
+       * but `RailControl` is the set of rows in the sidebar, and this opens a
+       * surface instead. Making it a rail row to reach it through one table would
+       * be the table lying about what it holds.
+       */
+      if (stroke.key === 'd') return emit({ kind: 'declined' });
       const row = RAIL_LETTERS[stroke.key];
       if (!row) return emit(null);
       if (!row.takesFacet) return emit({ kind: 'rail', control: row.control });
@@ -628,6 +649,15 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
      */
     case '!':
       return emit({ kind: 'work' });
+    /**
+     * Fold a candidate into what it extends.
+     *
+     * Punctuation for the same reason `!` is: it is not a letter, so no
+     * vocabulary can reach it and it shadows nothing even in principle. `+` reads
+     * as *add this into that*, which is what the merge does.
+     */
+    case '+':
+      return emit({ kind: 'fold' });
   }
 
   /**
@@ -713,6 +743,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       // The one row here that acts rather than reaching, which the wording has to
       // carry on its own: every other line in this section moves the keyboard.
       { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
+      { keys: '+', does: 'fold a candidate into the note it extends' },
     ],
   },
   {
@@ -758,6 +789,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: ', w', does: 'focus: walk from a note' },
       { keys: ', c', does: 'clear the filters' },
       { keys: ', \\', does: 'collapse the rail' },
+      { keys: ', d', does: 'what a sweep declined, and why' },
       { keys: '⌥1–9', does: 'the nth saved view' },
       { keys: '/', does: 'search' },
       { keys: '?', does: 'this' },

@@ -364,25 +364,74 @@ export function unsuppress(dataRoot: string, fingerprint: string): boolean {
   );
 }
 
-/** Everything suppressed, newest judgement first. `channel` narrows it. */
-export function suppressions(dataRoot: string, channel?: string): Suppression[] {
+export interface SuppressionQuery {
+  channel?: string;
+  /** Free text over the title, the reason and the fingerprint. */
+  q?: string;
+  /** Page size. One more than this is fetched to answer `more` without a count. */
+  limit?: number;
+  /**
+   * Keep reading below this `at`, which is the previous page's last row.
+   *
+   * A cursor rather than an offset because the list only ever grows, and it grows
+   * at the end being read from: a sweep landing between two pages of an offset
+   * walk shifts every row down one, so the reader sees a row twice and never sees
+   * another. Paging on the value being sorted by cannot do that.
+   */
+  before?: string;
+}
+
+export interface SuppressionPage {
+  rows: Suppression[];
+  /** True when there is at least one more row behind this page. */
+  more: boolean;
+  /** Every suppression, ignoring `q` and the page — what the footer counts. */
+  total: number;
+}
+
+const DEFAULT_PAGE = 50;
+
+/**
+ * A page of the declined pile, newest judgement first.
+ *
+ * Paged because it never shrinks: every sweep that declines something adds to it
+ * and nothing removes a row but an explicit rescue. A surface that read the whole
+ * table would get slower for exactly the vaults that use the feature most.
+ */
+export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): SuppressionPage {
   const conn = openIntakeDb(dataRoot);
-  const rows = (
-    channel
-      ? conn
-          .prepare(
-            `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
-               FROM suppressed WHERE channel = ? ORDER BY at DESC`,
-          )
-          .all(channel)
-      : conn
-          .prepare(
-            `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
-               FROM suppressed ORDER BY at DESC`,
-          )
-          .all()
-  ) as unknown as Suppression[];
-  return rows;
+  const limit = Math.max(1, Math.min(500, opts.limit ?? DEFAULT_PAGE));
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+
+  if (opts.channel) {
+    where.push('channel = ?');
+    args.push(opts.channel);
+  }
+  if (opts.q?.trim()) {
+    // Three columns, because a reader looking for something they half-remember
+    // may remember the wording of the reason rather than the title.
+    where.push('(title LIKE ? OR reason LIKE ? OR fingerprint LIKE ?)');
+    const like = `%${opts.q.trim()}%`;
+    args.push(like, like, like);
+  }
+  if (opts.before) {
+    where.push('at < ?');
+    args.push(opts.before);
+  }
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  // One more than asked for: `more` is then a fact about what was read rather
+  // than a second COUNT over a growing table.
+  const rows = conn
+    .prepare(
+      `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
+         FROM suppressed ${clause} ORDER BY at DESC LIMIT ?`,
+    )
+    .all(...args, limit + 1) as unknown as Suppression[];
+
+  const total = (conn.prepare('SELECT count(*) AS n FROM suppressed').get() as { n: number }).n;
+  return { rows: rows.slice(0, limit), more: rows.length > limit, total };
 }
 
 /**

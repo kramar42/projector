@@ -33,19 +33,59 @@ export function DeclinedPanel({
   onRestored: () => void;
 }) {
   const [rows, setRows] = useState<Declined[] | null>(null);
+  const [more, setMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [q, setQ] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  /**
+   * The first page, and again whenever the search changes.
+   *
+   * Debounced, because this is a `LIKE` over a table that only grows and a
+   * keystroke is not a question. 200ms is below the point a reader reads it as
+   * lag and above the rate anyone types.
+   */
   useEffect(() => {
     let alive = true;
-    api
-      .declined()
-      .then((res) => alive && setRows(res.declined))
-      .catch((e: Error) => alive && setError(e.message));
+    const timer = setTimeout(() => {
+      api
+        .declined(q ? { q } : {})
+        .then((res) => {
+          if (!alive) return;
+          setRows(res.rows);
+          setMore(res.more);
+          setTotal(res.total);
+        })
+        .catch((e: Error) => alive && setError(e.message));
+    }, q ? 200 : 0);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
-  }, []);
+  }, [q]);
+
+  /**
+   * The next page, from the last row's timestamp.
+   *
+   * A cursor rather than an offset: the list grows at the end being read from, so
+   * a sweep landing mid-walk would shift every row down one and the reader would
+   * see a row twice and never see another.
+   */
+  async function readMore() {
+    const last = rows?.at(-1);
+    if (!last) return;
+    setBusy('more');
+    try {
+      const res = await api.declined({ before: last.at, ...(q ? { q } : {}) });
+      setRows((prev) => [...(prev ?? []), ...res.rows]);
+      setMore(res.more);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   // Escape closes, as everywhere else that opens over the view.
   useEffect(() => {
@@ -68,6 +108,7 @@ export function DeclinedPanel({
     try {
       await api.restoreDeclined(fingerprint);
       setRows((prev) => (prev ?? []).filter((r) => r.fingerprint !== fingerprint));
+      setTotal((n) => Math.max(0, n - 1));
       onRestored();
     } catch (e) {
       setError((e as Error).message);
@@ -87,10 +128,20 @@ export function DeclinedPanel({
           <span className="declined-count">
             {rows === null
               ? 'reading…'
-              : rows.length === 0
-                ? 'nothing declined'
-                : `${rows.length} — ${byModel} by the classifier`}
+              : q
+                ? `${rows.length}${more ? '+' : ''} of ${total}`
+                : `${total} — ${byModel} by the classifier`}
           </span>
+          {/* Over title, reason and fingerprint: someone hunting for a card they
+              half-remember may remember how the refusal was worded. */}
+          <input
+            className="declined-search"
+            type="search"
+            value={q}
+            placeholder="search titles and reasons"
+            aria-label="Search declined candidates"
+            onChange={(e) => setQ(e.target.value)}
+          />
           <Button tone="ghost" size="tiny" onClick={onClose}>
             close
           </Button>
@@ -138,10 +189,19 @@ export function DeclinedPanel({
           </table>
         )}
 
+        {more && (
+          <div className="declined-more">
+            <Button size="small" disabled={busy === 'more'} onClick={() => void readMore()}>
+              {busy === 'more' ? 'reading…' : 'more'}
+            </Button>
+          </div>
+        )}
+
         {rows !== null && rows.length === 0 && (
           <div className="emptystate">
-            Nothing has been declined yet. A sweep that judges puts what it turned down here, with its
-            reason.
+            {q
+              ? 'Nothing matching.'
+              : 'Nothing has been declined yet. A sweep that judges puts what it turned down here, with its reason.'}
           </div>
         )}
       </div>

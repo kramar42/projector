@@ -206,6 +206,37 @@ function NoteCard({
    */
   const work = useWorkStarter({ id, title: card?.title ?? id });
 
+  /**
+   * Folding a candidate into the note it extends.
+   *
+   * `extends` is a built-in single-valued reference, so there is at most one
+   * target and no picking to do. The merge itself is the existing bulk op — the
+   * survivor keeps its own facets, the candidate contributes body, links and
+   * fingerprint, and `schema/merge.ts` drops the reference that pointed here on
+   * the way, so nothing has to be cleared first.
+   *
+   * Not part of `write`: every other panel write patches this note, and this one
+   * ends it.
+   */
+  const foldTarget = card?.facets?.extends?.[0] ?? null;
+  const [folding, setFolding] = useState(false);
+  async function fold() {
+    if (!card || !foldTarget) return;
+    if (
+      !confirm(
+        `Fold "${card.title}" into "${foldTarget}"?\n\nIts body, links and capture fingerprint move across, and this card is removed.`,
+      )
+    )
+      return;
+    setFolding(true);
+    try {
+      await api.bulk({ ids: [id], op: 'merge', into: foldTarget });
+      onOpen(foldTarget);
+    } finally {
+      setFolding(false);
+    }
+  }
+
   /** The head's one banner slot — see the comment where it renders. */
   const banner: { tone: string; message: string; canReload?: boolean } | null =
     write.banner ?? work.banner;
@@ -380,6 +411,30 @@ function NoteCard({
               that overshoots lands on nothing rather than on Delete. */}
           {card && (
             <div className="panel-acts">
+              {/*
+                * Only on a candidate that wants folding in, which is the only
+                * note the act means anything on. Drawn first — leftmost, furthest
+                * from the trash — because it is the most ordinary thing you do to
+                * a card in the queue, and because the destructive control keeps
+                * the end of the row.
+                *
+                * Accepting a candidate and merging it are the same act here: the
+                * survivor keeps its own facets, the candidate brings its body,
+                * links and fingerprint, and its file goes. So the glyph is the
+                * tick rather than something merge-shaped.
+                */}
+              {foldTarget && (
+                <IconButton
+                  glyph="check"
+                  size="normal"
+                  extra="panel-x"
+                  data-act="fold"
+                  disabled={folding}
+                  aria-label={`Fold ${card.title} into ${foldTarget}`}
+                  title={`Fold this into "${foldTarget}" — its body, links and fingerprint move across, and this card goes (+)`}
+                  onClick={() => void fold()}
+                />
+              )}
               <IconButton
                 glyph="start"
                 size="normal"

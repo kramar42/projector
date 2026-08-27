@@ -4471,3 +4471,25 @@ input[data-nav]:focus + .checkbox {
 }
 .rail-declined:hover { color: var(--ink); }
 .rail-declined:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The declined pile's own two controls: a search over a list that only grows,
+   and the page it stops at. */
+.declined-search {
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+  padding: 3px 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  min-width: 200px;
+}
+.declined-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.declined-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}

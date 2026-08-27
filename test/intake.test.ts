@@ -684,7 +684,7 @@ test('a declined candidate survives the cursor moving past it', () => {
 
     // The cursor has moved past it and the note was never written, and the
     // rejection is still readable — which is the whole point.
-    const rows = suppressions(root);
+    const rows = suppressions(root).rows;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.fingerprint, 'git:abc');
     assert.equal(rows[0]!.reason, 'my own commit');
@@ -726,7 +726,7 @@ test('suppressing again replaces the reason rather than failing', () => {
   try {
     suppress(root, { fingerprint: 'git:abc', reason: 'first answer' });
     suppress(root, { fingerprint: 'git:abc', reason: 'second answer' });
-    const rows = suppressions(root);
+    const rows = suppressions(root).rows;
     assert.equal(rows.length, 1, 'one row per fingerprint');
     assert.equal(rows[0]!.reason, 'second answer', 'the current judgement wins');
   } finally {
@@ -753,14 +753,14 @@ test('losing the suppression table is noisier, never wrong', () => {
   const root = vault({ a: card('a') });
   try {
     suppress(root, { fingerprint: 'git:abc', reason: 'noise' });
-    assert.equal(suppressions(root).length, 1);
+    assert.equal(suppressions(root).rows.length, 1);
 
     // Same argument the watermark makes about itself: what stops a duplicate note
     // is `source_fingerprint` on the notes, not this table. Dropping it re-opens
     // the proposal and creates nothing.
     closeIntakeDb(root);
     rmSync(paths(root).intakeDb, { force: true });
-    assert.equal(suppressions(root).length, 0);
+    assert.equal(suppressions(root).rows.length, 0);
     assert.equal(suppressedFingerprints(root).size, 0);
   } finally {
     closeIntakeDb(root);
@@ -1186,7 +1186,7 @@ test('deleting a captured note is a decline, so the sweep stops offering it', ()
     // The gesture that obviously means no. Before this it destroyed the one thing
     // stopping the next sweep re-proposing the card.
     deleteNote(root, id);
-    const rows = suppressions(root);
+    const rows = suppressions(root).rows;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.fingerprint, 'git:1');
     assert.equal(rows[0]!.decidedBy, 'person', 'deleting a file is a person deciding');
@@ -1205,13 +1205,16 @@ test('a model decline and a person decline are told apart', () => {
   try {
     suppress(root, { fingerprint: 'git:1', reason: 'routine', by: 'model' });
     suppress(root, { fingerprint: 'git:2', reason: 'not interested' });
-    const by = new Map(suppressions(root).map((s) => [s.fingerprint, s.decidedBy]));
+    const by = new Map(suppressions(root).rows.map((s) => [s.fingerprint, s.decidedBy]));
     assert.equal(by.get('git:1'), 'model');
     assert.equal(by.get('git:2'), 'person');
 
     // A person overruling the model is the later decision, and the pile says so.
     suppress(root, { fingerprint: 'git:1', reason: 'agreed, actually', by: 'person' });
-    assert.equal(suppressions(root).find((s) => s.fingerprint === 'git:1')?.decidedBy, 'person');
+    assert.equal(
+      suppressions(root).rows.find((s) => s.fingerprint === 'git:1')?.decidedBy,
+      'person',
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1288,6 +1291,53 @@ test('a model may not set the app’s own axes', async () => {
   try {
     const res = await classify(root, [candidate('git:1', 'a')], overreaching);
     assert.deepEqual(res!.keep[0]!.verdict.facets, {}, 'intake and extends are the pipeline’s');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The declined pile only grows, so reading it is a paged, searchable question
+ * rather than "give me the table".
+ */
+
+test('a page stops, says there is more, and resumes without repeating', () => {
+  const root = vault({ a: card('a') });
+  try {
+    for (let i = 0; i < 7; i++) {
+      suppress(root, { fingerprint: `git:${i}`, reason: `reason ${i}`, title: `thing ${i}` });
+    }
+    const first = suppressions(root, { limit: 3 });
+    assert.equal(first.rows.length, 3);
+    assert.equal(first.more, true);
+    assert.equal(first.total, 7, 'the total ignores the page');
+
+    // Paged on `at`, not an offset: a suppression landing between two reads must
+    // not shift a row into a page that has already gone past.
+    const second = suppressions(root, { limit: 3, before: first.rows.at(-1)!.at });
+    const seen = new Set([...first.rows, ...second.rows].map((r) => r.fingerprint));
+    assert.equal(seen.size, first.rows.length + second.rows.length, 'no row read twice');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('search reaches the reason, not only the title', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:1', title: 'tidy the imports', reason: 'own routine commit' });
+    suppress(root, { fingerprint: 'git:2', title: 'bump eslint', reason: 'dependency bump' });
+
+    // Someone hunting a card they half-remember may remember how the refusal was
+    // worded rather than what the thing was called.
+    assert.deepEqual(suppressions(root, { q: 'routine' }).rows.map((r) => r.fingerprint), ['git:1']);
+    assert.deepEqual(suppressions(root, { q: 'eslint' }).rows.map((r) => r.fingerprint), ['git:2']);
+    assert.equal(suppressions(root, { q: 'nothing like this' }).rows.length, 0);
+
+    // And the total stays the whole pile, because it is what the footer counts.
+    assert.equal(suppressions(root, { q: 'routine' }).total, 2);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

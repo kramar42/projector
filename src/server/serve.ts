@@ -803,7 +803,16 @@ function ensureWatched(root: string): void {
  */
 app.get('/api/intake/declined', (c) => {
   const root = vaultOf(c);
-  return c.json({ declined: suppressions(root) });
+  const q = c.req.query('q');
+  const before = c.req.query('before');
+  const limit = Number(c.req.query('limit') ?? 0);
+  return c.json(
+    suppressions(root, {
+      ...(q ? { q } : {}),
+      ...(before ? { before } : {}),
+      ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
+    }),
+  );
 });
 
 app.post('/api/intake/declined/:fp/restore', (c) => {

@@ -403,7 +403,14 @@ notes, and this was never going to be one. It is reached with `?declined=1` over
 way `?note=` reaches the panel: no second route, still deep-linkable, back button still closes it.
 `GET /api/intake/declined` reads it and `meta.declined` carries the count, which is what lets the
 sidebar footer — *what is on screen, and why it is not more* — answer for the sweep as well as for the
-filter. Without it an empty board has two meanings and no way to tell them apart, which is the whole
+filter. `,d` opens it from the keyboard.
+
+It is **paged on `at` and searched with `LIKE`**, because the pile only ever grows: every sweep that
+declines something adds a row and only a rescue removes one. A cursor rather than an offset, for the
+reason the watermark gives about itself — the list grows at the end being read from, so an offset walk
+interrupted by a sweep shows a row twice and never shows another. The page fetches one row more than
+it needs, so `more` is a fact about what was read rather than a second count over a growing table, and
+`total` ignores the search because it is what the footer is counting. Without it an empty board has two meanings and no way to tell them apart, which is the whole
 justification: it is the audit trail for a decision the app made on its own, and the only place a wrong
 one can be put right.
 
@@ -585,6 +592,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
 | the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
 | `POST /api/intake/declined/:fp/restore` | one row removed from `.projector/intake.db`'s `suppressed` table | never a note; the only write the declined surface makes |
+| the panel's ✓ / `+`, through `POST /api/bulk` op `merge` | the same as any merge: the survivor, everything that referenced the absorbed note, then the absorbed file | drawn only on a note carrying `extends`, and it merges into that one value — there is nothing to pick |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
