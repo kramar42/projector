@@ -429,6 +429,11 @@ never changes shape because of a field it happens to carry. Drag handle-to-handl
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
 you have chosen to draw first — decomposition (`parent`) or membership (`project`).
 
+A container whose members contain nothing of their own does not grow a member-tall pillar: from
+six such members they lay out as a grid, reading left → right and top → bottom in the view's own
+sort order. A member with children of its own stays in the tree — it has structure a grid would
+flatten.
+
 Two kinds of line, told apart by geometry before colour: the relation the canvas is laid out by
 flows left → right with the ranks and steps around corners, and every other relation — a blocker,
 a second hierarchy — attaches top and bottom and curves. A fan of edges out of one note spreads

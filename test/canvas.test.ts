@@ -224,6 +224,52 @@ test('a container sits left of its member', () => {
 });
 
 /**
+ * dagre gives every member its own row, so a container with many members that
+ * contain nothing themselves was one card-wide pillar — forty rows for forty
+ * notes, scrolled rather than read. From `WRAP_AT` childless members they lay
+ * out as a grid, in the payload's own order.
+ */
+test('a brood of childless members wraps into a grid', () => {
+  const leaves = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+  const nodes = [face('p'), ...leaves.map(face)];
+  const tree = leaves.map((l) => ({ src: l, dst: 'p', type: 'parent' }));
+  const placed = treeLayout(nodes, tree, 'LR', ['parent']);
+
+  const xs = new Set(leaves.map((l) => placed.get(l)!.x));
+  const ys = new Set(leaves.map((l) => placed.get(l)!.y));
+  assert.equal(xs.size, 3, 'nine leaves: three columns');
+  assert.equal(ys.size, 3, 'and three rows');
+  // Reading order is the payload's order: first leaf top-left, next to its right.
+  assert.ok(placed.get('a')!.x < placed.get('b')!.x && placed.get('a')!.y === placed.get('b')!.y);
+  // The container still sits left of the whole grid.
+  const p = placed.get('p')!;
+  assert.ok(p.x + p.w <= Math.min(...leaves.map((l) => placed.get(l)!.x)));
+});
+
+test('below the wrap point a brood keeps its ranks', () => {
+  const leaves = ['a', 'b', 'c', 'd', 'e'];
+  const nodes = [face('p'), ...leaves.map(face)];
+  const tree = leaves.map((l) => ({ src: l, dst: 'p', type: 'parent' }));
+  const placed = treeLayout(nodes, tree, 'LR', ['parent']);
+  assert.equal(new Set(leaves.map((l) => placed.get(l)!.x)).size, 1, 'one rank, one column');
+});
+
+test('a member with children of its own stays out of the grid', () => {
+  const leaves = ['a', 'b', 'c', 'd', 'e', 'f'];
+  const nodes = [face('p'), face('m'), face('g'), ...leaves.map(face)];
+  const tree = [
+    ...leaves.map((l) => ({ src: l, dst: 'p', type: 'parent' })),
+    { src: 'm', dst: 'p', type: 'parent' },
+    { src: 'g', dst: 'm', type: 'parent' },
+  ];
+  const placed = treeLayout(nodes, tree, 'LR', ['parent']);
+  // The six childless members wrap; `m` has structure the grid would flatten,
+  // so it keeps its rank and its own child sits one rank further right.
+  assert.equal(new Set(leaves.map((l) => placed.get(l)!.x)).size, 2, 'six leaves: two columns');
+  assert.ok(placed.get('m')!.x < placed.get('g')!.x, 'the ranked member still opens rightward');
+});
+
+/**
  * The relation a canvas lays out by is the only one that positions anything. A
  * A `blocked_by` edge on a canvas laid out by `parent` still draws — `edgesFor`
  * decides that — but it must not drag a node into another rank.

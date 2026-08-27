@@ -30,6 +30,31 @@ export function dims(_card: NoteDTO): { w: number; h: number } {
 }
 
 /**
+ * Where fan-out stops being a tree. dagre gives every member its own row, so a
+ * project whose forty members contain nothing of their own was a forty-card
+ * pillar — scrolled, never read. From this many childless members of one
+ * container, they lay out as a grid instead.
+ */
+const WRAP_AT = 6;
+
+/** Grid gutters, matching `nodesep` so wrapped and ranked spacing agree. */
+const GAP = 26;
+
+/** The grid a brood of `n` takes: roughly square in cards, wide in pixels. */
+function gridFor(n: number): { cols: number; w: number; h: number } {
+  const cols = Math.max(2, Math.round(Math.sqrt(n)));
+  const rows = Math.ceil(n / cols);
+  return {
+    cols,
+    w: cols * FACE.w + (cols - 1) * GAP,
+    h: rows * FACE.h + (rows - 1) * GAP,
+  };
+}
+
+/** Ids are slugs, so a colon cannot collide with a note. */
+const gridId = (container: string) => `wrap:${container}`;
+
+/**
  * Left-to-right tree layout via dagre, which reproduces the shape of the
  * original mind-map.
  */
@@ -39,6 +64,37 @@ export function treeLayout(
   direction: 'LR' | 'TB' = 'LR',
   layoutBy: string[],
 ): Map<string, Placed> {
+  const ids = new Set(nodes.map((n) => n.id));
+  const feeds = new Set(layoutBy);
+  const live = edges.filter((e) => feeds.has(e.type) && ids.has(e.src) && ids.has(e.dst));
+
+  // Which containers hold which members. Members keep the payload's order — the
+  // view's own sort — so a wrapped grid reads left → right, top → bottom in the
+  // same order a board column would have listed.
+  const order = new Map(nodes.map((n, i) => [n.id, i]));
+  const kids = new Map<string, string[]>();
+  for (const e of live) {
+    const got = kids.get(e.dst);
+    if (got) got.push(e.src);
+    else kids.set(e.dst, [e.src]);
+  }
+
+  // A brood wraps: enough members holding nothing of their own become one
+  // virtual node for dagre, expanded into a grid after layout. A member that
+  // contains anything stays in the tree — it has structure the grid would
+  // flatten. A leaf under two containers goes to the first, the rule
+  // `assignClusters` already follows.
+  const swallowed = new Map<string, string>();
+  const broods = new Map<string, string[]>();
+  for (const [container, members] of kids) {
+    const leaves = members
+      .filter((m) => !kids.has(m) && !swallowed.has(m))
+      .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+    if (leaves.length < WRAP_AT) continue;
+    broods.set(container, leaves);
+    for (const l of leaves) swallowed.set(l, container);
+  }
+
   const g = new dagre.graphlib.Graph();
   g.setGraph({
     rankdir: direction,
@@ -50,13 +106,17 @@ export function treeLayout(
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const n of nodes) {
+    if (swallowed.has(n.id)) continue;
     const { w, h } = dims(n);
     g.setNode(n.id, { width: w, height: h });
   }
-  const ids = new Set(nodes.map((n) => n.id));
-  const feeds = new Set(layoutBy);
-  for (const e of edges) {
-    if (!feeds.has(e.type) || !ids.has(e.src) || !ids.has(e.dst)) continue;
+  for (const [container, leaves] of broods) {
+    const grid = gridFor(leaves.length);
+    g.setNode(gridId(container), { width: grid.w, height: grid.h });
+  }
+
+  const into = (id: string) => (swallowed.has(id) ? gridId(swallowed.get(id)!) : id);
+  for (const e of live) {
     // Always the other way round. A reference is stored on the note that
     // depends and points at what it depends on; dagre wants container → member,
     // so the roots sit on the left and the tree opens outward.
@@ -64,13 +124,16 @@ export function treeLayout(
     // This used to take a list of which relations to flip, because `blocks` was
     // stored pointing away from its own root and laying a canvas out by it
     // produced a backwards chain. Inverting that relation retired the list.
-    g.setEdge(e.dst, e.src);
+    const src = into(e.dst);
+    const dst = into(e.src);
+    if (src !== dst) g.setEdge(src, dst);
   }
 
   dagre.layout(g);
 
   const out = new Map<string, Placed>();
   for (const n of nodes) {
+    if (swallowed.has(n.id)) continue;
     const gn = g.node(n.id) as { x: number; y: number; width: number; height: number } | undefined;
     const { w, h } = dims(n);
     out.set(n.id, {
@@ -79,6 +142,21 @@ export function treeLayout(
       y: (gn?.y ?? 0) - h / 2,
       w,
       h,
+    });
+  }
+  for (const [container, leaves] of broods) {
+    const gn = g.node(gridId(container)) as { x: number; y: number } | undefined;
+    const grid = gridFor(leaves.length);
+    const left = (gn?.x ?? 0) - grid.w / 2;
+    const top = (gn?.y ?? 0) - grid.h / 2;
+    leaves.forEach((id, i) => {
+      out.set(id, {
+        id,
+        x: left + (i % grid.cols) * (FACE.w + GAP),
+        y: top + Math.floor(i / grid.cols) * (FACE.h + GAP),
+        w: FACE.w,
+        h: FACE.h,
+      });
     });
   }
   return out;
