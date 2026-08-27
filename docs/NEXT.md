@@ -334,10 +334,17 @@ needs to be part of two things.
   the migration path and the way to benefit from a changed `classify.md` without emptying the queue by
   hand.
 
-  It is not filed as an afterthought: it is the only operation in the pipeline that would *overwrite* a
-  note rather than create one, so it needs a rule about what it may touch. Facets a person has since
-  corrected must survive it, and there is nothing on a note today that distinguishes a value the model
-  proposed from one you accepted.
+  It is the only operation in the pipeline that would *overwrite* a note rather than create one, so it
+  needs a rule about what it may touch — and the rule is already stored, which was not obvious at first.
+  This was filed claiming it needed a way to tell a value the model proposed from one a person accepted.
+  It does not: **accepting is what makes a value yours**, whether you typed it or clicked it, and
+  `intake: unjudged` is exactly the note-level record of whether that has happened. So rejudge touches
+  notes still carrying the axis and nothing else, and no new provenance is needed anywhere.
+
+  The residue is small and worth stating rather than solving: a note you corrected but did not judge is
+  still, by its own flag, a proposal, so a rejudge would overwrite the correction. That is the honest
+  reading of leaving the axis on, and the command is one you run deliberately rather than something that
+  happens to you.
 
 - **The secrets rule is asked of a model, not applied by code.** Both prompts that reach one — the
   classifier's and the fetching agent's — say a credential's value must never be reproduced, and a test
