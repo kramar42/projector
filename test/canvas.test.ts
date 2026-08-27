@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { loadNote, } from '../src/schema/note.ts';
 import { createNote, deleteNote, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
-import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, treeLayout } from '../src/web/views/layout.ts';
+import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, dims, treeLayout } from '../src/web/views/layout.ts';
 import type { NoteDTO } from '../src/web/types.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
@@ -252,6 +252,36 @@ test('below the wrap point a brood keeps its ranks', () => {
   const tree = leaves.map((l) => ({ src: l, dst: 'p', type: 'parent' }));
   const placed = treeLayout(nodes, tree, 'LR', ['parent']);
   assert.equal(new Set(leaves.map((l) => placed.get(l)!.x)).size, 1, 'one rank, one column');
+});
+
+/**
+ * The height used to be one constant, and dagre spaced rows for a 116px card
+ * while a face with a wrapped title, links and an excerpt rendered at twice
+ * that — cards literally covered each other. A face is sized by what it will
+ * draw now, so a rank's rows cannot overlap whatever a note carries.
+ */
+test('a face is sized by what it will draw, so ranked rows cannot overlap', () => {
+  const rich = {
+    ...face('rich'),
+    title: 'A title long enough to wrap onto the second of its two clamped lines',
+    links: [
+      { kind: 'jira', raw: 'jira:PROJ-1', label: 'PROJ-1' },
+      { kind: 'url', raw: 'https://example.com', label: 'a-long-link-label-that-truncates' },
+    ],
+    excerpt: 'Two lines of excerpt text, long enough to wrap past the face width at least once.',
+  } as NoteDTO;
+  const bare = face('bare');
+  assert.ok(dims(rich).h > dims(bare).h, 'more rows, taller face');
+
+  // Stacked in one rank under a parent, their vertical intervals stay disjoint.
+  const nodes = [face('p'), rich, bare];
+  const tree = [
+    { src: 'rich', dst: 'p', type: 'parent' },
+    { src: 'bare', dst: 'p', type: 'parent' },
+  ];
+  const placed = treeLayout(nodes, tree, 'LR', ['parent']);
+  const [a, b] = [placed.get('rich')!, placed.get('bare')!].sort((m, n) => m.y - n.y);
+  assert.ok(a!.y + a!.h <= b!.y, 'the taller face pushes the next row down, not under it');
 });
 
 test('a member with children of its own stays out of the grid', () => {
