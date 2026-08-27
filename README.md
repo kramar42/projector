@@ -61,7 +61,8 @@ The rest of the design follows from three promises:
 
 - your markdown files are the source of truth. Every index is derived and disposable: delete it and
   nothing is lost
-- nothing is ever written back to Jira, GitHub, Trello or Slack. Everything external is read-only
+- nothing is ever written back to Jira, GitHub, Trello or Slack. Nothing is written where somebody
+  else reads — a notification to yourself is not one of those, and stays on your machine anyway
 - the vocabulary is yours. Which axes a note can carry, and what each one means, are declared in your
   vault rather than built into the app
 

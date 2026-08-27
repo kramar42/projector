@@ -11,7 +11,7 @@ number.
 | | | |
 |---|---|---|
 | C1 | Markdown files are the source of truth | any index is derived and disposable |
-| C2 | Everything external is read-only | no code path writes to Jira, GitHub, Trello or Slack |
+| C2 | Nothing is written where somebody else reads | no code path writes to Jira, GitHub, Trello or Slack. A sink only you read — a notification to yourself — is not one of those |
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
 | C5 | Every shape is equally first-class | all three are editable, not just viewable |
@@ -631,8 +631,21 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
 
-The only outbound calls are reads: `gh pr view`, `gh api` GETs, Jira GETs. Fetcher modules export no
-mutation functions, so there is no code path to write back.
+**What goes out, and what it is allowed to do.** Enrichment and the fetching channels are reads: `gh pr
+view`, `gh api` GETs, Jira GETs. Those modules export no mutation functions, so there is no code path
+to write back.
+
+Two calls are not fetches and are worth naming rather than leaving to the sentence above. The
+classifier sends candidate text to a model, and the Slack and Gmail channels send a *request to search*
+to an agent that holds those tools. Neither writes anywhere: the classifier has no tools at all, and
+the agent has only the tools the vault named — no wildcard, so a write tool is reachable only by being
+listed. What C2 forbids is writing where somebody else reads, and asking a model a question is not
+that. What it would forbid is a channel that could reply, and the allowlist is the thing standing
+between here and there.
+
+The one thing this app raises that is not a read is a **local** notification: the server tells a tab it
+is already talking to, and the tab tells the operating system. Nothing is sent, so there is nowhere for
+it to be read.
 
 A mutating request is refused when it carries an `Origin` header that is not one of ours, since a
 localhost server is reachable from any page open in the browser. Every frontmatter write goes through
