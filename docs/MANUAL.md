@@ -631,18 +631,35 @@ poll:
 channels: [git, claude, jira]
 ```
 
-It starts when the vault is first opened, and each candidate lands as an ordinary note carrying
-`intake: unjudged` — so an open board shows it appear without doing anything. Running twice writes
-nothing twice: a fingerprint the vault already holds short-circuits. Slack and Gmail are skipped with a
-reason, having no credential here.
+It starts when the vault is first opened, and each candidate that survives judgement lands as an
+ordinary note carrying `intake: unjudged` — so an open board shows it appear without doing anything.
+Running twice writes nothing twice: a fingerprint the vault already holds short-circuits. Slack and
+Gmail are skipped with a reason, having no credential here.
 
 Unlike `pj intake`, a poll **does** move each channel's cursor — it can, because everything behind the
 new boundary is a file rather than a line in a terminal you have already closed.
 
-**It is off by default, and you should know why before turning it on.** Nothing yet decides whether a
-candidate is worth having, so polling proposes at whatever rate your commits and sessions happen — turn
-it on for a vault whose channels are quiet, or expect to see your own afternoon in the queue. Until
-something judges, the way the queue gets shorter is you judging it.
+Without a server, `pj intake poll` runs exactly the same tick once, by hand.
+
+**Every tick judges before it writes.** Candidates that do not deserve a note are recorded as declined,
+with the reason, and never become files — so a sweep of your own afternoon leaves the board empty and
+`pj intake suppressed` three lines longer. The rule it applies: your own routine progress is not news
+to you; what needs a decision, a reply, or is unfinished and untracked, is.
+
+Tune it for your vault by writing `.projector/classify.md`, which replaces the built-in instructions
+entirely. Change the model or the command if you want something other than a small one:
+
+```yaml
+classify:
+  enabled: true       # the default; `false` means "write everything down and let me sort it"
+  model: haiku
+  command: claude
+```
+
+**If it cannot judge, it does not write.** A tick that cannot reach the classifier holds — nothing
+written, no cursor moved — and the next one tries again. That is deliberate: falling back to writing
+everything down would hand you the pile the judgement exists to prevent, and you would find out by
+looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
 **Saying no is a step too.** Capturing a candidate leaves a note carrying its fingerprint, and no later
 sweep offers it again. Declining one used to leave nothing at all — the cursor moved past it and that
@@ -810,8 +827,9 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
+| `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back · put one back in |
-| `poll:` in `.projector/config.yaml` | sweep on a timer and write candidates into the queue. Off unless set; nothing judges them yet |
+| `poll:` · `classify:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |

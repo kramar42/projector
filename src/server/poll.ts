@@ -1,6 +1,8 @@
 import { advance } from '../intake/run.ts';
+import { classify, type Ask } from '../intake/classify.ts';
 import { materialise } from '../intake/materialise.ts';
 import { settingsFor } from '../settings.ts';
+import { suppress } from '../intake/db.ts';
 import { sweep } from '../intake/run.ts';
 
 /**
@@ -24,11 +26,16 @@ import { sweep } from '../intake/run.ts';
  * nulled `nextCursor` in that case, and there is more behind the boundary that
  * this run never looked at.
  *
- * **It does not make the queue quiet, and nothing here pretends otherwise.**
- * Every session and every commit becomes a note, because deciding that one of them
- * does not matter is a judgement and there is not one in this file. See
- * `docs/NEXT.md` — the half that judges is the next piece, and until it exists a
- * vault turning this on is asking for everything it did, written down.
+ * **A tick judges before it writes.** `classify` decides which candidates deserve
+ * a note; the rest are recorded as declined, with the model's reason, so they stop
+ * being offered and stay readable through `pj intake suppressed`. Without that step
+ * every commit and every session on the machine would become a note, which is the
+ * failure the queue exists to prevent rather than a milder version of it.
+ *
+ * So a tick that cannot reach the classifier **holds**: it writes nothing and
+ * advances nothing, and the next tick tries again. Falling back to materialising
+ * everything would reach the bad outcome by accident, and there is no reading of
+ * "the judge is down" that makes writing down everything the right answer.
  */
 
 export interface PollResult {
@@ -39,15 +46,27 @@ export interface PollResult {
   /** Channels that could not be reached this tick, with the reason. */
   unreachable: { channel: string; reason: string }[];
   advanced: string[];
+  /** Candidates the classifier declined, now recorded as suppressed. */
+  declined: number;
+  /** Set when the classifier could not be reached, so the tick held. */
+  held?: string;
 }
 
 /**
  * One tick for one vault. Exported so a test can run it without a timer, which is
  * the only way to assert what a loop does without waiting for it.
  */
-export async function pollOnce(root: string): Promise<PollResult> {
-  const out: PollResult = { vault: root, created: [], skipped: 0, unreachable: [], advanced: [] };
+export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
+  const out: PollResult = {
+    vault: root,
+    created: [],
+    skipped: 0,
+    unreachable: [],
+    advanced: [],
+    declined: 0,
+  };
   const { reports } = await sweep(root);
+  const wantsJudgement = settingsFor(root).classify.enabled;
 
   for (const report of reports) {
     if (!report.fetched) {
@@ -57,7 +76,29 @@ export async function pollOnce(root: string): Promise<PollResult> {
       out.unreachable.push({ channel: report.channel, reason: report.reason ?? 'not fetched here' });
       continue;
     }
-    const res = materialise(root, report);
+
+    let keep = report.candidates;
+    if (wantsJudgement && report.candidates.length) {
+      const verdict = await classify(root, report.candidates, ask);
+      if (!verdict) {
+        // Held, not failed. Nothing written and nothing advanced, so the next
+        // tick sees exactly what this one saw.
+        out.held = 'the classifier could not be reached';
+        return out;
+      }
+      keep = verdict.keep;
+      for (const d of verdict.drop) {
+        suppress(root, {
+          fingerprint: d.candidate.fingerprint,
+          reason: d.reason,
+          channel: report.channel,
+          title: d.candidate.title,
+        });
+        out.declined++;
+      }
+    }
+
+    const res = materialise(root, { ...report, candidates: keep });
     out.created.push(...res.created);
     out.skipped += res.skipped;
   }
@@ -97,7 +138,15 @@ export function startPolling(root: string, log: (msg: string) => void = () => {}
   const tick = async () => {
     try {
       const res = await pollOnce(root);
-      if (res.created.length) log(`intake: ${res.created.length} new in ${root}`);
+      if (res.held) {
+        // Loud, because a held tick looks exactly like a quiet channel from the
+        // outside and the two mean opposite things.
+        log(`intake: held — ${res.held}`);
+        return;
+      }
+      if (res.created.length || res.declined) {
+        log(`intake: ${res.created.length} new, ${res.declined} declined in ${root}`);
+      }
       for (const u of res.unreachable) {
         // Not an error and not silent. A channel that has been unreachable for a
         // week is worth noticing, and a poller that swallowed it would look like

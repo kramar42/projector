@@ -320,30 +320,21 @@ needs to be part of two things.
   `open` press any focused button in the panel. Neither is worth deciding while the buttons are also
   reachable by `!` and by mouse.
 
-- **The half of the intake queue that judges.** The queue is built and so is the poller: `intake:
-  [unjudged]` is a built-in axis, `views/intake.yaml` is an ordinary board, a decline is durable through
-  `pj intake suppress` instead of vanishing behind a cursor, and a vault setting `poll.enabled` has the
-  server sweep on a timer and materialise what it finds. What is not built is the thing that decides —
-  so the board fills at whatever rate the channels produce, and the only thing that shortens it is a
-  person. A first run against this repository proposed two notes, both of them the author's own
-  commits, one of them the commit that added the queue. That is the shape of the problem, exactly.
+- **Calibration — the judgement learning from the judgements already made.** The classifier now
+  decides which candidates deserve a note, and every decision it gets wrong is corrected by hand and
+  then forgotten. Suppressions carry a reason and notes carry their fingerprint, so the corpus finally
+  exists: the last N kept and the last N declined, rendered into the prompt as examples, is the whole
+  mechanism — and the version worth copying adds the instruction that a candidate resembling a declined
+  one is declined *even when its wording looks urgent*.
 
-  That is the whole remaining question, and it is a volume question rather than a taste one. Every
-  Claude session and every commit on this machine is a candidate, and their *evidence* is uniformly
-  excellent — a commit in a declared repo by the configured author matches perfectly and is still
-  usually nothing to file. So evidence cannot rank the queue: it answers whether something is already
-  tracked, not whether it matters, and ordering by it puts your own progress at the top. Suppression is
-  the job, and only a judgement about relevance does it.
+  The signal worth weighting is the rescue. A dismissal only says the model agreed with you; a
+  `pj intake unsuppress` says it was wrong in the expensive direction, and there is currently nothing
+  that notices one happened. That is the piece to build first — a rescued fingerprint is worth more
+  than fifty confirmations.
 
-  The cheap shape first, and it needs no app code: a scheduled `claude -p` running the capture skill,
-  writing notes with plain file writes (C3) and recording its declines with `pj intake suppress`. If
-  the per-sweep cost or the latency hurts, the next shape is a small model called once per candidate,
-  which is a runtime dependency the app does not have today and would have to degrade to nothing when
-  absent. Likely both in the end, split by channel: the volume is in `git` and `claude`, which `pj`
-  fetches itself, while `slack` and `gmail` need an agent for the fetch anyway.
-
-  Whichever runs it, the constraint is written down in ARCHITECTURE and is the part to keep: a score may
-  gate and order, and may not become a facet or a badge.
+  Two mistakes not to inherit from the tool this came from: it shuffles its examples, so the prompt
+  differs run to run and a zero temperature buys nothing reproducible; and it stamps two synthetic
+  scores on them, teaching a model two buckets rather than an ordering.
 
 - **How a candidate says which note it wants to extend.** `Evidence.matches` already names the notes a
   candidate is probably more work on, and `pj merge` already does the accept — it drops the reference
@@ -362,11 +353,13 @@ needs to be part of two things.
   a private Telegram bot is also fine and is a **rewording of C2**, not an exception to it: the rule
   denies writing where somebody else reads, and the enumerated channels — Jira, GitHub, Trello, Slack —
   are exactly the shared ones. A sink only you read is not one of them. The summary column currently
-  says "everything external is read-only", which reads as banning it.
+  says "everything external is read-only", which reads as banning it. Reword C2 when this lands.
 
-  Both wait on the paragraph above. A notification is only worth having once something decides what
-  deserves one; wired to an unjudged queue it would fire on every commit, and the first thing anyone
-  would do is turn it off.
+  What blocked it is gone — the queue is judged now, so a notification would fire on things that
+  deserve one. What it still lacks is a *second* threshold. "Deserves a note" is the wrong bar for
+  interrupting somebody: a note is something you find later, and an interruption is something you
+  cannot decline. The classifier answers one question and this needs it to answer two, which is a
+  prompt change and a field, not a mechanism.
 
 ## Ideas from elsewhere
 

@@ -12,6 +12,7 @@ import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts'
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
+import { classify, type Ask } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
@@ -799,6 +800,18 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
  * move a cursor that a proposing run does not have.
  */
 
+/**
+ * A classifier that keeps everything, for the tests that are about something else.
+ *
+ * The real one shells out to a model, which a test must never do — so every
+ * `pollOnce` here passes a transport, and the ones asserting judgement pass one
+ * that judges.
+ */
+const keepAll: Ask = async (_system, user) =>
+  JSON.stringify(
+    (JSON.parse(user) as { fp: string }[]).map((c) => ({ fp: c.fp, keep: true, reason: 'kept' })),
+  );
+
 /** A report shaped like a channel's, without needing a channel to produce one. */
 function report(channel: string, candidates: Candidate[]): ChannelReport {
   return {
@@ -953,7 +966,7 @@ test('an unreachable channel is reported and its cursor is not advanced', async 
   try {
     // Slack and Gmail have no credential here by design, so they are the honest
     // fixture for "could not fetch".
-    const res = await pollOnce(root);
+    const res = await pollOnce(root, keepAll);
     const names = res.unreachable.map((u) => u.channel);
     assert.ok(names.includes('slack') && names.includes('gmail'), 'both are named, with reasons');
     for (const u of res.unreachable) assert.ok(u.reason, `${u.channel} says why`);
@@ -989,13 +1002,164 @@ test('a materialising run advances the cursor, because nothing is left unrecorde
 
     // A poll writes each candidate into the vault, so every item behind the new
     // boundary is a file. That is what earns the advance.
-    const res = await pollOnce(root);
+    const res = await pollOnce(root, keepAll);
     assert.equal(res.created.length, 1);
     assert.ok(res.advanced.includes('fake'));
     assert.equal(watermarkFor(root, 'fake')?.cursor, '2026-02-02T00:00:00.000Z');
   } finally {
     CHANNELS.splice(CHANNELS.indexOf(fake), 1);
     stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The classifier: the one place a model decides anything.
+ *
+ * What is worth pinning is not whether it judges well — that is the prompt's
+ * business and a model's — but that every way it can go wrong fails in the
+ * direction that loses nothing.
+ */
+
+test('a declined candidate is recorded with its reason, not dropped', async () => {
+  const root = vault({ a: card('a') });
+  const judge: Ask = async () =>
+    '[{"fp":"git:1","keep":false,"reason":"own routine commit"},{"fp":"jira:9","keep":true,"reason":"needs a reply"}]';
+  try {
+    const res = await classify(
+      root,
+      [candidate('git:1', 'refactor: tidy'), candidate('jira:9', 'Ben asked about the cutover')],
+      judge,
+    );
+    assert.ok(res);
+    assert.deepEqual(res!.keep.map((c) => c.fingerprint), ['jira:9']);
+    assert.equal(res!.drop.length, 1);
+    assert.equal(res!.drop[0]!.reason, 'own routine commit', 'the reason survives to be read back');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a candidate the model forgot to mention is kept', async () => {
+  const root = vault({ a: card('a') });
+  // Keeping costs a glance; dropping costs the item. So silence means keep.
+  const forgetful: Ask = async () => '[{"fp":"git:1","keep":false,"reason":"noise"}]';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b')], forgetful);
+    assert.deepEqual(res!.keep.map((c) => c.fingerprint), ['git:2']);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a fenced reply is still a reply', async () => {
+  const root = vault({ a: card('a') });
+  // Failing closed over three backticks would hold a whole sweep on punctuation.
+  const fenced: Ask = async () =>
+    'Here you go:\n```json\n[{"fp":"git:1","keep":false,"reason":"noise"}]\n```\n';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a')], fenced);
+    assert.equal(res!.drop.length, 1);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unreachable or unparseable classifier holds the whole tick', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    assert.equal(await classify(root, [candidate('git:1', 'a')], async () => null), null);
+    assert.equal(await classify(root, [candidate('git:1', 'a')], async () => 'I refuse'), null);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a held tick writes nothing and moves no cursor', async () => {
+  const root = vault({ a: card('a') });
+  const fake: Channel = {
+    name: 'fake',
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: 'fake',
+      cursor: ctx.cursor,
+      nextCursor: '2026-03-03T00:00:00.000Z',
+      fetched: true,
+      candidates: [candidate('fake:1', 'Something', { channel: 'fake' })],
+      skipped: [],
+    }),
+  };
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
+  try {
+    const res = await pollOnce(root, async () => null);
+    assert.ok(res.held, 'the tick says it held');
+    assert.deepEqual(res.created, [], 'and wrote nothing');
+    assert.equal(watermarkFor(root, 'fake')?.cursor, null, 'and moved no cursor');
+
+    // The point of holding: the next tick sees exactly what this one saw.
+    const retry = await pollOnce(root, keepAll);
+    assert.equal(retry.created.length, 1);
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('turning the classifier off writes everything down, explicitly', async () => {
+  const root = vault({ a: card('a') });
+  const fake: Channel = {
+    name: 'fake',
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: 'fake',
+      cursor: ctx.cursor,
+      nextCursor: '2026-03-03T00:00:00.000Z',
+      fetched: true,
+      candidates: [candidate('fake:1', 'Something', { channel: 'fake' })],
+      skipped: [],
+    }),
+  };
+  CHANNELS.push(fake);
+  // `classify: {enabled: false}` is the way to ask for the firehose on purpose.
+  // Never reached by omission — a missing classifier holds instead.
+  writeFileSync(
+    settingsPath(root),
+    'poll:\n  enabled: true\nchannels: [fake]\nclassify:\n  enabled: false\n',
+    'utf8',
+  );
+  try {
+    const res = await pollOnce(root, async () => null);
+    assert.ok(!res.held, 'no judgement was wanted, so nothing could hold it');
+    assert.equal(res.created.length, 1);
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a vault may override the judgement without editing the app', () => {
+  const root = vault({ a: card('a') });
+  try {
+    let seen = '';
+    const spy: Ask = async (system) => {
+      seen = system;
+      return '[]';
+    };
+    writeFileSync(join(paths(root).config, 'classify.md'), 'Only keep things about badgers.', 'utf8');
+    return classify(root, [candidate('git:1', 'a')], spy).then(() => {
+      assert.match(seen, /badgers/, 'the vault’s own instructions are what the model is given');
+    });
+  } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }

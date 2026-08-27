@@ -110,7 +110,7 @@ the two are expected to be editing the same note at the same time.
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
-| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined, and `materialise.ts` — a candidate becoming a note |
+| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined, `classify.ts` — which deserve a note — and `materialise.ts` — a candidate becoming one |
 | `src/agent/` | note context assembly, worktree workspaces, briefings, git history — and `work.ts`, the plan-and-launch both `pj work` and `POST /api/note/:id/work` reach, so the CLI and the panel cannot disagree about which branch, which directory or which link |
 | `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
 
@@ -353,12 +353,28 @@ One channel failing is that channel's news. A thrown `collect` used to take the 
 lapsed token meant no git candidates either; it now lands as `fetched: false` with the reason, which is
 the shape the report already had for Slack and Gmail. That matters more with nobody reading the output.
 
-**The poller does not make the queue quiet, and nothing pretends it does.** Every session and every
-commit becomes a note, because deciding that one of them does not matter is a judgement and there is
-not one in the codebase yet. `materialise` acts only on facts about the vault — a candidate already
-linked, or already captured — and never on whether the work matters. Which is why `poll.enabled`
-defaults to off: a vault polling by default would fill with its owner's own progress, and the first
-thing anyone would do is turn it off.
+**A tick judges before it writes.** `src/intake/classify.ts` is handed a run's candidates and answers
+which deserve a note; the rest are recorded through `suppress` with the model's reason, so they stop
+being offered and stay readable. Without that step every commit and every session on the machine
+becomes a note, which is not a milder version of the problem but the whole of it — the reason `poll`
+and `classify` shipped together rather than one and then the other.
+
+One call per run, not per candidate. A sweep's candidates arrive together and are frequently *one
+thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
+alone cannot. The transport is a stripped `claude -p`: the default system prompt replaced, the tools
+disallowed, MCP off. What is left is a classification rather than an agent, which is both cheaper and
+more predictable, since a classifier able to read files would eventually read them.
+
+**It fails closed.** A tick that cannot reach the classifier, or cannot parse what came back, writes
+nothing and advances nothing; the next tick sees exactly what it saw. Materialising everything instead
+would reach the bad outcome by accident, and no reading of "the judge is down" makes writing down
+everything the right answer. `classify.enabled: false` is how a vault asks for that on purpose —
+reachable by decision, never by omission. A candidate the model simply failed to mention is **kept**,
+which is the safe direction of the two: keeping costs a glance and dropping costs the item.
+
+`materialise` still judges nothing. It acts only on facts about the vault — already linked, already
+captured — and the separation is worth keeping: one file decides what is *true*, another decides what
+*matters*.
 
 **Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
 computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
@@ -525,7 +541,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
-| the poller (`src/server/poll.ts`), when a vault sets `poll.enabled` | one note per candidate, through `createNote` like any other write, plus that channel's cursor | writes nothing for a candidate the vault already answers for, and advances only channels it actually fetched. Off unless the vault asks |
+| the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
@@ -588,8 +604,9 @@ holds several vaults open and none of them may answer with another's token. `pj 
 making the request rather than checking that a value is present: configured-and-wrong and
 never-configured look identical otherwise.
 
-It also holds `poll:`, which is the one key that makes the app write notes nobody asked for. It is
-off unless a vault sets it, and that default is load-bearing rather than cautious — see below.
+It also holds `poll:` and `classify:` — the keys that let the app write notes nobody asked for, and
+the judgement that decides which. Polling is off unless a vault sets it; classification is on unless a
+vault turns it off, which is the asymmetry the two failure modes deserve.
 
 The registry beside the app stays what it was — a list of paths, holding nothing secret.
 

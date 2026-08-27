@@ -58,6 +58,15 @@ export interface Settings {
    * off — which is a worse outcome than never having offered it.
    */
   poll: { enabled: boolean; everySeconds: number };
+  /**
+   * Who judges the candidates a sweep found.
+   *
+   * On by default, because an unjudged queue of your own commits is the failure
+   * the queue exists to prevent, and arriving there by omission would be worse
+   * than the feature not working. `enabled: false` is the explicit way to say
+   * "write everything down and let me sort it".
+   */
+  classify: { enabled: boolean; command: string; model: string };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -75,6 +84,7 @@ interface Raw {
   doc?: { url?: unknown };
   workspaces?: unknown;
   poll?: { enabled?: unknown; every?: unknown };
+  classify?: { enabled?: unknown; command?: unknown; model?: unknown };
 }
 
 const str = (v: unknown): string | null => {
@@ -170,6 +180,13 @@ export function settingsFor(root: string): Settings {
       // fifteen minutes: a sweep reads `git log` and a Jira search, and the
       // things it looks for do not happen faster than that.
       everySeconds: Math.max(60, Number(raw.poll?.every ?? 900) || 900),
+    },
+    classify: {
+      enabled: raw.classify?.enabled !== false,
+      command: str(raw.classify?.command) ?? 'claude',
+      // Small on purpose: the question is narrow and the run is on a timer, so
+      // the cost of the judgement should not exceed the cost of reading it.
+      model: str(raw.classify?.model) ?? 'haiku',
     },
   };
 

@@ -31,6 +31,7 @@ import {
   renderSweep,
   sweep,
 } from '../intake/run.ts';
+import { pollOnce } from '../server/poll.ts';
 import {
   resetWatermark,
   suppress,
@@ -253,6 +254,7 @@ const HELP = `pj — projector CLI${vaultNote}
   pj intake commit --channel c --cursor v
      [--seen n] [--captured n]                         or say where by hand
   pj intake known <fingerprint>...                     which notes already carry these refs
+  pj intake poll                                       sweep, judge, and write what deserves a note
   pj intake suppress <fp>... --reason <why>             record a "not a note", so sweeps stop offering it
   pj intake suppressed [--channel c] [--json]          what a judgement hid, and why
   pj intake unsuppress <fp>...                         offer it again
@@ -762,6 +764,28 @@ try {
        * a no, so the next sweep stops offering it and the reason survives to be
        * read back. Without it a decline left nothing behind but a moved cursor.
        */
+      /**
+       * A sweep that judges and writes, run once by hand.
+       *
+       * The same tick the server runs on a timer — same classifier, same
+       * suppressions, same cursor rule — so a vault that does not want a server
+       * running is not a vault that has to do this by conversation instead.
+       */
+      if (sub === 'poll') {
+        const res = await pollOnce(root);
+        if (res.held) {
+          console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
+          process.exit(1);
+        }
+        for (const u of res.unreachable) console.log(`${pad(u.channel, 10)} not fetched — ${u.reason}`);
+        for (const id of res.created) console.log(`${pad('new', 10)} ${id}`);
+        console.log(
+          `${res.created.length} note(s), ${res.declined} declined, ${res.skipped} already known` +
+            (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
+        );
+        break;
+      }
+
       if (sub === 'suppress') {
         const reason = flags.get('reason')?.[0];
         if (!channels.length || !reason) {
