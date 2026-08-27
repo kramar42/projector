@@ -1703,6 +1703,14 @@ input:focus-visible + .checkbox {
   opacity: 0.12;
 }
 
+/* The same spotlight, on the notes: a note neither in the selection nor at the
+   far end of one of its lit lines recedes with the edges. Deeper than a context
+   node's wash, shallower than the edges' — a receded note still has to land a
+   click. */
+.react-flow__node.is-dimmed {
+  opacity: 0.25;
+}
+
 /* A line under the pointer, or the one a click is tracing, answers in its own
    weight — the 20px hit area React Flow gives an edge is invisible, so the
    thickening is what says "this is a thing you can click". */

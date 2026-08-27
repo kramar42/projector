@@ -225,10 +225,10 @@ export function CanvasView({
     const groups = data.groups ? groupsFor(data, { lanes: 'merged', empties: 'drop' }) : [];
     const clustered = groups.length > 0;
     const auto = clustered
-      ? clusteredLayout(shown, data.relations, layoutBy, groups)
-      : treeLayout(shown, data.relations, 'LR', layoutBy);
+      ? clusteredLayout(shown, data.relations, layoutBy, groups, data.spec.show)
+      : treeLayout(shown, data.relations, 'LR', layoutBy, data.spec.show);
     const placed = Object.keys(stored).length
-      ? manualLayout(shown, data.relations, stored, layoutBy, auto)
+      ? manualLayout(shown, data.relations, stored, layoutBy, auto, data.spec.show)
       : auto;
 
     const rfNodes: Node[] = shown.map((card) => {
@@ -386,6 +386,31 @@ export function CanvasView({
   }, [built.edges, selection.ids, traced]);
 
   /**
+   * The same spotlight, on the notes. With a trace or a selection active, a
+   * note that is neither in it nor at the far end of one of its lit lines
+   * recedes with the edges — what stays at full strength is exactly the answer:
+   * the traced pair, or the selection and everything one line away from it.
+   * Derived from `nodes` (not `built.nodes`) so positions mid-drag are kept.
+   */
+  const litNodes = useMemo(() => {
+    const trace = traced ? built.edges.find((e) => e.id === traced) : undefined;
+    let lit: Set<string> | null = null;
+    if (trace) lit = new Set([trace.source, trace.target]);
+    else if (selection.ids.size) {
+      lit = new Set(selection.ids);
+      for (const e of built.edges) {
+        if (selection.ids.has(e.source)) lit.add(e.target);
+        if (selection.ids.has(e.target)) lit.add(e.source);
+      }
+    }
+    if (!lit) return nodes;
+    const dark = lit;
+    return nodes.map((n) =>
+      n.type === 'note' && !dark.has(n.id) ? { ...n, className: 'is-dimmed' } : n,
+    );
+  }, [nodes, built.edges, selection.ids, traced]);
+
+  /**
    * What the first paint frames: the focused note and its first ring, when the
    * query has a focus — the rest of the graph is what the minimap is for. Without
    * a focus the whole graph fits, floored so fifty notes cannot open as slivers.
@@ -491,7 +516,7 @@ export function CanvasView({
       {problem && <div className="banner is-bad">{problem}</div>}
       <div className="canvas">
         <ReactFlow
-          nodes={nodes}
+          nodes={litNodes}
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}

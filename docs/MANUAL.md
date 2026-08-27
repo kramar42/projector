@@ -439,8 +439,9 @@ curves — a fan out of one note diverges at its source, so forty members are fo
 rather than one trunk — and every other relation, a blocker, a second hierarchy, attaches top and
 bottom and is drawn straight, cutting across the curved grain at an angle no tree edge takes.
 **A line you cannot trace is a click away from an answer**: clicking an edge spotlights just that
-line and recedes every other; click it again, the pane, or any note to release it. Selecting notes
-lights every line touching the selection — incoming and outgoing both — and recedes the rest. The
+line and its two ends; click it again, the pane, or any note to release it. Selecting notes lights
+every line touching the selection — incoming and outgoing both — and recedes the rest, lines and
+notes alike: what stays at full strength is the selection and everything one line away from it. The
 first paint is capped both ways, never past 1:1 and never below reading size; when the query has a
 `focus`, it frames the focused note and its first ring rather than the whole graph — the minimap
 covers the rest.
