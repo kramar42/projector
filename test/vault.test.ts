@@ -105,19 +105,17 @@ test('the CLI picks a vault explicitly, or unambiguously, or asks', () => {
   const one = [{ path: '/v/one', name: 'one' }];
   const two = [...one, { path: '/v/two', name: 'two' }];
 
-  // An explicit flag wins over everything.
-  assert.deepEqual(resolveCliVault(['node', 'pj', '--vault', '/v/x', 'ls'], two), { root: '/v/x' });
+  // An explicit flag wins over everything. What the flag was spelled as is the
+  // CLI's business — see cli.test.ts, which spells it four ways.
+  assert.deepEqual(resolveCliVault('/v/x', two), { root: '/v/x' });
   // One registered vault needs no flag.
-  assert.deepEqual(resolveCliVault(['node', 'pj', 'ls'], one), { root: '/v/one' });
+  assert.deepEqual(resolveCliVault(null, one), { root: '/v/one' });
   // Several, with no choice made, must ask rather than guess.
-  const ambiguous = resolveCliVault(['node', 'pj', 'ls'], two);
+  const ambiguous = resolveCliVault(null, two);
   assert.ok('error' in ambiguous && /--vault/.test(ambiguous.error));
   // None at all says how to get one.
-  const none = resolveCliVault(['node', 'pj', 'ls'], []);
+  const none = resolveCliVault(null, []);
   assert.ok('error' in none && /no vault/.test(none.error));
-  // A flag with no value is an error, not a silent fallback.
-  const bare = resolveCliVault(['node', 'pj', 'ls', '--vault'], one);
-  assert.ok('error' in bare);
 });
 
 

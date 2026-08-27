@@ -102,16 +102,21 @@ export function vaultAbove(from: string): string | null {
   }
 }
 
+/**
+ * The order of precedence, given whatever `--vault` said — `null` when it was not
+ * passed.
+ *
+ * It takes the value rather than argv because argv has one reader, in the CLI,
+ * and the flag has more spellings than its own name: this used to scan for the
+ * literal `--vault`, which `-v` and `--vau` walk straight past, leaving the CLI
+ * acting on a vault nobody asked for while its own parse had already found the
+ * right one.
+ */
 export function resolveCliVault(
-  argv: string[],
+  given: string | null,
   registered: { path: string; name: string }[],
 ): { root: string } | { error: string } {
-  const flagAt = argv.indexOf('--vault');
-  if (flagAt !== -1) {
-    const given = argv[flagAt + 1];
-    if (!given) return { error: '--vault needs a path' };
-    return { root: resolvePath(given, process.cwd()) };
-  }
+  if (given) return { root: resolvePath(given, process.cwd()) };
   if (process.env.PROJECTOR_DATA) {
     return { root: resolvePath(process.env.PROJECTOR_DATA, process.cwd()) };
   }

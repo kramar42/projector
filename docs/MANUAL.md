@@ -708,7 +708,7 @@ the only thing written outside a vault; delete it and you lose the list, nothing
 pj vaults                                  # list
 pj vaults add <path> [--name n] [--create] # open a folder as a vault
 pj vaults forget <path>                    # stop tracking it; the folder is untouched
-pj --vault <path> <command>                # act on a specific one
+pj --vault <path> <command>                # act on a specific one, or -v <path>
 ```
 
 The CLI does not need the list at all: run `pj` anywhere inside a vault and it finds it by walking up,
@@ -737,6 +737,14 @@ one.
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
+
+**Every flag shortens.** One dash or two, cut to any prefix that names exactly one flag of that
+command: `pj ls -j`, `pj ls -g status`, `pj set x -f status=done`, `pj intake commit -a`. A prefix that
+names two says which two rather than picking one, so `-s` on `pj ls` is refused with `--shape`,
+`--show` and `--sort` on the line and `-so` gets the sort. There is no table of letters to fall behind
+the flags — a flag added later can make an abbreviation ambiguous, never silently point it elsewhere.
+`-v` is `--vault` on every command, since the vault is read before the command is; `--view` and
+`--verbose` are `-vie` and `-ve`.
 
 `pj search` and `pj ls --q` match the same notes through the same sanitiser and differ only in order:
 search ranks by relevance, which belongs to a result set rather than to any note in it, so it cannot

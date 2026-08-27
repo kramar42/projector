@@ -164,7 +164,7 @@ test('the CLI finds a vault from the working directory, without a registry', () 
     const cwd = process.cwd();
     try {
       process.chdir(paths(root).notes);
-      assert.deepEqual(resolveCliVault([], []), { root: realpathSync(root) });
+      assert.deepEqual(resolveCliVault(null, []), { root: realpathSync(root) });
     } finally {
       process.chdir(cwd);
     }
@@ -180,9 +180,9 @@ test('an explicit vault still wins over the working directory', () => {
     const cwd = process.cwd();
     try {
       process.chdir(a.root);
-      assert.deepEqual(resolveCliVault(['--vault', b.root], []), { root: b.root });
+      assert.deepEqual(resolveCliVault(b.root, []), { root: b.root });
       process.env.PROJECTOR_DATA = b.root;
-      assert.deepEqual(resolveCliVault([], []), { root: b.root });
+      assert.deepEqual(resolveCliVault(null, []), { root: b.root });
     } finally {
       delete process.env.PROJECTOR_DATA;
       process.chdir(cwd);

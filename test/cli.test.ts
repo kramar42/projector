@@ -156,6 +156,43 @@ test('every command refuses a flag it does not know', () => {
   }
 });
 
+/**
+ * Every flag shortens to any prefix that names one of them, one dash or two. The
+ * risk in that is a prefix quietly resolving to the wrong flag, so the two cases
+ * asserted hardest are the ones that must not: an ambiguous prefix, and `-v`,
+ * which is read before the command is and so is the vault even on a command with
+ * `--view` and `--via` of its own.
+ */
+test('a flag shortens to any prefix that names exactly one', () => {
+  const v = vault();
+  try {
+    // One dash or two, whole or cut short: four spellings of the same flag.
+    for (const spelling of [['--vault'], ['-vault'], ['--vau'], ['-v']]) {
+      const r = run([...spelling, v.root, 'ls']);
+      assert.match(r.out, /2 note\(s\) of 2/, `${spelling[0]} should name the vault: ${r.out}`);
+    }
+    assert.match(run(['-v', v.root, 'ls', '-g', 'priority']).out, /## now \(1\)/);
+    assert.deepEqual(JSON.parse(run(['-v', v.root, 'ls', '-j']).out).ids.sort(), ['alpha', 'beta']);
+
+    // `ls` takes --shape, --show and --sort, so `-s` is none of them, and saying
+    // which three it could have been is the whole point of refusing.
+    const ambiguous = run(['-v', v.root, 'ls', '-s', 'title']);
+    assert.equal(ambiguous.code, 1);
+    for (const flag of ['--shape', '--show', '--sort']) {
+      assert.match(ambiguous.out, new RegExp(flag), ambiguous.out);
+    }
+
+    // A prefix of nothing is still just an unknown flag.
+    assert.match(run(['-v', v.root, 'ls', '-z']).out, /unknown flag -z/);
+    // And the vault flag with no path is refused rather than eating the command.
+    const bare = run(['ls', '-v']);
+    assert.equal(bare.code, 1);
+    assert.match(bare.out, /-v needs a path/, bare.out);
+  } finally {
+    v.cleanup();
+  }
+});
+
 test('a boolean flag does not swallow the argument after it', () => {
   const v = vault();
   try {

@@ -38,6 +38,103 @@ import { pickSession } from '../sources/claude.ts';
 import { createNote, deleteNote, mergeNotes, patchNote, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
+// ---------------------------------------------------------------- flags
+
+/** Report and stop. A CLI that half-applies a bad batch is worse than one that refuses. */
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+/**
+ * A token is a flag when it starts with a dash and then a letter.
+ *
+ * Not merely "starts with a dash": `--depth -1` has to keep its value, and a lone
+ * `-` is a value too. How many dashes is not part of it — see `longName`.
+ */
+const FLAG = /^--?[a-z]/i;
+
+/** `--group`, `-g` and `--gro` alike, with the dashes taken off. */
+const typedName = (token: string): string => token.replace(/^--?/, '');
+
+/**
+ * Which flag a token names, allowing any unambiguous shortening of it.
+ *
+ * Two spellings, one rule: `-x` is `--x`, and a name may be cut to any prefix
+ * that matches exactly one of the flags this command takes. So `-j`, `-js` and
+ * `--json` are one flag, and every flag on every command shortens — including
+ * the ones nobody thought to shorten.
+ *
+ * The alternative was a hand-kept table of letters, and a hand-kept copy of a
+ * list the code already has is what `SPEC_PARAMS` exists to stop: there were
+ * three of those, the CLI's was short by two entries, and `pj ls --shape canvas`
+ * simply did not exist for as long as nobody looked. A prefix needs no table and
+ * cannot fall behind one.
+ *
+ * Adding a flag later cannot silently redirect an abbreviation that already
+ * works: at worst it makes it ambiguous, which is an error naming both
+ * candidates. An exact name always wins, so a flag can never be shadowed by
+ * being a prefix of a longer one either.
+ */
+function longName(token: string, known: readonly string[]): string {
+  const typed = typedName(token);
+  if (known.includes(typed)) return typed;
+  const hits = known.filter((k) => k.startsWith(typed));
+  if (hits.length === 1) return hits[0]!;
+  const spell = (names: readonly string[]) => names.map((k) => '--' + k).join(' ');
+  if (hits.length > 1) fail(`${token} could be ${spell(hits)} — type more of it`);
+  return fail(
+    known.length
+      ? `unknown flag ${token}. This command takes: ${spell(known)}`
+      : `unknown flag ${token}. This command takes none.`,
+  );
+}
+
+/**
+ * Split flags from positional arguments.
+ *
+ * `known` is required, and that is the point. An unrecognised flag used to be
+ * dropped silently, so `pj set x --project '{}'` printed a success line and did
+ * nothing — the sort of failure you only find by checking the file afterwards.
+ * The fix shipped as an *optional* parameter, so `ls`, `vaults` and `enrich`
+ * never took it, and `pj ls --json` was accepted and ignored right up until
+ * `--json` became real. A command taking no flags passes `[]`; nothing opts out.
+ */
+function argFlags(
+  argv: string[],
+  known: readonly string[],
+  booleans: readonly string[] = [],
+): { flags: Map<string, string[]>; rest: string[] } {
+  const flags = new Map<string, string[]>();
+  const rest: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (FLAG.test(a)) {
+      const key = longName(a, known);
+      // A boolean never consumes what follows it. Otherwise `--remove jira:FOO-1`
+      // reads the ref as the flag's value and the positional list comes back
+      // empty — the flag parsed, the argument vanished, and the error message is
+      // about the wrong thing.
+      if (booleans.includes(key)) {
+        flags.set(key, [...(flags.get(key) ?? []), 'true']);
+        continue;
+      }
+      const next = argv[i + 1];
+      // `--set project=` has to reach the command as an empty string, since that
+      // is how it says "delete this key" — so only another flag ends a flag.
+      if (next === undefined || FLAG.test(next)) {
+        flags.set(key, [...(flags.get(key) ?? []), 'true']);
+      } else {
+        flags.set(key, [...(flags.get(key) ?? []), next]);
+        i++;
+      }
+    } else rest.push(a);
+  }
+  return { flags, rest };
+}
+
+// ---------------------------------------------------------------- the vault
+
 /**
  * Which vault this invocation acts on: `--vault`, then `PROJECTOR_DATA`, then the
  * single registered vault if there is exactly one. There is no built-in default
@@ -45,16 +142,26 @@ import { execFileSync } from 'node:child_process';
  */
 /**
  * `--vault <path>` may appear anywhere, including before the command, so it is
- * removed from the argument list before the command is read.
+ * read and removed from the argument list before the command is read.
+ *
+ * That makes it the one flag resolved without knowing the command, so it is
+ * matched against itself alone: `-v` is the vault everywhere, and `ls --view` and
+ * `intake --verbose` shorten to `-vie` and `-ve` instead. The value is read here
+ * and handed on, rather than `resolveCliVault` scanning argv for `--vault` a
+ * second time — an abbreviation would have walked straight past that scan and
+ * quietly acted on a different vault than the one named.
  */
 const rawArgs = process.argv.slice(2);
-const vaultFlagAt = rawArgs.indexOf('--vault');
-const cliArgs =
-  vaultFlagAt === -1 ? rawArgs : [...rawArgs.slice(0, vaultFlagAt), ...rawArgs.slice(vaultFlagAt + 2)];
+const vaultAt = rawArgs.findIndex((a) => FLAG.test(a) && 'vault'.startsWith(typedName(a)));
+const vaultGiven = vaultAt === -1 ? null : (rawArgs[vaultAt + 1] ?? null);
+if (vaultAt !== -1 && (vaultGiven === null || FLAG.test(vaultGiven))) {
+  fail(`${rawArgs[vaultAt]} needs a path${vaultGiven ? `, and ${vaultGiven} is a flag` : ''}`);
+}
+const cliArgs = vaultAt === -1 ? rawArgs : [...rawArgs.slice(0, vaultAt), ...rawArgs.slice(vaultAt + 2)];
 const [rawCmd, ...rawArgv] = cliArgs;
 
 function vaultOrExit(): string {
-  const res = resolveCliVault(process.argv, listVaults().filter((v) => v.exists));
+  const res = resolveCliVault(vaultGiven, listVaults().filter((v) => v.exists));
   if ('error' in res) {
     console.error(res.error);
     process.exit(1);
@@ -77,7 +184,7 @@ const NO_VAULT_NEEDED = new Set(['vaults', '']);
  */
 const HELP_CMDS = new Set(['help', '--help', '-h']);
 const asking = HELP_CMDS.has(rawCmd ?? '');
-const soft = asking ? resolveCliVault(process.argv, listVaults().filter((v) => v.exists)) : null;
+const soft = asking ? resolveCliVault(vaultGiven, listVaults().filter((v) => v.exists)) : null;
 const root = asking
   ? soft && 'root' in soft
     ? soft.root
@@ -137,64 +244,13 @@ const HELP = `pj — projector CLI${vaultNote}
   pj vaults forget <path>                              stop tracking it (folder untouched)
 
   --vault <path>                                       act on a specific vault
+
+Every flag shortens. One dash or two, cut to any prefix that names one flag of
+the command: -j is --json, -g is --group, -fi and -fo separate --filter from
+--focus, and an ambiguous one says which flags it could have meant. -v is
+--vault everywhere, since that one is read before the command is — so --view
+is -vie and --verbose is -ve.
 `;
-
-/**
- * Split flags from positional arguments.
- *
- * `known` is required, and that is the point. An unrecognised flag used to be
- * dropped silently, so `pj set x --project '{}'` printed a success line and did
- * nothing — the sort of failure you only find by checking the file afterwards.
- * The fix shipped as an *optional* parameter, so `ls`, `vaults` and `enrich`
- * never took it, and `pj ls --json` was accepted and ignored right up until
- * `--json` became real. A command taking no flags passes `[]`; nothing opts out.
- */
-/** Report and stop. A CLI that half-applies a bad batch is worse than one that refuses. */
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
-}
-
-function argFlags(
-  argv: string[],
-  known: readonly string[],
-  booleans: readonly string[] = [],
-): { flags: Map<string, string[]>; rest: string[] } {
-  const flags = new Map<string, string[]>();
-  const rest: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (a.startsWith('--')) {
-      const key = a.slice(2);
-      if (!known.includes(key)) {
-        console.error(
-          known.length
-            ? `unknown flag --${key}. This command takes: ${known.map((k) => '--' + k).join(' ')}`
-            : `unknown flag --${key}. This command takes none.`,
-        );
-        process.exit(1);
-      }
-      // A boolean never consumes what follows it. Otherwise `--remove jira:FOO-1`
-      // reads the ref as the flag's value and the positional list comes back
-      // empty — the flag parsed, the argument vanished, and the error message is
-      // about the wrong thing.
-      if (booleans.includes(key)) {
-        flags.set(key, [...(flags.get(key) ?? []), 'true']);
-        continue;
-      }
-      const next = argv[i + 1];
-      // `--set project=` has to reach the command as an empty string, since that
-      // is how it says "delete this key" — so only a `--flag` ends a flag.
-      if (next === undefined || next.startsWith('--')) {
-        flags.set(key, [...(flags.get(key) ?? []), 'true']);
-      } else {
-        flags.set(key, [...(flags.get(key) ?? []), next]);
-        i++;
-      }
-    } else rest.push(a);
-  }
-  return { flags, rest };
-}
 
 function ensureData(): void {
   mkdirSync(p.notes, { recursive: true });

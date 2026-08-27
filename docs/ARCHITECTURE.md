@@ -666,7 +666,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, the layout following only the relation shown, and a brood of childless members wrapping into a grid |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, and the leniency an adopted vault depends on — a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
-| `cli.test.ts` | every command refusing an unknown flag, `--json` being the payload the app receives, the registry, exit codes |
+| `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
