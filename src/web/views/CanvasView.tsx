@@ -115,7 +115,7 @@ function buildEdges(
   facets: Meta['facets'],
   layout: string | null,
 ): Edge[] {
-  return edgesFor(raw, facets).map(({ src, dst, types, lead, lane }) => {
+  return edgesFor(raw, facets).map(({ src, dst, types, lead }) => {
     // Through `hue.ts`, which is also what a chip asks — so a relation's line and
     // its axis's values cannot disagree about the family, and the app's own axis
     // draws its edges in the accent rather than falling to grey.
@@ -127,18 +127,15 @@ function buildEdges(
       source: src,
       target: dst,
       // Two path families, matching the two handle pairs on `RecordNode`: the
-      // layout relation steps with the ranks, everything else curves — so the
-      // two kinds of line cannot fuse in one corridor and be read as one.
-      type: tree ? 'smoothstep' : 'default',
+      // layout relation curves — a fan of curves to different targets diverges
+      // at the source, so forty members are forty traceable lines — and every
+      // other relation is drawn straight, cutting against the curved grain at
+      // an angle no tree edge takes. Stepped paths with staggered turn lanes
+      // were tried between these two and read as circuit traces: orderly, and
+      // still one corridor to lose a line in.
+      type: tree ? 'default' : 'straight',
       sourceHandle: tree ? 'tree-out' : 'cross-out',
       targetHandle: tree ? 'tree-in' : 'cross-in',
-      // The stagger. Same-source step edges once turned at the same distance
-      // from the node and fused into a single trunk; `lane` spreads the turns
-      // across the rank gap (ranksep 110), cycling so a wide fan stays inside
-      // it. Curved edges vary curvature instead, for the same reason.
-      pathOptions: tree
-        ? { offset: 16 + (lane % 12) * 8 }
-        : { curvature: 0.35 + (lane % 4) * 0.1 },
       style: {
         stroke: colour,
         strokeWidth: tree ? 1.6 : 1.4,
@@ -189,6 +186,14 @@ export function CanvasView({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [naming, setNaming] = useState(false);
+  /**
+   * The one edge a click is tracing, by id. Not the selection: selecting an
+   * edge's endpoints was tried, and it cannot isolate a line — a hub note is
+   * incident to its whole fan, so selecting it lit everything the click was
+   * trying to single out. Local state rather than the URL because a trace is a
+   * glance, not a place: nothing acts on it, so nothing needs it to survive.
+   */
+  const [traced, setTraced] = useState<string | null>(null);
 
   useRequestEnrichment([
     ...new Set(Object.values(data.notes).flatMap((c) => c.links.map((l) => l.raw))),
@@ -320,6 +325,9 @@ export function CanvasView({
           c.type === 'select',
       );
       if (!picks.length) return;
+      // The wider spotlight takes over: node selection answers "what do these
+      // connect to", and a lingering trace would mute most of that answer.
+      setTraced(null);
       const next = new Set(selection.ids);
       for (const p of picks) {
         if (p.selected) next.add(p.id);
@@ -357,19 +365,25 @@ export function CanvasView({
   const acting = visibleSelection(selection.ids, data.ids);
 
   /**
-   * Selection is a spotlight. With notes selected, an edge touching none of them
-   * recedes, so what remains on screen is the answer to "what do these connect
-   * to" — the question a selection on a canvas is usually asking. Computed here
-   * rather than in `buildEdges` so a click does not rebuild the graph.
+   * Two spotlights, the narrower one first. A traced edge leaves only itself
+   * lit — the question a click on a line asks is "this one, where from, where
+   * to". A selection leaves every edge touching a selected note — the question
+   * there is "what do these connect to". Computed here rather than in
+   * `buildEdges` so neither rebuilds the graph.
    */
   const edges = useMemo(() => {
+    if (traced && built.edges.some((e) => e.id === traced)) {
+      return built.edges.map((e) =>
+        e.id === traced ? { ...e, className: 'is-traced', zIndex: 1 } : { ...e, className: 'is-muted' },
+      );
+    }
     if (!selection.ids.size) return built.edges;
     return built.edges.map((e) =>
       selection.ids.has(e.source) || selection.ids.has(e.target)
         ? e
         : { ...e, className: 'is-muted' },
     );
-  }, [built.edges, selection.ids]);
+  }, [built.edges, selection.ids, traced]);
 
   /**
    * What the first paint frames: the focused note and its first ring, when the
@@ -499,17 +513,13 @@ export function CanvasView({
           maxZoom={2}
           elementsSelectable
           /*
-           * A line you cannot trace is a question; clicking it is the answer.
-           * Selecting the edge's two ends puts the ring on exactly the pair the
-           * line joins — and, through the spotlight above, dims every other
-           * edge. Context nodes stay out: they are not selectable by click and
-           * a bulk action must not reach a note the query never matched.
+           * A line you cannot trace is a question; clicking it is the answer:
+           * every other edge recedes, leaving the one line and its two ends. A
+           * second click on it, a click on the pane, or selecting any note
+           * releases it.
            */
-          onEdgeClick={(_, edge) => {
-            const picked = [edge.source, edge.target].filter((id) => data.ids.includes(id));
-            if (picked.length) selection.replace(new Set(picked));
-          }}
-          elevateEdgesOnSelect
+          onEdgeClick={(_, edge) => setTraced((t) => (t === edge.id ? null : edge.id))}
+          onPaneClick={() => setTraced(null)}
           /*
            * React Flow deletes the selected nodes on Backspace by default, and
            * `elementsSelectable` means there is always something selected to

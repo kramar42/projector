@@ -1703,11 +1703,11 @@ input:focus-visible + .checkbox {
   opacity: 0.12;
 }
 
-/* A line under the pointer, or one whose click just selected its pair, answers
-   in its own weight — the 20px hit area React Flow gives an edge is invisible,
-   so the thickening is what says "this is a thing you can click". */
+/* A line under the pointer, or the one a click is tracing, answers in its own
+   weight — the 20px hit area React Flow gives an edge is invisible, so the
+   thickening is what says "this is a thing you can click". */
 .react-flow__edge:hover .react-flow__edge-path,
-.react-flow__edge.selected .react-flow__edge-path {
+.react-flow__edge.is-traced .react-flow__edge-path {
   stroke-width: 2.2;
 }
 
