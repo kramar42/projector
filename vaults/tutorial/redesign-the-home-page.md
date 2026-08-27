@@ -5,7 +5,6 @@ facets:
   status: [active]
   priority: [now]
   energy: [deep]
-  parent: [personal-site]
   blocked_by: [pick-a-css-approach]
   tech: [css]
   project: [personal-site]

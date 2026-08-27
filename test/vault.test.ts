@@ -15,6 +15,7 @@ import { readAll } from '../src/index/indexer.ts';
 import { listNoteFiles } from '../src/schema/note.ts';
 import { split } from '../src/schema/frontmatter.ts';
 import { loadFacets, orderValues } from '../src/schema/facets.ts';
+import { validate } from '../src/schema/validate.ts';
 import { isConfigured, paths, resolveCliVault, vaultAbove } from '../src/config.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
@@ -267,6 +268,30 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
   assert.ok(
     [...notes.values()].some((r) => basename(r.file) === 'README.md'),
     'and a README that is a note like any other file',
+  );
+
+  /*
+   * And it models nothing `pj check` objects to.
+   *
+   * The tutorial is the vault a stranger opens before reading anything, so every
+   * shape in it is a recommendation whether or not it was meant as one. It taught
+   * one it should not have: two notes named `personal-site` in both `parent` and
+   * `project`, which is one edge stored twice — while the project note's own prose,
+   * three lines away, described the shape that avoids it. Nothing caught that,
+   * because the validator had nothing to say about relations until it did.
+   *
+   * Zero warnings and not just zero errors, deliberately: a warning is the
+   * validator's word for "valid, and probably not what you meant", which is
+   * exactly the register a tutorial must not be in. `vaults/coverage` is held to
+   * the opposite standard on purpose — it carries a dangling doc link and repo
+   * paths that do not resolve, because those are states the app has to draw.
+   */
+  const facets = loadFacets(paths(root).facets);
+  const issues = validate(notes, facets, root, { unreadable, duplicates });
+  assert.deepEqual(
+    issues.map((i) => `${basename(i.file)} [${i.field}]: ${i.message}`),
+    [],
+    'the vault a stranger sees first should model nothing the validator warns about',
   );
 });
 

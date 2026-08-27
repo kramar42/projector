@@ -1,4 +1,4 @@
-import { DIRS, NONE, type Dir, type Shape, negate } from '../schema/vocabulary.ts';
+import { DIRS, NONE, STRUCTURE_AXIS, type Dir, type Shape, negate } from '../schema/vocabulary.ts';
 import { SPEC_PARAMS, specToParams, type ViewSpec } from './spec.ts';
 
 /**
@@ -125,6 +125,28 @@ export function setFocus(
       dir: focus.dir ?? prev?.dir ?? 'in',
       ...(depth ? { depth } : {}),
     },
+    /*
+     * A focus clears the one filter that cancels it.
+     *
+     * `STRUCTURE_AXIS` says where a note sits in the reference graph; a focus
+     * selects by where a note sits in the reference graph. So `type=[project]`
+     * and "walk inward from this project" are the same question with opposite
+     * answers, and the query removed precisely what it had been asked to find:
+     * pressing the focus control on the **Projects** view reshaped the query and
+     * still drew one row, which reads as a dead button.
+     *
+     * Only this axis, and that is the whole of the rule. `priority=[now]` survives
+     * a focus because it is a preference about notes rather than a claim about
+     * their position — and a focus is not a request to see things you have said
+     * you do not want to see.
+     *
+     * Emptied rather than deleted, for the reason `clearFilters` is: on a saved
+     * view an absent key inherits the file's value, so dropping it would bring
+     * `type: [project]` straight back.
+     */
+    ...(spec.query.filter?.[STRUCTURE_AXIS]?.length
+      ? { filter: { ...spec.query.filter, [STRUCTURE_AXIS]: [] } }
+      : {}),
   });
 }
 

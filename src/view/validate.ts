@@ -130,7 +130,14 @@ function inert(name: string, def: Record<string, unknown>, file: string): Issue[
   const at = (message: string) =>
     out.push({ severity: 'error', file, field: name, message });
 
-  if (typeof def.inverse === 'string' && def.type !== 'ref') {
+  // The raw mapping is missing exactly one thing: a built-in's shape, which is
+  // not read from the file and cannot be written there. So the type is the file's
+  // if it wrote one and the built-in's otherwise — without this, `project:
+  // {inverse: Owners}` was reported as an inverse on a non-reference facet, which
+  // is the built-in's own `type: ref` being invisible to the checker rather than
+  // anything wrong with the vault.
+  const type = def.type ?? BUILTIN_FACETS[name]?.type;
+  if (typeof def.inverse === 'string' && type !== 'ref') {
     at(`"${name}" declares an inverse but is not a reference facet — nothing points back along it`);
   }
   /**

@@ -19,7 +19,7 @@ import { blockedSet, blockingFacets } from './blocking.ts';
 
 /** Absence of any value for a facet. Also the trailing group's label, as in P0. */
 export { NONE } from '../schema/vocabulary.ts';
-import { NONE, splitSelection } from '../schema/vocabulary.ts';
+import { NONE, STRUCTURE_AXIS, splitSelection } from '../schema/vocabulary.ts';
 
 export type { Dir } from './refs.ts';
 import type { Dir } from './refs.ts';
@@ -185,7 +185,9 @@ export function triageGaps(rec: Note, facets: Facets): string[] {
  * that is what an ordered facet's own `buckets` do now, so it left.
  */
 export const COMPUTED: Record<string, Computed> = {
-  type: {
+  // Keyed from the constant rather than spelled here: `setFocus` clears a filter
+  // on this axis and lives at the wire tier, which cannot import this module.
+  [STRUCTURE_AXIS]: {
     label: 'Type',
     values: () => ['project', 'node', 'plain'],
     // A project owns configuration, a node is named by another note, and the

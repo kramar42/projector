@@ -92,6 +92,8 @@ export function NotePanel(props: {
   meta: Meta;
   onClose: () => void;
   onOpen: (id: string) => void;
+  /** Walk `via` inward from this note and show what it reaches. */
+  onFocus: (id: string, via: string) => void;
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
 }) {
   const { data, error, reload } = useLive<NoteDetail>(() => api.note(props.id), [props.id]);
@@ -116,6 +118,7 @@ function NoteCard({
   meta,
   onClose,
   onOpen,
+  onFocus,
   onUnsaved,
   data,
   error,
@@ -125,6 +128,7 @@ function NoteCard({
   meta: Meta;
   onClose: () => void;
   onOpen: (id: string) => void;
+  onFocus: (id: string, via: string) => void;
   /**
    * Tell the shell what is at risk here.
    *
@@ -493,7 +497,19 @@ function NoteCard({
             </div>
 
             <div className="panel-tier">
-              <Refs defs={meta.facets} card={card} data={data} write={write} onOpen={onOpen} lit={lit} />
+              <Refs
+                defs={meta.facets}
+                card={card}
+                data={data}
+                write={write}
+                onOpen={onOpen}
+                // The panel does not own the query — the shell does — so a
+                // derived row's focus control names the note and the relation
+                // and lets `App` reshape the view. Same call the keyboard's
+                // `gotoInverse` makes, so the two cannot drift apart.
+                onFocus={(via) => onFocus(id, via)}
+                lit={lit}
+              />
             </div>
 
             {/*

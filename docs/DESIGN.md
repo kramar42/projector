@@ -470,7 +470,7 @@ pair, written down beside them.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
 tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for every drawn glyph —
-`trash`, `refresh`, `edit`, `start`) so they read as one family — but
+`trash`, `refresh`, `edit`, `start`, `focus`) so they read as one family — but
 those metrics deliberately do **not** live here. The glyph set is closed, so the table in
 `src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
 a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
@@ -820,6 +820,13 @@ against `start`'s 30.5 on the same instrument, so the destructive mark is nearly
 the constructive one at the same nominal size and the same hit target. A *filled* triangle measured 61
 and would have made the one purely constructive act the heaviest mark in the app. The glyph table in
 `src/web/components/Button.tsx` carries the measurements; this is the rule they serve.
+
+`focus` — the bullseye that reshapes the view around a derived row — is held to the same band and is
+the one figure in the table that is **computed rather than rasterised**: perimeter × the shared stroke,
+plus the area of anything filled. The table says so, and says why it is trusted — the same arithmetic
+reproduces `start`'s measured 30.5 and `refresh`'s 29.3–30.1 to within a few per cent. It is also why
+that glyph is a ring and a dot rather than two rings: two rings cost half again the light band, for a
+control that only changes what you are looking at.
 
 `start` is also the reason the corner became a group. Destructive controls sit at the very end of a
 row, so a reach for the corner that overshoots lands on nothing rather than on Delete.

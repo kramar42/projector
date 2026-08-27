@@ -1965,6 +1965,23 @@ input:focus-visible + .checkbox {
   margin-left: auto;
 }
 
+/*
+ * The focus control, at the row's right edge with the count.
+ *
+ * The `auto` goes to whichever of the two comes first, because the count is
+ * conditional — `InboundRow` draws it only past one note — and a row with a single
+ * member would otherwise leave the bullseye sitting against the word. So the
+ * button claims the free space by default and gives it back when a count is there
+ * to claim it instead, which keeps the pair reading `⟨number⟩ ⟨focus⟩` either way.
+ */
+.facetrow.is-computed .facetrow-label > .icon-button {
+  margin-left: auto;
+}
+
+.facetrow.is-computed .facetrow-label > .quietcount + .icon-button {
+  margin-left: 0;
+}
+
 .kv dd {
   margin: 0;
   overflow-wrap: anywhere;

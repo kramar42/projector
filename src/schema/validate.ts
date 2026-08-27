@@ -98,6 +98,46 @@ export function validate(
       }
     }
 
+    /**
+     * One edge, stored twice.
+     *
+     * Two reference facets on one note naming the *same* note is the only
+     * relation problem a validator can judge without holding an opinion about how
+     * you file: whichever of the two you drop, nothing is lost, because the
+     * remaining one already records that this note points at that one. Every
+     * consequence follows from that — the canvas draws one shape under two edge
+     * colours, and the panel lists the note under both relations' derived rows,
+     * so the reader sees a structure that is really one fact wearing two hats.
+     *
+     * Deliberately *not* the check it grew out of, which was "a decomposition
+     * relation should not name a project note". That one is policy — it needs to
+     * know which of a vault's relations mean containment, and the note that being
+     * blocked by a whole project is perfectly reasonable is what kills it. The
+     * removed "this note has no project" warning below is the same lesson: a
+     * validator judges whether a *file* is coherent, and a view judges how you
+     * work.
+     *
+     * Facet-agnostic for the reason `vocabulary.test.ts` asserts: naming a
+     * relation here would be an axis one vault gets a check for and every other
+     * vault cannot have.
+     */
+    const named = new Map<string, string[]>();
+    for (const [facet, values] of Object.entries(rec.facets)) {
+      const def = facets[facet];
+      if (!def || !isRef(def)) continue;
+      for (const v of values) named.set(v, [...(named.get(v) ?? []), facet]);
+    }
+    for (const [target, via] of named) {
+      if (via.length < 2 || !notes.has(target)) continue;
+      const labels = via.map((f) => `"${f}"`).join(' and ');
+      at(
+        `facets.${via.join(', facets.')}`,
+        `${labels} both name "${target}" — one edge stored twice, so one of them ` +
+          `adds nothing the other does not already say`,
+        'warning',
+      );
+    }
+
 
     // --- links ---
     for (const l of rec.links) {

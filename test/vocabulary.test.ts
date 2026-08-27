@@ -246,3 +246,56 @@ test('a vault with notes, views and no vocabulary is a working vault', () => {
     cleanup();
   }
 });
+
+/**
+ * The other end of the one relation a vault cannot declare.
+ *
+ * `inverse:` is what a derived row is drawn from, and the rule everywhere else is
+ * that nothing computes an inverse it has no word for — a relation the vault did
+ * not name gets an editable row and no derived one, which is correct. `project`
+ * cannot play by that rule: its definition is not read from `facets.yaml` at all,
+ * so a vault had no way to name its other end, and the axis every vault shares
+ * was the one whose members nothing would list. The portfolio counted them in
+ * the same breath — `Notes: 5` beside an empty panel.
+ *
+ * So the default lives on the built-in. Both halves are asserted here because
+ * only one of them is obvious: that the word arrives without being declared, and
+ * that a vault may still change it — `inverse` is not structural, and the merge
+ * that protects `type` must not protect this.
+ */
+test('the built-in relation names its own other end, and a vault may rename it', () => {
+  const bare = loadFacets(join(tmpdir(), 'projector-no-such-facets-file.yaml'));
+  assert.equal(
+    bare.project!.inverse,
+    'Members',
+    'a vault that declares nothing still gets a word for the other end',
+  );
+
+  const root = mkdtempSync(join(tmpdir(), 'projector-inverse-'));
+  try {
+    const file = join(root, 'facets.yaml');
+
+    // Renaming it is a vault's business, like `label`.
+    writeFileSync(file, 'project:\n  inverse: Owners\n  expected: true\n', 'utf8');
+    const renamed = loadFacets(file);
+    assert.equal(renamed.project!.inverse, 'Owners');
+    assert.equal(renamed.project!.expected, true);
+    // …and it is still the built-in's shape underneath, which is the whole
+    // reason the definition is not read from the file.
+    assert.equal(renamed.project!.type, 'ref');
+    assert.equal(renamed.project!.builtin, true);
+    assert.deepEqual(
+      validateVocabulary(declaredFacets(file), 'facets.yaml'),
+      [],
+      'renaming the other end is not a structural change',
+    );
+
+    // Declaring the axis without mentioning the inverse keeps the default: the
+    // merge takes only the keys the file actually wrote, so `expected: true`
+    // must not erase it. That is the bug this half exists for.
+    writeFileSync(file, 'project:\n  expected: true\n', 'utf8');
+    assert.equal(loadFacets(file).project!.inverse, 'Members');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

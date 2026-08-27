@@ -70,6 +70,23 @@ export const HUES: readonly string[] = ['orange', 'green', 'purple', 'blue', 'pi
 export const NONE = '(none)';
 
 /**
+ * The computed axis that says where a note sits in the reference graph.
+ *
+ * `project` · `node` · `plain` — configuration, named-by-something, neither. It is
+ * the only axis of any kind whose value is a fact about a note's *position* rather
+ * than about the note, which is why `setFocus` singles it out: a focus is also a
+ * selection by position, so the two are one question asked twice and a focus is
+ * the more specific answer. Every other axis, computed or stored, survives a focus
+ * untouched, because "only what is due this week" is a preference and stays one.
+ *
+ * Here rather than in `index/query.ts`, where the axis itself lives, for the
+ * reason at the top of this file: `intents.ts` is imported by the browser and
+ * `query.ts` reaches `node:fs` through the facet loader. `COMPUTED` keys itself
+ * from this constant, so the name cannot drift from the axis.
+ */
+export const STRUCTURE_AXIS = 'type';
+
+/**
  * Filtering something *out*.
  *
  * A filter value is already not only a value: `(none)` is a refinement and

@@ -176,6 +176,42 @@ const GLYPH = {
     px: 15,
     path: 'M4.9 2.7L12.7 8L4.9 13.3Z',
   },
+  /**
+   * The fifth drawing: reshape the view around what this row lists.
+   *
+   * A bullseye, because the act is *focus* — the query's own word for it — and a
+   * target is the one mark a reader already reads as that. No character was
+   * considered: `◎` `⊙` `◉` are CJK-and-Miscellaneous-Symbols codepoints, so they
+   * fail the test the other four drawings were made to pass before their advances
+   * are even worth measuring.
+   *
+   * **A ring and a dot, not two rings**, and that is the whole of the design
+   * decision. Ink here is analytic rather than rasterised — perimeter × the shared
+   * 1.2 stroke, plus the area of anything filled, scaled by (15/16)² — a method
+   * checked against the two figures this table already publishes: it puts `start`
+   * at 31.1 against a measured 30.5 and `refresh` at 31.4 against 29.3–30.1, so it
+   * is good to a few per cent, which is all this decision needs.
+   *
+   * On that model two concentric *rings* cost 41.7 px² at r4.5/r1.8 and 45.7 at
+   * r4.8/r2.1 — half again the light band and most of the way to `trash`, for a
+   * navigational act. And the inner ring does not survive the shrinking that would
+   * fix it: at r1.0 the 1.2 stroke leaves a hole of radius 0.4, which is 0.75px
+   * across at this size and rasterises as a soft dot rather than a ring. So it is
+   * drawn as the dot it would become.
+   *
+   * r4.5 with a filled r1.05 centre: 32.9 px², against `+` at 31.6 and `edit` at
+   * 31.4 — the light band, where a control that only changes what you are looking
+   * at belongs. The ink box is 9.6×9.6, between `start`'s 9×11 and `edit`'s
+   * 10.5×10.5.
+   *
+   * Two arcs per circle rather than one: a 360° elliptical arc has identical start
+   * and end points, which is the one case the SVG spec says to render as nothing.
+   */
+  focus: {
+    px: 15,
+    path: 'M3.5 8A4.5 4.5 0 1 1 12.5 8A4.5 4.5 0 1 1 3.5 8',
+    fill: 'M6.95 8A1.05 1.05 0 1 1 9.05 8A1.05 1.05 0 1 1 6.95 8Z',
+  },
 } as const;
 
 export type GlyphName = keyof typeof GLYPH;

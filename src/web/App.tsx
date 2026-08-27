@@ -568,6 +568,18 @@ export function App() {
             meta={meta}
             onClose={() => setOpenNote(null)}
             onOpen={followCard}
+            /*
+             * The same reshape `gotoInverse` performs, from the row rather than
+             * from a keystroke — one `setFocus` call in both places, so the
+             * button and `g⇧⟨key⟩` cannot come to mean different things.
+             *
+             * No notification here, and that is the difference between the two.
+             * The keystroke announces itself because nothing on screen says a
+             * key was pressed; a click on a bullseye in the row it reshapes has
+             * already been seen. The rail's Focus row is the state either way,
+             * with its ✕ to undo.
+             */
+            onFocus={(id, via) => edit((spec) => setFocus(spec, { id, via, dir: 'in' }))}
             onUnsaved={(u) => {
               panelUnsaved.current = u;
             }}
@@ -934,6 +946,24 @@ function run(command: Command, s: KeyState): void {
        */
       const chips = navChips(axisRow(command.facet, true));
       if (chips.length) return chips[0]!.focus();
+      /*
+       * Nothing to walk to, said without walking anywhere.
+       *
+       * The panel draws a derived row whenever the axis names an inverse *and*
+       * something points along it, so with the panel open on this note those two
+       * conditions are jointly observable: a declared `inverse` and no row means
+       * the count is zero. Focusing on that reshaped the whole view to show one
+       * note and `no notes match`, which is a worse answer than a sentence.
+       *
+       * Both halves of the guard are load-bearing. Without `inverse` no row is
+       * ever drawn, so its absence says nothing and the traversal is the only way
+       * to see the other end — that is the case this fallback was written for.
+       * And without the panel there is no row to read, so nothing has been
+       * observed and the traversal is again the honest move.
+       */
+      if (def?.inverse && s.openNote === id) {
+        return s.notify({ tone: 'info', text: `nothing names this note on ${def.inverse}` });
+      }
       s.edit((spec) => setFocus(spec, { id, via: command.facet, dir: 'in' }));
       return s.notify({
         tone: 'info',

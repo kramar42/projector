@@ -25,7 +25,27 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * pushing it off the rail.
  */
 export const BUILTIN_FACETS: Facets = {
-  project: { label: 'Project', type: 'ref', values: [], open: true, single: false, builtin: true },
+  project: {
+    label: 'Project',
+    type: 'ref',
+    values: [],
+    open: true,
+    single: false,
+    builtin: true,
+    // The one thing a built-in relation cannot get from the file it is not read
+    // from. `inverse:` is what the panel draws a derived row from, and the rule
+    // is that nothing computes an inverse it has no word for — so `project` had
+    // no word, and could not be given one where every other relation gives
+    // itself one. A project note reported five members in the portfolio's
+    // `Notes` column and drew an empty panel, which is the same edge counted in
+    // one place and unnameable in the other.
+    //
+    // Not structural, so a vault may still rename it — `inverse: Owners` — the
+    // same as `label` or `hue`. What it may not do is take it away, and that is
+    // the right asymmetry: the relation exists either way, and a vault declining
+    // to name it does not stop notes pointing along it.
+    inverse: 'Members',
+  },
 };
 
 /**
@@ -44,6 +64,11 @@ export const BUILTIN_FACETS: Facets = {
  * value had picked *purple* anyway, neither of them from this declaration. A vault
  * may still set `hue`, and on a reference axis that colours its canvas edge; see
  * `src/web/hue.ts`, which is the one place any of this is decided.
+ *
+ * It *does* declare an `inverse`, for the opposite reason: `hue` has a sane
+ * absence and an inverse does not. A relation with no word for its other end
+ * draws no derived row, so leaving it out would make `project` the one relation
+ * whose other end is uncountable — while `projectRollups` counts it anyway.
  *
  * So a declaration of a built-in is allowed and merges *under* this list.
  * `pj check` errors only when one of these keys is the thing being set.

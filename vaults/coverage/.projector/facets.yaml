@@ -8,6 +8,10 @@
 # every one. Shape is the built-in's; only the expectation is set here.
 project:
   expected: true
+  # A key, so a derived row can draw its `g⇧R` hint — the one state an inbound
+  # row has that no keyless axis reaches. `p` is priority's; `r` is the seed's
+  # choice for the same reason.
+  key: r
 
 status:
   label: Status
@@ -81,6 +85,7 @@ parent:
   single: true
   hue: purple
   inverse: Children
+  key: a
 
 blocked_by:
   label: Blocked by

@@ -156,6 +156,13 @@ inside it, and the panel decides which facets to **offer** from the universe whi
 from the filtered pool. Collapse them and "38 filtered out" changes meaning. Worth revisiting only with
 the histogram semantics settled first.
 
+The one place they interact rather than compose is `type`, which is why `setFocus` empties a filter on
+it. `type` is the only axis whose value states a note's *position in the reference graph*, and a focus
+is a selection by position — so `type=[project]` under `focus via=project dir=in` deletes precisely
+what the traversal was asked to find, and the seeded **Projects** view shipped in exactly that state.
+`STRUCTURE_AXIS` in `schema/vocabulary.ts` is the name both ends read, keyed into `COMPUTED` so it
+cannot drift; every other filter, computed or stored, is a preference and survives untouched.
+
 **Universe vs. hits.** `universe` is what focus and search left; `hits` is that narrowed by the facet
 filter. The distinction is load-bearing in two places: the sidebar reports `universe − total` as
 "filtered out", so the number is exact rather than inferred from the histogram; and the facet panel
@@ -688,11 +695,11 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
 | `source.test.ts` | no source file hides a control byte from grep |
-| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows |
+| `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
-| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, and seeding a fresh vault not being the same act as adopting one |
+| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, seeding a fresh vault not being the same act as adopting one, and the shipped tutorial passing `pj check` with no warnings — every shape in it is a recommendation whether it was meant as one or not |
 | `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy |
-| `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query |
+| `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query; plus the one asymmetry it allows — the built-in relation carries its own `inverse`, a vault may rename it, and declaring the axis for any other reason does not erase it |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine
 and not whatever the notes happen to say today. `tsconfig` runs with `noUnusedLocals` and

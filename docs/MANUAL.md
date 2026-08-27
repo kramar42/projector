@@ -170,11 +170,16 @@ A facet declared **`type: ref`** holds note ids rather than labels. That one wor
 relation model — there is no separate notion of an edge, and no limit on how many relations a vault
 declares. The seeded ones:
 
-| | Meaning | Powers |
-|---|---|---|
-| `parent` | decomposition — this note is *part of* that one | the mind-map tree, roll-up progress |
-| `blocked_by` | this note cannot move until that one is finished | the `blocked` axis, "what does finishing this unblock" |
-| `project` | membership *(built in)* | config inheritance, the portfolio, transitive roll-up |
+| | Meaning | Points at | Powers |
+|---|---|---|---|
+| `parent` | decomposition — this note is *part of* that one | an ordinary note | the mind-map tree, roll-up progress |
+| `blocked_by` | this note cannot move until that one is finished | any note | the `blocked` axis, "what does finishing this unblock" |
+| `project` | membership *(built in)* | a project note | config inheritance, the portfolio, transitive roll-up |
+
+The **points at** column is guidance, not a constraint — nothing refuses a `parent` that names a
+project note. It is worth following anyway, because `project` already records that edge: a note whose
+`parent` and `project` name the *same* note has stored one fact twice, and the panel then draws it
+under two headings. See [Projects](#projects) for what each axis is for.
 
 There is no `edges:` block, because a relation was never a different kind of thing. Being a facet means
 a relation **filters, groups a board, reaches `(none)`, bulk-edits and drags** — none of which an edge
@@ -241,8 +246,28 @@ heading in the body. The body is free-form: nothing in it is configuration. It i
 progress bar, the first prose paragraph becomes the note-face excerpt, and the whole of it goes into
 FTS — but no heading or marker in it changes how the app behaves.
 
-`parent` is a separate relation: it means decomposition and carries no config. A note may have a
-project, a parent, both or neither.
+### `project` and `parent` are different questions
+
+A note may have a project, a parent, both or neither, and the two axes do not compete:
+
+| | `project` | `parent` |
+|---|---|---|
+| asks | who owns this | what is this a piece of |
+| shape | many-to-many, flat | single, a tree |
+| carries config | yes — repos, `jira`, `branch`, `instructions` | no |
+| other end | `Members` | `Children` |
+
+So the useful pattern is **both, naming different notes**: `project` names the project, `parent` names
+the neighbouring note this one is a piece of. A task that is one of four steps in a piece of work says
+`project: [platform]` and `parent: [the-piece-of-work]`, and each axis is then answering the question
+it is for.
+
+Pointing both at the same note is the shape to avoid. `parent: [platform], project: [platform]` adds
+nothing to the membership already recorded — and it makes the decomposition tree a copy of the
+portfolio tree, so the canvas draws one shape twice and the panel lists the note under both `Members`
+and `Children`. A project note is the root of its portfolio; it is not a step in anything.
+
+`parent` is otherwise a separate relation: it means decomposition and carries no config.
 
 ---
 
@@ -894,6 +919,25 @@ do anyway. The same door is also the last step of the `g f` walk, and `+ ref` be
 section down. `g` plus a *shifted* axis letter lands on that axis's `Children`-style row when the
 panel draws one, and reshapes the view when it does not.
 
+The two are not alternatives, they compose. A derived row lists at most three notes and then pages, so
+when the list is the thing you want — a project with sixty members — the row carries a **bullseye at
+its right edge, after the count**. It applies exactly the reshape the shifted letter falls back to:
+walk that relation inward from this note and show everything it reaches, as ordinary cards you can
+sort, group and filter. The rail's **Focus** row is where it shows, with a `✕` to undo it.
+
+**Setting a focus clears the `Type` filter, and only that one.** `Type` says where a note sits in the
+reference graph and a focus selects by where a note sits in the reference graph, so on **Projects** —
+whose filter is `type=[project]` — the two cancel: the members the walk exists to reach are exactly
+what the filter removes. Every other filter survives, because `priority=[now]` is a preference about
+notes rather than a claim about their position, and a focus is not a request to see things you have
+said you do not want to see. The `Type` chips come back with one click in the rail.
+
+**The shifted letter will not focus on nothing.** With the panel open on a note, a declared `inverse:`
+and no row drawn means nothing points along that relation — so `g ⇧A` on a note with no children says
+so and leaves the view alone, rather than reshaping it to show one note and *no notes match*. Where
+there is no panel to read, or the relation names no inverse, it still reshapes: nothing has been
+observed, and the traversal is the only way to see the other end.
+
 ## Choosing cards
 
 | Keys | What |
@@ -1131,14 +1175,20 @@ vocabulary, so the filter rail, the panel, the pickers and drag-and-drop reach i
 as everything else, and it filters, groups and drags exactly like an axis you declared.
 
 A vault may declare `project:` to set what is its to set — its label, its hue, whether triage asks for
-it — and `pj check` errors only if the declaration touches the shape:
+it, what its other end is called — and `pj check` errors only if the declaration touches the shape:
 
 ```yaml
 project:
   label: Portfolio      # fine
   expected: true        # fine
+  inverse: Owners       # fine — renames the derived row, `Members` by default
   type: label           # error: project is built in and its shape is fixed
 ```
+
+It is the one relation that brings its own `inverse`. Every other relation gets a derived row only if
+the vault names one, because nothing computes an inverse it has no word for — but a vault cannot name
+this one's, since the definition is not read from the file. So `Members` is the default rather than an
+omission, and renaming it is a vault's business like the label.
 
 # Theme
 

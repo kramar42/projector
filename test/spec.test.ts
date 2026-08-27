@@ -55,6 +55,43 @@ test('changing one focus field inherits the others, depth included', () => {
 });
 
 /**
+ * The one filter a focus cancels, and every filter it does not.
+ *
+ * `type` says where a note sits in the reference graph and a focus selects by
+ * where a note sits in the reference graph, so `type=[project]` plus "walk inward
+ * from this project" is a query that deletes what it was asked to find. On the
+ * seeded **Projects** view — which is `filter: type=[project]` — the focus control
+ * reshaped the query and still drew the one row, which reads as a dead button.
+ *
+ * Emptied rather than dropped: on a saved view an absent key inherits the file's
+ * value, so deleting it would bring `type: [project]` back on the next read. That
+ * is the same distinction `clearFilters` rests on, and the reason `focused.yaml`
+ * exists in the coverage vault.
+ */
+test('a focus clears a structural filter and leaves every other one alone', () => {
+  const spec = parseSpec({
+    'f.type': 'project',
+    'f.priority': 'now',
+    'f.status': 'active,-done',
+    q: 'keycloak',
+  });
+  const focused = setFocus(spec, { id: 'iam', via: 'project', dir: 'in' });
+
+  assert.deepEqual(focused.query.filter?.type, [], 'emptied, so a saved view cannot reinstate it');
+  assert.deepEqual(focused.query.filter?.priority, ['now'], 'a preference is not a position');
+  assert.deepEqual(focused.query.filter?.status, ['active', '-done'], 'negations included');
+  assert.equal(focused.query.q, 'keycloak', 'and the text search is not a filter on position');
+
+  // A spec with no structural filter is left byte-identical, so the key is never
+  // invented — `?f.type=` in every URL that has ever carried a focus is noise.
+  const plain = parseSpec({ 'f.priority': 'now' });
+  assert.deepEqual(
+    setFocus(plain, { id: 'iam', via: 'project', dir: 'in' }).query.filter,
+    { priority: ['now'] },
+  );
+});
+
+/**
  * A negation is a filter token like `(none)` and a range, so it needs nothing of
  * its own on the wire: it round-trips through the URL, a view file and `pj
  * --filter` because it is carried inside the value list rather than beside it.

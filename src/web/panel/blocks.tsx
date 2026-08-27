@@ -180,6 +180,7 @@ function InboundRow({
   means,
   notes,
   onOpen,
+  onFocus,
 }: {
   /** The axis this inverts, so `g⇧⟨key⟩` can find the row. */
   axis: string;
@@ -189,6 +190,8 @@ function InboundRow({
   means: string;
   notes: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
   onOpen: (id: string) => void;
+  /** Reshape the view around this list — see the bullseye below. */
+  onFocus: () => void;
 }) {
   const [all, setAll] = useState(false);
   if (!notes.length) return null;
@@ -228,6 +231,28 @@ function InboundRow({
             wraps, and a `.reflink` is `width: 100%` — so it took a line of its own
             under the whole list. */}
         {notes.length > 1 && <span className="quietcount facetrow-count">{notes.length}</span>}
+        {/*
+          The whole list, as a query.
+          
+          `INBOUND_CUTOFF` is 3, so a project with sixty-five members has a row
+          that can only ever show three of them and a `62 more` that pages rather
+          than filters. The traversal that answers it properly already exists —
+          `focus` walks a reference facet — and `g⇧⟨key⟩` reaches it, but only
+          when this row is *absent*: the keyboard prefers the drawn chips when
+          there are any, which is exactly the case a long list is. So the control
+          is here, where the length that makes it worth pressing is visible.
+
+          Last, and after the count, because the count has `margin-left: auto` —
+          so the pair travels to the row's right edge together and reads
+          `⟨number⟩ ⟨focus⟩`. The stylesheet hands the `auto` to whichever of
+          the two comes first, since a single-member row draws no count.
+        */}
+        <IconButton
+          glyph="focus"
+          title={`show every note that names this one on "${label}" — a view focus you can filter and group`}
+          aria-label={`focus the view on ${label}`}
+          onClick={onFocus}
+        />
       </span>
       <div className="facetrow-values">
         {/* Finished says `ok`; unfinished says nothing. Only a note in *your*
@@ -333,6 +358,7 @@ export function Refs({
   data,
   write,
   onOpen,
+  onFocus,
   lit = nothingLit,
 }: {
   defs: Meta['facets'];
@@ -340,6 +366,8 @@ export function Refs({
   data: NoteDetail;
   write: Pick<NoteWriter, 'facet'>;
   onOpen: (id: string) => void;
+  /** Which relation to walk inward from this note. The shell owns the query. */
+  onFocus: (via: string) => void;
   lit?: Lit;
 }) {
   const rels = Object.keys(defs).filter((n) => defs[n]!.type === 'ref');
@@ -378,6 +406,7 @@ export function Refs({
                 means={`notes naming this one through "${def.label}", not stored on this one`}
                 notes={naming}
                 onOpen={onOpen}
+                onFocus={() => onFocus(name)}
               />
             ) : null,
           ];

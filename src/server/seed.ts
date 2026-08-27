@@ -23,7 +23,8 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #   inverse: what the other end of a relation is called — \`parent\` is answered by
 #            children. Omit it and the relation gets an editable row and no
 #            derived one, which is right: nothing computes an inverse it has no
-#            word for
+#            word for. The built-in \`project\` brings its own, \`Members\`; declare
+#            \`project: { inverse: ... }\` to call it something else
 #   hue:     which family this axis draws in — orange green purple blue pink red
 #            yellow, or omitted for no colour at all. \`pj check\` rejects a family
 #            that is not one of those, rather than drawing it grey. A bucket may declare one
