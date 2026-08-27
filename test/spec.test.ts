@@ -7,6 +7,7 @@ import {
   clearFilters,
   clearFocus,
   patchIsEmpty,
+  setFocus,
   setGroupBy,
   setSearch,
   setShape,
@@ -34,6 +35,23 @@ test('a spec survives the round trip through URL parameters', () => {
   assert.deepEqual(spec.query.focus, { id: 'project-b', via: 'project', dir: 'in', depth: 2 });
   assert.deepEqual(spec.show, ['parent', 'project', 'tech']);
   assert.deepEqual(specToParams(spec), params);
+});
+
+/**
+ * `setFocus` merges with the previous focus so each rail control can send only
+ * the field it changed — which means "clear" must be sayable, not just omitted.
+ * `null` clears; `undefined` inherits.
+ */
+test('selecting "all" clears a set depth instead of inheriting it', () => {
+  const spec = parseSpec({ focus: 'iam', via: 'parent', dir: 'in', depth: '2' });
+  const cleared = setFocus(spec, { id: 'iam', depth: null });
+  assert.deepEqual(cleared.query.focus, { id: 'iam', via: 'parent', dir: 'in' });
+});
+
+test('changing one focus field inherits the others, depth included', () => {
+  const spec = parseSpec({ focus: 'iam', via: 'parent', dir: 'in', depth: '2' });
+  const retargeted = setFocus(spec, { id: 'iam', via: 'project' });
+  assert.deepEqual(retargeted.query.focus, { id: 'iam', via: 'project', dir: 'in', depth: 2 });
 });
 
 /**

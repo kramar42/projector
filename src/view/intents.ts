@@ -111,15 +111,19 @@ export function clearFilters(spec: ViewSpec): ViewSpec {
 
 export function setFocus(
   spec: ViewSpec,
-  focus: { id: string; via?: string; dir?: Dir; depth?: number },
+  focus: { id: string; via?: string; dir?: Dir; depth?: number | null },
 ): ViewSpec {
   const prev = spec.query.focus;
+  // An absent field inherits the previous focus; `null` explicitly clears it.
+  // Without that distinction "all" (no depth) could never win over a set depth,
+  // because the control cannot say "clear" except by omission.
+  const depth = focus.depth === null ? undefined : (focus.depth ?? prev?.depth);
   return replaceQuery(spec, {
     focus: {
       id: focus.id,
       ...(focus.via ?? prev?.via ? { via: focus.via ?? prev?.via } : {}),
       dir: focus.dir ?? prev?.dir ?? 'in',
-      ...(focus.depth ?? prev?.depth ? { depth: focus.depth ?? prev?.depth } : {}),
+      ...(depth ? { depth } : {}),
     },
   });
 }

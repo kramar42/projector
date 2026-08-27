@@ -127,7 +127,8 @@ export function FocusSection({
             title="how many hops"
             onChange={(e) =>
               edit((spec) =>
-                setFocus(spec, { id: focus!.id, depth: Number(e.target.value) || undefined }),
+                // "all" must clear the stored depth, not inherit it — null, not undefined.
+                setFocus(spec, { id: focus!.id, depth: Number(e.target.value) || null }),
               )
             }
           >
