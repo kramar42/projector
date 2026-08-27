@@ -925,6 +925,14 @@ its right edge, after the count**. It applies exactly the reshape the shifted le
 walk that relation inward from this note and show everything it reaches, as ordinary cards you can
 sort, group and filter. The rail's **Focus** row is where it shows, with a `✕` to undo it.
 
+**`⇧⟨axis⟩` without the `g` is that same reshape in one keystroke** — `⇧A` for children, `⇧R` for
+members, on a vocabulary that spends those letters that way. Where `g ⇧A` prefers the drawn list when
+there is one, this always makes it the view. It costs no reserved letter: shift already means *the
+other end* behind `g`, and a bare axis letter is already that axis's namespace — `p3` sets priority's
+third value and `pp` opens its control, so declaring `key: p` claims `⇧P` along with them. The
+collision question answers itself, because the only bare shifted letters the map binds are `G H L J K
+U`, and each is the shifted form of a letter no vault may declare.
+
 **Setting a focus clears the `Type` filter, and only that one.** `Type` says where a note sits in the
 reference graph and a focus selects by where a note sits in the reference graph, so on **Projects** —
 whose filter is `type=[project]` — the two cancel: the members the walk exists to reach are exactly

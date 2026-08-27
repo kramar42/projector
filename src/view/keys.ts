@@ -142,6 +142,29 @@ export type Command =
    */
   | { kind: 'gotoInverse'; facet: string }
   /**
+   * The other end as a *query*, in one keystroke: bare `⇧⟨axis key⟩`.
+   *
+   * `gotoInverse` prefers the drawn row when there is one, which is right — three
+   * children on screen do not need the view reshaped around them. But that leaves
+   * the reshape reachable only when the row is *absent*, so the long lists, the
+   * ones actually worth a query, were the ones the keyboard could not ask for.
+   * This is the unconditional half of the same act.
+   *
+   * **Shifted and bare, and neither is arbitrary.** Shift already means *the
+   * other end* on this map — `g⟨key⟩` walks out along a relation and `g⇧⟨key⟩`
+   * comes back — so this borrows the established word rather than adding a second
+   * one. And a bare axis letter is already a namespace: `p3` sets priority's third
+   * value and `pp` opens its control, so a vault declaring `key: p` already owns
+   * that letter and gains `⇧P` with it, needing no new leader and no new entry in
+   * `RESERVED` — which the comment there argues hard against spending.
+   *
+   * It cannot collide, and that is checkable rather than hopeful: the bare
+   * uppercase letters `start` binds are `G H L J K U`, every one the shifted form
+   * of a letter already in `RESERVED`. A legal `key:` is a–z and not reserved, so
+   * its shifted form is unbound by construction.
+   */
+  | { kind: 'focusInverse'; facet: string }
+  /**
    * A region of the open note: its links, its facet rows, its body, its raw
    * frontmatter.
    *
@@ -614,7 +637,17 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
    * the bottom the thing that decides: a declaration that would reach a letter
    * already handled above is refused by `pj check`, so falling through to here is
    * proof the letter is the vault's.
+   *
+   * Shifted first, and only because it has to be read from the same table: an
+   * axis key is stored lower-cased, so `⇧R` has to fold before it can be looked
+   * up, and folding first would make `r` and `⇧R` the same stroke. The switch
+   * above has already claimed every shifted letter the map wants, so anything
+   * arriving here shifted is the vault's too — see `focusInverse`.
    */
+  if (shiftKey) {
+    const inverted = ctx.facetKeys[key.toLowerCase()];
+    return inverted ? emit({ kind: 'focusInverse', facet: inverted }) : nothing;
+  }
   const facet = ctx.facetKeys[key];
   if (facet) {
     return emit(null, { kind: 'axis', facet, fallback: { kind: 'openAxisControl', facet } });
@@ -667,6 +700,10 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
     rows: [
       { keys: 'g ⟨axis⟩', does: 'the note it names there' },
       { keys: 'g ⇧⟨axis⟩', does: 'what names this note there' },
+      // Beside `g ⇧⟨axis⟩` because they are the same question, and the wording has
+      // to carry the difference: that one reaches the drawn list when there is
+      // one, this one always makes it the view.
+      { keys: '⇧⟨axis⟩', does: 'show everything that names this note there' },
       { keys: 'g f', does: 'its facet rows' },
       { keys: 'g ⇧F', does: 'add an axis it lacks' },
       { keys: 'g l', does: 'its links' },

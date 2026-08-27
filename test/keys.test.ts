@@ -574,9 +574,43 @@ test('the stack is capped, because git is what remembers Tuesday', () => {
  */
 test('g plus an axis key follows that axis, and shifted follows it back', () => {
   assert.deepEqual(commandOf(['g', 'p']), { kind: 'gotoRef', facet: 'priority' });
-  assert.deepEqual(commandOf([stroke('P')], ctx()), null, 'only behind the prefix');
   assert.deepEqual(commandOf(['g', stroke('P')]), { kind: 'gotoInverse', facet: 'priority' });
   assert.deepEqual(commandOf(['g', 'l']), { kind: 'gotoRegion', region: 'links' });
+});
+
+/**
+ * The shifted axis letter, without the prefix.
+ *
+ * This line used to assert `null` — "only behind the prefix" — and it was pinning
+ * an accident rather than a decision. `g⇧⟨key⟩` prefers the drawn row when the
+ * panel has one, so the *reshape* was reachable only when the row was absent, and
+ * a project's sixty members are exactly the case that draws a row. The one list
+ * worth turning into a query was the one the keyboard could not ask for.
+ *
+ * The stroke was free by construction, which is the whole argument for spending
+ * it here: the bare uppercase letters `start` binds are `G H L J K U`, each the
+ * shifted form of a letter already in `RESERVED`, so no legal `key:` can have a
+ * shifted form the map has taken. Asserted below rather than reasoned about, on
+ * both sides — an axis letter reaches the command, and a letter no vault declared
+ * still reaches nothing.
+ */
+test('a shifted axis letter alone makes the other end the view', () => {
+  assert.deepEqual(commandOf([stroke('P')], ctx()), { kind: 'focusInverse', facet: 'priority' });
+
+  // Folded to find the axis, but not folded *before* deciding: `p` and `⇧P` are
+  // two strokes with two meanings, and one table serves both. `p` alone is still a
+  // prefix awaiting a digit, so it is the double-tap that reaches the control —
+  // which is the namespace this borrows a letter from.
+  assert.deepEqual(commandOf(['p'], ctx()), null, 'a prefix, not a command');
+  assert.deepEqual(commandOf(['p', 'p'], ctx()), { kind: 'openAxisControl', facet: 'priority' });
+
+  // A letter no vault declared stays unbound rather than falling through to
+  // something. `z` is not in `RESERVED` and not an axis key here.
+  assert.deepEqual(commandOf([stroke('Z')], ctx()), null);
+
+  // And the map's own shifted letters are unreachable this way, because the
+  // switch claims them first — `U` is redo, not an axis whose key is `u`.
+  assert.deepEqual(commandOf([stroke('U')], ctx()), { kind: 'redo' });
 });
 
 /**

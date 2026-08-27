@@ -695,9 +695,53 @@ function facetKeysOf(meta: Meta | null): Record<string, string> {
  * `data-nav` rather than the styling class, so a chip can be restyled without
  * silently leaving the keyboard behind.
  */
+/**
+ * Is this axis's other end observably empty?
+ *
+ * The panel draws a derived row whenever the axis names an `inverse:` *and*
+ * something points along it. So with the panel open on this note the two are
+ * jointly observable, and a declared inverse with no row drawn means the count is
+ * zero — without asking the server a question it has already answered on screen.
+ *
+ * Every clause is load-bearing, which is why this is a function rather than a
+ * condition written twice. No `inverse` means no row is ever drawn, so its absence
+ * says nothing; no panel means there is no row to read; and either way the honest
+ * move is to walk the relation rather than to claim it is empty.
+ *
+ * Shared by `gotoInverse` and `focusInverse` so the two cannot come to disagree
+ * about what "nothing there" means — they already share the reshape.
+ */
+function emptyOtherEnd(
+  s: { facets: Meta['facets']; openNote: string | null },
+  id: string,
+  facet: string,
+): boolean {
+  if (s.openNote !== id) return false;
+  if (!s.facets[facet]?.inverse) return false;
+  return rowChips(facet, true).length === 0;
+}
+
 function navChips(within?: Element | null): HTMLElement[] {
   const root = within ?? document.querySelector('.panel');
   return root ? [...root.querySelectorAll<HTMLElement>('[data-nav]')] : [];
+}
+
+/**
+ * The chips of one axis row, and none when that row is not drawn.
+ *
+ * `navChips` widens an absent argument to the whole panel, which is right for its
+ * other caller and wrong for every question of the form *does this axis have a
+ * drawn list*: `navChips(axisRow(f, true))` on a note with no derived row returned
+ * every `[data-nav]` in the panel, so `g⇧⟨key⟩` landed on the first link instead
+ * of falling through to the traversal, and `focusInverse`'s empty-set guard could
+ * not fire at all while the panel held a single link.
+ *
+ * `??` is what made it silent — an absent row and a row with no chips are the same
+ * value, and only one of them means "no list here".
+ */
+function rowChips(facet: string, inverse: boolean): HTMLElement[] {
+  const row = axisRow(facet, inverse);
+  return row ? navChips(row) : [];
 }
 
 /**
@@ -899,7 +943,7 @@ function run(command: Command, s: KeyState): void {
        * Clicking the chip rather than extracting an id from it: the chip already
        * knows which note it is and already goes there through the trail.
        */
-      const chips = navChips(axisRow(command.facet, false));
+      const chips = rowChips(command.facet, false);
       if (chips.length === 1) return chips[0]!.click();
       if (chips.length > 1) return chips[0]!.focus();
 
@@ -944,7 +988,7 @@ function run(command: Command, s: KeyState): void {
        * wins when it exists, and the traversal is what happens when there is no
        * panel to read.
        */
-      const chips = navChips(axisRow(command.facet, true));
+      const chips = rowChips(command.facet, true);
       if (chips.length) return chips[0]!.focus();
       /*
        * Nothing to walk to, said without walking anywhere.
@@ -961,8 +1005,36 @@ function run(command: Command, s: KeyState): void {
        * And without the panel there is no row to read, so nothing has been
        * observed and the traversal is again the honest move.
        */
-      if (def?.inverse && s.openNote === id) {
-        return s.notify({ tone: 'info', text: `nothing names this note on ${def.inverse}` });
+      if (emptyOtherEnd(s, id, command.facet)) {
+        return s.notify({ tone: 'info', text: `nothing names this note on ${def!.inverse}` });
+      }
+      s.edit((spec) => setFocus(spec, { id, via: command.facet, dir: 'in' }));
+      return s.notify({
+        tone: 'info',
+        text: `showing what names this note on ${def?.label ?? command.facet}`,
+      });
+    }
+
+    /**
+     * The same reshape, unconditionally — bare `⇧⟨axis key⟩`.
+     *
+     * `gotoInverse` prefers the drawn row, which is why this exists: the row is
+     * capped at three, so the lists worth turning into a query were exactly the
+     * ones its preference kept the keyboard away from. One keystroke, and the same
+     * `setFocus` call the row's bullseye makes — three routes to this act now, and
+     * one line of code performing it.
+     *
+     * It keeps the empty-set guard rather than dropping it for being terse. A
+     * shortcut that reshapes the view to show one note and `no notes match` is not
+     * faster than one that says nothing is there; it is the same wrong answer
+     * sooner.
+     */
+    case 'focusInverse': {
+      const id = cursor.id;
+      if (!id) return;
+      const def = s.facets[command.facet];
+      if (emptyOtherEnd(s, id, command.facet)) {
+        return s.notify({ tone: 'info', text: `nothing names this note on ${def!.inverse}` });
       }
       s.edit((spec) => setFocus(spec, { id, via: command.facet, dir: 'in' }));
       return s.notify({
