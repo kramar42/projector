@@ -1,6 +1,6 @@
 ---
 name: pj-setup
-description: Set up a projector vault's channels and credentials — ask which sources this vault should sweep, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; those are the pj-capture and pj-triage skills.
+description: Set up a projector vault's channels and credentials — ask which sources this vault should sweep, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; the intake poller files, and pj-triage sorts.
 ---
 
 # Setup
@@ -64,7 +64,7 @@ overwrite** an existing file — if one is there, edit it rather than re-running
 
 **Never type a credential into the file yourself, and never ask the user to paste one to you.** Tell
 them which keys to fill in and where the file is; they edit it. A token pasted into a conversation is
-a token in a transcript. The same rule as `pj-capture`: a secret's value never enters a note, and it
+a token in a transcript. The rule everywhere here: a secret's value never enters a note, and it
 never enters this chat either.
 
 For Jira, what they need is an **Atlassian API token**, not their password —

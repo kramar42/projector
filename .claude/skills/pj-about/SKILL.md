@@ -136,7 +136,8 @@ refilling the inbox.
   person, set `waiting_on`. Both surface on the `blocked` axis, under their own facet names, without
   being stored twice.
 - **`archived` is how you retire a captured note**, not deletion. Deleting it destroys the
-  `source_fingerprint` too, so the next `/pj-capture` sweep creates it again.
+  `source_fingerprint` too, so the next sweep creates it again — unless the delete recorded it as
+  declined, which deleting a swept note now does.
 - **Duplicates are merged, not deleted.** `pj merge <id>... --into <id>` when two notes turn out to be
   one thing: the survivor keeps its own facets, and the rest contribute their body (one `##` section
   each, titled with the note's title), their links, their references, and their fingerprints — which

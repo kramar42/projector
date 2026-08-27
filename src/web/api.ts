@@ -280,3 +280,36 @@ export function onDataChange(
   });
   return () => es.close();
 }
+
+/**
+ * Something a sweep judged worth interrupting for.
+ *
+ * A separate stream from `onDataChange` because the two mean different things: a
+ * change refetches the board, this interrupts a person, and a client that treated
+ * them alike would notify on every write or on none.
+ *
+ * Local delivery, entirely. The server tells a tab that is already open and the
+ * tab asks the operating system — nothing leaves the machine, which is why this
+ * does not engage C2 at all: there is no service to write to.
+ */
+export function onAttention(fn: (notes: { id: string; title: string }[]) => void): () => void {
+  const es = new EventSource('/api/events');
+  es.addEventListener('attention', (e) => {
+    try {
+      const data = JSON.parse((e as MessageEvent<string>).data) as {
+        vault?: string;
+        ids?: string[];
+        titles?: string[];
+      };
+      const mine = currentVault();
+      if (data.vault && mine && data.vault !== mine) return;
+      const ids = data.ids ?? [];
+      const titles = data.titles ?? [];
+      if (!ids.length) return;
+      fn(ids.map((id, i) => ({ id, title: titles[i] ?? id })));
+    } catch {
+      /* an unreadable payload is not worth interrupting anyone about */
+    }
+  });
+  return () => es.close();
+}

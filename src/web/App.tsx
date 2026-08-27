@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
-import { ApiError, api } from './api.ts';
+import { ApiError, api, onAttention } from './api.ts';
 import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
@@ -286,6 +286,34 @@ export function App() {
     },
     [cursor.jump, setOpenNote],
   );
+
+  /**
+   * Interrupting, when a sweep found something that could not wait.
+   *
+   * Permission is asked on the first one rather than on load: a page that demands
+   * notification rights before it has anything to say is the page everybody
+   * denies. By the time this fires there is a specific thing to be told about, and
+   * a refusal costs nothing — the note is on the board either way, which is what
+   * makes this an enhancement rather than a delivery mechanism.
+   *
+   * Clicking one opens the note it names.
+   */
+  useEffect(() => {
+    if (typeof Notification === 'undefined') return;
+    return onAttention((notes) => {
+      const raise = () => {
+        for (const n of notes.slice(0, 3)) {
+          const seen = new Notification(n.title, { body: 'Needs you now — from a sweep', tag: n.id });
+          seen.onclick = () => {
+            window.focus();
+            setOpenNote(n.id);
+          };
+        }
+      };
+      if (Notification.permission === 'granted') raise();
+      else if (Notification.permission === 'default') void Notification.requestPermission().then((p) => p === 'granted' && raise());
+    });
+  }, [setOpenNote]);
 
   const loadMeta = useCallback(() => {
     api.meta().then(

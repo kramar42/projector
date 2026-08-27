@@ -10,7 +10,7 @@ import { fromWorkspacePath, slugBranch } from '../agent/workspaceName.ts';
  * Every function here answers with a *reason*, never a score: a session in a
  * project's repo is a fact, a title sharing four words with a note is a fact, and
  * neither is a verdict. Turning facts into "link it to that note" is a judgement
- * the `/capture` skill makes, out loud, on evidence it can quote.
+ * the classifier makes, out loud, on evidence it can quote.
  *
  * Deliberately not a similarity model. The one thing that would make this
  * unusable is a confident wrong answer — a session linked to the wrong note puts

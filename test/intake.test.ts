@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
-import { closeIntakeDb, commitWatermark, recordPending, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
+import { closeIntakeDb, commitWatermark, recordPending, rescues, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
@@ -155,15 +155,17 @@ test('a truncated run holds its cursor, so nothing behind it is skipped', async 
   }
 });
 
-test('a channel pj cannot reach still reports its cursor', async () => {
+test('a channel with no tools named is not fetched, and still reports its cursor', async () => {
   const root = vault({ a: card('a') });
   try {
     commitWatermark(root, 'slack', '1755700000.1');
     const s = await sweep(root, { only: ['slack', 'gmail'] });
     const slack = s.reports.find((r) => r.channel === 'slack')!;
+    // The default, and the safe one: Slack and Gmail are the shared channels C2
+    // names, so a vault that has not named the tools gets no agent at all.
     assert.equal(slack.fetched, false);
     assert.equal(slack.cursor, '1755700000.1');
-    assert.match(slack.reason ?? '', /MCP/);
+    assert.match(slack.reason ?? '', /mcp\.slack/);
     // Not fetching is not an error, and it never advances anything.
     assert.equal(slack.nextCursor, null);
   } finally {
@@ -415,7 +417,7 @@ test('a process without a turn to work on is waiting, and none at all is closed'
 });
 
 /**
- * `pj intake status --json` used to be accepted and ignored, so pj-capture read
+ * `pj intake status --json` used to be accepted and ignored, so the sweep's caller read
  * the cursor it fetches Slack and Gmail from out of a padded table. The renderer
  * reads this now, which is what keeps the two from disagreeing.
  */
@@ -1338,6 +1340,129 @@ test('search reaches the reason, not only the title', () => {
 
     // And the total stays the whole pile, because it is what the footer counts.
     assert.equal(suppressions(root, { q: 'routine' }).total, 2);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The spike: fetching what `pj` has no credential for, learning from what was
+ * decided, and interrupting for the little that cannot wait.
+ */
+
+test('a rescue is kept after the decline it corrects is gone', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:1', reason: 'routine commit', title: 'tidy', by: 'model' });
+    assert.equal(unsuppress(root, 'git:1'), true);
+
+    // The suppression is gone and the correction is not. This is the signal that
+    // says the judgement was wrong the expensive way, and it existed nowhere
+    // before — the row it corrects was simply deleted.
+    assert.equal(suppressions(root).rows.length, 0);
+    const back = rescues(root);
+    assert.equal(back.length, 1);
+    assert.equal(back[0]!.fingerprint, 'git:1');
+    assert.equal(back[0]!.reason, 'routine commit', 'and it remembers what it was declined for');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rescues, declines and kept notes all reach the prompt, rescues first', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:1', reason: 'looked routine', title: 'the one it got wrong' });
+    unsuppress(root, 'git:1');
+    suppress(root, { fingerprint: 'git:2', reason: 'genuinely noise', title: 'the one it got right' });
+
+    let seen = '';
+    await classify(root, [candidate('git:9', 'x')], async (system) => {
+      seen = system;
+      return '[]';
+    });
+
+    assert.match(seen, /the one it got wrong/, 'the rescue is shown');
+    assert.match(seen, /the one it got right/, 'and so is the decline that stood');
+    assert.ok(
+      seen.indexOf('RESCUED') < seen.indexOf('  NO   '),
+      'the rescue leads: getting one of those wrong costs the item',
+    );
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the calibration block is absent when nothing has been decided', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    let seen = '';
+    await classify(root, [candidate('git:1', 'x')], async (system) => {
+      seen = system;
+      return '[]';
+    });
+    // A heading with nothing under it teaches a model that this reader decides
+    // nothing, which is worse than saying nothing at all.
+    assert.doesNotMatch(seen, /What this reader has actually decided/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('interrupting is a second, higher bar than deserving a note', async () => {
+  const root = vault({ a: card('a') });
+  const judge: Ask = async () =>
+    '[{"fp":"git:1","decision":"keep","reason":"a","title":"Ordinary","notify":false},' +
+    ' {"fp":"git:2","decision":"keep","reason":"b","title":"Someone is blocked","notify":true}]';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b')], judge);
+    const out = materialise(root, 'git', res!.keep);
+    assert.equal(out.created.length, 2, 'both deserve a note');
+    assert.deepEqual(
+      out.notify.map((n) => n.title),
+      ['Someone is blocked'],
+      'and only one is worth interrupting for',
+    );
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a candidate that was not written cannot interrupt anyone', async () => {
+  const root = vault({ a: card('a') });
+  const judge: Ask = async () =>
+    '[{"fp":"git:1","decision":"keep","reason":"a","title":"Urgent","notify":true}]';
+  try {
+    const kept = (await classify(root, [candidate('git:1', 'a')], judge))!.keep;
+    assert.equal(materialise(root, 'git', kept).notify.length, 1);
+
+    // Second time it is a duplicate and nothing is written — so nothing fires.
+    // Being interrupted about something that turned out to already exist is the
+    // fastest way to have notifications turned off.
+    assert.equal(materialise(root, 'git', kept).notify.length, 0);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an MCP channel with no tools named calls no agent at all', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    // The C2 guard, stated as a test: Slack and Gmail are the shared channels the
+    // principle names, so the default has to be that no agent is launched into
+    // them — not that one is launched with tools we hope are read-only.
+    writeFileSync(settingsPath(root), 'channels: [slack]\n', 'utf8');
+    const { reports } = await sweep(root, { only: ['slack'] });
+    const slack = reports[0]!;
+    assert.equal(slack.fetched, false);
+    assert.equal(slack.nextCursor, null);
+    assert.match(slack.reason ?? '', /mcp\.slack/);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

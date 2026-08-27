@@ -208,7 +208,7 @@ export interface Advanced {
  *
  * The counts and the cursor were both `pj`'s to begin with — the agent was
  * copying them out of one process and typing them into the next, and
- * `pj-capture` carried a paragraph explaining the hand-carry. `captured` is the
+ * the capture skill carried a paragraph explaining the hand-carry. `captured` is the
  * exception and stays a caller's argument: capture happens between the sweep and
  * this call, through `pj add` and `pj link`, and nothing attributes those back to
  * a channel.

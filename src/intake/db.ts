@@ -70,6 +70,25 @@ CREATE TABLE IF NOT EXISTS suppressed (
   -- which, and neither can a reader deciding how much to trust an empty board.
   decided_by  TEXT NOT NULL DEFAULT 'person'
 );
+
+-- A decline somebody took back.
+--
+-- The most valuable row in this file, and the one that had nowhere to go: an
+-- un-suppression means the judgement was wrong in the expensive direction, and
+-- that is worth more than any number of declines it got right. A dismissal only
+-- says the reader agreed; this says they did not.
+--
+-- Kept when the suppression row is deleted, which is the point -- the pile is
+-- where a wrong call is corrected, and the correction is the thing to learn from.
+CREATE TABLE IF NOT EXISTS rescued (
+  fingerprint TEXT PRIMARY KEY,
+  channel     TEXT,
+  title       TEXT,
+  -- Why it had been declined. The example is the pairing: this text, and the
+  -- fact that a person disagreed with it.
+  reason      TEXT NOT NULL,
+  at          TEXT NOT NULL
+);
 `;
 
 /**
@@ -357,11 +376,42 @@ export function suppress(
  * readable, or raising a threshold is an act of faith.
  */
 export function unsuppress(dataRoot: string, fingerprint: string): boolean {
-  return (
-    (openIntakeDb(dataRoot)
-      .prepare('DELETE FROM suppressed WHERE fingerprint = ?')
-      .run(fingerprint).changes as number) > 0
-  );
+  const conn = openIntakeDb(dataRoot);
+  const row = conn
+    .prepare('SELECT fingerprint, channel, title, reason FROM suppressed WHERE fingerprint = ?')
+    .get(fingerprint) as Suppression | undefined;
+  if (!row) return false;
+
+  // Recorded before the delete, and kept after it. A rescue is the one signal
+  // that says the judgement was wrong the expensive way, and it existed nowhere
+  // until now — the row it corrects was simply removed.
+  conn
+    .prepare(
+      `INSERT INTO rescued (fingerprint, channel, title, reason, at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(fingerprint) DO UPDATE SET
+         reason = excluded.reason, at = excluded.at`,
+    )
+    .run(row.fingerprint, row.channel ?? null, row.title ?? null, row.reason, new Date().toISOString());
+  conn.prepare('DELETE FROM suppressed WHERE fingerprint = ?').run(fingerprint);
+  return true;
+}
+
+export interface Rescue {
+  fingerprint: string;
+  channel: string | null;
+  title: string | null;
+  reason: string;
+  at: string;
+}
+
+/** Declines somebody took back, newest first. The corpus worth learning from. */
+export function rescues(dataRoot: string, limit = 12): Rescue[] {
+  return openIntakeDb(dataRoot)
+    .prepare(
+      `SELECT fingerprint, channel, title, reason, at FROM rescued ORDER BY at DESC LIMIT ?`,
+    )
+    .all(limit) as unknown as Rescue[];
 }
 
 export interface SuppressionQuery {

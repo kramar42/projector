@@ -67,6 +67,16 @@ export interface Settings {
    * "write everything down and let me sort it".
    */
   classify: { enabled: boolean; command: string; model: string };
+  /**
+   * Which MCP tools the agent-fetched channels may call, per channel.
+   *
+   * Empty is the default and means the channel is not fetched — which is exactly
+   * what it did before it could be. Slack and Gmail are the shared channels C2
+   * names, so an agent loose in them could post or send; nothing here can tell a
+   * read tool from a write one by its name, so nothing guesses. The vault lists
+   * the tools and Claude Code refuses everything else.
+   */
+  mcp: { slack: string[]; gmail: string[] };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -85,6 +95,7 @@ interface Raw {
   workspaces?: unknown;
   poll?: { enabled?: unknown; every?: unknown };
   classify?: { enabled?: unknown; command?: unknown; model?: unknown };
+  mcp?: { slack?: unknown; gmail?: unknown };
 }
 
 const str = (v: unknown): string | null => {
@@ -187,6 +198,10 @@ export function settingsFor(root: string): Settings {
       // Small on purpose: the question is narrow and the run is on a timer, so
       // the cost of the judgement should not exceed the cost of reading it.
       model: str(raw.classify?.model) ?? 'haiku',
+    },
+    mcp: {
+      slack: list(raw.mcp?.slack) ?? [],
+      gmail: list(raw.mcp?.gmail) ?? [],
     },
   };
 

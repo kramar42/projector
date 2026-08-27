@@ -37,6 +37,8 @@ export interface Materialised {
   skipped: number;
   /** Notes created carrying `extends`, i.e. waiting to be merged into a target. */
   extending: number;
+  /** The ones the classifier judged worth interrupting for: `{id, title}`. */
+  notify: { id: string; title: string }[];
 }
 
 /**
@@ -66,7 +68,7 @@ export function materialise(
   const canTagSource =
     Boolean(defs.source) && (defs.source?.open || (defs.source?.values ?? []).includes(channel));
 
-  const out: Materialised = { created: [], skipped: 0, extending: 0 };
+  const out: Materialised = { created: [], skipped: 0, extending: 0, notify: [] };
   for (const { candidate: c, verdict: v } of kept) {
     if (alreadyAnswered(c)) {
       out.skipped++;
@@ -91,6 +93,10 @@ export function materialise(
     else {
       out.created.push(res.id);
       if (v.target) out.extending++;
+      // Only a note that was actually written. Interrupting somebody about
+      // something that turned out to be a duplicate is the fastest way to have
+      // notifications turned off.
+      if (v.notify) out.notify.push({ id: res.id, title: v.title ?? c.title });
     }
   }
   return out;

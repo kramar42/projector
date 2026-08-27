@@ -1,6 +1,6 @@
 ---
 name: pj-triage
-description: Triage projector notes that are missing a project, priority or status — propose values for each, present them for approval, and apply only what is approved. Use when asked to triage, sort out, clean up or organise notes, when asked "what needs sorting", or after an import has left a pile of untriaged notes. Do not use for creating new notes from external sources; that is the pj-capture skill.
+description: Triage projector notes that are missing a project, priority or status — propose values for each, present them for approval, and apply only what is approved. Use when asked to triage, sort out, clean up or organise notes, when asked "what needs sorting", or after an import has left a pile of untriaged notes. Do not use for creating new notes from external sources; the intake poller does that on its own.
 ---
 
 # Triage

@@ -320,46 +320,24 @@ needs to be part of two things.
   `open` press any focused button in the panel. Neither is worth deciding while the buttons are also
   reachable by `!` and by mouse.
 
-- **Calibration — the judgement learning from the judgements already made.** The classifier now
-  decides which candidates deserve a note, and every decision it gets wrong is corrected by hand and
-  then forgotten. Suppressions carry a reason and notes carry their fingerprint, so the corpus finally
-  exists: the last N kept and the last N declined, rendered into the prompt as examples, is the whole
-  mechanism — and the version worth copying adds the instruction that a candidate resembling a declined
-  one is declined *even when its wording looks urgent*.
+- **C2's summary column still reads as a ban on notifications.** The rule is *nothing is written where
+  somebody else reads* — Jira, GitHub, Trello and Slack are exactly the shared ones, and a sink only you
+  read is not among them. The detail column has always said that; the summary says "everything external
+  is read-only", which reads as forbidding the local notification that shipped and the private push that
+  would be fine. Reword it when something actually pushes: today nothing does, so the wording is
+  misleading rather than wrong.
 
-  The signal worth weighting is the rescue. A dismissal only says the model agreed with you; a
-  `pj intake unsuppress` says it was wrong in the expensive direction, and there is currently nothing
-  that notices one happened. That is the piece to build first — a rescued fingerprint is worth more
-  than fifty confirmations.
+- **Nothing re-judges a note that was already filed.** The pass writes a card once, on the way in. A
+  vault holding cards from an earlier, thinner version of it keeps them — and deleting one to force a
+  re-sweep now records the decline, so it does not come back either. `pj intake rejudge`, running the
+  pass over notes still carrying `intake: unjudged` and rewriting title, body and facets in place, is
+  the migration path and the way to benefit from a changed `classify.md` without emptying the queue by
+  hand.
 
-  Two mistakes not to inherit from the tool this came from: it shuffles its examples, so the prompt
-  differs run to run and a zero temperature buys nothing reproducible; and it stamps two synthetic
-  scores on them, teaching a model two buckets rather than an ordering.
-
-- **How a candidate says which note it wants to extend.** `Evidence.matches` already names the notes a
-  candidate is probably more work on, and `pj merge` already does the accept — it drops the reference
-  that pointed at the target, keeps the target's own facets, and absorbs the candidate's fingerprint, so
-  nothing has to be built for the operation itself.
-
-  What has no answer is which axis a materialised candidate should carry to say so. `parent` is the only
-  single-valued reference every vault has, and it means "part of", which is not what a candidate means —
-  and using it would put the candidate into the membership graph and the rollups for as long as it sat
-  unjudged. A dedicated axis would be vault vocabulary for something the app writes, which is the
-  argument that made `intake` built in. Left open deliberately rather than guessed at, since the fixture
-  would otherwise teach whichever answer was convenient.
-
-- **Telling you without you looking.** A local notification — the browser's, from the tab already open,
-  or the OS's from the server — is the version that costs nothing and collides with nothing. A push to
-  a private Telegram bot is also fine and is a **rewording of C2**, not an exception to it: the rule
-  denies writing where somebody else reads, and the enumerated channels — Jira, GitHub, Trello, Slack —
-  are exactly the shared ones. A sink only you read is not one of them. The summary column currently
-  says "everything external is read-only", which reads as banning it. Reword C2 when this lands.
-
-  What blocked it is gone — the queue is judged now, so a notification would fire on things that
-  deserve one. What it still lacks is a *second* threshold. "Deserves a note" is the wrong bar for
-  interrupting somebody: a note is something you find later, and an interruption is something you
-  cannot decline. The classifier answers one question and this needs it to answer two, which is a
-  prompt change and a field, not a mechanism.
+  It is not filed as an afterthought: it is the only operation in the pipeline that would *overwrite* a
+  note rather than create one, so it needs a rule about what it may touch. Facets a person has since
+  corrected must survive it, and there is nothing on a note today that distinguishes a value the model
+  proposed from one you accepted.
 
 ## Ideas from elsewhere
 

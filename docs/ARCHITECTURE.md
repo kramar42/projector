@@ -34,7 +34,7 @@ flowchart TB
   end
 
   you["You, in a browser"]
-  agent["A Claude session<br/>/pj-capture · /pj-triage · /pj-work"]
+  agent["A Claude session<br/>/pj-triage · /pj-work"]
 
   subgraph surfaces["Two surfaces — peers, not a stack"]
     direction LR
@@ -110,7 +110,7 @@ the two are expected to be editing the same note at the same time.
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
-| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined, `classify.ts` — which deserve a note — and `materialise.ts` — a candidate becoming one |
+| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined and which of those were taken back, `classify.ts` — which deserve a note and what the note is — and `materialise.ts` — a candidate becoming one |
 | `src/agent/` | note context assembly, worktree workspaces, briefings, git history — and `work.ts`, the plan-and-launch both `pj work` and `POST /api/note/:id/work` reach, so the CLI and the panel cannot disagree about which branch, which directory or which link |
 | `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
 
@@ -428,7 +428,7 @@ deciding how much to trust an empty board.
 **Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
 computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
 as fact. It has never governed the judgement of whether a candidate is worth filing: that belongs to
-the `/pj-capture` skill and always has, which is a model making the call. So classifying candidates at
+a skill run by hand and always has, which is a model making the call. So classifying candidates at
 fetch time rather than in a conversation moves **when and where** the judgement runs, not who makes it,
 and no principle moves with it.
 
@@ -436,6 +436,40 @@ What C8 does constrain is the residue. A relevance score may gate a candidate an
 not become a facet, and it may not render as a badge beside computed ones, because what C8 buys is that
 a badge can be trusted. Its durable form is prose — a reason on a suppression, which is the shape
 `Skipped.why` already had.
+
+**Slack and Gmail are fetched by an agent, and the safety story is one flag.** `pj` has no credential
+for either and is not getting one — a second token in a second place to rotate buys nothing when an
+agent already has both through MCP. So those channels shell out to the same `claude -p` the classifier
+uses, with MCP left on, and return candidates in the shape every other channel returns. Fetch stays
+separate from judgement, so one policy still covers every channel.
+
+These are exactly the shared channels C2 names, and an agent holding Slack tools could post. Nothing
+here can tell a read tool from a write one by its name, so nothing tries: **the vault lists the tools
+the channel may call** (`mcp.slack`, `mcp.gmail`) and `--allowedTools` makes Claude Code refuse the
+rest. No wildcard, because a wildcard over a server's tools is a wildcard over its write tools. Unset
+means no tools, which means the channel reports itself unfetched exactly as it did before it could be
+fetched at all — so the failure of omission is the old behaviour, and enabling a write is something a
+person has to spell out.
+
+**A rescue is the signal worth keeping.** `unsuppress` writes the row it removes into `rescued`,
+because an un-suppression says the judgement was wrong in the direction that costs the item, and a
+dismissal only says the reader agreed. It had nowhere to go before: the row it corrected was deleted
+and that was the whole record. `classify` renders the recent ones into its prompt ahead of the declines
+that stood and the notes that were kept, with the instruction pointing at them — order fixed rather
+than shuffled, so the prompt is the same prompt run to run, and nothing stamped with a synthetic score.
+An empty corpus renders nothing at all, a heading with no examples under it being worse than silence.
+
+**Interrupting is a second, higher bar.** A note is something you find when you look; an interruption
+is something you cannot decline, so "deserves a note" is the wrong threshold for it and `notify` is a
+separate question the same pass answers. Only a candidate that was actually *written* can raise one —
+being interrupted about a duplicate is the fastest way to have notifications turned off.
+
+Delivery is **local, entirely**: the server signals a tab that is already open on its own `attention`
+event, and the tab asks the operating system. Nothing leaves the machine, so C2 is not engaged — there
+is no service to write to. A separate event from `change` because the two mean different things: a
+change refetches the board, this interrupts a person, and a client treating them alike would notify on
+every write or on none. Permission is asked on the first notification rather than on load, and a
+refusal costs nothing, the note being on the board either way.
 
 **Enrichment and intake are mirror images that share only the way out.** Enrichment is given a ref and
 answers how to display it; intake is given a channel and a cursor and answers which refs nobody has

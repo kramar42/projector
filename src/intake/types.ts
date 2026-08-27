@@ -8,11 +8,12 @@ import type { Note } from '../schema/types.ts';
  * display it; intake is given a channel and a cursor and returns refs nobody has
  * filed yet. Neither imports the other, and they share only `src/sources/`.
  *
- * A channel **proposes and classifies; it never writes a note.** Everything a
- * channel emits is either deterministic fact or provenance — the judgement of
- * what deserves a note belongs to the `/capture` skill, and the judgement of
- * where it lives belongs to `/triage` (C8: what is computed is computed, what is
- * decided is decided by someone).
+ * A channel **gathers; it never judges and never writes a note.** Everything a
+ * channel emits is deterministic fact or provenance. Whether a candidate deserves
+ * a note, and what the note says, belongs to `classify.ts`; whether it was right
+ * belongs to whoever walks the queue (C8: what is computed is computed, what is
+ * decided is decided by someone — and a model deciding what to file was always
+ * the arrangement, only in a conversation instead of a pass).
  */
 
 /** A note this candidate might belong to, and the mechanical reason it might. */

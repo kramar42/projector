@@ -50,6 +50,8 @@ export interface PollResult {
   declined: number;
   /** Of those created, how many are waiting to be merged into an existing note. */
   extending: number;
+  /** Notes worth interrupting for. A higher bar than deserving a note. */
+  notify: { id: string; title: string }[];
   /** Set when the classifier could not be reached, so the tick held. */
   held?: string;
 }
@@ -67,6 +69,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     advanced: [],
     declined: 0,
     extending: 0,
+    notify: [],
   };
   const { reports } = await sweep(root);
   const wantsJudgement = settingsFor(root).classify.enabled;
@@ -117,6 +120,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     out.created.push(...res.created);
     out.skipped += res.skipped;
     out.extending += res.extending;
+    out.notify.push(...res.notify);
   }
 
   /**
@@ -146,7 +150,12 @@ const timers = new Map<string, Timer>();
  * a second call must not double the rate. Returns whether a loop is now running,
  * so the caller can say so once rather than guessing.
  */
-export function startPolling(root: string, log: (msg: string) => void = () => {}): boolean {
+export function startPolling(
+  root: string,
+  log: (msg: string) => void = () => {},
+  /** Called with what a tick judged worth interrupting for. Local delivery only. */
+  onAttention: (notes: { id: string; title: string }[]) => void = () => {},
+): boolean {
   if (timers.has(root)) return true;
   const { poll } = settingsFor(root);
   if (!poll.enabled) return false;
@@ -163,6 +172,8 @@ export function startPolling(root: string, log: (msg: string) => void = () => {}
       if (res.created.length || res.declined) {
         log(`intake: ${res.created.length} new, ${res.declined} declined in ${root}`);
       }
+      // After the log, so a tick that writes and interrupts says both.
+      onAttention(res.notify);
       for (const u of res.unreachable) {
         // Not an error and not silent. A channel that has been unreachable for a
         // week is worth noticing, and a poller that swallowed it would look like

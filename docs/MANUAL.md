@@ -668,6 +668,30 @@ classify:
   command: claude
 ```
 
+**It learns from what you decide.** Every decline you take back is the strongest example there is —
+it says the judgement was wrong in the direction that costs you the item, where a decline you leave
+alone only says you agreed. Recent rescues, recent declines and recently kept notes go into the prompt,
+rescues first. Nothing is configured for this; using the queue is what trains it.
+
+**Slack and Gmail are fetched by an agent**, because `pj` has no credential for either. They are also
+the two channels where a mistake would be visible to other people, so nothing is enabled by default and
+there is no wildcard: you name the tools, and everything else is refused.
+
+```yaml
+mcp:
+  slack: [mcp__yourserver__slack_search_public, mcp__yourserver__slack_read_channel]
+  gmail: [mcp__yourserver__search_threads, mcp__yourserver__get_thread]
+```
+
+Leave either out and that channel is not fetched, which is exactly what it did before it could be.
+
+**Being told, for the few things that cannot wait.** The same pass answers a second, higher question:
+is this worth interrupting for? Most things that deserve a note are not. When one is, a browser tab you
+already have open raises a notification and clicking it opens the note. Nothing is sent anywhere — the
+server tells the tab and the tab tells your operating system — so there is no account to connect and
+nothing leaves the machine. Permission is asked the first time there is something to say, and refusing
+costs you nothing: the note is on the board either way.
+
 **If it cannot judge, it does not write.** A tick that cannot reach the classifier holds — nothing
 written, no cursor moved — and the next one tries again. That is deliberate: falling back to writing
 everything down would hand you the pile the judgement exists to prevent, and you would find out by
@@ -708,13 +732,14 @@ cursor is one value, so it may only advance to a boundary with nothing unexamine
 **What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
 note, a fingerprint already captured, a session too short to be work. Everything else arrives as
 `evidence`, and each match carries the mechanical reason it matched: `cwd`, `worktree`, `branch`,
-`mentions PROJ-303`, `text`. There is no score and no verdict, because the failure that would make this
-useless is a confident wrong one — a session linked to the wrong note puts its history where nobody will
-look. Choosing between note, link and neither is `/pj-capture`'s job, out loud.
+`mentions PROJ-303`, `text`. There is no score and no verdict here, because the failure that would make
+this useless is a confident wrong one — a session linked to the wrong note puts its history where
+nobody will look. Choosing between note, extension and neither is the classifier's job, on the evidence
+this hands it.
 
-Two channels have no fetcher here at all. Slack and Gmail are read by an agent through MCP — a second
-token in a second place to rotate buys nothing — but `pj` still keeps their cursors, because a
-watermark is a property of where the sweep got to, not of who fetched.
+Slack and Gmail are fetched by an agent through MCP rather than by `pj` — a second token in a second
+place to rotate buys nothing — but `pj` keeps their cursors either way, because a watermark is a
+property of where the sweep got to, not of who fetched.
 
 ---
 
@@ -764,20 +789,17 @@ accumulates its own history.
 |---|---|
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
-| `/pj-capture` | sweep the five intake channels; each candidate becomes a note, a link on an existing note, or nothing |
 | `/pj-triage` | give incomplete notes a project, priority and status |
 | `/pj-work` | start work on a note |
 
-`/pj-capture` and `/pj-triage` both **propose and stop**: they present a table and apply nothing until it is
-approved. A wrong project assignment hides a note in a column nobody will look in, which is worse than
-leaving it blank. Fingerprinting makes a repeated sweep converge instead of refilling the inbox — which
-is why a rejected note gets `status: archived` rather than being deleted: deleting it destroys the
-fingerprint with it, and the next sweep creates it again.
+**There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
+timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
+now a queue you walk, and `pj intake poll` runs the same tick by hand when there is no server up.
 
-`/pj-capture` reads its candidates from `pj intake` rather than deciding what is new itself, and it makes
-one decision per candidate that `pj` deliberately does not: **note, link, or neither.** A Claude session
-is usually not new work — it is more of something already tracked, or a question that was answered — and
-only "already on a note" is a fact. The rest is a judgement, made on evidence it has to quote.
+`/pj-triage` still **proposes and stops**: it presents a table and applies nothing until it is approved.
+A wrong project assignment hides a note in a column nobody will look in, which is worse than leaving it
+blank. It is for notes you made yourself and left half-filled — a polled note arrives with its facets
+already proposed, and judging it is accepting them.
 
 ---
 
@@ -847,7 +869,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · put one back in |
-| `poll:` · `classify:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model. `.projector/classify.md` replaces the instructions |
+| `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |

@@ -673,7 +673,13 @@ app.post('/api/enrich/clear', async (c) => {
 // up in the open app without a manual refresh.
 
 let revision = 0;
-type Send = (event: 'change' | 'enriched', rev: number, vault: string, ids?: string[]) => void;
+type Send = (
+  event: 'change' | 'enriched' | 'attention',
+  rev: number,
+  vault: string,
+  ids?: string[],
+  titles?: string[],
+) => void;
 const listeners = new Set<Send>();
 
 /**
@@ -702,6 +708,26 @@ function bump(vault: string, ids?: string[]) {
  * Enrichment gets its own signal. A chip resolving should refresh the chips, not
  * make the board rebuild itself — and it must never look like a file changed.
  */
+/**
+ * Something a sweep judged worth interrupting for.
+ *
+ * A **local** signal, and that is the whole of the C2 story: nothing is sent
+ * anywhere. The server tells a tab that is already open, and the tab raises the
+ * operating system's own notification if the reader has allowed it. No service,
+ * no credential, no egress — so the rule about not writing where someone else
+ * reads is not engaged at all, there being no somewhere to write to.
+ *
+ * Separate from `change` because the two mean different things: a change refetches
+ * the board, and this interrupts a person. A client that treated them alike would
+ * either notify on every write or notify on none.
+ */
+function bumpAttention(vault: string, notes: { id: string; title: string }[]) {
+  if (!notes.length) return;
+  revision++;
+  for (const fn of [...listeners])
+    fn('attention', revision, vault, notes.map((n) => n.id), notes.map((n) => n.title));
+}
+
 function bumpEnriched(vault: string) {
   revision++;
   for (const fn of [...listeners]) fn('enriched', revision, vault);
@@ -782,7 +808,7 @@ function ensureWatched(root: string): void {
    * so the watcher above turns each one into the SSE the open board already
    * listens for — a candidate appears without the client learning anything new.
    */
-  if (startPolling(root, (msg) => console.log(msg))) {
+  if (startPolling(root, (msg) => console.log(msg), (notes) => bumpAttention(root, notes))) {
     console.log(`polling ${root} every ${settingsFor(root).poll.everySeconds}s`);
   }
 }
@@ -824,8 +850,8 @@ app.post('/api/intake/declined/:fp/restore', (c) => {
 app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {
     let alive = true;
-    const send: Send = (event, rev, vault, ids) => {
-      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault, ids }) });
+    const send: Send = (event, rev, vault, ids, titles) => {
+      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault, ids, titles }) });
     };
     listeners.add(send);
     await stream.writeSSE({ event: 'hello', data: JSON.stringify({ rev: revision }) });

@@ -4,8 +4,9 @@ import { paths } from '../config.ts';
 import { isRef, loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
 import { run } from '../sources/run.ts';
+import { rescues, suppressions } from './db.ts';
 import { settingsFor } from '../settings.ts';
-import type { Facets } from '../schema/types.ts';
+import type { Facets, Note } from '../schema/types.ts';
 import type { Candidate } from './types.ts';
 
 /**
@@ -58,6 +59,14 @@ export interface Verdict {
   facets?: Record<string, string[]>;
   /** For `extend`: the note this belongs to. Always one of the evidence matches. */
   target?: string;
+  /**
+   * Worth interrupting for, which is a different question from worth filing.
+   *
+   * A note is something you find when you look; an interruption is something you
+   * cannot decline. So "deserves a note" is the wrong bar for it, and this is a
+   * second, higher one rather than a re-reading of the first.
+   */
+  notify?: boolean;
 }
 
 const DEFAULT_PROMPT = `You triage candidates for someone's personal work tracker, and you do two jobs at once: decide whether each deserves a note, and if it does, write the note.
@@ -80,11 +89,63 @@ For "keep" and "extend", fill these in. This is most of the value — a card nob
 - "body" — one to three sentences: what this is, where it got to, and what is unresolved. Say what the raw material actually tells you and nothing you cannot see. No headings, no bullet lists, no restating the title.
 - "facets" — the axes below, with values from their own vocabulary. Only axes you have real grounds for; guessing every axis is worse than leaving one out. An axis marked single takes one value.
 
+# Job three: does it need to interrupt?
+
+Set "notify": true only for something the owner would want to be told about now rather than find later — someone blocked on them, a deadline inside a day or two, a production problem, a direct question that has been waiting. This is a *higher* bar than deserving a note, and most things that deserve a note do not clear it. Default to false; a notification nobody wanted is how people turn notifications off.
+
 # Output
 
 ONLY a JSON array, no prose and no code fences. One object per candidate, every "fp" verbatim:
 
-[{"fp":"…","decision":"keep"|"extend"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, extend only>"}]`;
+[{"fp":"…","decision":"keep"|"extend"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, extend only>","notify":false}]`;
+
+/**
+ * The judgements already made, as examples.
+ *
+ * Three kinds, and they are not equal. A **rescue** is a decline somebody took
+ * back, which is the only signal that says the judgement was wrong in the
+ * expensive direction — so it leads, and it is the one the instruction points at.
+ * A **decline** confirms the reader agreed. A **kept** note shows what surviving
+ * looks like in this vault's own words.
+ *
+ * Two mistakes not inherited from the tool this idea came from. The order is
+ * fixed rather than shuffled, so the prompt is the same prompt run to run and a
+ * zero temperature buys what it is supposed to. And nothing is stamped with a
+ * synthetic score, because a score teaches a model buckets it will then reach for.
+ */
+function calibrationFor(root: string, notes: Map<string, Note>): string {
+  const back = rescues(root, 8);
+  const no = suppressions(root, { limit: 8 }).rows;
+  const yes = [...notes.values()]
+    .filter((n) => n.source_fingerprint && !n.facets.intake?.length)
+    .sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''))
+    .slice(0, 8);
+
+  if (!back.length && !no.length && !yes.length) return '';
+
+  const L: string[] = ['', '# What this reader has actually decided', ''];
+  if (back.length) {
+    L.push(
+      'These were declined and the reader **took the decline back**. Getting one of',
+      'these wrong costs them the item, so weigh them above everything below: if a',
+      'candidate resembles one of these, keep it even when the wording looks routine.',
+      '',
+    );
+    for (const r of back) L.push(`  RESCUED  ${(r.title ?? r.fingerprint).slice(0, 90)}  (had been declined: ${r.reason})`);
+    L.push('');
+  }
+  if (no.length) {
+    L.push('Declined, and left declined:', '');
+    for (const s of no) L.push(`  NO   ${(s.title ?? s.fingerprint).slice(0, 90)}  (${s.reason})`);
+    L.push('');
+  }
+  if (yes.length) {
+    L.push('Kept, and judged — this is what a note in this vault reads like:', '');
+    for (const n of yes) L.push(`  YES  ${n.title.slice(0, 90)}`);
+    L.push('');
+  }
+  return L.join('\n');
+}
 
 function promptFor(root: string): string {
   const file = join(paths(root).config, 'classify.md');
@@ -112,7 +173,12 @@ function offerableAxes(defs: Facets): string[] {
   );
 }
 
-function vocabularyFor(root: string): { text: string; defs: Facets; projects: Set<string> } {
+function vocabularyFor(root: string): {
+  text: string;
+  defs: Facets;
+  projects: Set<string>;
+  notes: Map<string, Note>;
+} {
   const defs = loadFacets(paths(root).facets);
   const { notes } = reindex(root);
 
@@ -157,7 +223,7 @@ function vocabularyFor(root: string): { text: string; defs: Facets; projects: Se
         (def.open ? ' — prefer one of these; invent a new value only if none fits' : ''),
     );
   }
-  return { text: lines.join('\n'), defs, projects };
+  return { text: lines.join('\n'), defs, projects, notes };
 }
 
 /** What the model is shown: every scrap the channel gathered, and nothing else. */
@@ -306,8 +372,9 @@ export async function classify(
 ): Promise<Classified | null> {
   if (!candidates.length) return { keep: [], drop: [] };
 
-  const { text: vocab, defs, projects } = vocabularyFor(root);
-  const reply = await ask(`${promptFor(root)}\n\n${vocab}`, payloadFor(candidates));
+  const { text: vocab, defs, projects, notes } = vocabularyFor(root);
+  const system = `${promptFor(root)}\n\n${vocab}\n${calibrationFor(root, notes)}`;
+  const reply = await ask(system, payloadFor(candidates));
   if (reply === null) return null;
   const raw = rawVerdicts(reply);
   if (!raw) return null;
@@ -346,6 +413,7 @@ export async function classify(
         ...(str(r?.body, 2000) ? { body: str(r?.body, 2000)! } : {}),
         facets: validFacets(r?.facets, defs, projects),
         ...(extend ? { target } : {}),
+        ...(r?.notify === true ? { notify: true } : {}),
       },
     });
   }
