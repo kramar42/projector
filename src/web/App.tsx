@@ -6,6 +6,7 @@ import { BoardView } from './views/BoardView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
 import { NotePanel, whatIsUnsaved } from './panel/NotePanel.tsx';
+import { DeclinedPanel } from './Declined.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { VocabularyProvider } from './vocabulary.tsx';
 import { TouchedProvider } from './touched.tsx';
@@ -15,6 +16,7 @@ import { Cheatsheet } from './Cheatsheet.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
 import {
   NOTE_PARAM,
+  DECLINED_PARAM,
   apiSearch,
   patchSearch,
   selectionOf,
@@ -80,6 +82,29 @@ export function App() {
   const search = useSearch();
 
   const openNote = new URLSearchParams(search).get(NOTE_PARAM);
+  /**
+   * The declined pile, opened over the view like the panel is.
+   *
+   * A search parameter rather than a route, for the reason the file above gives:
+   * there is one route because a view is a query, and this is not a view — it is a
+   * surface over whatever you were looking at.
+   */
+  const declinedOpen = new URLSearchParams(search).get(DECLINED_PARAM) === '1';
+
+  /**
+   * Open or close the declined surface without disturbing the view underneath.
+   *
+   * Rewriting the whole search string would drop the query you were looking at,
+   * which is the difference between a surface *over* a view and a navigation away
+   * from one.
+   */
+  const setDeclined = (open: boolean) => {
+    const next = new URLSearchParams(search);
+    if (open) next.set(DECLINED_PARAM, '1');
+    else next.delete(DECLINED_PARAM);
+    const q = next.toString();
+    navigate(`${location}${q ? `?${q}` : ''}`);
+  };
   // Memoised on the search string, so the set's identity only changes when the
   // selection does — a canvas effect keys off it.
   const selectedIds = useMemo(() => selectionOf(search), [search]);
@@ -553,6 +578,7 @@ export function App() {
           data={data}
           search={search}
           wire={wire}
+          onShowDeclined={() => setDeclined(true)}
           patch={patch}
           edit={edit}
           onSwitchVault={switchVault}
@@ -589,6 +615,15 @@ export function App() {
           {content}
         </main>
         {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
+        {declinedOpen && (
+          <DeclinedPanel
+            onClose={() => setDeclined(false)}
+            // The footer's count comes from `meta`, so bringing one back has to
+            // reload it — otherwise the sidebar keeps claiming a number the open
+            // panel is visibly contradicting.
+            onRestored={loadMeta}
+          />
+        )}
         {openNote && (
           <NotePanel
             // Not keyed here any more — `NotePanel` keys the frame on the note it

@@ -1,5 +1,5 @@
 import { advance } from '../intake/run.ts';
-import { classify, type Ask } from '../intake/classify.ts';
+import { classify, type Ask, type Classified } from '../intake/classify.ts';
 import { materialise } from '../intake/materialise.ts';
 import { settingsFor } from '../settings.ts';
 import { suppress } from '../intake/db.ts';
@@ -48,6 +48,8 @@ export interface PollResult {
   advanced: string[];
   /** Candidates the classifier declined, now recorded as suppressed. */
   declined: number;
+  /** Of those created, how many are waiting to be merged into an existing note. */
+  extending: number;
   /** Set when the classifier could not be reached, so the tick held. */
   held?: string;
 }
@@ -64,6 +66,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     unreachable: [],
     advanced: [],
     declined: 0,
+    extending: 0,
   };
   const { reports } = await sweep(root);
   const wantsJudgement = settingsFor(root).classify.enabled;
@@ -77,30 +80,43 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
       continue;
     }
 
-    let keep = report.candidates;
+    /**
+     * With no judgement wanted, every candidate is kept with an empty verdict —
+     * so the write path is one path. The card is then as thin as the channel
+     * made it, which is what `classify.enabled: false` is asking for.
+     */
+    let kept: Classified['keep'] = report.candidates.map((candidate) => ({
+      candidate,
+      verdict: { fingerprint: candidate.fingerprint, decision: 'keep', reason: '' },
+    }));
+
     if (wantsJudgement && report.candidates.length) {
-      const verdict = await classify(root, report.candidates, ask);
-      if (!verdict) {
+      const judged = await classify(root, report.candidates, ask);
+      if (!judged) {
         // Held, not failed. Nothing written and nothing advanced, so the next
         // tick sees exactly what this one saw.
         out.held = 'the classifier could not be reached';
         return out;
       }
-      keep = verdict.keep;
-      for (const d of verdict.drop) {
+      kept = judged.keep;
+      for (const d of judged.drop) {
         suppress(root, {
           fingerprint: d.candidate.fingerprint,
           reason: d.reason,
           channel: report.channel,
           title: d.candidate.title,
+          // The model's decline, not a person's. Calibration needs to know which,
+          // and so does anyone deciding how much to trust an empty board.
+          by: 'model',
         });
         out.declined++;
       }
     }
 
-    const res = materialise(root, { ...report, candidates: keep });
+    const res = materialise(root, report.channel, kept);
     out.created.push(...res.created);
     out.skipped += res.skipped;
+    out.extending += res.extending;
   }
 
   /**

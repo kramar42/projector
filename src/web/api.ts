@@ -1,6 +1,6 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
-import type { NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
+import type { Declined, NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
 import { foreignOf } from './changed.ts';
 export { FLUSH_MS } from './changed.ts';
 
@@ -115,6 +115,17 @@ export const api = {
    */
   query: (search: string) => get<QueryResponse>(`/api/query${search}`),
   note: (id: string) => get<NoteDetail>(`/api/note/${encodeURIComponent(id)}`),
+
+  /**
+   * The declined pile. Not a query: declined candidates are not notes, so
+   * `/api/query` has nothing to say about them.
+   */
+  declined: () => get<{ declined: Declined[] }>('/api/intake/declined'),
+  restoreDeclined: (fingerprint: string) =>
+    req<{ restored: boolean }>(
+      'POST',
+      `/api/intake/declined/${encodeURIComponent(fingerprint)}/restore`,
+    ),
 
   patchNote: (id: string, patch: PatchCard) => (
     stampSelfWrite(id),

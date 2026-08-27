@@ -74,6 +74,36 @@ export const BUILTIN_FACETS: Facets = {
     single: true,
     builtin: true,
   },
+  /**
+   * The note a candidate wants folding into.
+   *
+   * A sweep often finds more of something already tracked rather than something
+   * new — another commit on a branch a note already covers. That candidate should
+   * not become a second note, and it cannot be silently dropped either: it may
+   * carry a link or a paragraph the existing note wants. So it lands as its own
+   * note pointing here, and accepting it is `pj merge` into the target, which
+   * folds body, links and fingerprint across and drops this reference on the way
+   * (see `schema/merge.ts` — a reference naming the survivor is dropped, not
+   * rewritten).
+   *
+   * **A separate axis rather than reusing `parent`.** `parent` means *part of*,
+   * and it is walked: a candidate parented to a real note would join that note's
+   * children, its roll-ups and its sibling set for as long as it sat in the queue,
+   * which is a graph change nobody asked for as a side effect of a sweep. Nothing
+   * walks this one, so an unjudged candidate perturbs no count anywhere.
+   *
+   * Built in for the reason the other two are: the pipeline writes it and reads it
+   * back, and a vault retyping it would strand the merge with no way to say so.
+   */
+  extends: {
+    label: 'Extends',
+    type: 'ref',
+    values: [],
+    open: true,
+    single: true,
+    builtin: true,
+    inverse: 'Extending',
+  },
 };
 
 /**

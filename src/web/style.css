@@ -4394,3 +4394,80 @@ input[data-nav]:focus + .checkbox {
 .rail-label-control .keyhint {
   margin-left: 3px;
 }
+
+/*
+ * The declined pile.
+ *
+ * Borrows `.cheatsheet`'s frame — same scrim, same depth, same surface — because
+ * both are one surface opened over whatever you were looking at, and giving this
+ * its own box would be a second answer to a question already settled. What it adds
+ * is a head row and a table narrow enough to read a reason in.
+ */
+.declined {
+  width: min(880px, 94vw);
+  padding: 14px 18px 12px;
+}
+.declined-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.declined-head h3 {
+  margin: 0;
+}
+/* The count carries the reading, so it takes the muted register rather than a
+   size of its own: how many, and how many were not your decision. */
+.declined-count {
+  flex: 1;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.declined-table {
+  width: 100%;
+}
+/* The two columns that hold prose. Capped so a long reason wraps instead of
+   pushing the action off the edge, which is the one control the row exists for. */
+.declined-what {
+  max-width: 34ch;
+}
+.declined-why {
+  max-width: 30ch;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+/*
+ * A classifier's decline reads differently from your own, and the chip is where
+ * that shows. Not a hue family — those belong to a vault's axes (C4) — so it takes
+ * the app's own accent, the same register `builtin` uses on a facet.
+ */
+.chip.is-model {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/*
+ * The other reason there is less on screen than you expected.
+ *
+ * A link in prose rather than a button in a row: it sits inside the sentence the
+ * footer is already saying, and reads as the last clause of it. So it takes that
+ * sentence's font and the accent, not the button chrome — pressing it opens a
+ * surface, it does not act on the view.
+ */
+.rail-declined {
+  /* The footer's own register — mono, chip step — because this is the last clause
+     of the sentence it sits in and not a control beside it. A button resets both
+     to the browser's, so both are said again here. */
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.rail-declined:hover { color: var(--ink); }
+.rail-declined:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

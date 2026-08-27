@@ -67,7 +67,7 @@ list does not declare, and `single: true` refuses a second value at all — beca
 done]` is not a note in two columns, it is a note in no coherent state, and the thing writing most of
 these files is an agent.
 
-Two facets are built in — `project` and `intake`, described [below](#the-built-ins). Everything else,
+Three facets are built in — `project`, `intake` and `extends`, described [below](#the-built-ins). Everything else,
 relations included, is yours: "group by project" and "group by priority" are the same board with one
 control moved rather than two boards to keep in sync.
 
@@ -641,10 +641,22 @@ new boundary is a file rather than a line in a terminal you have already closed.
 
 Without a server, `pj intake poll` runs exactly the same tick once, by hand.
 
-**Every tick judges before it writes.** Candidates that do not deserve a note are recorded as declined,
-with the reason, and never become files — so a sweep of your own afternoon leaves the board empty and
-`pj intake suppressed` three lines longer. The rule it applies: your own routine progress is not news
-to you; what needs a decision, a reply, or is unfinished and untracked, is.
+**Every tick judges before it writes, and writes the card while it is there.** One pass answers both
+questions: does this deserve a note, and if so what is the note. So a card arrives with a title a person
+would actually use, a body saying where the work got to, and the axes it belongs on — rather than a
+commit subject, a provenance string and nothing else.
+
+Candidates that do not deserve a note are recorded as declined, with the reason, and never become
+files — so a sweep of your own afternoon leaves the board empty and the declined pile three lines
+longer. The rule it applies: your own routine progress is not news to you; what needs a decision, a
+reply, or is unfinished and untracked, is. A candidate that is *more of something already tracked*
+lands pointing at that note through `extends`, to be merged rather than filed.
+
+**The model proposes; your vocabulary disposes.** Every facet value and every merge target is checked
+against the vault before anything is written — an invented value is dropped and the rest of the card
+kept, an invented target makes the candidate stand alone. It cannot set `intake` or `extends` itself,
+and on an open axis it is shown the values your notes already use and asked to prefer them, so a queue
+of cards does not sprawl your vocabulary.
 
 Tune it for your vault by writing `.projector/classify.md`, which replaces the built-in instructions
 entirely. Change the model or the command if you want something other than a small one:
@@ -661,22 +673,24 @@ written, no cursor moved — and the next one tries again. That is deliberate: f
 everything down would hand you the pile the judgement exists to prevent, and you would find out by
 looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
-**Saying no is a step too.** Capturing a candidate leaves a note carrying its fingerprint, and no later
-sweep offers it again. Declining one used to leave nothing at all — the cursor moved past it and that
-was the whole record, so the same commit could not be declined once and stay declined, and nothing you
-rejected could inform anything later. `pj intake suppress <fingerprint> --reason "…"` records the no.
-Later sweeps list it as declined rather than proposing it, which keeps it in the counts instead of
-quietly shrinking them.
+**Saying no is a step too, and there are three ways to do it.**
+
+**Delete the note.** The obvious gesture, and it now sticks: deleting a note that came from a sweep
+records its fingerprint as declined on the way out, so no later sweep offers it again. Before that it
+destroyed the one thing stopping the card coming back, which made the gesture that plainly means *no*
+the one that did not work.
+
+**`pj intake suppress <fingerprint> --reason "…"`** says no to something that never became a note —
+which is what the classifier itself does, for everything it drops.
+
+**Archive it** — keep the note and set `status: archived`. For one considered rejection you would like
+to find again; the note and its fingerprint both stay.
 
 Read the pile back with `pj intake suppressed` and undo any of it with `pj intake unsuppress`. Both
 matter more than they look: getting the order wrong costs you some scrolling, and hiding the wrong
-thing costs you the item — so a no is always reversible and the pile is always readable.
-
-Two ways to say no, and they are not the same. **Suppressing** leaves no file, which is what you want
-for the volume a sweep of your own commits produces. **Archiving** — capturing it and setting
-`status: archived` — keeps the note and its fingerprint, which is what you want for one considered
-rejection you would like to find again. Deleting a captured note does neither: it destroys the
-fingerprint, and the next sweep proposes it all over again.
+thing costs you the item — so a no is always reversible and the pile is always readable. Each row says
+whether the model or you decided, because a model's no is a guess you may want to check and yours is
+not.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
@@ -1242,8 +1256,8 @@ reference, a `hue:` outside the palette, a `closed:` value the vocabulary does n
 
 ## The built-ins
 
-Two axes are the app's rather than the vault's, and for the same reason: the app writes them and reads
-them back, so a vault redefining the shape would strand something with no way to say so. Both are still
+Three axes are the app's rather than the vault's, and for the same reason: the app writes them and
+reads them back, so a vault redefining the shape would strand something with no way to say so. They are still
 *facets* — injected into the vocabulary, so the filter rail, the panel, the pickers and drag-and-drop
 reach them through the same loop as everything else, and they filter, group and drag exactly like an
 axis you declared.
@@ -1267,10 +1281,28 @@ the vault names one, because nothing computes an inverse it has no word for — 
 this one's, since the definition is not read from the file. So `Members` is the default rather than an
 omission, and renaming it is a vault's business like the label.
 
-`intake` is the other, and it holds one value, `unjudged`. A sweep writes it onto a candidate it
-materialised; you remove it when you have judged the note. Presence is the whole meaning, which is why
-there is no second value — "judged" is the axis being absent, and storing it as well would be storing
-something the vault can already answer.
+`intake` holds one value, `unjudged`. A sweep writes it onto a candidate it materialised; you remove it
+when you have judged the note. Presence is the whole meaning, which is why there is no second value —
+"judged" is the axis being absent, and storing it as well would be storing something the vault can
+already answer.
+
+What it means is stronger than "new": **nothing on an unjudged note has been confirmed by a human.**
+Its title, its body and its facets are all a classifier's proposal, so judging it is accepting them —
+or fixing what is wrong first and then accepting.
+
+`extends` names the note a candidate wants folding into. A sweep often finds more of something already
+tracked rather than something new, and that should not become a second card; so the candidate lands
+pointing at the note it belongs to, and accepting it is a **merge** rather than a clearing of `intake`:
+
+```bash
+pj merge <candidate> --into <target>
+```
+
+The target keeps its own facets; the candidate brings its body, links and fingerprint across, and its
+file goes. The reference pointing at the target is dropped on the way, so nothing has to be tidied
+first. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
+to a real note would sit in that note's children and roll-ups while it waited. Nothing walks
+`extends`.
 
 It is a facet rather than a flag on the file so that the queue is a *view*: `filter: {intake:
 [unjudged]}` is a board like any other, and the panel, the bulk bar, the cursor and `pj ls` all reach

@@ -61,6 +61,7 @@ import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import { startPolling } from './poll.ts';
+import { suppressions, unsuppress } from '../intake/db.ts';
 import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
@@ -785,6 +786,31 @@ function ensureWatched(root: string): void {
     console.log(`polling ${root} every ${settingsFor(root).poll.everySeconds}s`);
   }
 }
+
+/**
+ * The declined pile: what a sweep saw and nobody filed.
+ *
+ * Read-only plus one un-decline, and it is not a view — declined candidates are
+ * not notes, so there is nothing for the query compiler to answer about them
+ * (C9 is about views over notes, and this was never going to be one). It is a
+ * surface, reached with `?declined=1` over the single route, the way `?note=`
+ * reaches the panel.
+ *
+ * Why it exists at all: with the classifier running, an empty board has two
+ * meanings — nothing happened, or everything was hidden — and no way to tell them
+ * apart. This is the audit trail for a decision the app made on its own, and the
+ * only place a wrong one can be corrected.
+ */
+app.get('/api/intake/declined', (c) => {
+  const root = vaultOf(c);
+  return c.json({ declined: suppressions(root) });
+});
+
+app.post('/api/intake/declined/:fp/restore', (c) => {
+  const root = vaultOf(c);
+  const fp = decodeURIComponent(c.req.param('fp'));
+  return c.json({ restored: unsuppress(root, fp) });
+});
 
 app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {

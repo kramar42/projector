@@ -1,7 +1,8 @@
 import { loadFacets } from '../schema/facets.ts';
 import { createNote } from '../server/mutate.ts';
 import { paths } from '../config.ts';
-import type { Candidate, ChannelReport } from './types.ts';
+import type { Verdict } from './classify.ts';
+import type { Candidate } from './types.ts';
 
 /**
  * Turning a candidate into a note nobody has judged yet.
@@ -34,41 +35,63 @@ export interface Materialised {
   created: string[];
   /** Candidates that were already in the vault, so nothing was written. */
   skipped: number;
+  /** Notes created carrying `extends`, i.e. waiting to be merged into a target. */
+  extending: number;
 }
 
 /**
- * Write every candidate in a report that is not already answered for.
+ * Write every kept candidate that is not already answered for.
  *
  * `createNote` short-circuits on a fingerprint the vault already holds — its own
- * or one absorbed by a merge — so running this twice over the same report creates
- * nothing the second time. That is what makes it safe on a timer: convergence is
- * a property of the write, not of the caller remembering what it did.
+ * or one absorbed by a merge — so running this twice over the same verdicts
+ * creates nothing the second time. That is what makes it safe on a timer:
+ * convergence is a property of the write, not of the caller remembering what it
+ * did.
+ *
+ * **What lands is the classifier's proposal, in the vault's own terms.** Title,
+ * body and facets are the model's; `intake: unjudged` is what says none of it has
+ * been confirmed; `extends` is what says it wants folding into another note
+ * rather than standing alone. Every value was validated against the vocabulary
+ * before it got here — this function writes, it does not judge.
  */
-export function materialise(root: string, report: ChannelReport): Materialised {
+export function materialise(
+  root: string,
+  channel: string,
+  kept: { candidate: Candidate; verdict: Verdict }[],
+): Materialised {
   const defs = loadFacets(paths(root).facets);
   // `source` is a vault's own axis, not a built-in, so a vault that never
-  // declared it must not be handed one. `intake` is always safe: it is built in.
-  const canTagSource = Boolean(defs.source) && (defs.source?.open || (defs.source?.values ?? []).includes(report.channel));
+  // declared it must not be handed one. `intake` and `extends` are always safe:
+  // both are built in.
+  const canTagSource =
+    Boolean(defs.source) && (defs.source?.open || (defs.source?.values ?? []).includes(channel));
 
-  const created: string[] = [];
-  let skipped = 0;
-  for (const c of report.candidates) {
+  const out: Materialised = { created: [], skipped: 0, extending: 0 };
+  for (const { candidate: c, verdict: v } of kept) {
     if (alreadyAnswered(c)) {
-      skipped++;
+      out.skipped++;
       continue;
     }
     const res = createNote(root, {
-      title: c.title,
+      // The model's title when it wrote one, and the raw material only as a
+      // fallback — a commit subject or an opening prompt is what made these
+      // cards unreadable in the first place.
+      title: v.title ?? c.title,
       facets: {
+        ...v.facets,
         intake: ['unjudged'],
-        ...(canTagSource ? { source: [report.channel] } : {}),
+        ...(v.target ? { extends: [v.target] } : {}),
+        ...(canTagSource ? { source: [channel] } : {}),
       },
       links: c.links,
       fingerprint: c.fingerprint,
-      ...(c.detail ? { body: c.detail } : {}),
+      ...(v.body ?? c.detail ? { body: v.body ?? c.detail } : {}),
     });
-    if (res.existed) skipped++;
-    else created.push(res.id);
+    if (res.existed) out.skipped++;
+    else {
+      out.created.push(res.id);
+      if (v.target) out.extending++;
+    }
   }
-  return { created, skipped };
+  return out;
 }

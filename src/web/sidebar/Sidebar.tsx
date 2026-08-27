@@ -32,6 +32,7 @@ export function Sidebar({
   patch,
   edit,
   onSwitchVault,
+  onShowDeclined,
   onAddVault,
   onOpenNote,
   collapsed,
@@ -52,6 +53,8 @@ export function Sidebar({
   /** Edit the view itself: a control says what it wants of the spec. */
   edit: Edit;
   onSwitchVault: (path: string) => void;
+  /** Open the declined pile — a surface over the view, not a query. */
+  onShowDeclined: () => void;
   onAddVault: () => void;
   onOpenNote: (id: string) => void;
   collapsed: boolean;
@@ -156,7 +159,12 @@ export function Sidebar({
       </div>
 
       <div className="rail-foot">
-        <ActiveStats data={data} edit={edit} />
+        <ActiveStats
+          data={data}
+          edit={edit}
+          declined={meta.declined}
+          onShowDeclined={onShowDeclined}
+        />
         <SearchBox spec={data?.spec} edit={edit} />
       </div>
     </nav>
@@ -175,9 +183,14 @@ export function Sidebar({
 function ActiveStats({
   data,
   edit,
+  declined,
+  onShowDeclined,
 }: {
   data: QueryResponse | null;
   edit: Edit;
+  /** Candidates a sweep turned down. Not notes, so not part of `data`. */
+  declined: number;
+  onShowDeclined: () => void;
 }) {
   if (!data) return <div className="rail-active">…</div>;
   const hidden = Math.max(0, data.universe - data.total);
@@ -209,6 +222,26 @@ function ActiveStats({
             </span>
           </>
         ))}
+      {/*
+        * The other reason there is less on screen than you expected, and the one
+        * no filter explains: a sweep judged something not worth a note. This
+        * section exists so "it isn't there and I don't know why" always has an
+        * answer, and until now it only answered for the filter.
+        */}
+      {declined > 0 && (
+        <>
+          {' '}
+          ·{' '}
+          <button
+            type="button"
+            className="rail-declined"
+            onClick={onShowDeclined}
+            title="What a sweep turned down, and why"
+          >
+            {declined} declined
+          </button>
+        </>
+      )}
       {extra > 0 && (
         <Button tone="ghost" size="tiny" onClick={() => edit(clearFilters)}>
           clear

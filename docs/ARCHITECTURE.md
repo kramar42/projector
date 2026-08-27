@@ -353,11 +353,32 @@ One channel failing is that channel's news. A thrown `collect` used to take the 
 lapsed token meant no git candidates either; it now lands as `fetched: false` with the reason, which is
 the shape the report already had for Slack and Gmail. That matters more with nobody reading the output.
 
-**A tick judges before it writes.** `src/intake/classify.ts` is handed a run's candidates and answers
-which deserve a note; the rest are recorded through `suppress` with the model's reason, so they stop
-being offered and stay readable. Without that step every commit and every session on the machine
-becomes a note, which is not a milder version of the problem but the whole of it — the reason `poll`
-and `classify` shipped together rather than one and then the other.
+**A tick judges before it writes, and describes what it keeps.** `src/intake/classify.ts` answers two
+questions in one pass — does this candidate deserve a note, and what is the note — because the model
+has to read the candidate to judge it and having read it can also say what to call it, what it is
+about, and which axes it sits on. Asking only *keep or drop* wasted the call and produced cards nobody
+wanted: a commit subject for a title, a provenance line for a body, one facet. The channels' `fields`
+— repo, branch, cwd, turn count, session state, every commit subject — were being discarded, and they
+are most of what makes a readable body possible.
+
+Three decisions come back. `keep` becomes a note. `drop` becomes a `suppressed` row carrying the
+model's reason. `extend` becomes a note pointing at an existing one through the `extends` axis, to be
+merged rather than filed — which is what a sweep finds most of the time once a piece of work is already
+tracked.
+
+**The model proposes, the vocabulary disposes.** Every facet name, value and merge target is validated
+against the vault before anything is written: an unknown axis or an undeclared value on a closed one is
+dropped *individually*, because a card with two good facets and one invented one is still worth having
+and a refused write is not. A target must be one of the mechanical `evidence.matches`, which is what
+stops a model inventing a relationship — and costs nothing, since anything outside that set was never
+a merge candidate. `intake` and `extends` are withheld from it entirely, being the pipeline's own
+bookkeeping. On an open axis the model is shown the values the vault's notes already carry and asked to
+prefer them, so a queue of cards cannot sprawl the vocabulary into `webhooks`, `webhook` and
+`eventing`.
+
+Which is what makes `intake: unjudged` mean something stronger than "new": **nothing on the note has
+been confirmed by a human.** Title, body and facets are all proposals, and judging is accepting them or
+fixing them first.
 
 One call per run, not per candidate. A sweep's candidates arrive together and are frequently *one
 thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
@@ -375,6 +396,27 @@ which is the safe direction of the two: keeping costs a glance and dropping cost
 `materialise` still judges nothing. It acts only on facts about the vault — already linked, already
 captured — and the separation is worth keeping: one file decides what is *true*, another decides what
 *matters*.
+
+**The declined pile is a surface, not a view.** A declined candidate never became a file, so there is
+nothing for the query compiler to answer about it and no shape to draw it in — C9 is about views over
+notes, and this was never going to be one. It is reached with `?declined=1` over the single route, the
+way `?note=` reaches the panel: no second route, still deep-linkable, back button still closes it.
+`GET /api/intake/declined` reads it and `meta.declined` carries the count, which is what lets the
+sidebar footer — *what is on screen, and why it is not more* — answer for the sweep as well as for the
+filter. Without it an empty board has two meanings and no way to tell them apart, which is the whole
+justification: it is the audit trail for a decision the app made on its own, and the only place a wrong
+one can be put right.
+
+**Deleting a note that came from a sweep is a decline**, so `deleteNote` records its fingerprint —
+every fingerprint it answered for, absorbed ones included. Without that, deleting a candidate destroys
+the only thing stopping the next sweep proposing it, so the card returns and the gesture that plainly
+means *no* is the one that does not work. That trap was live from the moment candidates began landing
+as notes.
+
+**A suppression says who decided.** `decided_by` is `model` or `person`, and it is not decoration: a
+model's decline is a prediction that may be wrong and a person's is the ground truth you would check it
+against. Calibration cannot use a pile that does not distinguish them, and neither can a reader
+deciding how much to trust an empty board.
 
 **Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
 computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
@@ -542,6 +584,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
 | the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
+| `POST /api/intake/declined/:fp/restore` | one row removed from `.projector/intake.db`'s `suppressed` table | never a note; the only write the declined surface makes |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |

@@ -1,78 +1,90 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from '../config.ts';
+import { isRef, loadFacets } from '../schema/facets.ts';
+import { reindex } from '../index/indexer.ts';
 import { run } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
+import type { Facets } from '../schema/types.ts';
 import type { Candidate } from './types.ts';
 
 /**
- * Deciding which candidates deserve a note.
+ * What a candidate is, and whether it deserves a note.
  *
- * This is the one place in projector where a model decides anything, and it is
- * worth being precise about why that does not move C8. C8 governs *signals* —
- * every count and badge the UI draws as fact is computed. Whether a candidate is
- * worth filing was never one of those: it was a judgement, made by whoever ran a
- * sweep, and `src/intake/types.ts` has said so since the channels were written.
- * Moving it into the pipeline changes when and where that judgement runs, not who
- * makes it.
+ * One pass, two answers, and merging them is the design rather than a shortcut.
+ * The model has to read the candidate to judge it; having read it, it can also
+ * say what the note should be called, what it is about, and which axes it sits
+ * on. Asking only *keep or drop* wasted the call and produced cards nobody wanted
+ * — a commit subject for a title, a provenance string for a body, one facet.
  *
- * What the constraint does forbid is the residue leaking outward. A verdict gates
- * a candidate and its reason is stored as prose on a suppression. It does not
- * become a facet, it is never drawn beside a computed badge, and there is no
- * score — the question here is binary because the queue is a queue and not a
- * ranked list. Adding an ordering later would mean deciding where it may be
- * rendered; not having one costs nothing today.
+ * **This is the one place a model decides anything, and C8 does not move.** C8
+ * governs *signals*: every count and badge the UI draws as fact is computed.
+ * Whether a candidate deserves a note, and what to call it, were never signals —
+ * they are judgements, made until now by whoever ran a sweep, which
+ * `src/intake/types.ts` has said since the channels were written. What changes is
+ * when and where the judgement runs, not who makes it.
  *
- * **It fails closed.** If the classifier cannot be reached, the run materialises
- * nothing and holds its cursor rather than falling back to writing everything
- * down. An unjudged queue of your own commits is the failure this whole mechanism
- * exists to prevent, so arriving at it by accident would be worse than an empty
- * board and a line in the log.
+ * What the constraint does forbid is the residue leaking outward, and two rules
+ * hold it in. A verdict gates a candidate and its reason is stored as prose on a
+ * suppression — never a facet, never a badge, and there is no score, because the
+ * queue is a queue and not a ranked list. And:
+ *
+ * **The model proposes, the vocabulary disposes.** Every facet name, every value
+ * and every merge target is checked against the vault before anything is written.
+ * An invented value is dropped; an invented target demotes the verdict to `keep`.
+ * A model cannot widen a vault's vocabulary, cannot set `intake` or `extends`
+ * itself, and cannot name a note that does not exist. So what reaches a file is
+ * the model's *proposal expressed in the vault's own terms* — which is exactly
+ * what `intake: unjudged` then means: nothing here has been confirmed by a human.
+ *
+ * **It fails closed.** If the classifier cannot be reached or cannot be parsed,
+ * the run writes nothing and holds its cursor. An unjudged pile of your own
+ * commits is the failure this exists to prevent, so arriving at it by accident
+ * would be worse than an empty board and a line in the log.
  */
+
+export type Decision = 'keep' | 'extend' | 'drop';
 
 export interface Verdict {
   fingerprint: string;
-  keep: boolean;
-  /** Why, in the model's words. Stored on the suppression when `keep` is false. */
+  decision: Decision;
+  /** Why, in the model's words. Stored on the suppression when dropped. */
   reason: string;
+  /** A real title, not the raw commit subject or opening prompt. */
+  title?: string;
+  /** A sentence or three: what this is, and what is unfinished about it. */
+  body?: string;
+  /** Proposed axis values, already validated against the vocabulary. */
+  facets?: Record<string, string[]>;
+  /** For `extend`: the note this belongs to. Always one of the evidence matches. */
+  target?: string;
 }
 
-/**
- * The judgement, as instructions.
- *
- * A vault overrides it with `.projector/classify.md` — same argument as project
- * instructions being configuration rather than prose: this is a policy about
- * *this* set of notes, and the person whose queue it is should be able to change
- * it without editing the app.
- *
- * The default encodes one rule above all others, because it is the one that
- * decides whether the queue is usable at all: **a person's own routine progress
- * is not news to them.** Every commit and every coding session on this machine is
- * a candidate, and they were all made deliberately by the person now being asked
- * to read about them.
- */
-const DEFAULT_PROMPT = `You decide which candidates deserve a note in someone's personal work tracker.
+const DEFAULT_PROMPT = `You triage candidates for someone's personal work tracker, and you do two jobs at once: decide whether each deserves a note, and if it does, write the note.
 
-The tracker exists to answer "what should I pick up next". A candidate earns a note only if reading it later would tell its owner something they would otherwise forget or miss.
+# Job one: does it deserve a note?
 
-KEEP a candidate when:
-- someone else is asking for a decision, a reply, or a review
-- it is work that has been started and is not finished, with nothing already tracking it
-- it records a decision or a problem that will not be obvious from the code later
+The tracker answers "what should I pick up next". A candidate earns a note only if reading it later tells its owner something they would otherwise forget or miss.
 
-SUPPRESS a candidate when:
-- it is the owner's own routine progress — their commits, their coding sessions, refactors, formatting, test runs. They did it on purpose and do not need telling
-- it is mechanical noise: dependency bumps, generated files, merge commits, CI chatter
-- something already tracked covers it, which the evidence will say
+- "keep" — someone else is asking for a decision, a reply or a review; or it is unfinished work with nothing already tracking it; or it records a problem or decision that will not be obvious from the code later.
+- "extend" — it is more of something already tracked. The candidate's "matches" name the notes it might belong to; pick one as "target". Use this whenever a match is clearly the same piece of work.
+- "drop" — the owner's own routine progress: their commits, their coding sessions, refactors, formatting, test runs. They did it on purpose and do not need telling. Also mechanical noise: dependency bumps, generated files, merge commits, CI chatter.
 
-When genuinely torn, keep it: a note too many costs a glance, and a note too few costs the thing itself.
+When genuinely torn between keep and drop, keep: a note too many costs a glance, a note too few costs the thing itself.
 
-Each candidate may carry "evidence" — mechanical facts about the vault. "matches" means notes this may be more work on; a strong match usually means suppress, because the work is already tracked.
+# Job two: write the note
 
-Reply with ONLY a JSON array, no prose and no code fences:
-[{"fp": "<the candidate's fp, verbatim>", "keep": true|false, "reason": "<under 12 words>"}]
+For "keep" and "extend", fill these in. This is most of the value — a card nobody can read is not worth having.
 
-Return exactly one object per candidate.`;
+- "title" — what a person would call this in conversation. Not a commit subject, not a raw prompt, not a file path. No ticket key prefix, no "feat(x):". Under 70 characters, no trailing full stop.
+- "body" — one to three sentences: what this is, where it got to, and what is unresolved. Say what the raw material actually tells you and nothing you cannot see. No headings, no bullet lists, no restating the title.
+- "facets" — the axes below, with values from their own vocabulary. Only axes you have real grounds for; guessing every axis is worse than leaving one out. An axis marked single takes one value.
+
+# Output
+
+ONLY a JSON array, no prose and no code fences. One object per candidate, every "fp" verbatim:
+
+[{"fp":"…","decision":"keep"|"extend"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, extend only>"}]`;
 
 function promptFor(root: string): string {
   const file = join(paths(root).config, 'classify.md');
@@ -83,16 +95,86 @@ function promptFor(root: string): string {
   return DEFAULT_PROMPT;
 }
 
-/** What the model is shown: enough to judge, and nothing it cannot use. */
+/**
+ * The axes a model may propose, rendered for a prompt.
+ *
+ * `intake` and `extends` are withheld — they are the app's bookkeeping and a
+ * model setting either would be writing the pipeline's own state. Reference axes
+ * other than `project` are withheld too: their values are note ids, and inviting
+ * a model to invent relationships between notes it has only seen the titles of is
+ * a different feature with a different failure mode.
+ */
+const NOT_THE_MODEL_S = new Set(['intake', 'extends']);
+
+function offerableAxes(defs: Facets): string[] {
+  return Object.keys(defs).filter(
+    (name) => !NOT_THE_MODEL_S.has(name) && (!isRef(defs[name]!) || name === 'project'),
+  );
+}
+
+function vocabularyFor(root: string): { text: string; defs: Facets; projects: Set<string> } {
+  const defs = loadFacets(paths(root).facets);
+  const { notes } = reindex(root);
+
+  const projects = new Set<string>();
+  // A note carrying a `project:` block is a project — the same rule the `type`
+  // computed axis applies.
+  for (const rec of notes.values()) if (rec.project) projects.add(rec.id);
+
+  /** Every value the vault is currently using, per axis. */
+  const inUse = new Map<string, Set<string>>();
+  for (const rec of notes.values()) {
+    for (const [name, values] of Object.entries(rec.facets)) {
+      const set = inUse.get(name) ?? new Set<string>();
+      for (const v of values) set.add(v);
+      inUse.set(name, set);
+    }
+  }
+
+  const lines: string[] = ['# Axes'];
+  for (const name of offerableAxes(defs)) {
+    const def = defs[name]!;
+    if (name === 'project') {
+      // Its vocabulary is the vault, so it is listed rather than declared.
+      const list = [...projects].map((id) => `${id} (${notes.get(id)?.title ?? ''})`).join(', ');
+      lines.push(`- project (single value; one of): ${list || '(no project notes yet)'}`);
+      continue;
+    }
+    /**
+     * Declared values, plus the ones notes are actually carrying.
+     *
+     * An open axis often declares none — `domain: {values: [], open: true}` is
+     * the seeded shape — so a model shown only the declaration has nothing to
+     * reuse and mints a word every time. That is how a vault ends up with
+     * `webhooks`, `webhook` and `eventing` meaning one thing. Showing what is in
+     * use, and asking for it by preference, keeps an open axis open without
+     * letting a queue of unjudged cards sprawl the vocabulary.
+     */
+    const known = [...new Set([...(def.values ?? []), ...(inUse.get(name) ?? [])])];
+    const shown = known.length ? known.join(', ') : '(nothing yet)';
+    lines.push(
+      `- ${name}${def.single ? ' (single value)' : ''}: ${shown}` +
+        (def.open ? ' — prefer one of these; invent a new value only if none fits' : ''),
+    );
+  }
+  return { text: lines.join('\n'), defs, projects };
+}
+
+/** What the model is shown: every scrap the channel gathered, and nothing else. */
 function payloadFor(candidates: Candidate[]): string {
   return JSON.stringify(
     candidates.map((c) => ({
       fp: c.fingerprint,
       channel: c.channel,
-      title: c.title.slice(0, 300),
+      raw_title: c.title.slice(0, 300),
       ...(c.detail ? { detail: c.detail.slice(0, 400) } : {}),
+      // `fields` is where the channels put what they actually learned — repo,
+      // branch, cwd, turn count, session state, every commit subject. It was
+      // being thrown away, and it is most of what makes a readable body possible.
+      ...(c.fields?.length ? { context: c.fields.map((f) => `${f.k}: ${f.v}`) } : {}),
+      ...(c.when ? { when: c.when } : {}),
       ...(c.evidence?.matches?.length
-        ? { matches: c.evidence.matches.map((m) => `${m.id} (${m.why})`) }
+        ? { matches: c.evidence.matches.map((m) => `${m.id} — ${m.title} (matched by ${m.why})`) }
         : {}),
     })),
     null,
@@ -103,19 +185,19 @@ function payloadFor(candidates: Candidate[]): string {
 /** Asks a model and returns its raw text, or null when it could not be reached. */
 export type Ask = (system: string, user: string) => Promise<string | null>;
 
+const NO_TOOLS =
+  'Bash Read Write Edit Glob Grep WebFetch WebSearch Task TodoWrite NotebookEdit BashOutput KillShell SlashCommand Skill';
+
 /**
  * The default transport: the Claude CLI, through the same read-only subprocess
  * runner everything else outside the vault goes through.
  *
  * Deliberately stripped. `--system-prompt` replaces the default one,
  * `--disallowedTools` drops the tool definitions, and `--strict-mcp-config` with
- * no config keeps a machine's MCP servers out of it. What is left is a
- * classification, not an agent, which is both the cheaper thing and the more
- * predictable one — a classifier that could read files would eventually do it.
+ * no config keeps a machine's MCP servers out. What is left is a classification
+ * rather than an agent, which is both cheaper and more predictable — a classifier
+ * able to read files would eventually read them.
  */
-const NO_TOOLS =
-  'Bash Read Write Edit Glob Grep WebFetch WebSearch Task TodoWrite NotebookEdit BashOutput KillShell SlashCommand Skill';
-
 export function claudeAsk(command: string, model: string): Ask {
   return async (system, user) => {
     const res = await run(
@@ -133,7 +215,7 @@ export function claudeAsk(command: string, model: string): Ask {
         '--output-format',
         'json',
       ],
-      { timeoutMs: 120_000 },
+      { timeoutMs: 180_000 },
     );
     if (!res.ok) return null;
     try {
@@ -149,43 +231,64 @@ export function claudeAsk(command: string, model: string): Ask {
 /**
  * Pull the JSON array out of a reply.
  *
- * Models fence JSON however the mood takes them, and a classifier that failed
- * because of three backticks would fail closed — holding the whole sweep over
- * punctuation. So the first balanced array in the text wins.
+ * Models fence JSON however the mood takes them, and failing closed over three
+ * backticks would hold a whole sweep on punctuation. So the first balanced array
+ * in the text wins.
  */
-function parseVerdicts(text: string): Verdict[] | null {
+function rawVerdicts(text: string): Record<string, unknown>[] | null {
   const start = text.indexOf('[');
   const end = text.lastIndexOf(']');
   if (start === -1 || end <= start) return null;
   try {
-    const raw = JSON.parse(text.slice(start, end + 1)) as unknown;
-    if (!Array.isArray(raw)) return null;
-    const out: Verdict[] = [];
-    for (const item of raw) {
-      if (!item || typeof item !== 'object') continue;
-      const r = item as Record<string, unknown>;
-      const fp = typeof r.fp === 'string' ? r.fp : null;
-      if (!fp) continue;
-      out.push({
-        fingerprint: fp,
-        keep: r.keep !== false,
-        reason: (typeof r.reason === 'string' ? r.reason : '').slice(0, 200) || 'no reason given',
-      });
-    }
-    return out;
+    const parsed = JSON.parse(text.slice(start, end + 1)) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === 'object');
   } catch {
     return null;
   }
 }
 
+const str = (v: unknown, max: number): string | undefined => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s.slice(0, max) : undefined;
+};
+
+/**
+ * Keep only what the vault would actually accept.
+ *
+ * An unknown axis, a value a closed axis never declared, a second value on a
+ * single one — each is dropped on its own rather than failing the card, because a
+ * card with two good facets and one invented one is still worth having and a
+ * refused write is not.
+ */
+function validFacets(proposed: unknown, defs: Facets, projects: Set<string>): Record<string, string[]> {
+  if (!proposed || typeof proposed !== 'object') return {};
+  const allowed = new Set(offerableAxes(defs));
+  const out: Record<string, string[]> = {};
+  for (const [name, raw] of Object.entries(proposed as Record<string, unknown>)) {
+    if (!allowed.has(name)) continue;
+    const def = defs[name]!;
+    const values = (Array.isArray(raw) ? raw : [raw])
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .filter(Boolean)
+      .filter((v) =>
+        // `project` names a note, so the vault is its vocabulary; every other
+        // axis is open or declares its values.
+        name === 'project' ? projects.has(v) : def.open || (def.values ?? []).includes(v),
+      );
+    const kept = def.single ? values.slice(0, 1) : values;
+    if (kept.length) out[name] = kept;
+  }
+  return out;
+}
+
 export interface Classified {
-  keep: Candidate[];
-  /** Candidates to record as declined, with the reason to record. */
+  keep: { candidate: Candidate; verdict: Verdict }[];
   drop: { candidate: Candidate; reason: string }[];
 }
 
 /**
- * Judge a run's candidates in one call.
+ * Judge and describe a run's candidates in one call.
  *
  * One call rather than one per candidate, which is not only cheaper: a sweep's
  * candidates arrive together and are frequently *one thing* — an afternoon's
@@ -193,8 +296,8 @@ export interface Classified {
  * shown each in isolation cannot.
  *
  * Returns null when the classifier could not be reached at all. A candidate the
- * model simply failed to mention is **kept**, which is the safe direction of the
- * two: the cost of keeping is a glance, and the cost of dropping is the item.
+ * model failed to mention is **kept**, which is the safe direction of the two:
+ * keeping costs a glance, dropping costs the item.
  */
 export async function classify(
   root: string,
@@ -203,17 +306,48 @@ export async function classify(
 ): Promise<Classified | null> {
   if (!candidates.length) return { keep: [], drop: [] };
 
-  const text = await ask(promptFor(root), payloadFor(candidates));
-  if (text === null) return null;
-  const verdicts = parseVerdicts(text);
-  if (!verdicts) return null;
+  const { text: vocab, defs, projects } = vocabularyFor(root);
+  const reply = await ask(`${promptFor(root)}\n\n${vocab}`, payloadFor(candidates));
+  if (reply === null) return null;
+  const raw = rawVerdicts(reply);
+  if (!raw) return null;
 
-  const byFp = new Map(verdicts.map((v) => [v.fingerprint, v]));
+  const byFp = new Map<string, Record<string, unknown>>();
+  for (const r of raw) {
+    const fp = typeof r.fp === 'string' ? r.fp : null;
+    if (fp) byFp.set(fp, r);
+  }
+
   const out: Classified = { keep: [], drop: [] };
   for (const c of candidates) {
-    const v = byFp.get(c.fingerprint);
-    if (v && !v.keep) out.drop.push({ candidate: c, reason: v.reason });
-    else out.keep.push(c);
+    const r = byFp.get(c.fingerprint);
+    const reason = str(r?.reason, 200) ?? 'no reason given';
+    const decision = r?.decision;
+
+    if (decision === 'drop') {
+      out.drop.push({ candidate: c, reason });
+      continue;
+    }
+
+    // A target must be one of the mechanical matches. That is what stops a model
+    // inventing a note id, and it costs nothing real: `matches` is computed from
+    // the vault, so anything outside it was never a candidate for merging.
+    const matched = new Set((c.evidence?.matches ?? []).map((m) => m.id));
+    const target = str(r?.target, 200);
+    const extend = decision === 'extend' && target && matched.has(target);
+
+    out.keep.push({
+      candidate: c,
+      verdict: {
+        fingerprint: c.fingerprint,
+        decision: extend ? 'extend' : 'keep',
+        reason,
+        ...(str(r?.title, 200) ? { title: str(r?.title, 200)! } : {}),
+        ...(str(r?.body, 2000) ? { body: str(r?.body, 2000)! } : {}),
+        facets: validFacets(r?.facets, defs, projects),
+        ...(extend ? { target } : {}),
+      },
+    });
   }
   return out;
 }

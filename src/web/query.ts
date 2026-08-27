@@ -33,6 +33,16 @@ export const NOTE_PARAM = 'note';
  */
 export const SEL_PARAM = 'sel';
 
+/**
+ * The declined pile, open or not.
+ *
+ * Out of the query for the same reason `?note=` is: it is where you are looking,
+ * not what you are looking at. It is *in* the URL rather than in component state
+ * so the surface is deep-linkable and the back button closes it — the two things
+ * a modal held in a `useState` never does.
+ */
+export const DECLINED_PARAM = 'declined';
+
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
   return key.startsWith('f.') || (SPEC_PARAMS as readonly string[]).includes(key);
@@ -49,7 +59,9 @@ function isQueryParam(key: string): boolean {
  * it is which library you opened rather than what you are looking at.
  */
 function isOwnParam(key: string): boolean {
-  return key === NOTE_PARAM || key === SEL_PARAM || isQueryParam(key);
+  return (
+    key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || isQueryParam(key)
+  );
 }
 
 /**

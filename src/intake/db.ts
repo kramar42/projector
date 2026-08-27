@@ -63,7 +63,12 @@ CREATE TABLE IF NOT EXISTS suppressed (
   -- Never null. A suppression with no reason cannot be reviewed, and the whole
   -- safety of a threshold is that the pile it hides stays readable.
   reason      TEXT NOT NULL,
-  at          TEXT NOT NULL
+  at          TEXT NOT NULL,
+  -- Who decided: 'model' or 'person'. Not decoration — a model's decline is a
+  -- prediction that may be wrong, and a person's is the ground truth you would
+  -- check it against. Calibration cannot use a pile that does not say which is
+  -- which, and neither can a reader deciding how much to trust an empty board.
+  decided_by  TEXT NOT NULL DEFAULT 'person'
 );
 `;
 
@@ -84,6 +89,16 @@ function migrate(conn: DatabaseSync): void {
     ['pending_at', 'TEXT'],
   ] as const) {
     if (!have.has(col)) conn.exec(`ALTER TABLE watermark ADD COLUMN ${col} ${type}`);
+  }
+
+  // Same reasoning for the suppressions table, which predates knowing who
+  // decided. An existing row is defaulted to 'person', which is what every row
+  // written before the classifier existed actually was.
+  const supp = new Set(
+    (conn.prepare('PRAGMA table_info(suppressed)').all() as { name: string }[]).map((r) => r.name),
+  );
+  if (supp.size && !supp.has('decided_by')) {
+    conn.exec("ALTER TABLE suppressed ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'person'");
   }
 }
 
@@ -272,12 +287,15 @@ export function resetWatermark(dataRoot: string, channel?: string): number {
 
 // --------------------------------------------------------------- suppressions
 
+export type DecidedBy = 'model' | 'person';
+
 export interface Suppression {
   fingerprint: string;
   channel: string | null;
   title: string | null;
   reason: string;
   at: string;
+  decidedBy: DecidedBy;
 }
 
 /**
@@ -295,26 +313,38 @@ export interface Suppression {
  */
 export function suppress(
   dataRoot: string,
-  entry: { fingerprint: string; reason: string; channel?: string; title?: string },
+  entry: {
+    fingerprint: string;
+    reason: string;
+    channel?: string;
+    title?: string;
+    /** Defaults to 'person': a caller that does not say is a person at a keyboard. */
+    by?: DecidedBy;
+  },
 ): Suppression {
   const at = new Date().toISOString();
+  const by: DecidedBy = entry.by ?? 'person';
   openIntakeDb(dataRoot)
     .prepare(
-      `INSERT INTO suppressed (fingerprint, channel, title, reason, at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO suppressed (fingerprint, channel, title, reason, at, decided_by)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(fingerprint) DO UPDATE SET
          channel = COALESCE(excluded.channel, suppressed.channel),
          title   = COALESCE(excluded.title, suppressed.title),
          reason  = excluded.reason,
-         at      = excluded.at`,
+         at      = excluded.at,
+         -- A person overruling the model is the point of the pile being readable,
+         -- so the later decision wins and says whose it was.
+         decided_by = excluded.decided_by`,
     )
-    .run(entry.fingerprint, entry.channel ?? null, entry.title ?? null, entry.reason, at);
+    .run(entry.fingerprint, entry.channel ?? null, entry.title ?? null, entry.reason, at, by);
   return {
     fingerprint: entry.fingerprint,
     channel: entry.channel ?? null,
     title: entry.title ?? null,
     reason: entry.reason,
     at,
+    decidedBy: by,
   };
 }
 
@@ -341,13 +371,14 @@ export function suppressions(dataRoot: string, channel?: string): Suppression[] 
     channel
       ? conn
           .prepare(
-            `SELECT fingerprint, channel, title, reason, at FROM suppressed
-              WHERE channel = ? ORDER BY at DESC`,
+            `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
+               FROM suppressed WHERE channel = ? ORDER BY at DESC`,
           )
           .all(channel)
       : conn
           .prepare(
-            `SELECT fingerprint, channel, title, reason, at FROM suppressed ORDER BY at DESC`,
+            `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
+               FROM suppressed ORDER BY at DESC`,
           )
           .all()
   ) as unknown as Suppression[];

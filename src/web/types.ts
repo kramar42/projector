@@ -93,3 +93,19 @@ export interface WorkResult {
   link?: string;
   briefingPath?: string;
 }
+
+/**
+ * A candidate a sweep saw and nobody filed.
+ *
+ * Not a note, which is why it has its own shape and its own endpoint rather than
+ * arriving through `/api/query` — the query compiler answers about notes.
+ */
+export interface Declined {
+  fingerprint: string;
+  channel: string | null;
+  title: string | null;
+  reason: string;
+  at: string;
+  /** `model` when the classifier decided, `person` when you did. */
+  decidedBy: 'model' | 'person';
+}

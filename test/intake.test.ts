@@ -11,14 +11,15 @@ import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
+import { deleteNote } from '../src/server/mutate.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
-import { classify, type Ask } from '../src/intake/classify.ts';
+import { classify, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
-import type { Candidate, Channel, ChannelReport, IntakeContext } from '../src/intake/types.ts';
+import type { Candidate, Channel, IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 
@@ -779,13 +780,19 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
      */
     assert.deepEqual(
       Object.keys(BUILTIN_FACETS).sort(),
-      ['intake', 'project'],
+      ['extends', 'intake', 'project'],
       'a built-in was added or removed — MANUAL.md’s "The built-ins" names them',
     );
     assert.equal(defs.intake?.builtin, true);
     assert.deepEqual(defs.intake?.values, ['unjudged']);
     assert.equal(defs.intake?.single, true);
     assert.equal(defs.intake?.open, false, 'a vault may not add a second meaning to it');
+
+    // `extends` points at a note, so the vault is its vocabulary — and nothing
+    // walks it, which is the reason it is not `parent`.
+    assert.equal(defs.extends?.builtin, true);
+    assert.equal(defs.extends?.type, 'ref');
+    assert.equal(defs.extends?.single, true);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -809,20 +816,22 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
  */
 const keepAll: Ask = async (_system, user) =>
   JSON.stringify(
-    (JSON.parse(user) as { fp: string }[]).map((c) => ({ fp: c.fp, keep: true, reason: 'kept' })),
+    (JSON.parse(user) as { fp: string }[]).map((c) => ({
+      fp: c.fp,
+      decision: 'keep',
+      reason: 'kept',
+    })),
   );
 
-/** A report shaped like a channel's, without needing a channel to produce one. */
-function report(channel: string, candidates: Candidate[]): ChannelReport {
-  return {
-    channel,
-    cursor: null,
-    nextCursor: '2026-01-01T00:00:00.000Z',
-    fetched: true,
-    candidates,
-    skipped: [],
-  };
-}
+/**
+ * Candidates paired with a bare "keep" verdict — for the materialise tests, whose
+ * subject is the write and not the judgement.
+ */
+const asKept = (candidates: Candidate[], over: Partial<Verdict> = {}) =>
+  candidates.map((candidate) => ({
+    candidate,
+    verdict: { fingerprint: candidate.fingerprint, decision: 'keep' as const, reason: '', ...over },
+  }));
 
 const candidate = (fp: string, title: string, over: Partial<Candidate> = {}): Candidate => ({
   channel: 'git',
@@ -835,7 +844,7 @@ const candidate = (fp: string, title: string, over: Partial<Candidate> = {}): Ca
 test('a materialised candidate is an ordinary note carrying the intake axis', () => {
   const root = vault({ a: card('a') });
   try {
-    const res = materialise(root, report('git', [candidate('git:1', 'A thing that happened')]));
+    const res = materialise(root, 'git', asKept([candidate('git:1', 'A thing that happened')]));
     assert.equal(res.created.length, 1);
 
     const rec = [...reindex(root).notes.values()].find((n) => n.id === res.created[0]);
@@ -851,12 +860,12 @@ test('a materialised candidate is an ordinary note carrying the intake axis', ()
 test('materialising the same report twice creates nothing the second time', () => {
   const root = vault({ a: card('a') });
   try {
-    const r = report('git', [candidate('git:1', 'A thing that happened')]);
-    assert.equal(materialise(root, r).created.length, 1);
+    const r = asKept([candidate('git:1', 'A thing that happened')]);
+    assert.equal(materialise(root, 'git', r).created.length, 1);
 
     // Convergence is a property of the write, not of the caller remembering.
     // A poller on a timer re-fetches the same window constantly.
-    const second = materialise(root, r);
+    const second = materialise(root, 'git', r);
     assert.deepEqual(second.created, []);
     assert.equal(second.skipped, 1);
   } finally {
@@ -870,7 +879,8 @@ test('a candidate the vault already answers for is not written again', () => {
   try {
     const res = materialise(
       root,
-      report('git', [
+      'git',
+      asKept([
         candidate('git:1', 'Already linked', { evidence: { linkedTo: ['a'] } }),
         candidate('git:2', 'Already captured', { evidence: { capturedAs: ['a'] } }),
       ]),
@@ -891,9 +901,11 @@ test('a suppressed candidate never reaches materialisation', async () => {
     suppress(root, { fingerprint: 'git:1', reason: 'noise' });
     // `sweep` drops it, so the report handed to `materialise` cannot contain it —
     // the poller needs no code of its own to honour a suppression.
-    const r = report('git', [candidate('git:1', 'noise')]);
-    const filtered = { ...r, candidates: r.candidates.filter((c) => !suppressedFingerprints(root).has(c.fingerprint)) };
-    assert.deepEqual(materialise(root, filtered).created, []);
+    const hidden = suppressedFingerprints(root);
+    const survivors = asKept([candidate('git:1', 'noise')]).filter(
+      (k) => !hidden.has(k.candidate.fingerprint),
+    );
+    assert.deepEqual(materialise(root, 'git', survivors).created, []);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1025,7 +1037,7 @@ test('a materialising run advances the cursor, because nothing is left unrecorde
 test('a declined candidate is recorded with its reason, not dropped', async () => {
   const root = vault({ a: card('a') });
   const judge: Ask = async () =>
-    '[{"fp":"git:1","keep":false,"reason":"own routine commit"},{"fp":"jira:9","keep":true,"reason":"needs a reply"}]';
+    '[{"fp":"git:1","decision":"drop","reason":"own routine commit"},{"fp":"jira:9","decision":"keep","reason":"needs a reply"}]';
   try {
     const res = await classify(
       root,
@@ -1033,7 +1045,7 @@ test('a declined candidate is recorded with its reason, not dropped', async () =
       judge,
     );
     assert.ok(res);
-    assert.deepEqual(res!.keep.map((c) => c.fingerprint), ['jira:9']);
+    assert.deepEqual(res!.keep.map((k) => k.candidate.fingerprint), ['jira:9']);
     assert.equal(res!.drop.length, 1);
     assert.equal(res!.drop[0]!.reason, 'own routine commit', 'the reason survives to be read back');
   } finally {
@@ -1045,10 +1057,10 @@ test('a declined candidate is recorded with its reason, not dropped', async () =
 test('a candidate the model forgot to mention is kept', async () => {
   const root = vault({ a: card('a') });
   // Keeping costs a glance; dropping costs the item. So silence means keep.
-  const forgetful: Ask = async () => '[{"fp":"git:1","keep":false,"reason":"noise"}]';
+  const forgetful: Ask = async () => '[{"fp":"git:1","decision":"drop","reason":"noise"}]';
   try {
     const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b')], forgetful);
-    assert.deepEqual(res!.keep.map((c) => c.fingerprint), ['git:2']);
+    assert.deepEqual(res!.keep.map((k) => k.candidate.fingerprint), ['git:2']);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1059,7 +1071,7 @@ test('a fenced reply is still a reply', async () => {
   const root = vault({ a: card('a') });
   // Failing closed over three backticks would hold a whole sweep on punctuation.
   const fenced: Ask = async () =>
-    'Here you go:\n```json\n[{"fp":"git:1","keep":false,"reason":"noise"}]\n```\n';
+    'Here you go:\n```json\n[{"fp":"git:1","decision":"drop","reason":"noise"}]\n```\n';
   try {
     const res = await classify(root, [candidate('git:1', 'a')], fenced);
     assert.equal(res!.drop.length, 1);
@@ -1159,6 +1171,123 @@ test('a vault may override the judgement without editing the app', () => {
     return classify(root, [candidate('git:1', 'a')], spy).then(() => {
       assert.match(seen, /badgers/, 'the vault’s own instructions are what the model is given');
     });
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('deleting a captured note is a decline, so the sweep stops offering it', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const res = materialise(root, 'git', asKept([candidate('git:1', 'A thing')]));
+    const id = res.created[0]!;
+
+    // The gesture that obviously means no. Before this it destroyed the one thing
+    // stopping the next sweep re-proposing the card.
+    deleteNote(root, id);
+    const rows = suppressions(root);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.fingerprint, 'git:1');
+    assert.equal(rows[0]!.decidedBy, 'person', 'deleting a file is a person deciding');
+
+    // And it holds: materialising the same candidate again writes nothing,
+    // because the sweep would never hand it over in the first place.
+    assert.ok(suppressedFingerprints(root).has('git:1'));
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a model decline and a person decline are told apart', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'git:1', reason: 'routine', by: 'model' });
+    suppress(root, { fingerprint: 'git:2', reason: 'not interested' });
+    const by = new Map(suppressions(root).map((s) => [s.fingerprint, s.decidedBy]));
+    assert.equal(by.get('git:1'), 'model');
+    assert.equal(by.get('git:2'), 'person');
+
+    // A person overruling the model is the later decision, and the pile says so.
+    suppress(root, { fingerprint: 'git:1', reason: 'agreed, actually', by: 'person' });
+    assert.equal(suppressions(root).find((s) => s.fingerprint === 'git:1')?.decidedBy, 'person');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a candidate that extends a match lands pointing at it, ready to merge', async () => {
+  const root = vault({ a: card('a') });
+  const judge: Ask = async () =>
+    '[{"fp":"git:1","decision":"extend","target":"a","reason":"more of the same work","title":"More on the retry bug","body":"Another commit on the same branch."}]';
+  try {
+    const res = await classify(
+      root,
+      [candidate('git:1', 'fix: another go', { evidence: { matches: [{ id: 'a', title: 'A', why: 'branch' }] } })],
+      judge,
+    );
+    const kept = res!.keep;
+    assert.equal(kept[0]!.verdict.decision, 'extend');
+    assert.equal(kept[0]!.verdict.target, 'a');
+
+    const out = materialise(root, 'git', kept);
+    assert.equal(out.extending, 1);
+    const rec = [...reindex(root).notes.values()].find((n) => n.id === out.created[0]);
+    assert.deepEqual(rec!.facets.extends, ['a'], 'it points at what it wants folding into');
+    assert.equal(rec!.title, 'More on the retry bug', 'and carries a title a person would use');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an invented merge target is refused, and the candidate stands alone', async () => {
+  const root = vault({ a: card('a') });
+  // A target must be one of the mechanical matches. Anything else is a model
+  // inventing a relationship, and demoting to `keep` loses nothing.
+  const inventive: Ask = async () =>
+    '[{"fp":"git:1","decision":"extend","target":"a-note-that-does-not-exist","reason":"x"}]';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a')], inventive);
+    assert.equal(res!.keep[0]!.verdict.decision, 'keep');
+    assert.equal(res!.keep[0]!.verdict.target, undefined);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an invented facet value is dropped, and the rest of the card survives', async () => {
+  const root = vault({ a: card('a') });
+  writeFileSync(
+    paths(root).facets,
+    'priority:\n  values: [now, month]\n  single: true\n  open: false\n',
+    'utf8',
+  );
+  const generous: Ask = async () =>
+    '[{"fp":"git:1","decision":"keep","reason":"x","title":"A real title","facets":{"priority":["urgent-ish"],"nonsense":["x"]}}]';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a')], generous);
+    const v = res!.keep[0]!.verdict;
+    // A card with a good title and one invented facet is still worth having; a
+    // refused write is not.
+    assert.deepEqual(v.facets, {}, 'the undeclared value and the unknown axis both go');
+    assert.equal(v.title, 'A real title');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a model may not set the app’s own axes', async () => {
+  const root = vault({ a: card('a') });
+  const overreaching: Ask = async () =>
+    '[{"fp":"git:1","decision":"keep","reason":"x","facets":{"intake":[],"extends":["a"]}}]';
+  try {
+    const res = await classify(root, [candidate('git:1', 'a')], overreaching);
+    assert.deepEqual(res!.keep[0]!.verdict.facets, {}, 'intake and extends are the pipeline’s');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

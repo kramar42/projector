@@ -7,6 +7,7 @@ import { counts } from '../index/queries.ts';
 import { computedAxes } from '../index/query.ts';
 import { enrichmentStats } from './enrich.ts';
 import { listVaults } from '../vault.ts';
+import { suppressions } from '../intake/db.ts';
 
 /**
  * What the client needs once per vault, rather than once per query.
@@ -34,6 +35,15 @@ export interface Meta {
   counts: Record<string, number>;
   enrichment: Record<string, number>;
   views: SavedViewSummary[];
+  /**
+   * How many candidates a sweep declined rather than filed.
+   *
+   * Not part of a query answer, because a declined candidate is not a note. It
+   * belongs to the vault, and the sidebar needs it: with a classifier running an
+   * empty board has two meanings — nothing happened, or everything was hidden —
+   * and this is what lets the footer say which.
+   */
+  declined: number;
 }
 
 
@@ -50,5 +60,25 @@ export function meta(
     counts: counts(deps.db, deps.facets),
     enrichment: enrichmentStats(root),
     views: summariseViews(deps.views),
+    /**
+     * How many candidates were declined rather than filed.
+     *
+     * Here rather than on the query response because a declined candidate is not
+     * a note — `/api/query` has nothing to say about it. It rides on meta for the
+     * reason the sidebar needs it: with a classifier running, an empty board has
+     * two meanings, and a count is what lets the footer say which.
+     */
+    declined: declinedCount(root),
   };
+}
+
+/** A count, not the rows — the surface fetches those when it opens. */
+function declinedCount(root: string): number {
+  try {
+    return suppressions(root).length;
+  } catch {
+    // Meta must answer even if the intake store cannot be opened; a missing
+    // count is a missing footer line, not a vault that will not load.
+    return 0;
+  }
 }

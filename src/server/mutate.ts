@@ -24,6 +24,7 @@ import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
 import { wouldCycle } from '../index/refs.ts';
 import { merged } from '../schema/merge.ts';
+import { suppress } from '../intake/db.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
 import { viewFileFor } from './views.ts';
@@ -495,6 +496,20 @@ export function repointed(
 /**
  * Delete a note's file, and drop every reference that pointed at it so the graph
  * does not keep dangling values. The files are in git, so this is recoverable.
+ *
+ * **A deleted note that came from a sweep is a decline**, so its fingerprint is
+ * recorded on the way out. Without that, deleting a candidate destroys the only
+ * thing that stopped the next sweep proposing it again — so the card returns, and
+ * the gesture that obviously means *no* is the one gesture that does not work.
+ * That trap was live from the moment candidates started landing as notes.
+ *
+ * Every fingerprint the note answered for, absorbed ones included: a note that
+ * swallowed three candidates in a merge is the answer to all four, and deleting
+ * it must not reopen the other three.
+ *
+ * Recorded as a person's decision, because deleting a file is one. `unsuppress`
+ * is the way back if it was a mistake, and archiving is the way to keep the note
+ * as a record instead.
  */
 export function deleteNote(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
@@ -503,6 +518,16 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   const refFacets = refFacetsOf(root);
   const gone = new Set([id]);
   let removedEdges = 0;
+
+  const doomed = notes.get(id);
+  for (const fp of [doomed?.source_fingerprint, ...(doomed?.absorbed_fingerprints ?? [])]) {
+    if (!fp) continue;
+    suppress(root, {
+      fingerprint: fp,
+      reason: `deleted from the vault (was "${(doomed?.title ?? id).slice(0, 80)}")`,
+      ...(doomed?.title ? { title: doomed.title } : {}),
+    });
+  }
 
   for (const rec of notes.values()) {
     if (rec.id === id) continue;
