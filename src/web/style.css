@@ -4493,3 +4493,75 @@ input[data-nav]:focus + .checkbox {
   justify-content: center;
   padding: 8px 0 4px;
 }
+
+/*
+ * Fold in: two columns of one decision.
+ *
+ * Borrows the cheatsheet frame like the declined pile does — both are one surface
+ * over whatever you were looking at, and a second box shape would be a second
+ * answer to a settled question.
+ */
+.fold {
+  width: min(560px, 94vw);
+  padding: 14px 18px 12px;
+}
+.fold-table {
+  width: 100%;
+}
+.fold-axis {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+/* A column heading that is a control. Underlined so it reads as pressable in a
+   row of headings that are not. */
+.fold-col {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.fold-col:hover { color: var(--ink); }
+.fold-col:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/*
+ * The cells are the radio buttons, so the whole cell is the target rather than a
+ * control inside it — the value is what you are choosing, and asking someone to
+ * hit a dot beside it would be two things where there is one.
+ */
+.fold-cell {
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+  width: 100%;
+  text-align: left;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.fold-cell:hover { background: var(--surface-2); color: var(--ink); }
+.fold-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fold-cell.is-chosen {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.fold-none {
+  font-style: italic;
+  color: var(--ink-3);
+}
+.fold-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0 2px;
+}

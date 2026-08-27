@@ -414,6 +414,19 @@ it needs, so `more` is a fact about what was read rather than a second count ove
 justification: it is the audit trail for a decision the app made on its own, and the only place a wrong
 one can be put right.
 
+**Folding is a merge plus an answer, and the split is exact.** `merged()` leaves the survivor's
+classification alone on purpose — combining two `status` values would be a guess about which note you
+meant — and that left a sweep unable to say that something already tracked had *moved*. The route back
+is not to teach merge to overwrite, which would cost the property that makes it safe. It is that **a
+reference facet is merge's to union and everything else is a question**: `schema/fold.ts` states it, one
+row per axis where the candidate proposes something the note does not already say, and the person
+answers before either write happens.
+
+The default answer is the note as it stands, which is exactly what folding did before the dialog
+existed — so it can be dismissed unread and behave as it always did, and taking every proposal is one
+click. Only the axes actually taken are written: an axis left alone is one the note already answers for,
+and writing its own value back would move its `updated` stamp for nothing.
+
 **Deleting a note that came from a sweep is a decline**, so `deleteNote` records its fingerprint —
 every fingerprint it answered for, absorbed ones included. Without that, deleting a candidate destroys
 the only thing stopping the next sweep proposing it, so the card returns and the gesture that plainly
@@ -626,7 +639,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
 | the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
 | `POST /api/intake/declined/:fp/restore` | one row removed from `.projector/intake.db`'s `suppressed` table | never a note; the only write the declined surface makes |
-| the panel's ✓ / `+`, through `POST /api/bulk` op `merge` | the same as any merge: the survivor, everything that referenced the absorbed note, then the absorbed file | drawn only on a note carrying `extends`, and it merges into that one value — there is nothing to pick |
+| the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |

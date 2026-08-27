@@ -18,7 +18,10 @@ import {
   repointed,
   putFrontmatter,
   saveAsset,
+  foldInto,
 } from '../src/server/mutate.ts';
+import { defaultSides, foldResult, foldRows } from '../src/schema/fold.ts';
+import type { Facets } from '../src/schema/types.ts';
 import { readAll } from '../src/index/indexer.ts';
 import { paths } from '../src/config.ts';
 
@@ -1009,4 +1012,104 @@ test('a repoint deduplicates, drops a self-reference, and reports nothing when n
     repointed({ project: ['a', 'b'] }, refs, gone, null, 'x'),
     { facets: { project: ['a'] }, changed: 1 },
   );
+});
+
+// ------------------------------------------------------------------ folding in
+
+/**
+ * What a fold asks about, and what it leaves to the merge.
+ *
+ * The division is the design: a reference facet is merge's to union — a note is a
+ * member of both projects — and everything else is a question, because one value
+ * has to win and only a person can say which. That hole was live: a sweep could
+ * discover a ticket had moved to blocked and had no way to say so, `merged()`
+ * touching no label on the survivor.
+ */
+
+const noteWith = (id: string, facets: Record<string, string[]>) =>
+  ({ id, title: id, facets, links: [], body: '', file: `${id}.md` }) as unknown as Parameters<
+    typeof foldRows
+  >[0];
+
+const FOLD_DEFS = {
+  status: { type: 'label', values: ['active', 'blocked'], single: true },
+  priority: { type: 'label', values: ['now', 'month'], single: true },
+  project: { type: 'ref', values: [], open: true },
+  parent: { type: 'ref', values: [], open: true, single: true },
+} as unknown as Facets;
+
+test('a fold asks about the axes a merge refuses to touch, and no others', () => {
+  const rows = foldRows(
+    noteWith('cand', {
+      status: ['blocked'],
+      priority: ['now'],
+      project: ['p'],
+      intake: ['unjudged'],
+      extends: ['target'],
+    }),
+    noteWith('target', { status: ['active'], priority: ['now'] }),
+    FOLD_DEFS,
+  );
+
+  assert.deepEqual(
+    rows.map((r) => r.facet),
+    ['status'],
+    'status differs so it is asked; priority already agrees; project is merge’s to union; ' +
+      'intake and extends are the pipeline’s',
+  );
+  assert.deepEqual(rows[0], { facet: 'status', before: ['active'], after: ['blocked'] });
+});
+
+test('an axis the note lacks is a row too, and says it holds nothing', () => {
+  const rows = foldRows(
+    noteWith('cand', { priority: ['now'] }),
+    noteWith('target', { status: ['active'] }),
+    FOLD_DEFS,
+  );
+  // A clean addition is still a decision — taking it is a change to the note.
+  assert.deepEqual(rows, [{ facet: 'priority', before: [], after: ['now'] }]);
+});
+
+test('the default keeps the note exactly as it is', () => {
+  const rows = foldRows(
+    noteWith('cand', { status: ['blocked'], priority: ['now'] }),
+    noteWith('target', { status: ['active'] }),
+    FOLD_DEFS,
+  );
+  const sides = defaultSides(rows);
+
+  // Which is what folding did before the dialog existed: it can be dismissed
+  // unread and behave the way it always did.
+  assert.deepEqual(foldResult(rows, sides), {});
+});
+
+test('only the axes taken are written, so keeping one writes nothing for it', () => {
+  const rows = foldRows(
+    noteWith('cand', { status: ['blocked'], priority: ['now'] }),
+    noteWith('target', { status: ['active'], priority: ['month'] }),
+    FOLD_DEFS,
+  );
+  const sides = { ...defaultSides(rows), status: 'after' as const };
+
+  // `priority` stays on the note's own value, and is absent rather than written
+  // back — a write that changes nothing still moves the file's stamp.
+  assert.deepEqual(foldResult(rows, sides), { status: ['blocked'] });
+});
+
+test('a fold applies what was taken and merges the rest, in that order', () => {
+  const v = vault({
+    target: card('target', 'status: [planning], priority: [month]'),
+    cand: card('cand', 'status: [done], priority: [now], extends: [target]'),
+  });
+  try {
+    foldInto(v.root, 'cand', 'target', { status: ['done'] });
+    const after = readAll(paths(v.root).notes).notes.get('target')!;
+
+    assert.deepEqual(after.facets.status, ['done'], 'the taken axis moved');
+    assert.deepEqual(after.facets.priority, ['month'], 'and the kept one did not');
+    assert.match(after.body, /body of cand/, 'the body came across regardless');
+    assert.equal(readAll(paths(v.root).notes).notes.has('cand'), false, 'the candidate is gone');
+  } finally {
+    v.cleanup();
+  }
 });

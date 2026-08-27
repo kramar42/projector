@@ -717,6 +717,37 @@ export function mergeNotes(
  * in the loop widens the gap further, so the stale window was real rather than
  * theoretical. See `facetsNow`.
  */
+/**
+ * Fold a candidate into the note it extends, applying what was accepted.
+ *
+ * Two writes, and the order is the decision. **The merge goes first** because it
+ * is the one that can refuse — it checks the graph the merge would produce and
+ * writes nothing until every check has passed — so a refusal leaves the target
+ * exactly as it was rather than carrying facets from a fold that never happened.
+ * The accepted values arrive as an argument rather than being read off the
+ * candidate, so they outlive the file the merge removes.
+ *
+ * The split between the two halves is `schema/fold.ts`'s: a reference facet is
+ * merge's to union, and everything else is a question merge refuses to answer,
+ * which is why it needs a person and arrives here already answered.
+ */
+export function foldInto(
+  root: string,
+  id: string,
+  into: string,
+  facets: Record<string, string[]>,
+): { merged: number; repointed: number; changed: number } {
+  const res = mergeNotes(root, into, [id]);
+
+  let changed = 0;
+  for (const [facet, values] of Object.entries(facets)) {
+    // One axis at a time through the checked path, so a value the vocabulary
+    // stopped accepting is refused here rather than written and found later.
+    changed += bulkFacet(root, [into], facet, values, 'set').changed;
+  }
+  return { ...res, changed };
+}
+
 export function bulkMove(
   root: string,
   ids: string[],

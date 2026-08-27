@@ -1,5 +1,6 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
+import type { FoldRow } from '../schema/fold.ts';
 import type { DeclinedPage, NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
 import { foreignOf } from './changed.ts';
 export { FLUSH_MS } from './changed.ts';
@@ -120,6 +121,20 @@ export const api = {
    * The declined pile. Not a query: declined candidates are not notes, so
    * `/api/query` has nothing to say about them.
    */
+  /** What folding this note into what it extends would change. Writes nothing. */
+  foldPlan: (id: string) =>
+    get<{ into: string; title: string; rows: FoldRow[] }>(
+      `/api/note/${encodeURIComponent(id)}/fold`,
+    ),
+
+  fold: (id: string, into: string, facets: Record<string, string[]>) => (
+    stampSelfWrite([id, into]),
+    req<{ merged: number; changed: number }>('POST', `/api/note/${encodeURIComponent(id)}/fold`, {
+      into,
+      facets,
+    })
+  ),
+
   declined: (opts: { q?: string; before?: string } = {}) => {
     const p = new URLSearchParams();
     if (opts.q) p.set('q', opts.q);

@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { isConfigured, paths } from '../config.ts';
 import { loadFacets } from '../schema/facets.ts';
 import type { Facets, Note } from '../schema/types.ts';
-import { reindex } from '../index/indexer.ts';
+import { reindex, readAll } from '../index/indexer.ts';
 import { computedReader } from '../index/query.ts';
 import { cached, invalidate } from '../index/cache.ts';
 import { resolveProject, isProject } from '../index/project.ts';
@@ -44,6 +44,7 @@ import {
   bulkMove,
   mergeNotes,
   createNote,
+  foldInto,
   deleteNote,
   fileFor,
   mtimeOf,
@@ -61,6 +62,7 @@ import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import { startPolling } from './poll.ts';
+import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
 import { settingsFor } from '../settings.ts';
 
@@ -827,6 +829,39 @@ function ensureWatched(root: string): void {
  * apart. This is the audit trail for a decision the app made on its own, and the
  * only place a wrong one can be corrected.
  */
+/**
+ * What folding this note into the one it extends would change, and then doing it.
+ *
+ * `GET` states the question — one row per axis where the candidate proposes
+ * something the target does not already say — and `POST` performs it with the
+ * answers. Two calls rather than one because the answer is a person's, and there
+ * is a dialog between them.
+ */
+app.get('/api/note/:id/fold', (c) => {
+  const root = vaultOf(c);
+  const id = c.req.param('id');
+  const { facets, db } = load(root);
+  const { notes } = readAll(paths(root).notes);
+  const rec = notes.get(id);
+  if (!rec) return c.json({ error: 'not found' }, 404);
+  const into = rec.facets.extends?.[0];
+  if (!into) return c.json({ error: 'this note extends nothing' }, 400);
+  const target = notes.get(into);
+  if (!target) return c.json({ error: `it extends "${into}", which does not exist` }, 404);
+  void db;
+  return c.json({ into, title: target.title, rows: foldRows(rec, target, facets) });
+});
+
+app.post('/api/note/:id/fold', async (c) => {
+  const root = vaultOf(c);
+  const id = c.req.param('id');
+  const body = (await c.req.json()) as { into?: string; facets?: Record<string, string[]> };
+  if (!body.into) return c.json({ error: 'into is required' }, 400);
+  const res = foldInto(root, id, body.into, body.facets ?? {});
+  bump(root);
+  return c.json(res);
+});
+
 app.get('/api/intake/declined', (c) => {
   const root = vaultOf(c);
   const q = c.req.query('q');

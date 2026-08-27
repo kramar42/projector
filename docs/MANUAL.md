@@ -1334,11 +1334,23 @@ pointing at the note it belongs to, and accepting it is a **merge** rather than 
 pj merge <candidate> --into <target>
 ```
 
-The target keeps its own facets; the candidate brings its body, links and fingerprint across, and its
-file goes. The reference pointing at the target is dropped on the way, so nothing has to be tidied
-first. In the panel it is a **✓** in the corner beside Start and the trash, drawn only on a note that
-extends one — or **`+`** from the keyboard, which presses that button rather than merging by a second
-route, so the confirmation cannot be skipped by arriving from the keys. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
+In the panel it is a **✓** in the corner beside Start and the trash, drawn only on a note that extends
+one — or **`+`** from the keyboard, which presses that button rather than folding by a second route.
+
+It opens a dialog, because there is something to decide. The body, links and provenance move across
+whatever you say; what needs answering is the *facets*, since a merge deliberately never touches the
+labels on the note that survives — it cannot know which `status` you meant. So the two are put side by
+side, one row per axis where the candidate says something the note does not already say:
+
+| Axis | keep all | take all |
+|---|---|---|
+| status | planning | active |
+| priority | *nothing* | now |
+
+Click a **heading** to answer its whole column, a **cell** to answer one row, and the two compose in the
+order you click them — take all, then keep the status, is two clicks. **The left column is chosen to
+begin with**, which is exactly what folding did before the dialog existed, so you can dismiss it unread
+and nothing about the note changes. Only what you take is written. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
 to a real note would sit in that note's children and roll-ups while it waited. Nothing walks
 `extends`.
 

@@ -5,6 +5,7 @@ import { ProjectMark } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { useWorkStarter } from './useWorkStarter.ts';
+import { FoldDialog } from '../FoldDialog.tsx';
 import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
 import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
@@ -218,24 +219,17 @@ function NoteCard({
    * Not part of `write`: every other panel write patches this note, and this one
    * ends it.
    */
+  /**
+   * Folding a candidate into the note it extends.
+   *
+   * `extends` is a built-in single-valued reference, so there is at most one
+   * target and nothing to pick. What there *is* to decide is which of the
+   * candidate's facets the target should take — `merged()` will not touch a label
+   * on the survivor, correctly, so a sweep discovering that a ticket moved has no
+   * other way to say so. `FoldDialog` asks; this only opens it.
+   */
   const foldTarget = card?.facets?.extends?.[0] ?? null;
   const [folding, setFolding] = useState(false);
-  async function fold() {
-    if (!card || !foldTarget) return;
-    if (
-      !confirm(
-        `Fold "${card.title}" into "${foldTarget}"?\n\nIts body, links and capture fingerprint move across, and this card is removed.`,
-      )
-    )
-      return;
-    setFolding(true);
-    try {
-      await api.bulk({ ids: [id], op: 'merge', into: foldTarget });
-      onOpen(foldTarget);
-    } finally {
-      setFolding(false);
-    }
-  }
 
   /** The head's one banner slot — see the comment where it renders. */
   const banner: { tone: string; message: string; canReload?: boolean } | null =
@@ -431,8 +425,8 @@ function NoteCard({
                   data-act="fold"
                   disabled={folding}
                   aria-label={`Fold ${card.title} into ${foldTarget}`}
-                  title={`Fold this into "${foldTarget}" — its body, links and fingerprint move across, and this card goes (+)`}
-                  onClick={() => void fold()}
+                  title={`Fold this into "${foldTarget}" — decide what it changes, then its body, links and fingerprint move across (+)`}
+                  onClick={() => setFolding(true)}
                 />
               )}
               <IconButton
@@ -628,6 +622,20 @@ function NoteCard({
           </div>
         )}
       </aside>
+      {/* Outside the aside, so the scrim covers the panel it was opened from —
+          the same depth the cheatsheet and the declined pile sit at. */}
+      {folding && card && foldTarget && (
+        <FoldDialog
+          id={id}
+          title={card.title}
+          onClose={() => setFolding(false)}
+          onFolded={(into) => {
+            setFolding(false);
+            // The candidate is gone; the survivor is what there is to look at.
+            onOpen(into);
+          }}
+        />
+      )}
     </>
   );
 }
