@@ -73,6 +73,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
   };
   const { reports } = await sweep(root);
   const wantsJudgement = settingsFor(root).classify.enabled;
+  const createdBy = new Map<string, number>();
 
   for (const report of reports) {
     if (!report.fetched) {
@@ -117,6 +118,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     }
 
     const res = materialise(root, report.channel, kept);
+    createdBy.set(report.channel, res.created.length);
     out.created.push(...res.created);
     out.skipped += res.skipped;
     out.extending += res.extending;
@@ -129,12 +131,12 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
    * A channel that could not be reached recorded a pending cursor of null, so it
    * has nothing to promote and `advance` skips it — but naming them explicitly
    * says the intent rather than relying on that. `captured` is the count of notes
-   * written, which for once is knowable: unlike `pj add` from a conversation,
-   * this run wrote them and can attribute them.
+   * this run wrote *from that channel*, which for once is knowable: unlike
+   * `pj add` from a conversation, this run wrote them and can attribute them.
    */
   for (const report of reports) {
     if (!report.fetched) continue;
-    const moved = advance(root, { channel: report.channel, captured: out.created.length });
+    const moved = advance(root, { channel: report.channel, captured: createdBy.get(report.channel) ?? 0 });
     out.advanced.push(...moved.moved.map((m) => m.channel));
   }
   return out;

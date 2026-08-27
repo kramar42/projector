@@ -685,6 +685,14 @@ mcp:
 
 Leave either out and that channel is not fetched, which is exactly what it did before it could be.
 
+**A secret's value never enters a note.** A scratchpad DM is exactly where a token or a password ends
+up, and this pipeline writes notes from what it swept with nobody watching. So both prompts that reach
+a model — the classifier's and the fetching agent's — carry the same rule: say that a credential is
+there and what it is for, and leave the value out of everything that gets written. A note about a token
+is about rotating it, never a place to keep it. If you replace the instructions with
+`.projector/classify.md`, that rule is yours to restate — the built-in wording is pinned by a test, a
+replacement is not.
+
 **Being told, for the few things that cannot wait.** The same pass answers a second, higher question:
 is this worth interrupting for? Most things that deserve a note are not. When one is, a browser tab you
 already have open raises a notification and clicking it opens the note. Nothing is sent anywhere — the

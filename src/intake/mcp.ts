@@ -27,7 +27,8 @@ import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.t
 /** What the agent is told to produce. Deliberately the smallest useful shape. */
 const SCHEMA = `[{"id":"<stable id>","when":"<ISO 8601>","title":"<one line, the sender's words>","detail":"<one line of context: who, where>"}]`;
 
-function instructions(kind: 'slack' | 'gmail', cursor: string | null, days: number): string {
+/** Exported for the test that pins the secrets rule; nothing else calls it. */
+export function instructions(kind: 'slack' | 'gmail', cursor: string | null, days: number): string {
   const window = cursor ? `since ${cursor}` : `from the last ${days} days`;
   const what =
     kind === 'slack'
@@ -39,6 +40,10 @@ function instructions(kind: 'slack' | 'gmail', cursor: string | null, days: numb
     'READ ONLY. Do not post, reply, send, draft, archive, label, or modify anything.',
     'You are gathering, not answering, and not deciding what matters — something',
     'else does that. Return everything you find that a person might want to act on.',
+    '',
+    'Never reproduce a secret. When a message contains a token, an API key or a',
+    'password, say that it does — "contains an API token" — and leave the value out',
+    'of both title and detail. A scratchpad message is exactly where one turns up.',
     '',
     `Reply with ONLY a JSON array, no prose and no code fences:\n${SCHEMA}`,
     '',

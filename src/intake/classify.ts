@@ -89,6 +89,8 @@ For "keep" and "extend", fill these in. This is most of the value — a card nob
 - "body" — one to three sentences: what this is, where it got to, and what is unresolved. Say what the raw material actually tells you and nothing you cannot see. No headings, no bullet lists, no restating the title.
 - "facets" — the axes below, with values from their own vocabulary. Only axes you have real grounds for; guessing every axis is worse than leaving one out. An axis marked single takes one value.
 
+Never reproduce a secret. When the raw material contains a token, an API key, a password or a private key, the note says what the credential is for and that the value was withheld — the value itself appears in no title and no body. A note about a credential is about rotating or replacing it, never a place to keep it.
+
 # Job three: does it need to interrupt?
 
 Set "notify": true only for something the owner would want to be told about now rather than find later — someone blocked on them, a deadline inside a day or two, a production problem, a direct question that has been waiting. This is a *higher* bar than deserving a note, and most things that deserve a note do not clear it. Default to false; a notification nobody wanted is how people turn notifications off.

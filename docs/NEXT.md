@@ -339,6 +339,14 @@ needs to be part of two things.
   corrected must survive it, and there is nothing on a note today that distinguishes a value the model
   proposed from one you accepted.
 
+- **The secrets rule is asked of a model, not applied by code.** Both prompts that reach one — the
+  classifier's and the fetching agent's — say a credential's value must never be reproduced, and a test
+  pins the wording. But the maxim below applies: never ask a model to honour a rule that can be applied
+  deterministically. Full secret detection is not deterministic; the common shapes are — an AWS key id,
+  a `ghp_` token, a PEM header — and a scrub at `materialise` time would sit on the one seam every
+  unattended write already crosses, catching the model that forgot. Known shapes only: redacting
+  anything that merely looks entropic would eat commit hashes.
+
 ## Ideas from elsewhere
 
 [Watchtower](https://github.com/Ruben-M-D/Watchtower) is a public MIT-licensed triage agent: it polls

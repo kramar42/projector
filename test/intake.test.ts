@@ -11,6 +11,7 @@ import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
+import { instructions } from '../src/intake/mcp.ts';
 import { deleteNote } from '../src/server/mutate.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
 import { classify, type Ask, type Verdict } from '../src/intake/classify.ts';
@@ -1028,6 +1029,41 @@ test('a materialising run advances the cursor, because nothing is left unrecorde
   }
 });
 
+test('captured is attributed per channel, not totalled across the tick', async () => {
+  const root = vault({ a: card('a') });
+  const report = (name: string, candidates: Candidate[]) => (ctx: IntakeContext) => ({
+    channel: name,
+    cursor: ctx.cursor,
+    nextCursor: '2026-04-04T00:00:00.000Z',
+    fetched: true,
+    candidates,
+    skipped: [],
+  });
+  const busy: Channel = {
+    name: 'busy',
+    defaultDays: 1,
+    collect: report('busy', [candidate('busy:1', 'Something that happened', { channel: 'busy' })]),
+  };
+  const quiet: Channel = { name: 'quiet', defaultDays: 1, collect: report('quiet', []) };
+  CHANNELS.push(busy, quiet);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [busy, quiet]\n', 'utf8');
+  try {
+    const res = await pollOnce(root, keepAll);
+    assert.equal(res.created.length, 1);
+    // The stat feeds `pj intake status`, per channel. A channel that wrote
+    // nothing must not inherit the tick's total, or every quiet channel reads
+    // as busy as the busiest one.
+    assert.equal(watermarkFor(root, 'busy')?.captured, 1);
+    assert.equal(watermarkFor(root, 'quiet')?.captured, 0);
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(busy), 1);
+    CHANNELS.splice(CHANNELS.indexOf(quiet), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /**
  * The classifier: the one place a model decides anything.
  *
@@ -1173,6 +1209,31 @@ test('a vault may override the judgement without editing the app', () => {
     return classify(root, [candidate('git:1', 'a')], spy).then(() => {
       assert.match(seen, /badgers/, 'the vault’s own instructions are what the model is given');
     });
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('both prompts that reach a model carry the secrets rule', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    // The pipeline writes notes from swept text with nobody watching, and a
+    // scratchpad DM is exactly where a plaintext credential ends up. Pinned as
+    // wording because the rule lives in prompts: a later edit must not drop it
+    // silently.
+    let seen = '';
+    const spy: Ask = async (system) => {
+      seen = system;
+      return '[]';
+    };
+    await classify(root, [candidate('git:1', 'a')], spy);
+    assert.match(seen, /value was withheld/, 'the classifier is told to withhold a secret’s value');
+    assert.match(
+      instructions('slack', null, 7),
+      /leave the value out/,
+      'and the fetching agent is told not to carry one in',
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
