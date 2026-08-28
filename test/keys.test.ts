@@ -20,7 +20,7 @@ import {
   type Pending,
 } from '../src/view/keys.ts';
 import { DEPTH, emptyHistory, inverseOf, recorded, redone, undone, type Step } from '../src/view/undo.ts';
-import { drawn, first, last, locate, stepped, type Grid } from '../src/web/views/motion.ts';
+import { drawn, first, isCursorAt, last, locate, stepped, type Grid } from '../src/web/views/motion.ts';
 
 /**
  * The keyboard grammar.
@@ -441,6 +441,39 @@ test('a card knows where it sits, and a card that is not drawn does not', () => 
   assert.deepEqual(locate(board, 'g'), [1, 1, 1]);
   assert.deepEqual(locate(board, 'nowhere'), null);
   assert.deepEqual(drawn(board), ['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+});
+
+/**
+ * A note drawn twice is one cursor and two elements.
+ *
+ * The views used to ask `cursor === id`, which is true of every placement — so
+ * each drew a ring, each took a tab stop, and each ran its own `scrollIntoView`
+ * on the same commit. The last in DOM order won, which on a wide board is a jump
+ * to the rightmost copy with the keyboard's own card left off-screen.
+ */
+test('exactly one placement of a repeated note is the cursor', () => {
+  // `a` in two columns of one lane, the way a facet with two values draws it.
+  const twice: Grid = {
+    cells: [[['a', 'b'], ['a', 'c']]],
+    columns: ['now', 'month'],
+    continuous: false,
+  };
+
+  // `locate` picks the first, and always did — every step is computed from it.
+  assert.deepEqual(locate(twice, 'a'), [0, 0, 0]);
+
+  const spot = locate(twice, 'a');
+  assert.equal(isCursorAt(spot, 0, 0, 0), true, 'the placement locate names');
+  assert.equal(isCursorAt(spot, 0, 1, 0), false, 'the other one is an echo, not a cursor');
+
+  // Exactly one, swept over the whole grid rather than asserted on two cells.
+  let cursors = 0;
+  twice.cells.forEach((lane, l) =>
+    lane.forEach((col, c) => col.forEach((_, r) => { if (isCursorAt(spot, l, c, r)) cursors++; })),
+  );
+  assert.equal(cursors, 1);
+
+  assert.equal(isCursorAt(null, 0, 0, 0), false, 'no cursor is no placement');
 });
 
 test('j and k walk a column and stop at its ends on a board', () => {

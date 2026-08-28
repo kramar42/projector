@@ -6,6 +6,7 @@ import { visibleSelection, type Selection } from '../selection.ts';
 import { useCursorFocus, useEdgeInset } from '../cursor.ts';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
+import { isCursorAt, type Spot } from './motion.ts';
 import { emptyReason } from '../../view/empty.ts';
 import type { Meta, NoteDTO, QueryResponse, Rollup } from '../types.ts';
 import { useTouched } from '../touched.tsx';
@@ -28,6 +29,7 @@ export function TableView({
   onOpen,
   selection,
   cursor,
+  cursorSpot,
   onCursor,
   reload,
 }: {
@@ -39,6 +41,8 @@ export function TableView({
   selection: Selection;
   /** Where the keyboard is; the table only draws it. See `motion.ts`. */
   cursor: string | null;
+  /** Which *placement* of it — a note can be drawn in several sections. */
+  cursorSpot: Spot | null;
   /** A pointer landing on a row is the keyboard landing there too. */
   onCursor: (id: string) => void;
   reload: () => void;
@@ -112,7 +116,7 @@ export function TableView({
             <th className="col-updated">Updated</th>
           </tr>
         </thead>
-        {sections.map((section) => (
+        {sections.map((section, sectionIndex) => (
           <tbody key={`${section.lane ?? ''}/${section.value}`}>
             {section.value !== '' && (
               <tr className="section">
@@ -140,7 +144,14 @@ export function TableView({
                   projects={projects}
                   index={index}
                   isSelected={selection.ids.has(id)}
-                  isCursor={cursor === id}
+                  /*
+                   * The placement, not the note. A table's sections are the
+                   * grid's columns and one lane, so the section index is the
+                   * column and `i` is the row — the same coordinates `locate`
+                   * walks. A note in two sections used to draw two cursors.
+                   */
+                  isCursor={isCursorAt(cursorSpot, 0, sectionIndex, i)}
+                  isEcho={cursor === id && !isCursorAt(cursorSpot, 0, sectionIndex, i)}
                   onCursor={onCursor}
                   onOpen={onOpen}
                   onSelect={(additive) => selection.toggle(id, additive, index)}
@@ -179,6 +190,7 @@ function Row({
   index,
   isSelected,
   isCursor,
+  isEcho,
   onCursor,
   onOpen,
   onSelect,
@@ -192,6 +204,8 @@ function Row({
   index: number;
   isSelected: boolean;
   isCursor: boolean;
+  /** Another placement of the cursor's note: marked, but not the cursor. */
+  isEcho: boolean;
   onCursor: (id: string) => void;
   onOpen: (id: string) => void;
   onSelect: (additive: boolean) => void;
@@ -214,6 +228,8 @@ function Row({
       // keyframe and the reason live in one place.
       className={`${card.isProject ? 'is-project' : ''} ${isSelected ? 'is-selected' : ''} ${
         isCursor ? 'is-cursor' : ''
+      } ${
+        isEcho ? 'is-echo' : ''
       } ${touched(card.id) ? 'is-touched' : ''}`}
       aria-selected={isSelected}
       data-row={index}

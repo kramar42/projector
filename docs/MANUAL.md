@@ -1229,6 +1229,12 @@ The cursor is the only pointer: with the panel open it **is** the panel, so `j` 
 next card. It is not stored in the URL and starts unset — the first motion key puts it on the first
 drawn card.
 
+**A note drawn in several columns has one cursor and the rest are echoes.** A facet with two values
+puts its note in two columns, and only one of them is where the keyboard is — the first, which is the
+one every step is measured from. It takes the ring; the others take a dashed outline saying *this note
+is also here*. So the board never scrolls to a copy you were not on, and the cursor is somewhere you
+can only be once.
+
 **A canvas has no cursor**: its nodes sit on a plane, so "the next one down" has no answer. It is
 worked with Tab instead — `space` selects the node you are on, the arrow keys move a selected one, and
 `⏎` opens it the way it does everywhere else. The first two are the canvas library's own; the third

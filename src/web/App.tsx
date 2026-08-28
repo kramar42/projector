@@ -27,7 +27,7 @@ import {
 } from './query.ts';
 import { useSelection, type Selection } from './selection.ts';
 import { focusSoon, useCursor, type Cursor } from './cursor.ts';
-import { drawn, first, gridOf, last, locate, stepped, type Grid } from './views/motion.ts';
+import { drawn, first, gridOf, last, locate, stepped, type Grid, type Spot } from './views/motion.ts';
 import {
   changeView,
   clearFilters,
@@ -397,6 +397,15 @@ export function App() {
    * given, and neither of them has to hand an ordering back up the tree.
    */
   const grid = useMemo(() => gridOf(data), [data]);
+  /**
+   * Which *placement* the cursor is at, for the views to draw.
+   *
+   * The cursor is an id and a note can be drawn several times, so an id alone
+   * cannot say which copy on screen is the one the keyboard is on. `locate` has
+   * always answered that for stepping; this hands the same answer to the drawing
+   * so the two cannot disagree.
+   */
+  const cursorSpot: Spot | null = useMemo(() => locate(grid, cursor.id), [grid, cursor.id]);
 
   // Remember every note the query has shown. Cheap — one entry per note in the
   // vault at worst — and it is the only record of what a note held once the query
@@ -559,6 +568,7 @@ export function App() {
           onOpen={openCard}
           selection={selection}
           cursor={cursor.id}
+          cursorSpot={cursorSpot}
           onCursor={cursor.step}
           reload={reload}
         />
@@ -570,6 +580,7 @@ export function App() {
         onOpen={openCard}
         selection={selection}
         cursor={cursor.id}
+        cursorSpot={cursorSpot}
         onCursor={cursor.step}
         newIn={newIn}
         onNewHandled={clearNewIn}

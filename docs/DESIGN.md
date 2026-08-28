@@ -1427,6 +1427,27 @@ It takes the `.emptystate` register the other six use, not an illustration — s
 `pointer-events: none`, so the one fixed element the canvas draws cannot swallow a drag across the
 middle of it.
 
+### The cursor, and its echoes
+
+**One placement of a note is the cursor; the others say so more quietly.**
+
+A note with two values on the grouped axis is drawn in two columns. Both used to take the full ring,
+which made the cursor a thing you could see twice and be wrong about — and worse, each placement ran
+its own `scrollIntoView`, so the last in DOM order won and the board scrolled to the rightmost copy.
+Measured on a real vault: a 2432px jump in a 1032px viewport, *away* from the placement the keyboard
+was on, which ended up 1419px off-screen to the left.
+
+The echo is the same word at lower volume: the accent, at one pixel and **dashed**, flush against the
+face where the cursor's ring sits a pixel out. Dashed rather than merely thinner because thin-and-solid
+reads at a glance as a ring that has not finished drawing; a dash reads as *a copy of* rather than *a
+weaker* — the distinction the canvas already makes between a tree edge and a crossing one, by geometry
+before colour. A table draws its cursor as an inset edge rather than an outline, so its echo is that
+edge in `accent-soft`.
+
+The rule underneath is not a visual one: `motion.ts` decides which placement is the cursor, and the
+same function answers for stepping and for drawing. They disagreed before — `locate` said the first
+and the DOM said the last — which is the whole of the bug.
+
 ### The three left edges outside the note vocabulary
 
 The Load-Bearing Left Border Rule enumerates three meanings for the 3px left edge and closes by

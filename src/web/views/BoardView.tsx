@@ -4,6 +4,7 @@ import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-sc
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { emptyReason, unusedGrouping } from '../../view/empty.ts';
+import { isCursorAt, type Spot } from './motion.ts';
 import type { Meta, NoteDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE } from '../../schema/vocabulary.ts';
@@ -31,6 +32,7 @@ export function BoardView({
   onOpen,
   selection,
   cursor,
+  cursorSpot,
   onCursor,
   newIn,
   onNewHandled,
@@ -50,6 +52,11 @@ export function BoardView({
    * position to hand back up.
    */
   cursor: string | null;
+  /**
+   * Which *placement* the cursor is at. A note drawn in three columns is three
+   * elements and one cursor, and this is which of the three.
+   */
+  cursorSpot: Spot | null;
   /** A pointer landing somewhere is the keyboard landing there too. */
   onCursor: (id: string) => void;
   /**
@@ -289,7 +296,7 @@ export function BoardView({
       {unused && <div className="board-unused">{unused.text}</div>}
 
       <div className="board-scroll">
-        {lanes.map((lane) => (
+        {lanes.map((lane, laneIndex) => (
           <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>
             {lane !== undefined && (
               <div className="lane-head">
@@ -300,11 +307,14 @@ export function BoardView({
               </div>
             )}
             <div className="board">
-              {columns(lane).map((g) => (
+              {columns(lane).map((g, columnIndex) => (
                 <Column
                   key={`${lane ?? ''}/${g.value}`}
                   group={g}
                   lane={lane}
+                  laneIndex={laneIndex}
+                  columnIndex={columnIndex}
+                  cursorSpot={cursorSpot}
                   order={orderedFor(g.value)}
                   cards={cards}
                   chips={data.spec.show}
@@ -370,6 +380,9 @@ export function BoardView({
 function Column({
   group,
   lane,
+  laneIndex,
+  columnIndex,
+  cursorSpot,
   order,
   cards,
   chips,
@@ -394,6 +407,15 @@ function Column({
    * lane it landed in.
    */
   lane: string | undefined;
+  /**
+   * Where this column sits in the grid `motion.ts` walks, so a card can ask
+   * whether it is the placement the cursor is at rather than merely one of its
+   * note's. The indices line up because `gridOf` and this view make the same
+   * `groupsFor` calls.
+   */
+  laneIndex: number;
+  columnIndex: number;
+  cursorSpot: Spot | null;
   /** The column's stored order, across lanes — what a reorder rewrites. */
   order: string[];
   cards: Record<string, NoteDTO>;
@@ -495,7 +517,7 @@ function Column({
             />
           </div>
         )}
-        {group.ids.map((id) => {
+        {group.ids.map((id, i) => {
           const card = cards[id];
           if (!card) return null;
           return (
@@ -513,7 +535,18 @@ function Column({
               draggableTile={Boolean(groupBy)}
               orderable={orderable}
               isSelected={selected.has(id)}
-              isCursor={cursor === id}
+              /*
+               * The placement the cursor is *at*, not every placement of its note.
+               *
+               * `cursor === id` was true of all of them, so each drew a ring, each
+               * took a tab stop, and each scrolled itself into view — the last in
+               * DOM order winning, which is a board that jumps to the rightmost
+               * copy and leaves the keyboard's own card off-screen. `isCursorAt`
+               * is `locate`'s answer, which is the one every step already uses.
+               */
+              isCursor={isCursorAt(cursorSpot, laneIndex, columnIndex, i)}
+              /* The others still say "this note is also here", quietly. */
+              isEcho={cursor === id && !isCursorAt(cursorSpot, laneIndex, columnIndex, i)}
               onCursor={onCursor}
               isDragging={dragging === id}
               onSelect={onSelect}
@@ -536,6 +569,7 @@ function CardTile({
   orderable,
   isSelected,
   isCursor,
+  isEcho,
   onCursor,
   isDragging,
   onSelect,
@@ -550,6 +584,8 @@ function CardTile({
   orderable: boolean;
   isSelected: boolean;
   isCursor: boolean;
+  /** Another placement of the cursor's note: marked, but not the cursor. */
+  isEcho: boolean;
   onCursor: (id: string) => void;
   isDragging: boolean;
   onSelect: (id: string, additive: boolean) => void;
@@ -601,7 +637,7 @@ function CardTile({
        */
       tabIndex={isCursor ? 0 : -1}
       data-card={card.id}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${
+      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${isEcho ? 'is-echo' : ''} ${
         isDragging ? 'is-dragging' : ''
       } ${edge ? `is-over-${edge}` : ''}`}
       onClick={(e) => {

@@ -2530,6 +2530,28 @@ textarea { resize: vertical; font-family: inherit; }
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/*
+ * The cursor's *other* placements.
+ *
+ * A note with two values on the grouped axis is drawn in two columns, and one of
+ * them is where the keyboard is. Both used to draw the full ring, which made the
+ * cursor a thing you could see twice and be wrong about — and the board scrolled
+ * to whichever came last in the DOM.
+ *
+ * So the echo says the same word more quietly: the accent, at one pixel and
+ * dashed. Dashed rather than merely thinner because thin-and-solid at a glance is
+ * a ring that has not finished loading; a dash reads as *a copy of* rather than
+ * *a weaker* — the same distinction the canvas draws between a tree edge and a
+ * crossing one, by geometry before colour.
+ *
+ * No `outline-offset`: sitting flush against the face is the other half of the
+ * difference, so the two are told apart by position as well as by weight when
+ * they happen to be side by side.
+ */
+.column-card.is-echo .cardface {
+  outline: 1px dashed var(--accent);
+}
 /* The tile itself never takes the browser ring: the face inside it is what is
    drawn, and two rings a pixel apart is a doubled edge. */
 .column-card:focus-visible {
@@ -3762,6 +3784,14 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
     inset 0 -2px 0 -1px var(--accent),
     inset -2px 0 0 0 var(--accent);
 }
+/* The cursor's other placements, quieter — see `.column-card.is-echo`. A table
+   draws its cursor as an inset edge rather than an outline, so the echo is the
+   same edge at a third of the strength: present, and not mistakable for the row
+   the keyboard is on. */
+.table tbody tr.is-echo > td {
+  box-shadow: inset 0 1px 0 -0.5px var(--accent-soft), inset 0 -1px 0 -0.5px var(--accent-soft);
+}
+
 /* The row carries the treatment; the browser ring on top of it would be a second
    edge one pixel out. */
 .table tbody tr:focus-visible {

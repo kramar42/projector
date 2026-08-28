@@ -108,6 +108,30 @@ export function locate(grid: Grid, id: string | null): Spot | null {
   return null;
 }
 
+/**
+ * Is this the placement the cursor is actually at?
+ *
+ * A note can be drawn several times — a facet with two values puts it in two
+ * columns — and until this existed the views asked `cursor === id`, which is true
+ * of *every* one of them. That made each placement a cursor: each drew the ring,
+ * each took a tab stop, and each ran its own `scrollIntoView` on the same commit,
+ * so the last in DOM order won and the board scrolled to the rightmost copy. On
+ * the author's vault that measured a 2432px jump in a 1032px viewport, *away*
+ * from the placement the keyboard was on, which ended up off-screen left.
+ *
+ * `locate` had always answered this — first lane, first column, first row — and
+ * every step `j`/`k`/`h`/`l` takes is computed from it. The drawing simply did not
+ * ask. So this is not a new rule: it is the existing one, exported, so that
+ * stepping and drawing cannot disagree about where the cursor is.
+ *
+ * The indices line up because `gridOf` and the views make the same `groupsFor`
+ * calls — `empties: 'keep'` per lane for a board, `'drop'` across one lane for a
+ * table. That is load-bearing, and `client.test.ts` pins it.
+ */
+export function isCursorAt(spot: Spot | null, lane: number, column: number, row: number): boolean {
+  return !!spot && spot[0] === lane && spot[1] === column && spot[2] === row;
+}
+
 /** Every drawn card, in the order the shape draws it. What `*` and a range use. */
 export function drawn(grid: Grid): string[] {
   return grid.cells.flat(2);
