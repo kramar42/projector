@@ -813,7 +813,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       // carry on its own: every other line in this section moves the keyboard.
       { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
       { keys: '+', does: 'judge a candidate — fold it in, or accept it as its own note' },
-      { keys: '⌫', does: 'delete the note, after a confirm' },
+      { keys: '⌫', does: 'delete — the selection if there is one, else this note. One confirm' },
     ],
   },
   {
@@ -842,6 +842,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: '0', does: 'clear the grouped axis' },
       { keys: '⟨axis⟩ 1–9', does: 'set that axis to its nth value' },
       { keys: 'n', does: 'new card in this column' },
+      { keys: '⌥j ⌥k', does: 'move this card down · up its column (a saved view)' },
       { keys: 'u U', does: 'undo · redo' },
     ],
   },
