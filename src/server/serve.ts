@@ -90,12 +90,14 @@ function vaultOf(c: Context): string {
     if (!isRegistered(want)) throw new NoVault(`vault not registered: ${want}`);
     if (!existsSync(want)) throw new NoVault(`vault directory is missing: ${want}`);
     ensureWatched(want);
+    ensurePolling(want);
     return want;
   }
   // No header: fall back only when the choice is unambiguous.
   const known = listVaults().filter((v) => v.exists);
   if (known.length === 1) {
     ensureWatched(known[0]!.path);
+    ensurePolling(known[0]!.path);
     return known[0]!.path;
   }
   throw new NoVault(known.length ? 'pick a vault' : 'no vault has been opened yet');
@@ -828,15 +830,26 @@ function ensureWatched(root: string): void {
   });
   watched.set(root, w);
 
-  /**
-   * A vault that asked to be swept on a timer starts here, for the same reason
-   * the watcher does: the first time it is actually used, not for every path in
-   * the registry. It writes note files through the same gate as everything else,
-   * so the watcher above turns each one into the SSE the open board already
-   * listens for — a candidate appears without the client learning anything new.
-   */
-  // It announces its own interval through the log, so there is nothing to say
-  // here about a vault that opted in — and a vault that did not is not news.
+}
+
+/**
+ * Start this vault's poll loop, if it asked for one and has not got one.
+ *
+ * Called on **every** request that resolves a vault, rather than once beside the
+ * watcher, and that placement is the whole point. The watcher is set up the first
+ * time a vault is used and never again — so turning `poll.enabled` on in a vault
+ * the server was already watching did nothing at all until a restart, with no
+ * error, no log line, and a board that stayed empty for the most plausible
+ * reason in the world. Settings are memoised on the file's mtime, so asking this
+ * often costs a map lookup and a cached read.
+ *
+ * `startPolling` is idempotent per vault, which is what makes calling it this
+ * often correct rather than merely cheap: a second call hands back the timer it
+ * already made instead of doubling the rate. It announces its own interval
+ * through the log, so there is nothing to say here — and a vault that did not opt
+ * in is not news.
+ */
+function ensurePolling(root: string): void {
   startPolling(root, (notes) => bumpAttention(root, notes));
 }
 
