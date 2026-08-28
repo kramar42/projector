@@ -115,23 +115,56 @@ export function useCursor(): Cursor {
  * used — the panel is non-modal, so both are live at once — and stealing focus
  * mid-edit is worse than a cursor you cannot see. The body, nothing, and another
  * card are the three cases where nobody is using it.
+ *
+ * ## Why a pointer gets the focus without the scroll
+ *
+ * The scroll is for motion keys, and only they need it: `l` can walk onto a card
+ * that is on screen only in the sense that its coordinates are, which is what the
+ * `scroll-padding` in `style.css` is measured for. **A pointer cannot do that.**
+ * Whatever was clicked was visible, or there was nothing there to click.
+ *
+ * And the same click opens the panel, which is a cover — so the aim it hands
+ * `scrollIntoView` is `scroll-padding-right: --panel-w` against a board that has
+ * just grown a `--panel-w` spacer to scroll into. A card clicked under where the
+ * panel lands was therefore hauled clear of it: `?view=home` at `scrollLeft: 0`,
+ * click the card at `877…1151`, and the board is at `434` with the card at `443`
+ * — the whole view sliding out from under the pointer that opened it. Nothing had
+ * reflowed; the click had asked to be scrolled to.
+ *
+ * So the caller says a pointer did it, by calling the returned function before it
+ * moves the cursor. It disarms itself on use and on the cursor leaving, so a
+ * click on the card the cursor is *already* on cannot leave the next `k` back
+ * onto it silently refusing to scroll.
+ *
+ * @returns Say that a pointer is what is about to move the cursor here.
  */
 export function useCursorFocus(
   ref: { current: HTMLElement | null },
   isCursor: boolean,
-): void {
+): () => void {
+  const pointed = useRef(false);
+
   useEffect(() => {
     const el = ref.current;
-    if (!isCursor || !el) return;
+    if (!isCursor || !el) {
+      pointed.current = false;
+      return;
+    }
+    const byPointer = pointed.current;
+    pointed.current = false;
     // `nearest`, so a cursor already on screen does not scroll the column under
     // it. A board scrolls in both directions and a table in one.
-    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (!byPointer) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const active = document.activeElement as HTMLElement | null;
     const idle = !active || active === document.body || active.hasAttribute('data-card');
     if (idle) el.focus({ preventScroll: true });
     // The ref is stable for the life of the element; `isCursor` is the question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCursor]);
+
+  return useCallback(() => {
+    pointed.current = true;
+  }, []);
 }
 
 /**

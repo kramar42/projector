@@ -3967,7 +3967,10 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   scroll-padding-top: calc(var(--covered-top, 0px) + var(--ring-out, 0px));
   scroll-padding-bottom: calc(var(--covered-bottom, 0px) + var(--ring-out, 0px));
   /* The open panel, on the axis `inline: 'nearest'` aims along. Declared from a
-     token rather than measured — see `.shell.panel-is-open`. */
+     token rather than measured — see `.shell.panel-is-open`. This aim is for a
+     motion key and only a motion key: a *click* suppresses the scroll entirely
+     (`useCursorFocus` in `cursor.ts`), because it opens the panel it would then
+     be hauling the board clear of. */
   scroll-padding-right: calc(var(--covered-right, 0px) + var(--ring-out, 0px));
 }
 

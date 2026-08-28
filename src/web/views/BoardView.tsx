@@ -499,7 +499,7 @@ function CardTile({
     return () => cleanups.forEach((f) => f());
   }, [card.id, column, lane, index, draggableTile, orderable]);
 
-  useCursorFocus(ref, isCursor);
+  const pointed = useCursorFocus(ref, isCursor);
 
   return (
     <div
@@ -520,7 +520,11 @@ function CardTile({
       } ${edge ? `is-over-${edge}` : ''}`}
       onClick={(e) => {
         // Wherever a pointer lands, the keyboard picks up — otherwise the first
-        // `j` after a click jumps back to wherever the cursor had been left.
+        // `j` after a click jumps back to wherever the cursor had been left. But
+        // it picks up *where the card already is*: this click is about to open a
+        // panel over the board, and a cursor that scrolled itself clear of it
+        // would take the board out from under the pointer that opened it.
+        pointed();
         onCursor(card.id);
         // Cmd/Ctrl or Shift builds a selection for a bulk action; a plain click opens.
         if (e.metaKey || e.ctrlKey || e.shiftKey) {

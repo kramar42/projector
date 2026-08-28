@@ -195,7 +195,7 @@ function Row({
 }) {
   const { touched } = useTouched();
   const ref = useRef<HTMLTableRowElement>(null);
-  useCursorFocus(ref, isCursor);
+  const pointed = useCursorFocus(ref, isCursor);
   return (
     <tr
       ref={ref}
@@ -214,7 +214,9 @@ function Row({
       aria-selected={isSelected}
       data-row={index}
       onClick={(e) => {
-        // Wherever a pointer lands, the keyboard picks up.
+        // Wherever a pointer lands, the keyboard picks up — and, as on a board,
+        // without scrolling: a clicked row is a row that was on screen.
+        pointed();
         onCursor(card.id);
         // cmd/ctrl toggles, the one gesture every shape agrees on. Shift extends a
         // run, which only a shape with an order can offer — a board has columns

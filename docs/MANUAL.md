@@ -1077,6 +1077,10 @@ The cursor is the only pointer: with the panel open it **is** the panel, so `j` 
 next card. It is not stored in the URL and starts unset — the first motion key puts it on the first
 drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one down" has no answer.
 
+**Only a key scrolls.** A motion key that lands on a card the open panel covers brings it out from
+under the panel, since it has no other way to show you where it went. Clicking never does: what you
+clicked was on screen already, so the view stays exactly where it was and the panel opens over it.
+
 ## Going to another note
 
 | Keys | What |
