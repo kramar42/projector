@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { loadNote, } from '../src/schema/note.ts';
 import { createNote, deleteNote, patchFields } from '../src/server/mutate.ts';
 import { isProject } from '../src/index/project.ts';
+import { readAll } from '../src/index/indexer.ts';
 import { CONTEXT_BAND, assignClusters, clusterBoxes, clusteredLayout, dims, treeLayout } from '../src/web/views/layout.ts';
 import type { NoteDTO } from '../src/web/types.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -37,19 +38,32 @@ function scratchVault(): { root: string; cleanup: () => void } {
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+/**
+ * The note by id, wherever it is.
+ *
+ * Not `<root>/x.md`: making a note a project moves it to `x/README.md`, so a path
+ * spelled out here would be asserting where the file sits rather than what `--set`
+ * did to it. The id is the thing these tests are actually about.
+ */
+function noteById(root: string, id: string) {
+  const rec = readAll(paths(root).notes).notes.get(id);
+  assert.ok(rec, `no note "${id}"`);
+  return rec;
+}
+
 test('--set writes a nested field, and YAML values carry structure', () => {
   const { root, cleanup } = scratchVault();
   try {
     patchFields(root, 'x', { 'project.jira': 'PROJ' });
     patchFields(root, 'x', { 'project.repos': '[{path: ~/a, base: main}]' });
-    const rec = loadNote(pathJoin(paths(root).notes, 'x.md'));
-    assert.ok(rec.ok);
+    const rec = noteById(root, 'x');
     // A flat key=value cannot express a list of maps, which is why the value is
     // parsed as YAML rather than split on a separator.
-    assert.equal(rec.rec.project?.jira, 'PROJ');
-    assert.deepEqual(rec.rec.project?.repos, [{ path: '~/a', base: 'main' }]);
-    // Only the touched key is rewritten, so everything else survives.
-    const text = readFileSync(pathJoin(paths(root).notes, 'x.md'), 'utf8');
+    assert.equal(rec.project?.jira, 'PROJ');
+    assert.deepEqual(rec.project?.repos, [{ path: '~/a', base: 'main' }]);
+    // Only the touched key is rewritten, so everything else survives — the move
+    // into the project's folder included, which is a rename and not a rewrite.
+    const text = readFileSync(rec.file, 'utf8');
     assert.match(text, /# a comment worth keeping/);
     assert.equal(text.endsWith('\nbody\n'), true);
   } finally {
@@ -61,13 +75,17 @@ test('--set project={} makes a project and --set project= unmakes one', () => {
   const { root, cleanup } = scratchVault();
   try {
     patchFields(root, 'x', { project: '{}' });
-    const made = loadNote(pathJoin(paths(root).notes, 'x.md'));
-    assert.ok(made.ok);
-    assert.equal(isProject(made.rec), true);
+    const made = noteById(root, 'x');
+    assert.equal(isProject(made), true);
+    // And it moved: a project's instructions are `AGENTS.md` beside its note, so
+    // promoting in place would leave it with nowhere to put them.
+    assert.equal(made.file, pathJoin(paths(root).notes, 'x', 'README.md'));
+
     patchFields(root, 'x', { project: '' });
-    const after = loadNote(pathJoin(paths(root).notes, 'x.md'));
-    assert.ok(after.ok);
-    assert.equal(after.rec.project, undefined);
+    const after = noteById(root, 'x');
+    assert.equal(after.project, undefined);
+    // Un-projecting does not move it back. The folder may hold anything by now.
+    assert.equal(after.file, pathJoin(paths(root).notes, 'x', 'README.md'));
   } finally {
     cleanup();
   }

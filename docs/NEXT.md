@@ -23,6 +23,28 @@ things.
 
 ## Parked
 
+- **Vault-wide instructions — a root `AGENTS.md` every note inherits.** Instructions now live in
+  `AGENTS.md` beside a project note, and the vault root's copy is deliberately *not* read: inheritance
+  flows along the `project` facet, and a root file is on no chain, so reading it would attach the
+  vault's rules to every root-level project note and to no other note in the vault — a rule that
+  applies to some notes for a reason nobody can see. The honest version is a separate mechanism:
+  instructions that apply to the vault regardless of membership, resolved before the chain rather than
+  as part of it. Worth doing when a second vault exists with rules that are genuinely about the vault
+  rather than about one project — one vault's worth of evidence cannot tell those apart, and the
+  natural place to write them today is the outermost project, which costs nothing and is honest about
+  what it is inheriting. Note that a root `AGENTS.md` is already excluded from the note walk, so the
+  file can be written now and simply not read yet.
+
+- **A project that is one flat file cannot carry instructions.** `platform.md` with a `project:` block
+  is still a project in every other respect — repos, `jira`, `branch`, membership, roll-ups — but there
+  is nowhere beside it to put an `AGENTS.md` that is not the vault's own. The fix is to make it a
+  folder, which is a `git mv` and nothing else, and the id does not change. Left as it is because the
+  alternative is a second convention for the same file (`platform.AGENTS.md`, or a key pointing at a
+  path), and one project having two spellings of its instructions is the thing this change removed.
+  The panel's *make it a project* toggle therefore produces a project that cannot state how its work is
+  done until it is moved; if that turns out to be a common dead end, the toggle creating the folder is
+  the smaller change.
+
 - **The aging view — who owes me what, and for how long.** A table filtered to `blocked: [waitingon]`,
   sorted by staleness descending, showing `waiting_on` and the project: a nudge list in the order the
   nudges are overdue. It needs no new mechanism — both axes compute, and it is one view file. Parked on

@@ -333,7 +333,8 @@ export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => 
   // block" is how.
   const next = card.isProject
     ? 'Click: stop being a project — its members stop inheriting these repos and instructions'
-    : 'Click: make it a project — it can own repos and instructions its members inherit';
+    : 'Click: make it a project — it moves into a folder of its own, where it can own repos ' +
+      'and an AGENTS.md its members inherit';
   return (
     <button
       className={`recordmark is-${role} is-toggle`}

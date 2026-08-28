@@ -17,7 +17,7 @@ import {
 import { jiraConfig } from '../sources/jira.ts';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
-import { loadNote } from '../schema/note.ts';
+import { idFromFile, loadNote } from '../schema/note.ts';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isConfigured, paths } from '../config.ts';
@@ -764,9 +764,9 @@ function notesTouched(root: string, changed?: string): string[] | undefined {
   if (!changed) return undefined;
   const dir = paths(root).notes;
   if (!changed.startsWith(dir) || !changed.endsWith('.md')) return undefined;
-  const stem = basename(changed, '.md');
+  const stem = idFromFile(changed, dir);
   try {
-    const res = loadNote(changed);
+    const res = loadNote(changed, dir);
     return [res.ok ? res.rec.id : stem];
   } catch {
     return [stem];

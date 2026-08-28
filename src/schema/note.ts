@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, renameSync, readdirSync, statSync } from 'node:fs';
-import { basename, join as pathJoin } from 'node:path';
+import { basename, dirname, join as pathJoin, resolve } from 'node:path';
 import { z } from 'zod';
 import { KEY_ORDER, headingOf, join, parseDoc, serialize, split } from './frontmatter.ts';
 import { parseLink } from './links.ts';
@@ -88,22 +88,53 @@ export function asDate(v: unknown): string | undefined {
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
- * A note's id when its file does not carry one: the filename, lowercased, with
- * every run of anything else becoming a dash.
+ * A name, lowercased, with every run of anything else becoming a dash.
  *
  * Deliberately not `slugify`, which drops stop words and truncates at six — good
  * for turning a sentence into a name, wrong here, where the id's whole job is to
  * correspond to the file you can see. `notes-on-the-2026-plan.md` keeps every
  * word.
- *
- * A derived id is only stable while the filename is. That is the trade a bare
- * note makes, and it ends the moment the note gains any structure: every write
- * materialises the id it was being called by, so a rename after that renames a
- * file rather than a note.
  */
-export function idFromFile(file: string): string {
-  const stem = basename(file, '.md');
-  return stem.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'note';
+const nameToId = (name: string): string =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'note';
+
+/**
+ * A note's id when its file does not carry one: its filename — except for a
+ * `README.md`, which takes the name of the folder it sits in.
+ *
+ * The exception is what makes a project a folder. `platform/README.md` is the
+ * note `platform`, so the folder name *is* the id and there is nothing else to
+ * keep in step with it (C11). Without it every README in the vault derives the
+ * same id, `readme`, and a vault with three project folders has three notes
+ * claiming one name — which `readAll` reports as duplicates and drops two of.
+ *
+ * `root` is where the vault's notes begin, and the README directly inside it is
+ * the vault's own front page rather than any folder's: its id stays `readme`,
+ * since the alternative is an id that changes when the vault directory is
+ * renamed. Callers with no vault in hand — `pj log`, reading blobs out of git —
+ * pass the relative root the paths are already measured against.
+ *
+ * A derived id is only stable while the *path* is. That is the trade a bare note
+ * makes, and it ends the moment the note gains any structure: every write
+ * materialises the id it was being called by, so a rename after that renames a
+ * file rather than a note. For a folder project this now includes the folder —
+ * renaming `platform/` renames the note, exactly as renaming `platform.md` did.
+ */
+export function idFromFile(file: string, root?: string): string {
+  if (basename(file) === 'README.md' && root !== undefined) {
+    const dir = dirname(file);
+    if (resolve(dir) !== resolve(root)) return nameToId(basename(dir));
+  }
+  return nameToId(basename(file, '.md'));
+}
+
+/** What a file with no `title:` and no heading is called: the same name its id came from. */
+function nameOf(file: string, root?: string): string {
+  if (basename(file) === 'README.md' && root !== undefined) {
+    const dir = dirname(file);
+    if (resolve(dir) !== resolve(root)) return basename(dir);
+  }
+  return basename(file, '.md');
 }
 
 /**
@@ -133,7 +164,7 @@ export function idFromFile(file: string): string {
  * it is the right way round — a vault should open, and a typo should cost you a
  * name rather than a file.
  */
-export function parseNote(file: string, text: string): ParseResult {
+export function parseNote(file: string, text: string, root?: string): ParseResult {
   const { yaml, body } = split(text);
 
   let raw: unknown = {};
@@ -163,8 +194,8 @@ export function parseNote(file: string, text: string): ParseResult {
       // `id: book highlights summary` costs the name it was going by, not the
       // note. The derived id is what every reference to it already resolves
       // through, since nothing could have pointed at a non-slug.
-      id: fm.id && SLUG.test(fm.id) ? fm.id : idFromFile(file),
-      title: fm.title ?? headingOf(body) ?? basename(file, '.md'),
+      id: fm.id && SLUG.test(fm.id) ? fm.id : idFromFile(file, root),
+      title: fm.title ?? headingOf(body) ?? nameOf(file, root),
       facets: normaliseFacets(fm.facets),
       links: (fm.links ?? []).map(parseLink),
       project: fm.project as ProjectBlock | undefined,
@@ -178,8 +209,8 @@ export function parseNote(file: string, text: string): ParseResult {
   };
 }
 
-export function loadNote(file: string): ParseResult {
-  return parseNote(file, readFileSync(file, 'utf8'));
+export function loadNote(file: string, root?: string): ParseResult {
+  return parseNote(file, readFileSync(file, 'utf8'), root);
 }
 
 /**
@@ -194,8 +225,17 @@ export function loadNote(file: string): ParseResult {
  * `README.md` used to be skipped too, and no longer is. The reason it was there —
  * a folder full of markdown attracts a README — is exactly the reason it should
  * be a note now that the folder full of markdown *is* the vault.
+ *
+ * `AGENTS.md` is the other way round, and for the same reason `facets.yaml` is
+ * not a note: it is **configuration**, and configuration is not content. It
+ * carries a project's instructions, which were a `project:` key until they got
+ * their own file, and a key in the frontmatter block was never a note either. If
+ * it were indexed, every project folder would also contribute a note called
+ * `agents`, all of them claiming one id — and the instructions would then be both
+ * a note body and inherited config, which is the one thing C11 forbids.
  */
-const skipped = (name: string): boolean => name === 'assets' || name.startsWith('.');
+const skipped = (name: string): boolean =>
+  name === 'assets' || name === 'AGENTS.md' || name.startsWith('.');
 
 /** Every `.md` in the vault, at any depth. */
 export function listNoteFiles(cardsDir: string): string[] {

@@ -1,6 +1,43 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { ProjectRepo, Note, ResolvedProject } from '../schema/types.ts';
-import { resolvePath } from '../config.ts';
+import { paths, resolvePath } from '../config.ts';
 import { adjacency, chains } from './refs.ts';
+
+
+/** The file a project's instructions live in, beside its note. */
+export const INSTRUCTIONS_FILE = 'AGENTS.md';
+
+/**
+ * How work on one project is done: `AGENTS.md` in the folder its note sits in.
+ *
+ * A file rather than a `project:` key, because instructions are the one piece of
+ * a project's configuration that is *prose*, and prose in a YAML block scalar is
+ * prose nobody edits. This is also the name every agent already opens without
+ * being told to — which is the point of the change: a session that lands in
+ * `platform/` with no `pj`, no index and no idea projector exists still reads the
+ * rules it is meant to work under (C3, extended from one note to its folder).
+ *
+ * **The vault root is excluded.** A vault's own `AGENTS.md` is about the vault,
+ * and letting it through here would attach it to every project note that happens
+ * to sit at the root while attaching to no other note at all — inheritance along
+ * the `project` facet, sourced from something that is not on the chain. Vault-wide
+ * instructions are a separate question; see docs/NEXT.md.
+ *
+ * So a project that wants instructions is a project that is a folder. That is a
+ * push rather than an accident: the folder is what makes the instructions
+ * findable without this app, which is the only reason they left the frontmatter.
+ */
+function instructionsOf(owner: Note, dataRoot: string): string | null {
+  const dir = dirname(owner.file);
+  if (resolve(dir) === resolve(paths(dataRoot).notes)) return null;
+  try {
+    const text = readFileSync(join(dir, INSTRUCTIONS_FILE), 'utf8').trim();
+    return text || null;
+  } catch {
+    return null; // absent is the ordinary case: most projects state no rules
+  }
+}
 
 
 export function isProject(rec: Note): boolean {
@@ -101,7 +138,7 @@ export function resolveProject(
     key = owner.id;
     if (p.jira) jira = p.jira;
     if (p.branch) branch = p.branch;
-    const ins = p.instructions?.trim();
+    const ins = instructionsOf(owner, dataRoot);
     if (ins) instructions.push(`<!-- from ${owner.id} -->\n${ins}`);
   }
 

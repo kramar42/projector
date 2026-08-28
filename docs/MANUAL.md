@@ -23,9 +23,10 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
 | **ref** | one value of a relation — a pointer *inside* the vault, traversable |
 | **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
-| **project** | a note carrying a `project:` block of configuration, which its members inherit. A built-in facet points at them |
+| **project** | a note carrying a `project:` block of configuration, which its members inherit. Usually a folder: `platform/README.md` is the note `platform`, and `platform/AGENTS.md` is its instructions. A built-in facet points at them |
 | **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
+| **project folder** | a folder whose `README.md` carries a `project:` block. The folder name is the note's id; `AGENTS.md` beside it is what members inherit. Nothing else about the folder means anything — what is *in* it is not what belongs to it |
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
 | **shape** | how a query is drawn: `board`, `canvas` or `table` |
 | **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a canvas a **band**; a second grouping axis gives a board **lanes** |
@@ -219,8 +220,6 @@ project:
     - { path: ~/code/infra,  base: dev }
   jira: PROJ                          # default project for new jira: links
   branch: "plat/{note}"               # branch template
-  instructions: |                     # how work here is done
-    - Never change a realm in eu-prod without a ticket and a rollback plan.
 ```
 
 A project's key is its note **id**. There is no separate `key`: a second name for one thing is a
@@ -229,6 +228,58 @@ a note id.
 
 Repos are declared inline by path — no registry to populate first. Relative paths resolve against the
 vault.
+
+### A project is a folder
+
+A project note is normally a folder's `README.md`:
+
+```
+platform/
+├── README.md        the note — `project:` block above, prose below
+├── AGENTS.md        how work on platform is done
+└── …                whatever else belongs beside it
+```
+
+**The folder name is the id.** `platform/README.md` is the note `platform`, so there is nothing to
+keep in step — the same reason a project has no `key`. Every other `README.md` in the vault would
+otherwise derive the same id, `readme`, and the second one to be read would be dropped as a duplicate.
+The vault's own root `README.md` is the exception: it is the vault's front page rather than any
+folder's, and it keeps its filename. A stated `id:` still wins over both.
+
+**`AGENTS.md` beside it is the project's instructions** — how work here is done, inherited by every
+member. It is a file rather than a `project:` key because instructions are the one part of a project's
+configuration that is prose, and because it is the name an agent opens without being told to: a
+session that lands in `platform/` with no `pj`, no index and no idea this app exists still reads the
+rules it is meant to work under. It is **not a note** — configuration is not content, any more than
+`facets.yaml` is — so it never appears on a board and never has an id.
+
+**Nothing else about the folder means anything.** What is *in* it is not what belongs to it:
+membership is the `project` facet and only the facet, exactly as before. A member can live anywhere in
+the vault, a note in `platform/` need not be a member, and a note belongs to as many projects as it
+names — which no single folder could express. Nesting is the same: a project inside a project is a
+`project:` value, not a folder inside a folder.
+
+**Making a note a project makes the folder.** The panel's `▣` toggle and `pj set <id> --set
+'project={}'` both move `platform.md` to `platform/README.md` as part of the write — the folder is
+named for the **id**, never for the filename it may have drifted from, and the id does not change, so
+nothing pointing at the note breaks. A folder that already exists is joined rather than refused; only
+an occupied `README.md` refuses, since that would be two notes claiming one id. A note that is already
+some folder's README stays where it is.
+
+**Un-projecting does not move it back.** The block goes and members stop inheriting, but the folder
+and everything in it — `AGENTS.md` included — stay exactly where they are. Collapsing the folder would
+delete files nobody asked about. The consequence worth knowing: an `AGENTS.md` left beside a note that
+is no longer a project is simply no longer read.
+
+**A project can still be one flat file.** `platform.md` with a `project:` block works exactly as it
+did if you write it by hand, and everything above is a convention. The one thing it cannot do is carry
+instructions — a vault's own root `AGENTS.md` is about the vault, and reading it here would attach it
+to every root-level project and to no other note. So a project that states how its work is done is a
+project that is a folder, which is why promotion makes one.
+
+> **Moving from an earlier vault.** `instructions:` was a key in the `project:` block. It is now the
+> file, and `pj check` reports the key as an error naming the path to write instead — loudly, because
+> a key that parses and is then ignored would leave members silently no longer inheriting anything.
 
 **Membership is the `project` facet and nothing else.** A note carries `project: [platform, mapping]`,
 an ordinary multi-valued facet stored exactly like `priority` — it drags, bulk-edits and groups through
@@ -245,10 +296,12 @@ another: every project comes before anything that names it, and two that are equ
 order the note listed them in. So a note belonging to both a subject and a way of working reads both
 sets of instructions as general → specific, with its own last.
 
-**Instructions are configuration**, so they live in the block with the rest of it rather than under a
-heading in the body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a
+**Instructions are configuration**, so they live in their own file rather than under a heading in the
+body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a
 progress bar, the first prose paragraph becomes the note-face excerpt, and the whole of it goes into
-FTS — but no heading or marker in it changes how the app behaves.
+FTS — but no heading or marker in it changes how the app behaves. That is why `AGENTS.md` is a
+separate file and not a `## Instructions` section of the README: a heading matched by a regex is prose
+made load-bearing, where renaming it stops inheritance with nothing to check against.
 
 ### `project` and `parent` are different questions
 

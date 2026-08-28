@@ -170,7 +170,7 @@ function readBlobs(root: string, shas: Set<string>): Map<string, string> {
 /** Parse a blob as a note, or null when it is absent or unreadable. */
 function recordOf(text: string | undefined, path: string): Note | null {
   if (text === undefined) return null;
-  const res = parseNote(path, text);
+  const res = parseNote(path, text, '.');
   return res.ok ? res.rec : null;
 }
 

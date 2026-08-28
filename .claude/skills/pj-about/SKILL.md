@@ -18,8 +18,16 @@ is under `.projector/`. This skill covers all three editable things:
 | `<vault>/.projector/facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
 | `<vault>/.projector/views/*.yaml` | saved queries and their arrangement | hand-edit |
 
-**Every markdown file is a note, with no exceptions** — a `README.md` included, and one in a
-subfolder. Folders are the user's to arrange and mean nothing to the app.
+**Every markdown file is a note but one: `AGENTS.md`.** A `README.md` is a note, and so is one in a
+subfolder. `AGENTS.md` is configuration — a project's instructions — and never appears as a note.
+
+**Folders are the user's to arrange, with one convention: a project is usually a folder.**
+`platform/README.md` carrying a `project:` block is the note `platform` — a `README.md` below the
+vault root takes its *folder's* name as its id, so the folder name is the id — and `platform/AGENTS.md`
+beside it holds the instructions its members inherit. The vault's own root `README.md` is the
+exception and keeps the id `readme`. Nothing else about a folder means anything: what is *in* it is
+**not** what belongs to it. Membership is the `project` facet and only the facet, a member can live
+anywhere, and a note sitting in `platform/` need not be a member of it.
 
 **A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
@@ -55,7 +63,7 @@ alias pj="bun '$PWD/src/cli/pj.ts'"   # from the projector project root: freezes
    expressive.
 2. **`project` is a reference facet** — `type: ref`, so its values are note **ids**.
    `project: [project-d, mapping]` means the note belongs to both and inherits the repos and instructions
-   of both. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
+   of both. Membership is this facet and nothing else — never a folder it sits in. Being a reference makes it traversable as well as filterable: it draws on a canvas, walks
    under `--focus ... --via project`, and refuses a cycle. A project has no separate key.
 3. **`parent` is a reference facet too** — "this note is part of that one". Single-valued, drawn by the
    canvas, and it carries **no config**: repos and instructions come through `project` alone. The two
@@ -113,7 +121,7 @@ re-derive those by reading files.
 pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]
 pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
-pj set <id> --set 'project={}'      # this is how a note becomes a project
+pj set <id> --set 'project={}'      # a note becomes a project — and moves to <id>/README.md
 pj merge <id>... --into <id>         # folds notes into one; the survivor keeps its facets
 pj rm <id>...                       # deletes, dropping every reference pointing at it
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
@@ -149,6 +157,25 @@ refilling the inbox.
   outside Project A.
 - **Never set a `project` value with no matching project note.** Either use an existing id or
   propose creating the note — do not invent membership that resolves to nothing.
+- **A project's instructions are `AGENTS.md`, not frontmatter.** There is no `project.instructions`
+  key any more; `pj check` reports one as an error. Write or edit the file directly with Write/Edit —
+  `pj` has no command for it, deliberately, since it is prose. It belongs beside the project note, so
+  a project that needs instructions is a project that is a folder:
+
+  Promotion makes the folder for you — `pj set <id> --set 'project={}'` moves `platform.md` to
+  `platform/README.md`, named for the id, so nothing pointing at the note breaks. For a project that
+  is already flat, do the move first and then write the file:
+
+  ```bash
+  git -C <vault> mv platform.md platform/README.md   # or let `pj set --set project={}` do it
+  # then write platform/AGENTS.md beside it
+  ```
+
+  Un-projecting never moves it back, so an `AGENTS.md` left beside a note that is no longer a project
+  is simply no longer read — remove it yourself if that is what you meant.
+
+  The vault's own root `AGENTS.md` is **not** read as any project's instructions. Do not put a
+  project's rules there expecting them to be inherited.
 - **Positions are never on a note.** Canvas `x/y` lives in `<vault>/.projector/views/*.yaml`.
 - **Everything external is read-only.** Never write to Jira, GitHub, Trello or Slack from a note
   operation. Links are references, not copies.

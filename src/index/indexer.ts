@@ -24,7 +24,7 @@ export function readAll(cardsDir: string): {
   const seen = new Map<string, string[]>();
 
   for (const file of listNoteFiles(cardsDir)) {
-    const res = loadNote(file);
+    const res = loadNote(file, cardsDir);
     if (!res.ok) {
       unreadable.push({ file: res.file, errors: res.errors });
       continue;

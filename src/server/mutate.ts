@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
@@ -55,9 +55,15 @@ function fileFor(root: string, id: string): string {
   const p = paths(root);
   const direct = join(p.notes, `${id}.md`);
   if (existsSync(direct)) return direct;
+  // The other shape an id has on disk: a folder of that name, the note being its
+  // README. Probed rather than scanned for the same reason as the line above — a
+  // project is the note most often written to, and the scan below is the whole
+  // vault.
+  const folder = join(p.notes, id, 'README.md');
+  if (existsSync(folder)) return folder;
   // The filename may drift from the id, so fall back to a scan.
   for (const f of listNoteFiles(p.notes)) {
-    const res = loadNote(f);
+    const res = loadNote(f, p.notes);
     if (res.ok && res.rec.id === id) return f;
   }
   throw new Invalid(`no note with id "${id}"`);
@@ -85,7 +91,7 @@ export function mtimeOf(file: string): number {
  * the indexer does with an unreadable note and the only answer available.
  */
 function facetsNow(rec: { file: string; facets: Record<string, string[]> }): Record<string, string[]> {
-  const res = loadNote(rec.file);
+  const res = loadNote(rec.file);  // id is not read here; only this file's facets are
   return res.ok ? res.rec.facets : rec.facets;
 }
 
@@ -144,19 +150,76 @@ function today(): string {
  * Nothing is written for a note that already says who it is, which is every note
  * projector itself created.
  */
-function identity(text: string, file: string): Record<string, string> {
+function identity(text: string, file: string, root: string): Record<string, string> {
   const { yaml, body } = split(text);
   const fm = (yaml === null ? {} : ((parseDoc(yaml).toJS() ?? {}) as Record<string, unknown>));
   const out: Record<string, string> = {};
-  if (typeof fm.id !== 'string') out.id = idFromFile(file);
+  if (typeof fm.id !== 'string') out.id = idFromFile(file, root);
   if (typeof fm.title !== 'string') out.title = headingOf(body) ?? basename(file, '.md');
   return out;
 }
 
-/** Apply several frontmatter keys in one atomic write, bumping `updated`. */
-function patchAll(file: string, patch: Record<string, unknown>): void {
+/**
+ * A project note lives in a folder named after it. Move it there.
+ *
+ * Called after any write that could have added a `project:` block, and a no-op
+ * for every write that did not. The reason it exists at all is that instructions
+ * are `AGENTS.md` *beside the note*: promoting `platform.md` in place produces a
+ * project with nowhere to put them except the vault root, whose `AGENTS.md`
+ * belongs to the vault and is deliberately not read. So the promotion that leaves
+ * the file flat is a promotion into a dead end, and this is the fix.
+ *
+ * **The folder is named for the id, never for the filename.** The folder name
+ * *is* the id (`platform/README.md` is the note `platform`), so a folder called
+ * anything else would be the second name for one thing that a project's missing
+ * `key` already refuses. A note whose file has drifted from its id is therefore
+ * renamed as well as moved, and the id does not change either way.
+ *
+ * Three cases do nothing, and none of them is a failure:
+ *
+ * - the note is not a project — nothing to settle;
+ * - it is already a `README.md` — it is already a folder's note, and `AGENTS.md`
+ *   beside it already resolves, whatever the folder is called. Renaming that
+ *   folder could move files nobody asked about;
+ * - it is already at `<id>/README.md` — the target.
+ *
+ * An existing folder is *joined*, not refused: `platform/` full of notes plus a
+ * flat `platform.md` is exactly the vault mid-migration. Only an occupied
+ * `README.md` refuses, because that is two notes claiming one id.
+ *
+ * Returns where the note is now, so the caller stamps the mtime of the file that
+ * exists rather than the path it opened with.
+ */
+function settleProjectFolder(root: string, id: string, file: string): string {
+  const res = loadNote(file, paths(root).notes);
+  if (!res.ok || !res.rec.project) return file;
+  if (basename(file) === 'README.md') return file;
+
+  const dir = join(dirname(file), id);
+  const target = join(dir, 'README.md');
+  if (existsSync(target)) {
+    throw new Invalid(
+      `cannot make "${id}" a project: ${relative(paths(root).notes, target)} already exists`,
+    );
+  }
+  mkdirSync(dir, { recursive: true });
+  renameSync(file, target);
+  return target;
+}
+
+/**
+ * Apply several frontmatter keys in one atomic write, bumping `updated`.
+ *
+ * `root` is not optional, and that is deliberate. `identity` freezes the id the
+ * file has been answering to, and for `platform/README.md` that id is `platform`
+ * — derivable only against the vault it sits in. A defaulted root would make the
+ * first write to a folder project stamp `id: readme` into it, renaming the note
+ * and orphaning every `project:` value pointing at it, silently. Required, the
+ * compiler asks instead.
+ */
+function patchAll(root: string, file: string, patch: Record<string, unknown>): void {
   let text = readFileSync(file, 'utf8');
-  for (const [key, value] of Object.entries({ ...identity(text, file), ...patch })) {
+  for (const [key, value] of Object.entries({ ...identity(text, file, paths(root).notes), ...patch })) {
     text = patchKey(text, key, value);
   }
   text = patchKey(text, 'updated', today());
@@ -379,16 +442,16 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
   if (input.links !== undefined) patch.links = input.links.length ? input.links : undefined;
   if (input.project !== undefined) patch.project = input.project ?? undefined;
 
-  if (Object.keys(patch).length) patchAll(file, patch);
+  if (Object.keys(patch).length) patchAll(root, file, patch);
 
   if (input.body !== undefined) {
     // The body is written verbatim; only this call path and `mergeNotes` may
     // touch it.
     putBody(file, input.body);
-    patchAll(file, {});
+    patchAll(root, file, {});
   }
 
-  return { mtime: mtimeOf(file) };
+  return { mtime: mtimeOf(settleProjectFolder(root, id, file)) };
 }
 
 export function createNote(
@@ -537,7 +600,7 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
     const plan = repointed(facetsNow(rec), refFacets, gone, null, rec.id);
     if (!plan) continue;
     removedEdges += plan.changed;
-    patchAll(rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
+    patchAll(root, rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
   }
 
   rmSync(file);
@@ -669,14 +732,14 @@ export function mergeNotes(
     // input is fresher.
     const fresh = repointed(facetsNow(plan.rec), refFacets, gone, into, plan.rec.id);
     if (!fresh) continue;
-    patchAll(plan.rec.file, { facets: Object.keys(fresh.facets).length ? fresh.facets : undefined });
+    patchAll(root, plan.rec.file, { facets: Object.keys(fresh.facets).length ? fresh.facets : undefined });
   }
 
   const file = fileFor(root, into);
   // The body first, so the frontmatter write is what stamps `updated` — one bump
   // for one merge, rather than one per field it happens to touch.
   putBody(file, out.body);
-  patchAll(file, {
+  patchAll(root, file, {
     facets: Object.keys(out.facets).length ? out.facets : undefined,
     links: out.links.length ? out.links : undefined,
     absorbed_fingerprints: out.absorbed.length ? out.absorbed : undefined,
@@ -779,7 +842,7 @@ export function bulkMove(
     if (!touched) continue;
     // Every axis is checked before any of them is written.
     checkFacets(root, id, check, notes);
-    patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
+    patchAll(root, rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
   return { changed };
@@ -805,7 +868,7 @@ export function bulkFacet(
     if (same(current, next)) continue;
     const facets = withFacet(now, facet, next);
     checkFacets(root, id, next.length ? { [facet]: next } : {}, notes);
-    patchAll(rec.file, { facets: Object.keys(facets).length ? facets : undefined });
+    patchAll(root, rec.file, { facets: Object.keys(facets).length ? facets : undefined });
     changed++;
   }
   return { changed };
@@ -903,8 +966,8 @@ export function patchFields(
   }
   checkFacets(root, id, facets, readAll(paths(root).notes).notes);
 
-  for (const key of touched) patchAll(file, { [key]: fm[key] });
-  return { mtime: mtimeOf(file) };
+  for (const key of touched) patchAll(root, file, { [key]: fm[key] });
+  return { mtime: mtimeOf(settleProjectFolder(root, id, file)) };
 }
 
 /**
@@ -972,7 +1035,7 @@ export function putFrontmatter(
   // Re-render through the canonical serializer so key order and flow style match
   // every other file, then restore the body untouched.
   writeNoteFile(file, joinFm(serialize(check.data), body));
-  return { mtime: mtimeOf(file), warnings };
+  return { mtime: mtimeOf(settleProjectFolder(root, id, file)), warnings };
 }
 
 // ---------------------------------------------------------------- canvas
@@ -1006,7 +1069,7 @@ export function saveArrangement(
       if (!live) {
         live = new Set<string>();
         for (const f of listNoteFiles(p.notes)) {
-          const res = loadNote(f);
+          const res = loadNote(f, p.notes);
           if (res.ok) live.add(res.rec.id);
         }
       }

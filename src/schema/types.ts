@@ -15,12 +15,18 @@ export interface ProjectBlock {
   jira?: string;
   branch?: string;
   /**
-   * How work on this project is done, inherited by its members.
+   * **Not configuration.** Parsed only so `pj check` can say it moved.
    *
-   * Configuration, so it lives with the rest of it. It used to be a `##
-   * Instructions` heading in the note's body, matched by regex — the one place
-   * prose was load-bearing, where renaming a heading silently stopped
-   * inheritance with nothing to check against.
+   * Instructions are now `AGENTS.md` beside the project note, and nothing reads
+   * this key — `resolveProject` never looks at it. It stays in the schema because
+   * the alternative is worse: an unknown key is silently stripped, so a vault
+   * written against the old format would keep working with its operating rules
+   * quietly no longer inherited, which is the failure mode instructions can least
+   * afford. Kept, it is an error with a file path and a fix in it.
+   *
+   * It was a `## Instructions` heading in the body before it was this key, and it
+   * moved for the reason it is moving again: the format should be the one the
+   * reader already expects to find.
    */
   instructions?: string;
 }

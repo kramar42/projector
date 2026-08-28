@@ -313,8 +313,9 @@ function NoteCard({
     if (card.isProject) {
       const ok = confirm(
         `Stop "${card.title}" being a project?\n\n` +
-          'This deletes its project block — the repos, the branch template, the jira key ' +
-          'and any instruction blocks — and the notes that name it stop inheriting them.\n\n' +
+          'This deletes its project block — the repos, the branch template and the jira key — ' +
+          'and the notes that name it stop inheriting them, its AGENTS.md included.\n\n' +
+          'The folder and every file in it stay where they are; only the block goes. ' +
           'The file is in git, so this is recoverable.',
       );
       if (!ok) return;

@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { isKnownKind } from './links.ts';
 import { isRef } from './facets.ts';
 import type { Facets, Issue, Note } from './types.ts';
-import { isProject } from '../index/project.ts';
+import { INSTRUCTIONS_FILE, isProject } from '../index/project.ts';
 import { wouldCycle } from '../index/refs.ts';
-import { resolvePath } from '../config.ts';
+import { paths, resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
 
 /**
@@ -156,6 +157,24 @@ export function validate(
       for (const repo of rec.project?.repos ?? []) {
         const p = resolvePath(repo.path, dataRoot);
         if (!existsSync(p)) at('project.repos', `repo path not found: ${repo.path}`, 'warning');
+      }
+      // Instructions moved out of the frontmatter and into a file. An error
+      // rather than a warning, and named here rather than left to the schema to
+      // strip, because the failure it prevents is silent: the key parses, the
+      // vault loads, the board draws — and members stop inheriting the rules they
+      // are supposed to work under, with nothing anywhere saying so.
+      if (rec.project?.instructions !== undefined) {
+        // At the vault root there is no folder to put the file in yet, so the fix
+        // is the move that creates one — which is the whole shape of a project now.
+        const notes = paths(dataRoot).notes;
+        const atRoot = resolve(dirname(rec.file)) === resolve(notes);
+        at(
+          'project.instructions',
+          `instructions are a file now — move them to ` +
+            (atRoot
+              ? `${rec.id}/${INSTRUCTIONS_FILE}, and this note to ${rec.id}/README.md`
+              : join(relative(notes, dirname(rec.file)), INSTRUCTIONS_FILE)),
+        );
       }
     }
 

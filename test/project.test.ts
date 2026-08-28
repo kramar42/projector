@@ -6,7 +6,9 @@ import { projectsOf, resolveProject } from '../src/index/project.ts';
 import { adjacency, chains, refsOf, wouldCycle } from '../src/index/refs.ts';
 import { blockedBy, blockedSet, unblocks } from '../src/index/blocking.ts';
 import { loadFacets } from '../src/schema/facets.ts';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { stringify } from 'yaml';
+import { readAll } from '../src/index/indexer.ts';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -53,6 +55,38 @@ function graph(...recs: Note[]): Map<string, Note> {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
+/**
+ * A vault of folder projects on disk.
+ *
+ * Instructions are `AGENTS.md` beside the project note, so a test that asserts
+ * what a member inherits has to be a test with real folders in it — `graph`
+ * above builds records whose `file` points nowhere, which is exactly right for
+ * the ordering tests and useless for this one.
+ *
+ * Each entry becomes `<root>/<id>/README.md`, plus `<root>/<id>/AGENTS.md` when
+ * it states any rules. `readAll` then reads it back the way the indexer does, so
+ * these tests exercise the folder id rule at the same time.
+ */
+function vault(
+  ...projects: { id: string; belongsTo?: string[]; project?: Note['project']; rules?: string }[]
+): { root: string; notes: Map<string, Note> } {
+  const root = mkdtempSync(join(tmpdir(), 'projector-vault-'));
+  for (const spec of projects) {
+    mkdirSync(join(root, spec.id));
+    const fm: string[] = ['---'];
+    if (spec.belongsTo?.length) fm.push(`facets:\n  project: [${spec.belongsTo.join(', ')}]`);
+    fm.push(`project:\n${stringify(spec.project ?? {}).trimEnd().split('\n').map((l) => `  ${l}`).join('\n')}`);
+    fm.push('---', '');
+    writeFileSync(join(root, spec.id, 'README.md'), fm.join('\n'), 'utf8');
+    if (spec.rules) writeFileSync(join(root, spec.id, 'AGENTS.md'), spec.rules, 'utf8');
+  }
+  return { root, notes: readAll(root).notes };
+}
+
+/** The rules each project on the chain contributed, without the provenance marker. */
+const rulesOf = (p: { instructions: string[] }) =>
+  p.instructions.map((i) => i.split('\n').slice(1).join('\n').trim());
+
 
 /** Parse a note from its text, failing the test rather than returning a result. */
 function recordOf(text: string): Note {
@@ -76,18 +110,16 @@ test('repos union across the project chain, nearest wins for scalars', () => {
 });
 
 test('a note in two projects inherits from both, unioned', () => {
-  const g = graph(
-    rec('project-d', [], { repos: [{ path: '/project-d' }], instructions: 'project-d rule' }),
-    rec('mapping', [], { repos: [{ path: '/mapping' }], instructions: 'mapping rule' }),
-    rec('deploy', [], undefined, '', ['project-d', 'mapping']),
+  const { root, notes } = vault(
+    { id: 'project-d', project: { repos: [{ path: '/project-d' }] }, rules: 'project-d rule' },
+    { id: 'mapping', project: { repos: [{ path: '/mapping' }] }, rules: 'mapping rule' },
+    { id: 'deploy', belongsTo: ['project-d', 'mapping'] },
   );
-  const p = resolveProject('deploy', g, '/data');
+  const p = resolveProject('deploy', notes, root);
   assert.ok(p);
   assert.deepEqual(p.repos.map((r) => r.path), ['/project-d', '/mapping']);
-  assert.equal(p.instructions.length, 2);
-  assert.match(p.instructions[0]!, /project-d rule/);
-  assert.match(p.instructions[1]!, /mapping rule/);
-  assert.deepEqual(p.chain, ['project-d', 'mapping']);
+  assert.deepEqual(rulesOf(p), ['project-d rule', 'mapping rule']);
+  assert.deepEqual(p.chain, ['project-d', 'mapping', 'deploy']);
 });
 
 test('a duplicate repo path is not added twice', () => {
@@ -98,15 +130,42 @@ test('a duplicate repo path is not added twice', () => {
   assert.equal(resolveProject('leaf', g, '/data')!.repos.length, 1);
 });
 
-test('instructions concatenate outermost first', () => {
-  const g = graph(
-    rec('root', [], { instructions: 'root rule' }),
-    rec('leaf', [], { instructions: 'leaf rule' }, '', ['root']),
+test('instructions come from AGENTS.md, concatenated outermost first', () => {
+  const { root, notes } = vault(
+    { id: 'outer', rules: 'root rule' },
+    { id: 'leaf', belongsTo: ['outer'], rules: 'leaf rule' },
   );
-  const p = resolveProject('leaf', g, '/data')!;
-  assert.equal(p.instructions.length, 2);
-  assert.match(p.instructions[0]!, /root rule/);
-  assert.match(p.instructions[1]!, /leaf rule/);
+  const p = resolveProject('leaf', notes, root)!;
+  assert.deepEqual(rulesOf(p), ['root rule', 'leaf rule']);
+  // The provenance marker is what makes a briefing able to say where a rule came
+  // from, and it names the note rather than the file.
+  assert.match(p.instructions[0]!, /^<!-- from outer -->/);
+});
+
+test('a project stating no rules contributes nothing', () => {
+  const { root, notes } = vault(
+    { id: 'outer', rules: 'only rule' },
+    { id: 'leaf', belongsTo: ['outer'] },
+  );
+  assert.deepEqual(rulesOf(resolveProject('leaf', notes, root)!), ['only rule']);
+});
+
+/**
+ * A vault's own AGENTS.md is about the vault, not about whichever project note
+ * happens to sit beside it.
+ *
+ * Read, it would attach the vault's rules to every root-level project and to no
+ * other note — inheritance along the `project` facet, sourced from something that
+ * is not on the chain. So a project that wants instructions is a folder.
+ */
+test('the vault root AGENTS.md is not any project\'s instructions', () => {
+  const root = mkdtempSync(join(tmpdir(), 'projector-vault-'));
+  writeFileSync(join(root, 'AGENTS.md'), 'how this vault is kept', 'utf8');
+  writeFileSync(join(root, 'flat.md'), '---\nid: flat\nproject: {}\n---\n', 'utf8');
+  const { notes } = readAll(root);
+  assert.deepEqual(resolveProject('flat', notes, root)!.instructions, []);
+  // And it is not a note either, so it cannot arrive by the other door.
+  assert.equal(notes.has('agents'), false);
 });
 
 test('a note naming no project resolves to null', () => {
@@ -250,17 +309,18 @@ test('two projects merge into one outermost-first order, not one chain after ano
   // others. Walking chain by chain emitted `garden → money → agent`, putting the
   // note's own advice between its two parents' — so the second parent's general
   // rules read after the specific ones they exist to precede.
-  const g = graph(
-    rec('garden', [], { instructions: 'general: the garden' }),
-    rec('agent', [], { instructions: 'general: the agent' }),
-    rec('money', [], { instructions: 'specific: money' }, '', ['garden', 'agent']),
+  const { root, notes } = vault(
+    { id: 'garden', rules: 'general: the garden' },
+    { id: 'agent', rules: 'general: the agent' },
+    { id: 'money', belongsTo: ['garden', 'agent'], rules: 'specific: money' },
   );
-  const p = resolveProject('money', g, '/data')!;
+  const p = resolveProject('money', notes, root)!;
   assert.deepEqual(p.chain, ['garden', 'agent', 'money']);
-  assert.deepEqual(
-    p.instructions.map((i) => i.split('\n')[1]),
-    ['general: the garden', 'general: the agent', 'specific: money'],
-  );
+  assert.deepEqual(rulesOf(p), [
+    'general: the garden',
+    'general: the agent',
+    'specific: money',
+  ]);
   // The nearest value is the most specific one, which is now the note itself
   // rather than whichever parent the traversal reached last.
   assert.equal(p.key, 'money');
@@ -271,17 +331,17 @@ test('a project reachable at two depths reads at its most general position', () 
   // Ranking by the *longest* distance from a root is what keeps it ahead of
   // `mid` on both paths; the shortest would let it read after its own child.
   const g = graph(
-    rec('base', [], { instructions: 'base' }),
-    rec('mid', [], { instructions: 'mid' }, '', ['base']),
-    rec('leaf', [], { instructions: 'leaf' }, '', ['mid', 'base']),
+    rec('base', [], {}),
+    rec('mid', [], {}, '', ['base']),
+    rec('leaf', [], {}, '', ['mid', 'base']),
   );
   assert.deepEqual(resolveProject('leaf', g, '/data')!.chain, ['base', 'mid', 'leaf']);
 });
 
 test('two parents equally general keep the order the note declared', () => {
   const g = graph(
-    rec('alpha', [], { instructions: 'alpha' }),
-    rec('beta', [], { instructions: 'beta' }),
+    rec('alpha', [], {}),
+    rec('beta', [], {}),
     rec('note', [], undefined, '', ['beta', 'alpha']),
   );
   // Declaration order, not alphabetical and not traversal order: the file is

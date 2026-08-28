@@ -14,6 +14,7 @@ import {
   deleteNote,
   mergeNotes,
   mtimeOf,
+  patchFields,
   patchNote,
   repointed,
   putFrontmatter,
@@ -686,6 +687,101 @@ test('the write paths that carry a guard are the ones the document names', () =>
   for (const row of ['cannot be guarded', 'merges', 'narrows']) {
     assert.ok(doc.includes(row), `the write-path table should still say "${row}"`);
   }
+});
+
+/**
+ * Promotion makes the folder, because the flat form is a dead end.
+ *
+ * A project's instructions are `AGENTS.md` beside its note, so promoting
+ * `platform.md` in place leaves a project with nowhere to put them except the
+ * vault root — whose `AGENTS.md` belongs to the vault and is deliberately not
+ * read. Every path that can add a `project:` block therefore settles the folder.
+ */
+test('making a note a project moves it into a folder named for its id', () => {
+  const { root, cleanup } = vault({ platform: card('platform', 'priority: [now]') });
+  patchNote(root, 'platform', { project: {} });
+
+  assert.ok(existsSync(join(root, 'platform', 'README.md')), 'the note moved into its folder');
+  assert.equal(existsSync(join(root, 'platform.md')), false, 'and is not left behind');
+
+  // The id is the point: it is the folder name now, so nothing pointing at it broke.
+  const { notes, duplicates } = readAll(paths(root).notes);
+  assert.deepEqual(duplicates, []);
+  assert.equal(notes.get('platform')?.title, 'PLATFORM');
+  assert.ok(notes.get('platform')?.project);
+  cleanup();
+});
+
+test('the folder is named for the id, not for the filename it drifted from', () => {
+  const { root, cleanup } = vault();
+  writeFileSync(join(root, 'Old Name.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
+  patchFields(root, 'platform', { project: '{}' });
+  assert.ok(existsSync(join(root, 'platform', 'README.md')));
+  assert.equal(readAll(paths(root).notes).notes.get('platform')?.id, 'platform');
+  cleanup();
+});
+
+test('a bare note keeps the id it was answering to when it is promoted', () => {
+  const { root, cleanup } = vault();
+  writeFileSync(join(root, 'Some Note.md'), '# Some Note\n\nprose\n', 'utf8');
+  patchNote(root, 'some-note', { project: {} });
+  assert.ok(existsSync(join(root, 'some-note', 'README.md')));
+  assert.ok(readAll(paths(root).notes).notes.has('some-note'), 'not renamed by the move');
+  cleanup();
+});
+
+test('promotion joins a folder that already exists rather than refusing it', () => {
+  // A vault mid-migration: `mapping/` full of notes and a flat `mapping.md`.
+  const { root, cleanup } = vault({ mapping: card('mapping', 'priority: [now]') });
+  mkdirSync(join(root, 'mapping'));
+  writeFileSync(join(root, 'mapping', 'sub.md'), '# Sub\n', 'utf8');
+  patchNote(root, 'mapping', { project: {} });
+  assert.ok(existsSync(join(root, 'mapping', 'README.md')));
+  assert.ok(existsSync(join(root, 'mapping', 'sub.md')), 'what was already there is untouched');
+  cleanup();
+});
+
+test('promotion refuses when the README is taken — two notes cannot claim one id', () => {
+  const { root, cleanup } = vault({ taken: card('taken', 'priority: [now]') });
+  mkdirSync(join(root, 'taken'));
+  writeFileSync(join(root, 'taken', 'README.md'), '# Squatter\n', 'utf8');
+  assert.throws(() => patchNote(root, 'taken', { project: {} }), Invalid);
+  assert.ok(existsSync(join(root, 'taken.md')), 'and leaves the note where it was');
+  cleanup();
+});
+
+test('a note that is already a folder README is left where it is', () => {
+  const { root, cleanup } = vault();
+  mkdirSync(join(root, 'anything'));
+  writeFileSync(join(root, 'anything', 'README.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
+  patchNote(root, 'platform', { project: {} });
+  // Renaming `anything/` would move files nobody asked about, and `AGENTS.md`
+  // beside it resolves whatever the folder is called.
+  assert.ok(existsSync(join(root, 'anything', 'README.md')));
+  assert.equal(existsSync(join(root, 'platform')), false);
+  cleanup();
+});
+
+test('a write that is not a promotion moves nothing', () => {
+  const { root, cleanup } = vault({ plain: card('plain', 'priority: [now]') });
+  patchNote(root, 'plain', { title: 'Renamed' });
+  assert.ok(existsSync(join(root, 'plain.md')), 'still flat');
+  cleanup();
+});
+
+test('un-projecting leaves the folder alone', () => {
+  const { root, cleanup } = vault({ platform: card('platform', 'priority: [now]') });
+  patchNote(root, 'platform', { project: {} });
+  writeFileSync(join(root, 'platform', 'AGENTS.md'), '- a rule\n', 'utf8');
+  patchNote(root, 'platform', { project: null });
+
+  // The folder may hold anything — `AGENTS.md`, other notes — so collapsing it
+  // back to a flat file would delete what nobody asked about. The note stays put
+  // and simply stops being a project.
+  assert.ok(existsSync(join(root, 'platform', 'README.md')));
+  assert.ok(existsSync(join(root, 'platform', 'AGENTS.md')));
+  assert.equal(readAll(paths(root).notes).notes.get('platform')?.project, undefined);
+  cleanup();
 });
 
 // ------------------------------------------------------- two writers, interleaved

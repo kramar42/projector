@@ -1,5 +1,6 @@
 import { renderContext, type NoteContext } from './context.ts';
 import type { RepoResult } from './worktree.ts';
+import { INSTRUCTIONS_FILE } from '../index/project.ts';
 
 /**
  * The briefing an agent reads before touching anything.
@@ -7,6 +8,14 @@ import type { RepoResult } from './worktree.ts';
  * Five steps, and step 4 is the point: read everything first, then **stop and
  * ask**. Two framings in it are worth keeping word for word — "the note is not
  * the whole story", and report what was deliberately left out.
+ *
+ * It used to end by telling the session to run `pj link <id> --session`, and that
+ * step is gone rather than moved. It was the only thing putting a session on a
+ * note, which meant a note showed its work only if the agent got all the way to
+ * the end and remembered — so a session still running had not registered and an
+ * abandoned one never would. `pj work` now records the *workspace* on the note
+ * instead, once, and every session that ever runs there is read back off it
+ * (`sources/claude.ts`, `sessionsUnder`). Nothing to ask the agent for.
  */
 export function buildBriefing(input: {
   ctx: NoteContext;
@@ -75,8 +84,9 @@ export function buildBriefing(input: {
     L.push('Already included in the context above, inherited outermost-project-first. Follow them.');
   } else {
     L.push(
-      "None recorded for this project. If rules emerge while you work, offer them for the project's " +
-        '`instructions` rather than keeping them in your head.',
+      'None recorded for this project. If rules emerge while you work, offer them for the ' +
+        `project's \`${INSTRUCTIONS_FILE}\` — the file beside its note — rather than keeping them ` +
+        'in your head.',
     );
   }
   L.push('');
@@ -97,11 +107,6 @@ export function buildBriefing(input: {
   L.push('1. Implement the change.');
   L.push('2. Run the tests of every repo you touched, and say which commands you ran.');
   L.push('3. Report **per repo**: what changed, what passed, and **what you deliberately left out**.');
-  L.push('4. Link this session back to the note so it can be found later:');
-  L.push('');
-  L.push('   ```bash');
-  L.push(`   pj link ${ctx.id} --session`);
-  L.push('   ```');
   L.push('');
   L.push(
     'Keep each repo\'s commits to that repo\'s own concern — do not mix a change to one into a ' +

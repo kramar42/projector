@@ -8,9 +8,11 @@ import { validate } from '../src/schema/validate.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import { demoted, merged } from '../src/schema/merge.ts';
 import type { Facets, Note } from '../src/schema/types.ts';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
+import { listNoteFiles } from '../src/schema/note.ts';
+import { readAll } from '../src/index/indexer.ts';
 
 
 /**
@@ -145,8 +147,10 @@ const HREF_CASES: Record<(typeof LINK_KINDS)[number], { raw: string; href: strin
   'gh:pr': { raw: 'gh:pr:Org/repo#4', href: 'https://github.com/Org/repo/pull/4' },
   'gh:branch': { raw: 'gh:branch:Org/repo@main', href: 'https://github.com/Org/repo/tree/main' },
   'gh:commit': { raw: 'gh:commit:Org/repo@abc123', href: 'https://github.com/Org/repo/commit/abc123' },
-  // A session on this machine and a file in the vault: neither is a web page.
+  // A session on this machine, the directory one worked in, and a file in the
+  // vault: none of the three is a web page.
   claude: { raw: 'claude:local_abc', href: null },
+  workspace: { raw: 'workspace:/wt/plat-wt-ship-it', href: null },
   doc: { raw: 'doc:a/b.md', href: null },
   // The ref is already the permalink — no fetcher, and no special case either.
   slack: { raw: 'slack:https://acme.slack.com/archives/C1/p123', href: 'https://acme.slack.com/archives/C1/p123' },
@@ -282,6 +286,75 @@ test('a derived id is always a legal id, whatever the filename was', () => {
   }
 });
 
+/**
+ * A folder's README is the folder.
+ *
+ * This is the whole of what makes a project a folder: `platform/README.md` is the
+ * note `platform`, so the folder name *is* the id and there is no second name to
+ * keep in step with it (C11). Without the rule every README in the vault derives
+ * `readme`, and a vault with three project folders has three notes claiming one
+ * id — two of which `readAll` drops.
+ */
+test('a README takes the name of its folder, and the vault root one does not', () => {
+  const root = '/vault';
+  const id = (f: string) => {
+    const res = parseNote(f, '# Hello\n', root);
+    return res.ok ? res.rec.id : null;
+  };
+  assert.equal(id('/vault/platform/README.md'), 'platform');
+  assert.equal(id('/vault/Identity and Access/README.md'), 'identity-and-access', 'slugged like any other name');
+  assert.equal(id('/vault/README.md'), 'readme', "the vault's own front page keeps its filename");
+  // Every other filename is unaffected, README rule or not.
+  assert.equal(id('/vault/platform/notes.md'), 'notes');
+});
+
+test('a folder README with no heading is titled by its folder too', () => {
+  const res = parseNote('/vault/platform/README.md', 'just prose\n', '/vault');
+  assert.ok(res.ok);
+  assert.equal(res.rec.title, 'platform');
+});
+
+test('a stated id still wins over the folder', () => {
+  const res = parseNote('/vault/platform/README.md', '---\nid: infra\n---\n', '/vault');
+  assert.ok(res.ok);
+  assert.equal(res.rec.id, 'infra');
+});
+
+test('without a root, a README is just a file called README', () => {
+  // The signature is what carries the rule, so a caller with no vault in hand —
+  // `pj log`, reading blobs out of git — cannot accidentally get folder ids for
+  // paths that were never measured against a vault.
+  const res = parseNote('/vault/platform/README.md', 'x');
+  assert.ok(res.ok);
+  assert.equal(res.rec.id, 'readme');
+});
+
+/**
+ * `AGENTS.md` is configuration, and configuration is not a note.
+ *
+ * It holds a project's instructions, which were a `project:` key until they got
+ * their own file — and a key in the frontmatter block was never a note either.
+ * Indexed, every project folder would contribute a note called `agents`, all of
+ * them claiming one id, and the instructions would be both a note body and
+ * inherited config: the one thing C11 forbids.
+ */
+test('AGENTS.md is not a note, anywhere in the vault', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-walk-'));
+  mkdirSync(pathJoin(root, 'platform'));
+  writeFileSync(pathJoin(root, 'AGENTS.md'), 'how this vault is kept', 'utf8');
+  writeFileSync(pathJoin(root, 'platform', 'AGENTS.md'), 'how platform work is done', 'utf8');
+  writeFileSync(pathJoin(root, 'platform', 'README.md'), '# Platform\n', 'utf8');
+  writeFileSync(pathJoin(root, 'platform', 'design.md'), '# Design\n', 'utf8');
+
+  assert.deepEqual(
+    listNoteFiles(root).map((f) => f.slice(root.length + 1)).sort(),
+    ['platform/README.md', 'platform/design.md'],
+  );
+  const { notes, duplicates } = readAll(root);
+  assert.deepEqual([...notes.keys()].sort(), ['design', 'platform']);
+  assert.deepEqual(duplicates, [], 'two folders with a README are not two notes called readme');
+});
+
 test('a bare note keeps its identity when it is written down', () => {
   // What `patchAll` materialises has to be what the reader was already using, or
   // the first write renames the note and orphans every reference to it.
@@ -326,6 +399,45 @@ test('a single-valued facet holding two values is an error, not a note in two co
   const good = recordOf('---\nid: x\ntitle: X\nfacets: { status: [done] }\n---\n');
   assert.equal(
     validate(new Map([['x', good]]), facets, '/data').filter((i) => i.severity === 'error').length,
+    0,
+  );
+});
+
+/**
+ * The one migration this change needs, made loud.
+ *
+ * `instructions:` parses and is then ignored, which is the worst way for a format
+ * to move: the vault loads, the board draws, and members quietly stop inheriting
+ * the rules they are meant to work under. So the key is kept in the schema for the
+ * sole purpose of being rejected here, with the path to write instead.
+ */
+test('instructions left in the frontmatter are an error naming where they go', () => {
+  const facets = loadFacets(facetsFile('status: { values: [done] }\n'));
+  const stale = parseNote(
+    '/data/platform/README.md',
+    '---\nid: platform\nproject:\n  instructions: |\n    - a rule\n---\n',
+  );
+  assert.ok(stale.ok);
+  const issues = validate(new Map([['platform', stale.rec]]), facets, '/data');
+  const moved = issues.filter((i) => i.field === 'project.instructions');
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0]!.severity, 'error');
+  assert.match(moved[0]!.message, /move them to platform\/AGENTS\.md$/, 'vault-relative, like the file column beside it');
+
+  // A flat project has no folder to put the file in, so the fix is the move that
+  // makes one — and the message says so rather than naming the vault's own file.
+  const flat = parseNote('/data/platform.md', '---\nid: platform\nproject:\n  instructions: x\n---\n');
+  assert.ok(flat.ok);
+  const atRoot = validate(new Map([['platform', flat.rec]]), facets, '/data')
+    .filter((i) => i.field === 'project.instructions');
+  assert.equal(atRoot.length, 1);
+  assert.match(atRoot[0]!.message, /platform\/AGENTS\.md, and this note to platform\/README\.md/);
+
+  // A project block without it is clean.
+  const ok = parseNote('/data/platform/README.md', '---\nid: platform\nproject:\n  jira: PROJ\n---\n');
+  assert.ok(ok.ok);
+  assert.equal(
+    validate(new Map([['platform', ok.rec]]), facets, '/data').filter((i) => i.severity === 'error').length,
     0,
   );
 });

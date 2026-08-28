@@ -50,7 +50,7 @@ flowchart TB
     direction LR
     q["query compiler<br/>runs in memory, so a computed axis is<br/>indistinguishable from a stored one"]
     refs["reference graph<br/>walk · chains · cycle refusal<br/>every relation is a reference facet"]
-    proj["project resolution<br/>repos · jira · branch · instructions,<br/>inherited along the project facet"]
+    proj["project resolution<br/>repos · jira · branch from the project: block,<br/>instructions from AGENTS.md beside it,<br/>inherited along the project facet"]
   end
 
   outside["Jira · GitHub · Claude transcripts · docs · git<br/>read-only, always (C2)"]
@@ -83,11 +83,20 @@ else to live. Everything below the vault box is derived: delete both caches and 
 always correct.
 
 **Only one of the three is at the root.** The notes are the vault — a folder of markdown, at any
-depth, with no `notes/` to put them in and no exempted filename. The other two live under
-`.projector/` along with the databases, so removing that one directory leaves the folder of markdown
-you started with. This is what lets a directory of notes that has never heard of projector be opened
-rather than imported: a file with no frontmatter is a note whose id is its filename and whose title
-is its leading heading, and nothing is written back until you change something.
+depth, with no `notes/` to put them in. The other two live under `.projector/` along with the
+databases, so removing that one directory leaves the folder of markdown you started with. This is what
+lets a directory of notes that has never heard of projector be opened rather than imported: a file
+with no frontmatter is a note whose id is its filename and whose title is its leading heading, and
+nothing is written back until you change something.
+
+**Two filenames mean something, and they are the two a folder of markdown already has.** A
+`README.md` below the root takes its *folder's* name as its id, which is what makes a project a folder
+— `platform/README.md` is the note `platform`, so the id has no second copy to disagree with (C11).
+`AGENTS.md` is not a note at all: it holds a project's instructions, and instructions are
+configuration, which is not content — the same reason `facets.yaml` is not a note. Both are
+conventions rather than requirements. A folder with no README is just a folder, a project can still be
+one flat file, and a vault that uses neither behaves exactly as it did — which is the property the
+paragraph above is protecting, not an exception to it.
 
 **The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a view file and
 a set of `pj` flags parse into the same thing, so `pj ls --view unblocked` and opening that view in
@@ -668,11 +677,11 @@ C2 says everything external is read-only. Concretely, every operation that write
 |---|---|---|
 | `pj add` / `POST /api/note` | one new note file | never overwrites an existing file |
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
-| `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent | a frontmatter change never touches body bytes |
+| `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent — plus, when the write added a `project:` block, the note file **moved** to `<id>/README.md` | a frontmatter change never touches body bytes. The move is a rename, so the bytes are the ones just written; it refuses rather than overwrites when that README exists, and it never moves a note that is already a folder's README |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
 | `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
 | `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one, and `assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten |
-| `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block | never touches the body |
+| `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block, and the same move when it added a `project:` block | never touches the body |
 | `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside the vault |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose note still exists |
@@ -740,6 +749,11 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 
 Every note write goes through `writeCardFile` — temp file plus rename — so a concurrent reader never
 sees half a file. The registry is written the same way.
+
+**`<vault>/<project>/AGENTS.md` is missing from that table on purpose.** A project's instructions are
+read and never written: no route takes them, the note walk skips the file, and `renderNote` has no key
+that could reach it. It is the one file inside a vault the app depends on and cannot touch — which is
+what makes it safe to hand to whoever edits it next, the point of moving it out of the frontmatter.
 
 **Reads outside a vault:**
 
@@ -929,8 +943,8 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — the desktop deep link and the one shell string left beside it, base-branch fallback, worktree preparation, both of `planWork`'s refusals, a dry run naming worktrees rather than checkouts, and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
 | `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
-| `canvas.test.ts` | nested `--set` and its validation against the result, deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
-| `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, and the leniency an adopted vault depends on — a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
+| `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
+| `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
 | `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
@@ -939,9 +953,9 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
 | `keys.test.ts` | the keyboard grammar: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
-| `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
+| `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
-| `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, and multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order |
+| `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
