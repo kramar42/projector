@@ -144,6 +144,19 @@ things.
   not judge is still, by its own flag, a proposal, and a rejudge would overwrite the correction. It is
   a command you run deliberately, not something that happens to you.
 
+- **A second `pj intake rejudge` rewrites what the first one wrote.** Its facet half is idempotent — the
+  same values validate to the same values — but its prose half is not: a model rewords, so a card
+  titled *"TOS L3 workflow app: UI builder, not Temporal"* comes back *"TOS L3 workflow orchestration UI
+  builder"* and the run reports it rewritten. Harmless in itself, but every rewrite stamps `updated`,
+  and `updated` is what `staleness` is computed from — so rejudging fifty cards makes fifty cards look
+  worked on today, which is exactly the reading that axis exists to give honestly.
+
+  Not fixed because the obvious repairs are worse than the wart. Comparing prose loosely needs a
+  threshold nobody can defend; leaving the title alone when it is "already good" needs "good" to be
+  decidable. What would change the answer is `staleness` reading a stamp that only a person's edit
+  moves — which is a second timestamp, and the reason `created` and `updated` are the only two is that a
+  third has never earned itself.
+
 - **The C4 guard knows two spellings and there is a third.** `no facet a vault declares is named in
   the code that serves every vault` catches a literal — `'source'` — and a property access —
   `rec.facets.source`. It does not catch an **unquoted key in a facet map**, which is how a facet map is

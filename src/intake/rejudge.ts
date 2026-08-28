@@ -115,7 +115,17 @@ export async function rejudge(
     };
 
     const title = verdict.title ?? note.title;
-    const body = verdict.body ?? note.body;
+    /**
+     * The model's body is bare prose; the note's is the file's own bytes.
+     *
+     * `patchNote` writes a body verbatim on purpose — the panel's editor read it
+     * with its leading blank line and hands the same back — so a bare string
+     * arrives welded to the closing `---`. `createNote` normalises for exactly
+     * this reason and this is the same job on the other write path, which is why
+     * only the model's half is touched: normalising the note's own body would
+     * add a line every time the pass agreed with it.
+     */
+    const body = verdict.body ? `\n${verdict.body.trim()}\n` : note.body;
     const facetsMoved = Object.keys({ ...facets, ...note.facets }).some(
       (k) => !same(facets[k], note.facets[k]),
     );

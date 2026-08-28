@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -1651,6 +1651,61 @@ test('a date axis is described by what it accepts, not by what notes carry', asy
     // the shape to write, and it will offer "Friday".
     assert.match(seen, /due \(single value; a date, YYYY-MM-DD\)/);
     assert.match(seen, /status.*active, done/, 'a label axis still lists its values');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a rewritten body keeps the blank line the file format wants', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "before"\nfacets: { intake: [unjudged] }\n---\n\nold body\n`,
+  });
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'keep',
+        reason: 'x',
+        title: 'after',
+        body: 'A new body.',
+      })),
+    );
+  try {
+    await rejudge(root, { ask: judge });
+    const text = readFileSync(join(paths(root).notes, 'raw.md'), 'utf8');
+
+    // `patchNote` writes a body verbatim on purpose — the panel hands back the
+    // bytes it read — so a model's bare prose arrives welded to the closing
+    // fence unless the caller does what `createNote` does.
+    assert.match(text, /---\n\nA new body\.\n$/);
+    assert.doesNotMatch(text, /---\nA new body/, 'no blank line is a malformed note');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a rejudge that keeps the body does not grow it a line at a time', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "before"\nfacets: { intake: [unjudged] }\n---\n\nkeep me\n`,
+  });
+  // No body in the verdict: the note's own bytes are already normalised, and
+  // normalising them again would add a line on every pass.
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'keep',
+        reason: 'x',
+        title: 'after',
+      })),
+    );
+  try {
+    await rejudge(root, { ask: judge });
+    await rejudge(root, { ask: judge });
+    const text = readFileSync(join(paths(root).notes, 'raw.md'), 'utf8');
+    assert.match(text, /---\n\nkeep me\n$/);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
