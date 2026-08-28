@@ -4386,11 +4386,29 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   margin-top: 10px;
 }
 
-/* A grid so the descriptions line up down a column — the keys vary in width and
-   a ragged second column is what makes a table of pairs hard to scan. */
+/*
+ * A grid so the descriptions line up down a column — the keys vary in width and
+ * a ragged second column is what makes a table of pairs hard to scan.
+ *
+ * **84px is measured, not chosen.** The widest key cell is `⟨axis⟩⟨axis⟩` at 78px
+ * and `⟨axis⟩ 1–9` at 79px, both of them two or three `kbd`s and a 3px gap — so
+ * at the 78px this used to be, the two rows that name an axis wrapped onto a
+ * second line while every other row sat on one. 82px is the threshold and 84
+ * costs nothing over it: the same single extra description wraps either way, and
+ * the sheet grows 2px. The slack is for a machine whose mono font is wider than
+ * this one's.
+ *
+ * Widening the *sheet* is the fix that looks obvious and is not: `columns: 4
+ * 210px` fits as many columns as the width allows, so a wider frame becomes four
+ * narrower columns instead of three roomy ones and every description wraps more.
+ * Measured — 940px draws three columns at 282px, 1010px draws four at 223px.
+ *
+ * Not the rail's 78px, which is a different column that happens to share the
+ * number: `.rail-label` is the sidebar's label gutter and answers to nothing here.
+ */
 .cheatsheet-row {
   display: grid;
-  grid-template-columns: 78px 1fr;
+  grid-template-columns: 84px 1fr;
   gap: 7px;
   align-items: baseline;
   padding: 1px 0;
