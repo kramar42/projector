@@ -1232,7 +1232,7 @@ clicked was on screen already, so the view stays exactly where it was and the pa
 | `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
 | `!` | **start work** on the cursor's note: worktrees, a briefing, a session in the app. Confirmed first, and the confirm names what it is about to create |
 | `+` | **judge** a candidate. One key, because the card has already decided which act it is: one carrying `extends` folds into that note — confirmed first, and the dialog names the target — and one carrying none is accepted as its own note. To keep a card that proposes a target separate, remove the `extends` reference and judge it again |
-| `⌫` | **delete** the note, after a confirm that names it. In the queue this is *declining*: the file goes and the fingerprint is recorded, so the next sweep does not propose it again. Not `dd` — `d` is an axis letter in the shipped vocabularies, where `dd` already means that axis's own row |
+| `⌫` | **delete**, after one confirm. With nothing selected that is the cursor's note and the confirm names it; with a selection it is the whole selection and the confirm counts it — the same rule every other write follows, so `⌫` deletes exactly what a facet key would have written to. In the queue this is *declining*: the files go and their fingerprints are recorded, so the next sweep does not propose them again. Not `dd` — `d` is an axis letter in the shipped vocabularies, where `dd` already means that axis's own row |
 
 `!` is the odd one out here: every other key in this section *reaches* something, and `!` does
 something. It reads that way from vim, where `!` is the key that hands what you have to an external

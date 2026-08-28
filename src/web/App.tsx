@@ -1351,6 +1351,10 @@ function run(command: Command, s: KeyState): void {
             return null;
           }
           button.click();
+          // And returned on the way out for the same reason `remove` does it: a
+          // `find` that answers with nothing is retried, and the fold dialog this
+          // opens would be opened again 16ms later.
+          return button;
         },
         10,
         () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was judged' }),
@@ -1358,14 +1362,30 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
-     * Delete, through the panel's own confirm.
+     * Delete, through the confirm belonging to whichever control means it.
      *
      * The one command that destroys something, so it is the one that most needs
-     * the aim-at-the-button rule: the confirm names the note and says the file is
-     * in git, and a keyboard path that wrote directly would be a second way to
-     * delete with no second confirm to match.
+     * the aim-at-the-button rule: the confirm names what goes and says the files
+     * are in git, and a keyboard path that wrote directly would be a second way
+     * to delete with no second confirm to match.
+     *
+     * **Which button is a DOM question, not a derived one.** The bulk bar is
+     * drawn exactly when there is a selection to act on, and it is drawn from the
+     * *narrowed* selection — the ids it will actually send — so asking whether it
+     * is on screen asks the thing that knows. Deriving the set here would put one
+     * count in the confirm and another in the request, and on the canvas it
+     * cannot be derived at all: `gridOf` is empty there.
+     *
+     * This is the same rule `targets` states for every other write — the
+     * selection if there is one, otherwise the cursor's note — and it is the half
+     * of it that `⌫` was missing. It went to the panel unconditionally, so eleven
+     * selected notes and one keystroke deleted the one under the cursor and left
+     * ten selected.
      */
     case 'remove': {
+      const bulk = document.querySelector<HTMLButtonElement>('.bulkbar [data-act="delete"]');
+      if (bulk) return bulk.click();
+
       const on = openNote ?? cursor.id;
       if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
       if (!openNote) setOpenNote(on);
@@ -1374,6 +1394,15 @@ function run(command: Command, s: KeyState): void {
           const button = document.querySelector<HTMLButtonElement>('.panel [data-act="delete"]');
           if (!button) return null;
           button.click();
+          /**
+           * Returned so `focusSoon` **stops**, which is the whole of a second bug.
+           * It retries whenever `find` answers with nothing, and `confirm()` blocks
+           * the timer rather than cancelling it — so the retry fired 16ms after the
+           * dialog was answered, found the same button still mounted, and clicked
+           * it again. One keystroke, two dialogs; cancelling the first asked
+           * another ten times.
+           */
+          return button;
         },
         10,
         () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was deleted' }),
@@ -1399,6 +1428,7 @@ function run(command: Command, s: KeyState): void {
           // disabled element cannot hold focus. That is also a third guard against
           // a double launch, after the hook's own and the confirm: `.click()` on a
           // disabled button does nothing, so a second `!` mid-flight is inert.
+          return button;
         },
         10,
         () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was started' }),

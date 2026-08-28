@@ -153,6 +153,11 @@ export function BulkBar({
 
       <Button
         tone="danger" size="small"
+        // What `⌫` presses when there is a selection, aimed at rather than
+        // reimplemented — so the count in the confirm and the ids in the request
+        // are one list, and the keyboard cannot reach the delete without the
+        // question. See `remove` in `App.tsx`.
+        data-act="delete"
         onClick={() => {
           if (!confirm(`Delete ${plural(ids.length, 'note')}?\n\nThe files are in git, so this is recoverable.`))
             return;
