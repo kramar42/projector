@@ -249,6 +249,30 @@ than drawing a blank table and teaching that the axis is decorative. `blockingFa
 in `src/schema/vocabulary.ts`, beside `isRef`: it is a question about what a vault *declares*, and the
 browser needs the declaration without the engine that walks it.
 
+### The keyboard's flat half is a table
+
+`src/view/keys.ts` splits into four tiers, and only one of them can be data.
+
+| | | |
+|---|---|---|
+| flat | a stroke, one fixed command, no context | **a table** — `BINDINGS` |
+| template | fixed shape, one field the vault fills — `⟨axis⟩⟨digit⟩`, `g⟨axis⟩` | a shape, not a row |
+| sequence | `g…` and `,…`, their sub-tables and the fallback rule | `REGIONS` and `RAIL_LETTERS` already; the glue is code |
+| guard | modifiers, `inField`, Escape, ⌥-before-bare, shift-fold order | never data |
+
+The flat tier is twenty-four of roughly forty addressable strokes, so `start()`
+looks one up instead of switching on it, and a key cannot be bound without an
+entry the cheatsheet and the tests can see. The other three stayed as they were:
+the attempt to make the prefix machine declarative is the version of this that
+does not work, and the tiers are written down so nobody has to rediscover which.
+
+What it fixed is not tidiness. `bind`, `KEYMAP` and `MANUAL.md` are three places
+one binding has to be written; the tests held the *commands* together and nothing
+held the *strokes*, and two drifted in one afternoon — `⌥j`/`⌥k` bound,
+documented and missing from `?`, and `⌫` grown a second meaning its row never
+mentioned. A cheatsheet row that is nothing but bindings now derives its keys from
+them and keeps its own prose, which is the half worth writing by hand.
+
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
@@ -1012,7 +1036,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
-| `keys.test.ts` | the keyboard grammar, and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
+| `keys.test.ts` | the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |

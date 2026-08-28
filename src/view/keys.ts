@@ -633,96 +633,29 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
       : emit(null);
   }
 
-  switch (key) {
-    // motion
-    case 'j':
-      return emit({ kind: 'move', along: 'row', delta: 1 });
-    case 'k':
-      return emit({ kind: 'move', along: 'row', delta: -1 });
-    case 'h':
-      return emit({ kind: 'move', along: 'column', delta: -1 });
-    case 'l':
-      return emit({ kind: 'move', along: 'column', delta: 1 });
-    case '[':
-      return emit({ kind: 'move', along: 'lane', delta: -1 });
-    case ']':
-      return emit({ kind: 'move', along: 'lane', delta: 1 });
-    case 'g':
-      return emit(null, { kind: 'goto', fallback: null });
-    case 'G':
-      return emit({ kind: 'moveTo', end: 'last' });
+  /**
+   * The two prefixes, which are the only strokes here that open a sequence rather
+   * than meaning something. They stay written out because what follows them is a
+   * machine — a sub-table, a fallback, and a re-entry into this function — and
+   * none of the three is a row in `BINDINGS`.
+   */
+  if (key === 'g') return emit(null, { kind: 'goto', fallback: null });
+  if (key === ',') return emit(null, { kind: 'rail', fallback: null });
 
-    // the trail. `H`/`L` rather than a jumplist chord: this is a browser, where
-    // back and forward are already the shifted forms of the horizontal motion
-    // keys in every vim-for-the-web anyone has used.
-    case 'H':
-      return emit({ kind: 'trail', delta: -1 });
-    case 'L':
-      return emit({ kind: 'trail', delta: 1 });
-
-    // opening
-    case 'Enter':
-    case 'o':
-      return emit({ kind: 'open' });
-
-    // selection
-    case 'x':
-      return emit({ kind: 'select', how: 'toggle' });
-    case 'J':
-      return emit({ kind: 'select', how: 'extend', delta: 1 });
-    case 'K':
-      return emit({ kind: 'select', how: 'extend', delta: -1 });
-    case '*':
-      return emit({ kind: 'select', how: 'all' });
-
-    // undo. `U` rather than a chord: this is not a modal editor, and a pair you
-    // reach for as often as these two should be one hand and no modifier.
-    case 'u':
-      return emit({ kind: 'undo' });
-    case 'U':
-      return emit({ kind: 'redo' });
-
-    // leaders and the rest
-    case ',':
-      return emit(null, { kind: 'rail', fallback: null });
-    case '.':
-      return emit({ kind: 'palette' });
-    case '/':
-      return emit({ kind: 'search' });
-    case '?':
-      return emit({ kind: 'help' });
-    case 'n':
-      return emit({ kind: 'newCard' });
-    /**
-     * Hand this note to a session. See `Command`'s `work` for why it is a bare
-     * mark and why that mark is this one.
-     *
-     * Above the facet fallthrough like every other case here, but uniquely
-     * safe there: `!` is not a letter, so no vocabulary can reach it and this is
-     * not shadowing anything even in principle.
-     */
-    case '!':
-      return emit({ kind: 'work' });
-    /**
-     * Judge a candidate: fold it if it extends something, accept it if not.
-     *
-     * Punctuation for the same reason `!` is: not a letter, so no vocabulary can
-     * reach it and it shadows nothing even in principle. `+` because both
-     * outcomes are *this belongs in the vault*, which is the one question the
-     * queue asks. `=` held the fold and is free again — the two acts turned out
-     * to be one decision the card had already made.
-     */
-    case '+':
-      return emit({ kind: 'judge' });
-    /**
-     * Delete, confirmed by the panel.
-     *
-     * Not a letter: see the command's own note above for why `dd` is not
-     * available and would not be right if it were.
-     */
-    case 'Backspace':
-      return emit({ kind: 'remove' });
-  }
+  /**
+   * Everything flat, from the registry.
+   *
+   * This was twenty-four `case` arms. Their reasoning moved to the entries, which
+   * is where it belonged — it explains a binding, not a branch — and the lookup
+   * is what makes a key impossible to bind without something the cheatsheet and
+   * the tests can see.
+   *
+   * Before the facet fallthrough, exactly as the switch was: `RESERVED` and
+   * `pj check` between them guarantee no vault declares a letter claimed here, so
+   * reaching the lines below is proof the letter is the vault's.
+   */
+  const flat = FLAT.get(key);
+  if (flat) return emit(flat.command);
 
   /**
    * A facet key, last — so a vault can never shadow the map.
@@ -749,6 +682,103 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
   return nothing;
 }
 
+// ---------------------------------------------------------------- the registry
+
+/**
+ * One stroke, one command, no context.
+ *
+ * The flat half of the grammar, declared rather than switched. Twenty-four of the
+ * roughly forty addressable strokes are this shape: a key that always means the
+ * same thing, whatever the vault declares and whatever is on screen. The rest —
+ * a digit standing for an axis value, a prefix awaiting a letter, the guards in
+ * `bind` — cannot be a table and are not one.
+ *
+ * **Why it is a table now.** `bind`, `KEYMAP` and `MANUAL.md` are three places one
+ * binding has to be written, and the comment on `KEYMAP` below has always said the
+ * tests hold them together. They hold the *commands*: `test/keys.test.ts` checks
+ * that every kind the grammar emits is one the dispatcher acts on. Nothing held
+ * the *strokes*, and in one afternoon two drifted — `⌥j`/`⌥k` shipped bound,
+ * documented, and absent from `?`, and `⌫` grew a second meaning its row never
+ * mentioned. A key that cannot be bound without an entry here cannot do either.
+ *
+ * The per-binding reasoning lives on the entry rather than beside a switch arm,
+ * which is where it belonged: it explains the binding, not the branch.
+ */
+export interface Binding {
+  /** Stable, and what a palette will key on. Not shown to a reader. */
+  id: string;
+  /** As `bind` sees it — `KeyboardEvent.key`, so `Backspace` and not `⌫`. */
+  stroke: string;
+  /** As a reader sees it, where the two differ. */
+  glyph?: string;
+  command: Command;
+}
+
+export const BINDINGS: readonly Binding[] = [
+  { id: 'move.down', stroke: 'j', command: { kind: 'move', along: 'row', delta: 1 } },
+  { id: 'move.up', stroke: 'k', command: { kind: 'move', along: 'row', delta: -1 } },
+  { id: 'move.left', stroke: 'h', command: { kind: 'move', along: 'column', delta: -1 } },
+  { id: 'move.right', stroke: 'l', command: { kind: 'move', along: 'column', delta: 1 } },
+  { id: 'lane.prev', stroke: '[', command: { kind: 'move', along: 'lane', delta: -1 } },
+  { id: 'lane.next', stroke: ']', command: { kind: 'move', along: 'lane', delta: 1 } },
+  { id: 'cursor.last', stroke: 'G', command: { kind: 'moveTo', end: 'last' } },
+
+  /**
+   * The trail. `H`/`L` rather than a jumplist chord: this is a browser, where back
+   * and forward are already the shifted forms of the horizontal motion keys in
+   * every vim-for-the-web anyone has used.
+   */
+  { id: 'trail.back', stroke: 'H', command: { kind: 'trail', delta: -1 } },
+  { id: 'trail.forward', stroke: 'L', command: { kind: 'trail', delta: 1 } },
+
+  { id: 'open.enter', stroke: 'Enter', glyph: '⏎', command: { kind: 'open' } },
+  { id: 'open.o', stroke: 'o', command: { kind: 'open' } },
+
+  { id: 'select.toggle', stroke: 'x', command: { kind: 'select', how: 'toggle' } },
+  { id: 'select.down', stroke: 'J', command: { kind: 'select', how: 'extend', delta: 1 } },
+  { id: 'select.up', stroke: 'K', command: { kind: 'select', how: 'extend', delta: -1 } },
+  { id: 'select.all', stroke: '*', command: { kind: 'select', how: 'all' } },
+
+  /**
+   * `U` rather than a chord: this is not a modal editor, and a pair you reach for
+   * as often as these two should be one hand and no modifier.
+   */
+  { id: 'undo', stroke: 'u', command: { kind: 'undo' } },
+  { id: 'redo', stroke: 'U', command: { kind: 'redo' } },
+
+  { id: 'palette', stroke: '.', command: { kind: 'palette' } },
+  { id: 'search', stroke: '/', command: { kind: 'search' } },
+  { id: 'help', stroke: '?', command: { kind: 'help' } },
+  { id: 'newCard', stroke: 'n', command: { kind: 'newCard' } },
+
+  /**
+   * Hand this note to a session. See `Command`'s `work` for why it is a bare mark
+   * and why that mark is this one. Safe among the letters because `!` is not one:
+   * no vocabulary can reach it, so it shadows nothing even in principle.
+   */
+  { id: 'work', stroke: '!', command: { kind: 'work' } },
+  /**
+   * Judge a candidate: fold it if it extends something, accept it if not.
+   *
+   * Punctuation for the same reason `!` is. `+` because both outcomes are *this
+   * belongs in the vault*, which is the one question the queue asks. `=` held the
+   * fold and is free again — the two acts turned out to be one decision the card
+   * had already made.
+   */
+  { id: 'judge', stroke: '+', command: { kind: 'judge' } },
+  /**
+   * Delete, confirmed by whatever it is aimed at. Not a letter: `d` is spent on
+   * `due` by both shipped vocabularies, where `dd` already means that axis's row.
+   */
+  { id: 'remove', stroke: 'Backspace', glyph: '⌫', command: { kind: 'remove' } },
+];
+
+/** By stroke, for `start`. Built once; a duplicate stroke is a test failure. */
+const FLAT = new Map(BINDINGS.map((b) => [b.stroke, b]));
+
+/** By id, for the cheatsheet rows that name what they cover. */
+const BY_ID = new Map(BINDINGS.map((b) => [b.id, b]));
+
 // ---------------------------------------------------------------- the cheatsheet
 
 /**
@@ -756,9 +786,16 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
  *
  * Beside `bind` rather than in the component that draws it, because `?` restating
  * the bindings in its own words is exactly how a cheatsheet comes to describe a
- * key that was renamed a month ago. The two are not derived from one another —
- * `bind` resolves things a table cannot express — so this is a list the
- * dispatcher's tests hold it against, which is the next best thing.
+ * key that was renamed a month ago.
+ *
+ * It used to say the two "are not derived from one another — `bind` resolves
+ * things a table cannot express — so this is a list the dispatcher's tests hold
+ * it against, which is the next best thing." Half of that was right. A table
+ * cannot express the prefix machine or the guards in `bind`; it expresses the
+ * flat strokes exactly, and those are twenty-four of the forty. So the flat rows
+ * *are* derived now — their keys come from `BINDINGS` and cannot be spelled
+ * wrongly here — and only the rows that describe a sequence or a template still
+ * write their own.
  *
  * The dynamic rows say what they are rather than enumerating themselves: the
  * digits mean whatever the current grouping axis declares, and the facet keys are
@@ -781,16 +818,41 @@ export interface KeyRow {
   does: string;
 }
 
-export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
+/**
+ * A row as it is written, before its keys are filled in.
+ *
+ * `ids` names the bindings the row accounts for. Where the row is nothing but
+ * those bindings, the keys are *derived* from them and there is no second place
+ * to spell `j k` wrongly. Where it is not — `gg G` pairs a sequence with a
+ * binding, `⟨axis⟩ 1–9` is a template — `keys` is written out and `ids` still
+ * says what it covers, so the coverage test holds either way.
+ *
+ * The prose stays hand-written on purpose. `down / up a column` is better than
+ * anything a machine would assemble from two bindings, and it is the whole value
+ * of the cheatsheet.
+ */
+interface RowSpec {
+  does: string;
+  /** Literal, when the row is more than its bindings. */
+  keys?: string;
+  /** Binding ids this row accounts for. */
+  ids?: string[];
+}
+
+const SPEC: { section: string; rows: RowSpec[] }[] = [
   {
     section: 'The cursor',
     rows: [
-      { keys: 'j k', does: 'down / up a column' },
-      { keys: 'h l', does: 'across columns' },
-      { keys: '[ ]', does: 'across lanes' },
-      { keys: 'gg G', does: 'first / last' },
-      { keys: '⏎ o', does: 'open the note' },
-      { keys: 'H L', does: 'back / forward through visited cards' },
+      { ids: ['move.down', 'move.up'], does: 'down / up a column' },
+      { ids: ['move.left', 'move.right'], does: 'across columns' },
+      { ids: ['lane.prev', 'lane.next'], does: 'across lanes' },
+      // `gg` is a sequence and `G` a binding, so the keys are written and the
+      // coverage is declared.
+      { keys: 'gg G', ids: ['cursor.last'], does: 'first / last' },
+      { ids: ['open.enter', 'open.o'], does: 'open the note' },
+      { ids: ['trail.back', 'trail.forward'], does: 'back / forward through visited cards' },
+      // Escape is decided in `bind` before the registry is consulted — it has to
+      // end a pending sequence, which no binding can express.
       { keys: 'esc', does: 'close · leave a list · deselect' },
     ],
   },
@@ -811,9 +873,9 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: '⟨axis⟩⟨axis⟩', does: 'one axis’s row' },
       // The one row here that acts rather than reaching, which the wording has to
       // carry on its own: every other line in this section moves the keyboard.
-      { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
-      { keys: '+', does: 'judge a candidate — fold it in, or accept it as its own note' },
-      { keys: '⌫', does: 'delete — the selection if there is one, else this note. One confirm' },
+      { ids: ['work'], does: 'start work on it — worktrees, briefing, a session' },
+      { ids: ['judge'], does: 'judge a candidate — fold it in, or accept it as its own note' },
+      { ids: ['remove'], does: 'delete — the selection if there is one, else this note. One confirm' },
     ],
   },
   {
@@ -830,9 +892,9 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
   {
     section: 'Choosing',
     rows: [
-      { keys: 'x', does: 'add this card to the selection' },
-      { keys: 'J K', does: 'extend the selection' },
-      { keys: '*', does: 'everything on screen' },
+      { ids: ['select.toggle'], does: 'add this card to the selection' },
+      { ids: ['select.down', 'select.up'], does: 'extend the selection' },
+      { ids: ['select.all'], does: 'everything on screen' },
     ],
   },
   {
@@ -841,9 +903,11 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: '1–9', does: 'move to the nth column' },
       { keys: '0', does: 'clear the grouped axis' },
       { keys: '⟨axis⟩ 1–9', does: 'set that axis to its nth value' },
-      { keys: 'n', does: 'new card in this column' },
+      { ids: ['newCard'], does: 'new card in this column' },
+      // `⌥` is read before the registry, so the two reorder strokes are not
+      // bindings and their keys are written out.
       { keys: '⌥j ⌥k', does: 'move this card down · up its column (a saved view)' },
-      { keys: 'u U', does: 'undo · redo' },
+      { ids: ['undo', 'redo'], does: 'undo · redo' },
     ],
   },
   {
@@ -865,11 +929,33 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: ', b', does: 'the bulk bar, when something is selected' },
       { keys: ', t', does: 'the canvas toolbar' },
       { keys: '⌥1–9', does: 'the nth saved view' },
-      { keys: '/', does: 'search' },
-      { keys: '?', does: 'this' },
+      { ids: ['search'], does: 'search' },
+      { ids: ['help'], does: 'this' },
     ],
   },
 ];
+
+/** What a reader is shown for a stroke: `Backspace` is `⌫` on the page. */
+const glyphOf = (id: string): string => {
+  const b = BY_ID.get(id);
+  if (!b) throw new Error(`the cheatsheet names a binding that does not exist: ${id}`);
+  return b.glyph ?? b.stroke;
+};
+
+/**
+ * The map, resolved. Rows keep their prose; their keys come from the registry
+ * wherever the row is nothing but bindings.
+ */
+export const KEYMAP: { section: string; rows: KeyRow[] }[] = SPEC.map(({ section, rows }) => ({
+  section,
+  rows: rows.map((r) => ({
+    does: r.does,
+    keys: r.keys ?? (r.ids ?? []).map(glyphOf).join(' '),
+  })),
+}));
+
+/** Which binding ids the cheatsheet accounts for — `test/keys.test.ts` holds it. */
+export const CHEATSHEET_IDS: readonly string[] = SPEC.flatMap((s) => s.rows.flatMap((r) => r.ids ?? []));
 
 /** Which shapes offer motion. A canvas is a plane; `j` has no meaning on it. */
 export const MOVES: readonly Shape[] = ['board', 'table'];

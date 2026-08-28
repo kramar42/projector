@@ -4,6 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  BINDINGS,
+  CHEATSHEET_IDS,
   KEYMAP,
   RESERVED,
   bind,
@@ -788,4 +790,118 @@ test('a surface that draws controls is reachable from the keyboard', () => {
     'these draw controls with no keyboard address and are not listed as Tab-only:\n  ' +
       unreachable.join('\n  '),
   );
+});
+
+// ------------------------------------------------------------- the registry
+
+/**
+ * The flat half of the grammar is a table now, and this is what the table buys.
+ *
+ * `bind`, `KEYMAP` and `MANUAL.md` are three places one binding has to be
+ * written. The tests above hold the *commands* together — every kind the grammar
+ * emits is one the dispatcher acts on — and nothing held the *strokes*: `⌥j` and
+ * `⌥k` shipped bound, documented and absent from `?`, and `⌫` grew a second
+ * meaning its row never mentioned, both inside one afternoon.
+ */
+
+/** No vocabulary and no grouping, so only the map itself can answer. */
+const bare = ctx({ facetKeys: {}, groupedAxis: null });
+
+/** The strokes the registry claims, for the exhaustive sweep below. */
+const FLAT_STROKES = new Set(BINDINGS.map((b) => b.stroke));
+
+test('every binding is what pressing its stroke does', () => {
+  for (const b of BINDINGS) {
+    assert.deepEqual(
+      commandOf([b.stroke], bare),
+      b.command,
+      `${b.id}: pressing ${b.stroke} does not produce the command it declares`,
+    );
+  }
+  assert.equal(new Set(BINDINGS.map((b) => b.stroke)).size, BINDINGS.length, 'a stroke is bound twice');
+  assert.equal(new Set(BINDINGS.map((b) => b.id)).size, BINDINGS.length, 'an id is used twice');
+});
+
+/**
+ * The other direction, and the one that matters: a key cannot answer without an
+ * entry. Exhaustive over everything the map could plausibly claim, so a stroke
+ * added to `bind` and to nothing else fails here rather than shipping unlisted.
+ */
+test('nothing answers a bare stroke except a binding', () => {
+  const candidates = [
+    ...Array.from({ length: 95 }, (_, i) => String.fromCharCode(33 + i)), // printable ASCII
+    'Enter', 'Backspace', 'Tab', 'Escape', 'Home', 'End', 'PageUp', 'PageDown',
+    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Insert',
+  ];
+  /**
+   * The answers that are deliberately not bindings.
+   *
+   * `Escape` is decided in `bind` before the registry, because it has to end a
+   * pending sequence — a binding cannot express that. A digit is a template: it
+   * means the nth value of whatever axis the view groups by, so with no grouping
+   * it correctly answers nothing, and `bare` is why it does not appear here.
+   */
+  const notBindings = new Set(['Escape']);
+
+  const surprises = candidates
+    .filter((k) => !FLAT_STROKES.has(k) && !notBindings.has(k))
+    .filter((k) => commandOf([k], bare) !== null);
+
+  assert.deepEqual(surprises, [], `answered without a registry entry: ${surprises.join(' ')}`);
+});
+
+/**
+ * Every command has a way in, and the ways that are not bindings are named.
+ *
+ * The taxonomy, asserted rather than described: a kind is reached by a stroke, by
+ * a sequence or template the registry cannot hold, or it is parked. A new kind
+ * that is none of the three fails here — which is the check that would have
+ * caught `openAxisControl`, `newCard` and `reorder` sitting unreachable.
+ */
+test('every command is reachable, and how is written down', () => {
+  /** Reached by a prefix sequence or by a template the vault fills in. */
+  const NOT_FLAT: Record<string, string> = {
+    escape: 'decided in bind(), before the registry',
+    move: 'also a binding; `listMove` shares the kind',
+    moveTo: 'gg for first; G is a binding',
+    listMove: 'j/k inside a navlist, resolved by the dispatcher',
+    gotoRef: 'g + an axis letter',
+    gotoInverse: 'g + a shifted axis letter',
+    focusInverse: 'a shifted axis letter',
+    gotoRegion: 'g + a region letter — REGIONS',
+    openAxisControl: 'an axis letter, then anything that is not a digit',
+    setAxisValue: 'a digit, or an axis letter then a digit',
+    rail: 'the , leader — RAIL_LETTERS',
+    reachList: ',b and ,t',
+    declined: ',d',
+    view: '⌥1–9',
+    reorder: '⌥j / ⌥k',
+  };
+
+  // Widened: `commandKinds()` reads the union out of the source as plain strings,
+  // so the two sides of this comparison have to meet as strings.
+  const bound = new Set<string>(BINDINGS.map((b) => b.command.kind));
+  const missing = [...commandKinds()].filter((k) => !bound.has(k) && !(k in NOT_FLAT));
+  assert.deepEqual(missing, [], `no way in, and no note saying why:\n  ${missing.join('\n  ')}`);
+
+  // And nothing claims to need an escape hatch it no longer uses.
+  const stale = Object.keys(NOT_FLAT).filter((k) => !commandKinds().has(k));
+  assert.deepEqual(stale, [], `named here and gone from the union: ${stale.join(', ')}`);
+});
+
+test('the cheatsheet accounts for every binding, once', () => {
+  const listed = CHEATSHEET_IDS;
+  assert.equal(new Set(listed).size, listed.length, 'a binding is on two rows');
+
+  /**
+   * `palette` is bound to `.` and consumed by nothing, so `?` deliberately does
+   * not name it — a cheatsheet row for a key that does nothing puts every other
+   * row in doubt. MANUAL's *Not bound yet* is where it is written down instead.
+   */
+  const parked = new Set(['palette']);
+  const unlisted = BINDINGS.map((b) => b.id).filter((id) => !listed.includes(id) && !parked.has(id));
+  assert.deepEqual(unlisted, [], `bound and not on the cheatsheet: ${unlisted.join(', ')}`);
+
+  const listedParked = [...parked].filter((id) => listed.includes(id));
+  assert.deepEqual(listedParked, [], `parked and listed anyway: ${listedParked.join(', ')}`);
 });
