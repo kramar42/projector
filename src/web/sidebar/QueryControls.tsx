@@ -150,20 +150,31 @@ function SortRow({
     <div className="rail-row" title={note}>
       <div className="rail-label-control">
         <label className="rail-label">Sort</label>
-        {key && (
-          <Button
-            tone="ghost" size="tiny" extra="sort-direction"
-            title={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
-            aria-label={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
-            onClick={() => edit((spec) => setSort(spec, key, dir === 'asc' ? 'desc' : 'asc'))}
-          >
-            {dir === 'asc' ? '↑' : '↓'}
-          </Button>
-        )}
+        {/*
+          * The slot is drawn whether or not there is a direction to put in it.
+          *
+          * It is the slot, not the arrow, that takes the auto margin — so the
+          * label box has one geometry in both states. Hung on the arrow instead,
+          * the push to the inner edge disappeared with the arrow, and an unsorted
+          * view drew its hint against the word `Sort` while the other six rows
+          * kept theirs in the column. The arrow now arrives in a gap that was
+          * already there rather than shoving the hint left as it appears.
+          */}
+        <span className="sortdir-slot">
+          {key && (
+            <Button
+              tone="ghost" size="tiny" extra="sort-direction"
+              title={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
+              aria-label={`Sort ${dir === 'asc' ? 'ascending' : 'descending'}; change direction`}
+              onClick={() => edit((spec) => setSort(spec, key, dir === 'asc' ? 'desc' : 'asc'))}
+            >
+              {dir === 'asc' ? '↑' : '↓'}
+            </Button>
+          )}
+        </span>
         {/* After the direction, not before it: the hint is the last thing in every
             label box in the rail, so putting it here is what keeps all seven of
-            them in one column. The arrow takes the auto margin and the hint sits
-            against the inner edge behind it. */}
+            them in one column. */}
         <KeyHint keys="o" means="comma then o — the same axis twice flips the direction" />
       </div>
       <select

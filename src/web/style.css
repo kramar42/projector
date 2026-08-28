@@ -541,6 +541,24 @@ body {
   flex: none;
 }
 
+/*
+ * The direction arrow's place, held whether or not there is an arrow.
+ *
+ * This is what carries the auto margin, so the label box measures the same in
+ * both states and the hint keeps the column's inner edge either way. Hung on the
+ * arrow itself, the push vanished with the arrow: an unsorted view drew its `o`
+ * against the word `Sort` while the other six rows kept theirs in the column.
+ */
+.rail-label-control .sortdir-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+}
+
 /* Outranks `.btn.tiny` (which is declared later in this file) so the padding
    reset lands: with the inherited 6px side padding the content box was 2px wide
    and the arrow drew outside its own hover box. */
@@ -549,8 +567,6 @@ body {
   align-items: center;
   justify-content: center;
   flex: none;
-  margin-left: auto;
-  margin-right: 3px;
   padding: 0;
   width: 22px;
   height: 22px;
@@ -4445,9 +4461,10 @@ input[data-nav]:focus + .checkbox {
   align-items: baseline;
   gap: 4px;
 }
-/* The Sort row puts the hint outside its `<label>`, because the direction arrow
-   sits between the word and it. Both boxes are the same width, so the hint lands
-   in the same column either way — which is the point of moving it. */
+/* The Sort row puts the hint outside its `<label>`, because the direction slot
+   sits between the word and it. Both boxes are the same width, and the slot holds
+   its place empty, so the hint lands in the same column either way — which is the
+   point of moving it. The 3px is the gap to the slot; the slot owns the push. */
 .rail-label-control .rail-label {
   width: auto;
 }
