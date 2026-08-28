@@ -11,6 +11,11 @@ two of them touch, the boundary is named below.
 | [PRODUCT.md](PRODUCT.md) | **who reads this, and why?** | audience, purpose, positioning, the commitments that follow from them |
 | [NEXT.md](NEXT.md) | **why isn't it doing X?** | where the model landed, and what is deliberately not being done |
 
+**A plan is not a document.** `plans/` holds work that is agreed and not yet built — one file per
+plan, deleted when it lands and its answer has moved into the five documents above. It is the gap
+NEXT.md does not cover: NEXT is what was decided *against*, a plan is what was decided *for* and has
+not happened yet.
+
 [../README.md](../README.md) is the entry point — what this is, how to start it, and six words of
 vocabulary. [../CLAUDE.md](../CLAUDE.md) is for an agent working on the app itself.
 

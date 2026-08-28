@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { paletteFor, type Command, type PaletteAxis } from '../view/keys.ts';
 import { fuzzy } from '../view/fuzzy.ts';
 import type { Meta } from './types.ts';
@@ -56,6 +56,17 @@ export function Palette({
   /** The list shrinks as you type, so the cursor has to be pulled back with it. */
   const here = Math.min(at, Math.max(0, rows.length - 1));
 
+  /**
+   * The walk scrolls the list under the cursor, because the list is taller than
+   * its box and the cursor was walking off the bottom of it. `nearest` so a row
+   * already on screen does not move the list, which is the same bargain the board
+   * makes in `cursor.ts`.
+   */
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    list.current?.querySelector('.is-here')?.scrollIntoView({ block: 'nearest' });
+  }, [here, rows.length]);
+
   const run = (command: Command) => {
     // Closed *before* the act, because several of them open something else — the
     // vault picker, the filter rail, the panel's rename editor — and a palette
@@ -81,9 +92,16 @@ export function Palette({
           /*
            * The field owns its keys, which is why this is here and not in the
            * shell: `inField` hands every stroke to whatever is being typed into,
-           * so the walk and the commit have to be the field's own. Escape is
-           * left alone — the shell's chain closes the palette, and one place
-           * deciding that is what stops the two disagreeing.
+           * so the walk, the commit *and the exit* have to be the field's own.
+           *
+           * Escape used to be left to the shell's chain, on the reasoning that
+           * one place should decide what it means. The reasoning was right and
+           * the arrangement was wrong: the palette opens with focus in this
+           * input, `bind` stands aside for a field before it ever reaches the
+           * chain, and so the chain's palette link could not fire while the
+           * palette was open. Escape did nothing at all. Until a keymap makes
+           * the exit a binding rather than a literal, a field that opens focused
+           * closes itself — the same bargain `Sidebar`'s search box makes.
            */
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown' || (e.key === 'n' && e.ctrlKey)) {
@@ -92,6 +110,9 @@ export function Palette({
             } else if (e.key === 'ArrowUp' || (e.key === 'p' && e.ctrlKey)) {
               e.preventDefault();
               setAt(Math.max(here - 1, 0));
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              onClose();
             } else if (e.key === 'Enter') {
               e.preventDefault();
               const row = rows[here];
@@ -100,7 +121,7 @@ export function Palette({
           }}
         />
 
-        <div className="palette-list" data-navlist="palette" data-nav-flow="column">
+        <div ref={list} className="palette-list" data-navlist="palette" data-nav-flow="column">
           {rows.map((e, i) => (
             <button
               key={e.id}
