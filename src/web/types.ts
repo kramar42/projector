@@ -78,8 +78,8 @@ export interface NoteDetail {
  *
  * One type for the plan and the result because the plan *is* the result minus
  * what happened: `workspace`, `branch` and `repos` are the same three facts
- * either way, and `results` and `link` are the only things a commit adds. Two
- * types would have let a caller read `link` off a plan that never created one.
+ * either way, and everything optional below is what a commit adds. Two types
+ * would have let a caller read `opening` off a plan that never created one.
  */
 export interface WorkResult {
   workspace: string;
@@ -89,9 +89,27 @@ export interface WorkResult {
   briefing?: string;
   /** One entry per declared repo, on a commit only. */
   results?: { name: string; path: string; created: boolean; error: string | null }[];
-  /** The `claude://` deep link that opens the prepared workspace. Commit only. */
-  link?: string;
+  /**
+   * Where to go, on a commit only — and whether that is a new session at all.
+   * `running` is a live session the desktop app cannot be pointed at, so it
+   * carries no link: there is nothing to open and saying so is the answer.
+   */
+  opening?:
+    | { how: 'new'; link: string }
+    | { how: 'reopen'; link: string; session: WorkSession }
+    | { how: 'running'; session: WorkSession };
+  /** Whether the note now carries `workspace:<path>`, and why not if it does not. */
+  recorded?: boolean;
+  recordError?: string | null;
   briefingPath?: string;
+}
+
+/** A session already working in the workspace, as the panel reports it. */
+export interface WorkSession {
+  uuid: string;
+  state: 'working' | 'stalled' | 'waiting' | 'closed';
+  opening: string;
+  lastAt: string;
 }
 
 /**

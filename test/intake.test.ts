@@ -265,6 +265,46 @@ test('a worktree path names the project and the branch it was made for', () => {
   assert.equal(parsed?.branchSlug, 'feature-PROJ-303');
 });
 
+test('a workspace recorded on a note is the strongest reason a cwd can give', () => {
+  const root = vault({
+    ship: `---\nid: ship\ntitle: ship\nlinks:\n  - workspace:/wt/plat-wt-tos-ship\n---\n\nb\n`,
+  });
+  try {
+    const ctx = context(root);
+    // The session sits in a worktree *inside* the workspace, which is where
+    // `pj work` puts every repo — so containment, not equality.
+    assert.deepEqual(matchCwd(ctx, '/wt/plat-wt-tos-ship/api'), [
+      { id: 'ship', title: 'ship', why: 'workspace' },
+    ]);
+    assert.deepEqual(matchCwd(ctx, '/wt/plat-wt-tos-other'), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a worktree branch finds its note through the project's own template", () => {
+  // The bug this pins: the comparison was against the note id, which is
+  // `branchFor`'s *fallback*. A project declaring a template never matched, so
+  // every note in one was invisible to a sweep that had its workspace in hand.
+  const root = vault({
+    plat: `---\nid: plat\ntitle: plat\nproject:\n  branch: tos/{note}\n---\n\nb\n`,
+    ship: `---\nid: ship\ntitle: ship\nfacets:\n  project:\n    - plat\n---\n\nb\n`,
+  });
+  try {
+    const m = matchCwd(context(root), workspacePath('/wt', 'plat', 'tos/ship'));
+    assert.deepEqual(
+      m,
+      [
+        { id: 'plat', title: 'plat', why: 'worktree' },
+        { id: 'ship', title: 'ship', why: 'worktree branch' },
+      ],
+      'the project and the note, not the project alone',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a branch naming a Jira key finds the note carrying that key', () => {
   const root = vault({
     c: `---\nid: c\ntitle: c\nlinks:\n  - jira:PROJ-303\n---\n\nb\n`,

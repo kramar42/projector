@@ -7,11 +7,13 @@ import type { WorkResult } from '../types.ts';
  *
  * A sibling of `usePanelWriter` rather than a member of it, and the reason is the
  * rule that hook states about itself: every write it makes carries a base mtime,
- * because every write it makes changes a note file. This changes no note. It lays
- * out git worktrees under `$PROJECTOR_WORKSPACES` and writes a briefing beside
- * them, so there is no mtime to carry and nothing for the conflict machinery to
- * do — and folding it in would have made "every write carries a base" a sentence
- * with an exception in it.
+ * because every write it makes is a person editing a note they are looking at.
+ * This is not that. Almost all of it lands outside the vault — git worktrees
+ * under `$PROJECTOR_WORKSPACES` and a briefing beside them — and the one note
+ * write it makes is an append of a `workspace:` ref derived from the note
+ * itself, which has nothing to conflict with and so carries no base. Folding it
+ * in would have made "every write carries a base" a sentence with an exception
+ * in it.
  *
  * Two calls, both to the same route. The first is the plan and touches nothing;
  * it exists so the confirm can name the directory and the branch it is about to
@@ -42,7 +44,9 @@ function askAbout(title: string, plan: WorkResult): boolean {
       `workspace   ${plan.workspace}\n` +
       `branch      ${plan.branch}\n\n` +
       `A git worktree on that branch, in each of:\n${repos}\n\n` +
-      `Then the workspace opens in Claude. Nothing in the vault is written.`,
+      `Then the workspace opens in Claude — reopening the session already ` +
+      `working there, if there is one. The note records the workspace; nothing ` +
+      `else in the vault is written.`,
   );
 }
 
@@ -51,9 +55,18 @@ function outcome(done: WorkResult): { tone: 'bad' | 'info'; message: string } {
   const failed = (done.results ?? []).filter((r) => r.error);
   const prepared = (done.results ?? []).length - failed.length;
   const head = `${prepared} of ${done.results?.length} repos ready in ${done.workspace}`;
-  return failed.length
-    ? { tone: 'bad', message: `${head} — ${failed.map((r) => `${r.name}: ${r.error}`).join('; ')}` }
-    : { tone: 'info', message: head };
+  // Reopening rather than starting is the one outcome a person would otherwise
+  // find out about by looking at the window that appeared, so it is said here.
+  const opened =
+    done.opening?.how === 'reopen'
+      ? ' — reopening the session already working here'
+      : done.opening?.how === 'running'
+        ? ' — a session is already running here; nothing opened'
+        : '';
+  if (failed.length) {
+    return { tone: 'bad', message: `${head} — ${failed.map((r) => `${r.name}: ${r.error}`).join('; ')}` };
+  }
+  return { tone: 'info', message: head + opened + (done.recordError ? ` — not recorded on the note: ${done.recordError}` : '') };
 }
 
 export function useWorkStarter(o: { id: string; title: string }): WorkStarter {
@@ -90,8 +103,14 @@ export function useWorkStarter(o: { id: string; title: string }): WorkStarter {
          * than a fetch: `claude://` is the desktop app's scheme, so the browser
          * hands it to the OS and this page stays exactly where it is — which is
          * why the banner above is set *first* and survives to be read.
+         *
+         * `running` carries no link on purpose: a live session the app has no
+         * chat for cannot be reached by a URL, and opening a second one beside
+         * it is the silent duplication this is here to stop. The banner says so.
          */
-        if (done.link) window.location.href = done.link;
+        if (done.opening?.how !== 'running' && done.opening?.link) {
+          window.location.href = done.opening.link;
+        }
       })
       .catch((err: unknown) => {
         setBusy(null);

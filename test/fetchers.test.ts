@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ago, firstLine } from '../src/sources/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
-import { sessionFetcher } from '../src/enrich/claudeSession.ts';
+import { sessionFetcher, workspaceFetcher } from '../src/enrich/claudeSession.ts';
 import { jiraFetcher, statusTone as jiraStatusTone } from '../src/enrich/jira.ts';
 import { docFetcher } from '../src/enrich/doc.ts';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -72,6 +72,41 @@ test('a desktop-app local_ id explains why it cannot resolve', async () => {
   const r = await sessionFetcher.fetch('local_3c379ddf-4887-4235-a12e-493ecfb49420');
   assert.equal(isUnavailable(r), true);
   if (isUnavailable(r)) assert.match(r.reason, /transcript uuid/);
+});
+
+test('a workspace refuses a relative path and reports a directory that is gone', async () => {
+  // Absolute on purpose: the ref is written by `pj work` from a resolved path, so
+  // a relative one is a hand-edit that would resolve against whatever the server's
+  // cwd happens to be.
+  const rel = await workspaceFetcher.fetch('wt/plat-wt-ship-it');
+  assert.equal(isUnavailable(rel), true);
+  if (isUnavailable(rel)) assert.match(rel.reason, /absolute path/);
+
+  const gone = await workspaceFetcher.fetch('/definitely/not/here');
+  assert.equal(isUnavailable(gone), true);
+  if (isUnavailable(gone)) assert.match(gone.reason, /gone/);
+});
+
+test('a prepared workspace nobody has worked in says so, and offers the way in', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'projector-ws-'));
+  const home = mkdtempSync(join(tmpdir(), 'projector-claude-'));
+  const before = process.env.PROJECTOR_CLAUDE_HOME;
+  process.env.PROJECTOR_CLAUDE_HOME = home;
+  try {
+    const r = await workspaceFetcher.fetch(dir);
+    assert.equal(isUnavailable(r), false);
+    if (!isUnavailable(r)) {
+      assert.match(r.title ?? '', /nothing has worked in it/);
+      // Empty is not unavailable: the directory is there and starting a session
+      // in it is the offer, which is the same one `pj work` would have made.
+      assert.match(r.action?.href ?? '', /^claude:\/\/code\/new\?/);
+    }
+  } finally {
+    if (before === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = before;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('jira says what configuration it needs', async () => {

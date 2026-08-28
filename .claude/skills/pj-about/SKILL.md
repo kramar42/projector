@@ -125,7 +125,9 @@ pj set <id> --set 'project={}'      # a note becomes a project — and moves to 
 pj merge <id>... --into <id>         # folds notes into one; the survivor keeps its facets
 pj rm <id>...                       # deletes, dropping every reference pointing at it
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
-pj link <id> --session       # link the live Claude session working in this directory
+pj link <id> --session       # link the live Claude session working in this directory.
+                             # Only for a session outside a pj work workspace: inside one,
+                             # the note's workspace: link already finds it.
 pj check                     # validate everything; run this after a batch of edits
 pj setup                     # which channels and fetchers this vault can reach, and what is missing
 ```
@@ -301,13 +303,18 @@ create the file, and confirm it by opening it: `pj ls --view <name>`.
 ## Link kinds
 
 `jira:PROJ-303` · `gh:pr:ORG/repo#412` · `gh:branch:ORG/repo@name` · `gh:commit:ORG/repo@sha` ·
-`claude:<transcript-uuid>` · `doc:relative/path.md` · `slack:<permalink>` · a bare `https://…`
+`claude:<transcript-uuid>` · `workspace:/abs/path` · `doc:relative/path.md` · `slack:<permalink>` ·
+a bare `https://…`
 
 A kind exists when something resolves it. Everything else — a Trello note, a calendar entry, a Grafana
 dashboard — is a bare URL, with provenance in the `source` facet where it matters.
 
 A `claude:` link takes the **transcript uuid** — the filename under `~/.claude/projects/<slug>/`.
 A `local_…` id comes from the desktop app's store, is not on disk, and will not resolve.
+
+A `workspace:` link is written by `pj work` and names the directory it prepared. Do not write one by
+hand: every session that has ever run there is read back off the directory, so the link is how a note
+shows its sessions — one you invented points at nothing.
 
 ## Don't compute what a query already answers
 

@@ -220,8 +220,12 @@ export function enrichEnabled(root: string, kind: string): boolean {
   const { enrich } = settingsFor(root);
   if (enrich === null) return true;
   // `gh` in the file covers `gh:pr`, `gh:branch` and `gh:commit` — three refs of
-  // one credential, and nobody wants to enable them one at a time.
-  return enrich.includes(kind) || enrich.includes(kind.split(':')[0]!);
+  // one credential, and nobody wants to enable them one at a time. `claude`
+  // covers `workspace` on the same grounds one step further out: a workspace
+  // resolves by reading `~/.claude` and nothing else, so a vault that has said it
+  // does not want its sessions read has said it about both.
+  const named = kind === 'workspace' ? 'claude' : kind;
+  return enrich.includes(named) || enrich.includes(named.split(':')[0]!);
 }
 
 /** Forget the memo. Only tests need this; the mtime handles the real case. */

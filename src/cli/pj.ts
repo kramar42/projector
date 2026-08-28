@@ -42,6 +42,7 @@ import {
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
+import { ago } from '../sources/run.ts';
 import { createNote, deleteNote, mergeNotes, patchNote, patchFields } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
@@ -269,7 +270,8 @@ const HELP = `pj — projector CLI${vaultNote}
          [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
   pj merge <id>... --into <id>                         fold notes into one, keeping its facets
   pj rm <id>...                                        delete, dropping references to it
-  pj work <id> [--dry-run] [--no-open]                 multi-repo worktree workspace + briefing
+  pj work <id> [--dry-run] [--no-open] [--new]         multi-repo worktree workspace + briefing;
+                                                       reopens a session already working there
 
   pj setup [--json]                                    what this vault can reach, and what is missing
   pj setup --init                                      write .projector/config.yaml and gitignore it
@@ -1088,11 +1090,15 @@ try {
     }
 
     case 'work': {
-      const { flags, rest } = argFlags(argv, ['dry-run', 'no-open'], ['dry-run', 'no-open']);
+      const { flags, rest } = argFlags(
+        argv,
+        ['dry-run', 'no-open', 'new'],
+        ['dry-run', 'no-open', 'new'],
+      );
       const id = rest[0];
       const ctx = id ? noteContext(id, root) : null;
       if (!ctx) {
-        console.error('pj work <id>');
+        console.error('pj work <id> [--dry-run] [--no-open] [--new]');
         process.exit(1);
       }
       /**
@@ -1122,7 +1128,7 @@ try {
 
       let started;
       try {
-        started = startWork(ctx, plan);
+        started = startWork(ctx, plan, root, { fresh: flags.has('new') });
       } catch (err) {
         if (!(err instanceof NotWorkable)) throw err;
         console.error(`\n${err.message}`);
@@ -1132,9 +1138,30 @@ try {
         console.log(`  ${r.error ? '✗' : r.created ? '+' : '='} ${pad(r.name, 26)} ${r.error ?? r.path}`);
       }
       console.log(`\nwrote ${started.briefingPath}`);
+      // Worth a line either way. Silence about the recorded workspace would make
+      // the one thing this writes into the vault the one thing it does not say.
+      if (started.recordError) console.error(`could not record it on ${ctx.id}: ${started.recordError}`);
+      else console.log(started.recorded ? `recorded on ${ctx.id}` : `already recorded on ${ctx.id}`);
+
+      const { opening } = started;
+      if (opening.how !== 'new') {
+        const s = opening.session;
+        console.log(`\n${s.state} here: session ${s.uuid.slice(0, 8)}, last active ${ago(s.lastAt)}`);
+        if (s.opening) console.log(`  ${s.opening}`);
+      }
+      /**
+       * A live session the desktop app cannot be pointed at — started from a
+       * terminal — is the one case with nothing to open. Saying so and stopping
+       * is the point: opening a second session beside it is exactly the silent
+       * duplication this is here to prevent, and `--new` is how you ask for it.
+       */
+      if (opening.how === 'running') {
+        console.log(`\nalready running here, and not the app's to reopen.\nStart another alongside it with --new.`);
+        break;
+      }
 
       if (flags.has('no-open')) {
-        console.log(`not opening the app (--no-open)\n  ${started.link}`);
+        console.log(`not opening the app (--no-open)\n  ${opening.link}`);
         break;
       }
       /**
@@ -1147,12 +1174,14 @@ try {
        * the scheme; the fallback below is the CLI, for a machine with no app.
        */
       try {
-        execFileSync('open', [started.link], { stdio: ['ignore', 'ignore', 'pipe'] });
-        console.log('opened the workspace in Claude');
+        execFileSync('open', [opening.link], { stdio: ['ignore', 'ignore', 'pipe'] });
+        console.log(opening.how === 'reopen' ? 'reopened it in Claude' : 'opened the workspace in Claude');
       } catch (err) {
         console.error(`could not open the app: ${(err as Error).message}`);
         console.log(
-          `run it yourself:\n  cd ${shellQuote(started.workspace)} && claude ${shellQuote(BRIEFING_PROMPT)}`,
+          opening.how === 'reopen'
+            ? `run it yourself:\n  claude --resume ${opening.session.uuid}`
+            : `run it yourself:\n  cd ${shellQuote(started.workspace)} && claude ${shellQuote(BRIEFING_PROMPT)}`,
         );
       }
       break;

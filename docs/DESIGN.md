@@ -310,8 +310,8 @@ a family a vault's own axis could also ask for.
 
 ### The Link Kind Vocabulary
 
-Eight link kinds, and each draws its prefix in one family: `jira` blue, the three `gh:` kinds green,
-`claude` orange, `doc` yellow, `slack` pink, and `url` none. It is one map in `src/web/links.ts` —
+Each link kind draws its prefix in one family: `jira` blue, the three `gh:` kinds green, `claude` and
+`workspace` orange, `doc` yellow, `slack` pink, and `url` none. It is one map in `src/web/links.ts` —
 `LINK_KINDS`, the letters and the family together — read by the face's `J` and by the panel's
 spelled-out `jira`, so one kind cannot be two colours in two registers. `theme.test.ts` holds the seam
 shut: every kind's family has to be one the palette defines, and neither of the two reserved ones.
@@ -320,7 +320,9 @@ This borrows families the axes claim, and does not break The One Hue Per Axis Ru
 an axis, and it colours two or three mono characters, never a fill. Red stays out because it means a
 failure here and `.linkchip.is-failed` is a state a prefix has to survive; purple stays out because it
 is the accent. The three `gh:` kinds share green because they share a host, and `PR` / `br` / `sha`
-separate them already — seven families do not survive spending three on one host.
+separate them already — seven families do not survive spending three on one host. `workspace` shares
+orange with `claude` on the same reasoning: a workspace is a directory whose whole content is Claude
+sessions, and `AI` / `wt` tell them apart without a family each.
 
 ### Neutral
 

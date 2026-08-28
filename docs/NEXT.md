@@ -187,6 +187,16 @@ things.
   sit on the one seam every unattended write crosses, catching the model that forgot. Known shapes
   only: redacting anything that merely looks entropic would eat commit hashes.
 
+- **`pj work` does not resume a *finished* session in the workspace.** It reopens a live one and
+  starts a new one otherwise, and a closed transcript in that directory stays history rather than
+  becoming the thing the command lands you in. The reasoning is that "continue where I left off" and
+  "start the next piece of work" are different intentions that produce the same keystroke, and
+  guessing between them silently is what the reconnect was added to stop doing. Both are visible
+  either way — the note's `workspace:` row lists every session the directory has held, live and
+  closed, and each carries its own way back in. What changes the answer is wanting the *keystroke* to
+  resume: then it needs to ask rather than pick, and a `confirm()` is already the wrong shape for that
+  (see the native-dialog entry above).
+
 ## Decided against
 
 - **`created` and `updated` as facets.** They are note fields, so `sort` accepts them and `filter` and

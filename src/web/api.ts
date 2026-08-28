@@ -165,19 +165,23 @@ export const api = {
   ),
 
   /**
-   * Start work on a note: a worktree workspace, a briefing, and a link that opens
-   * it in the desktop app.
+   * Start work on a note: a worktree workspace, a briefing, the `workspace:` link
+   * recording where it went, and somewhere to open.
    *
-   * No `stampSelfWrite`, and that is not an omission. Nothing inside the vault
-   * changes — the worktrees and the briefing live under `$PROJECTOR_WORKSPACES` —
-   * so there is no note write for the watcher to mistake for someone else's.
+   * `stampSelfWrite` on the commit and not on the plan, which is the difference
+   * between them: the plan touches nothing, while the commit appends that link
+   * and so is a note write this tab made and must not read back as someone
+   * else's.
    *
-   * `commit: false` is the plan and touches nothing, which is what the confirm is
-   * built from: a dialog that names the directory it is about to create is worth
-   * one extra round trip against localhost.
+   * `commit: false` is the plan, which is what the confirm is built from: a
+   * dialog that names the directory it is about to create is worth one extra
+   * round trip against localhost. `fresh` forces a new session where the
+   * workspace already has one running.
    */
-  work: (id: string, commit: boolean) =>
-    req<WorkResult>('POST', `/api/note/${encodeURIComponent(id)}/work`, { commit }),
+  work: (id: string, commit: boolean, fresh = false) => (
+    commit && stampSelfWrite(id),
+    req<WorkResult>('POST', `/api/note/${encodeURIComponent(id)}/work`, { commit, fresh })
+  ),
 
   bulk: (input: {
     ids: string[];

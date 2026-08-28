@@ -1,7 +1,10 @@
 import { basename, resolve } from 'node:path';
 import { resolvePath } from '../config.ts';
 import { search } from '../index/queries.ts';
+import { parseLink } from '../schema/links.ts';
+import { resolveProject } from '../index/project.ts';
 import type { Evidence, IntakeContext, Match } from './types.ts';
+import { branchFor } from '../agent/worktree.ts';
 import { fromWorkspacePath, slugBranch } from '../agent/workspaceName.ts';
 
 /**
@@ -45,19 +48,50 @@ function push(into: Match[], ctx: IntakeContext, id: string, why: string): void 
 
 
 
-/** Notes reachable from a working directory: its worktree's project, or a repo's. */
+/**
+ * Notes reachable from a working directory: the note whose workspace it is, its
+ * worktree's project, or a repo's.
+ *
+ * The strongest reason first and by a distance. A note that carries
+ * `workspace:<path>` was *told* this directory is where its work goes — `pj work`
+ * wrote it at launch — so a session inside it is not a guess. The two below are
+ * what answer for workspaces prepared before that link existed.
+ */
 export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
   if (!cwd) return [];
   const here = resolve(cwd);
   const out: Match[] = [];
 
+  // A scan rather than a lookup, because the session's cwd is usually a repo
+  // *inside* the workspace rather than the workspace itself.
+  for (const [raw, ids] of ctx.links) {
+    const link = parseLink(raw);
+    if (link.kind !== 'workspace') continue;
+    const dir = resolve(link.ref.trim());
+    if (here !== dir && !here.startsWith(dir + '/')) continue;
+    for (const id of ids) push(out, ctx, id, 'workspace');
+  }
+
   const ws = fromWorkspacePath(here);
   if (ws) {
     push(out, ctx, ws.project, 'worktree');
-    // The branch half names the note in the common case, since `branchFor`
-    // falls back to the note id.
+    // The branch half names the note — but only through the project's own branch
+    // template, which is the thing this used to skip. It compared the note id
+    // against the slug directly, which is `branchFor`'s *fallback*: a project
+    // declaring `branch: tos/{note}` produced `tos-<id>` and never matched, so
+    // every templated project silently offered its project and never its note.
+    const template = resolveProject(ws.project, ctx.notes, ctx.root)?.branch;
     for (const rec of ctx.notes.values()) {
-      if (slugBranch(rec.id) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
+      const jiraKeys = rec.links.filter((l) => l.kind === 'jira').map((l) => l.ref);
+      let branch: string;
+      try {
+        branch = branchFor(rec.id, { ...(template ? { template } : {}), jiraKeys });
+      } catch {
+        // A template with an unknown placeholder is a refusal `pj work` makes
+        // loudly; here it is simply not a match.
+        break;
+      }
+      if (slugBranch(branch) === ws.branchSlug) push(out, ctx, rec.id, 'worktree branch');
     }
   }
 

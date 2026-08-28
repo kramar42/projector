@@ -22,7 +22,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **bucket** | the named range an ordered facet presents itself as, so a date filters as `overdue` and sorts as `2026-09-01` |
 | **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
 | **ref** | one value of a relation — a pointer *inside* the vault, traversable |
-| **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
+| **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `workspace:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
 | **project** | a note carrying a `project:` block of configuration, which its members inherit. Usually a folder: `platform/README.md` is the note `platform`, and `platform/AGENTS.md` is its instructions. A built-in facet points at them |
 | **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
@@ -689,13 +689,14 @@ command where it does not.
 | `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | the `gh` CLI, authenticated | 10 min |
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | the `gh` CLI, authenticated | never |
 | `claude` | `claude:<uuid>` | `~/.claude/projects/**` | — | 1 min |
+| `workspace` | `workspace:/abs/path` | `~/.claude/projects/**` | — | 1 min |
 | `doc` | `doc:path.md` | filesystem | `PROJECTOR_DOC_URL` to make it clickable | 30 s |
 | `slack` `url` | — | not fetched — the ref is already the URL | — | — |
 
 Every fetcher is read-only and runs server-side, so credentials stay out of the browser. Failures are
 cached too, so a link that cannot resolve says why once instead of retrying on every render.
 
-**A link row is one skeleton for all eight kinds** — the kind, then the label, then a remove — with
+**A link row is one skeleton for every kind** — the kind, then the label, then a remove — with
 what a fetcher returned below it in a fixed order: what it is, what is true about it, what went wrong.
 **The label is the way in**, whatever the href's origin, so "where do I click" is answered in the same
 place for every kind. There is no separate control reading "open in Claude": the label already names
@@ -716,6 +717,12 @@ export PROJECTOR_DOC_URL='obsidian://open?path={path}'
 A `claude:` link takes a session transcript uuid and resolves to its opening prompt, last activity,
 turn count, working directory, branch, and either a `claude://` deep link into the desktop app or the
 `claude --resume` command to pick it back up.
+
+A `workspace:` link takes an absolute directory — the one `pj work` prepared — and resolves to the
+sessions that have worked in it: what the newest one is doing, how many there have been, and the way
+back into it. It names a *place* rather than a session, which is what makes it maintenance-free:
+every session that ever runs there is found by reading the directory, live or finished, and nothing
+has to register itself. `pj work` writes one at launch and it is the only thing it writes to a note.
 
 ```bash
 pj enrich --all              # resolve every link on every note and print it
@@ -895,7 +902,7 @@ cursor is one value, so it may only advance to a boundary with nothing unexamine
 
 **What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
 note, a fingerprint already captured, a session too short to be work. Everything else arrives as
-`evidence`, and each match carries the mechanical reason it matched: `cwd`, `worktree`, `branch`,
+`evidence`, and each match carries the mechanical reason it matched: `workspace`, `cwd`, `worktree`, `branch`,
 `mentions PROJ-303`, `text`. There is no score and no verdict here, because the failure that would make
 this useless is a confident wrong one — a session linked to the wrong note puts its history where
 nobody will look. Choosing between note, extension and neither is the classifier's job, on the evidence
@@ -922,11 +929,17 @@ the answer was already on disk — this reads the two versions of every changed 
 parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
 **Starting work** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
-with the note's full context embedded, and a Claude session opened on it in the desktop app — the same
-place the `claude:` link on a note reopens a *past* session, so work happens in one app rather than
-two. Reopening is idempotent, and one repo failing does not stop the others.
+with the note's full context embedded, `workspace:<path>` recorded on the note, and a Claude session
+opened on it in the desktop app — the same place the `claude:` link on a note reopens a *past*
+session, so work happens in one app rather than two. One repo failing does not stop the others.
 **`PROJECTOR_WORKSPACES` is required** — worktrees are real directories on disk, so where they go is
 told, never guessed.
+
+**Running it twice does not make two sessions.** The worktrees were always idempotent — an existing
+one is reused rather than refused — and now the session is too: if something is already working in
+that workspace, it is reopened instead of joined by a second window. A session started from a
+terminal is the one case with nothing to reopen, since the app has no chat to point at; that says so
+and opens nothing. `--new` asks for a second session deliberately, which is a real thing to want.
 
 Three ways in, one act behind them:
 
@@ -934,7 +947,7 @@ Three ways in, one act behind them:
 |---|---|
 | the ▶ in the panel's top-right corner | beside the trash, and confirmed like it |
 | `!` with a note under the cursor | opens the panel if it is shut, then presses the same control |
-| `pj work <id>` | prints what it prepared, then hands the link to `open` |
+| `pj work <id>` | prints what it prepared, then hands the link to `open`; `--new` forces a second session |
 
 The confirm names the workspace directory, the branch and every repo *before* any of them exists,
 which is the whole of the safety on a one-keystroke launch. Backing out of it creates nothing.
@@ -942,8 +955,9 @@ which is the whole of the safety on a one-keystroke launch. Backing out of it cr
 prepares the workspace and prints the link instead of following it.
 
 The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
-before planning or writing code. Its last step links the session back to the note, so a note
-accumulates its own history.
+before planning or writing code. It asks for nothing at the end: the note records the workspace at
+launch, so every session that ever runs there shows on the note without any of them registering
+itself.
 
 ## Skills
 
@@ -1024,9 +1038,9 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |
 | `pj merge <id>… --into <id>` | fold notes into one. The survivor keeps its facets; the rest bring their body, links, references and capture fingerprints, and their files go |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
-| `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own |
+| `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
 | `pj context <id> [--json]` | everything known about a note, assembled |
-| `pj work <id> [--dry-run] [--no-open]` | multi-repo worktree workspace, briefing, a session in the app |
+| `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |

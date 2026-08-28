@@ -12,7 +12,9 @@ import {
   workspacePath,
 } from '../src/agent/worktree.ts';
 import { buildBriefing } from '../src/agent/briefing.ts';
-import { NotWorkable, plannedBriefing, planWork, startWork } from '../src/agent/work.ts';
+import { NotWorkable, openingFor, plannedBriefing, planWork, startWork } from '../src/agent/work.ts';
+import { sessionsUnder } from '../src/sources/claude.ts';
+import { readAll } from '../src/index/indexer.ts';
 import type { NoteContext } from '../src/agent/context.ts';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
@@ -147,7 +149,10 @@ test('the briefing names failed repos as out of scope and stops before building'
   assert.match(out, /out of scope[\s\S]*bad.*boom/);
   assert.match(out, /STOP/);
   assert.match(out, /deliberately left out/);
-  assert.match(out, /pj link c1 --session/);
+  // The briefing no longer asks the session to register itself. `pj work` records
+  // the workspace on the note and the sessions are read back off that, so a step
+  // the agent could forget is a step that must not be here.
+  assert.ok(!out.includes('--session'), out);
 });
 
 
@@ -250,7 +255,7 @@ test('every repo failing is a refusal, so no briefing is written and nothing ope
     const ctx = workCtx(project({ repos: ['/definitely/not/here'] }));
     const plan = { ...planWork(ctx, root), workspace: pathJoin(parent, 'plat-wt-x') };
     assert.throws(
-      () => startWork(ctx, plan),
+      () => startWork(ctx, plan, root),
       (err: unknown) => err instanceof NotWorkable && /no worktree could be created/.test((err as Error).message),
     );
     // One repo failing does not stop the others; all of them failing leaves
@@ -261,6 +266,167 @@ test('every repo failing is a refusal, so no briefing is written and nothing ope
     rmSync(parent, { recursive: true, force: true });
   }
 });
+
+
+// ------------------------------------------------- the workspace, and who is in it
+//
+// The mechanism that replaced `pj link --session` in the briefing. A session used
+// to reach a note only by registering itself at the end of its work, so a note
+// showed nothing while the work was happening and nothing at all if the agent
+// never got that far. `pj work` records the workspace instead, once, and every
+// session that ever runs there is read back off the directory (C8, C11).
+
+/** A `~/.claude` with the sessions and transcripts a test wants in it. */
+function claudeHomeWith(
+  sessions: { uuid: string; cwd: string; pid?: number; alive?: boolean }[],
+): string {
+  const home = mkdtempSync(pathJoin(tmpdir(), 'projector-claude-'));
+  mkdirSync(pathJoin(home, 'sessions'), { recursive: true });
+  for (const s of sessions) {
+    // `alive` is decided by whether the pid exists, so this process's own pid is
+    // the only one a test can be sure of either way.
+    const pid = s.pid ?? (s.alive === false ? 2 ** 30 : process.pid);
+    writeFileSync(
+      pathJoin(home, 'sessions', `${s.uuid}.json`),
+      JSON.stringify({ sessionId: s.uuid, pid, cwd: s.cwd }),
+      'utf8',
+    );
+    const dir = pathJoin(home, 'projects', s.cwd.replace(/[^A-Za-z0-9]/g, '-'));
+    mkdirSync(dir, { recursive: true });
+    const at = new Date().toISOString();
+    writeFileSync(
+      pathJoin(dir, `${s.uuid}.jsonl`),
+      [
+        JSON.stringify({ type: 'user', cwd: s.cwd, timestamp: at, message: { content: `work in ${s.cwd}` } }),
+        JSON.stringify({ type: 'assistant', cwd: s.cwd, timestamp: at, message: { stop_reason: 'end_turn' } }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+  }
+  return home;
+}
+
+/** Run with `PROJECTOR_CLAUDE_HOME` pointed somewhere a test built. */
+function withClaudeHome<T>(home: string, fn: () => T): T {
+  const before = process.env.PROJECTOR_CLAUDE_HOME;
+  const desktop = process.env.PROJECTOR_CLAUDE_DESKTOP;
+  process.env.PROJECTOR_CLAUDE_HOME = home;
+  // No desktop store, so nothing has a chat: `openingFor` lands on `running`
+  // unless a test says otherwise, which is the interesting half anyway.
+  process.env.PROJECTOR_CLAUDE_DESKTOP = pathJoin(home, 'no-desktop');
+  try {
+    return fn();
+  } finally {
+    if (before === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = before;
+    if (desktop === undefined) delete process.env.PROJECTOR_CLAUDE_DESKTOP;
+    else process.env.PROJECTOR_CLAUDE_DESKTOP = desktop;
+  }
+}
+
+test('a workspace finds the sessions that worked in it, and only those', () => {
+  // Two directories whose slugs are one character apart, plus a repo *inside*
+  // the workspace — which is where a session actually sits, since the worktrees
+  // are subdirectories.
+  const home = claudeHomeWith([
+    { uuid: 'aaaaaaaa-0000-4000-8000-000000000001', cwd: '/wt/plat-wt-ship-it' },
+    { uuid: 'aaaaaaaa-0000-4000-8000-000000000002', cwd: '/wt/plat-wt-ship-it/api' },
+    { uuid: 'aaaaaaaa-0000-4000-8000-000000000003', cwd: '/wt/plat-wt-other' },
+  ]);
+  try {
+    const found = withClaudeHome(home, () => sessionsUnder('/wt/plat-wt-ship-it'));
+    assert.deepEqual(
+      found.map((s) => s.uuid.slice(-1)).sort(),
+      ['1', '2'],
+      'the workspace and its worktrees, and nothing beside them',
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a slug collision is settled by the cwd the transcript recorded', () => {
+  // `/wt/a.b` and `/wt/a/b` flatten to the same directory name, so the slug
+  // cannot tell them apart and the transcript has to.
+  const home = claudeHomeWith([{ uuid: 'bbbbbbbb-0000-4000-8000-000000000001', cwd: '/wt/a.b' }]);
+  try {
+    assert.equal(withClaudeHome(home, () => sessionsUnder('/wt/a/b')).length, 0);
+    assert.equal(withClaudeHome(home, () => sessionsUnder('/wt/a.b')).length, 1);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a workspace with a live session is reopened, not doubled — unless asked', () => {
+  const home = claudeHomeWith([{ uuid: 'cccccccc-0000-4000-8000-000000000001', cwd: '/wt/plat-wt-ship-it' }]);
+  try {
+    withClaudeHome(home, () => {
+      // Live, but no desktop chat to point at: nothing is opened, and saying so
+      // is the answer. Opening a second session beside it is the bug.
+      const busy = openingFor('/wt/plat-wt-ship-it');
+      assert.equal(busy.how, 'running');
+      assert.ok(!('link' in busy));
+
+      // `--new` is how you ask for the second one.
+      assert.equal(openingFor('/wt/plat-wt-ship-it', true).how, 'new');
+      // A workspace nobody is in starts one, which is what it always did.
+      assert.equal(openingFor('/wt/plat-wt-nobody').how, 'new');
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a finished session in the workspace is history, not something to reopen', () => {
+  const home = claudeHomeWith([
+    { uuid: 'dddddddd-0000-4000-8000-000000000001', cwd: '/wt/plat-wt-ship-it', alive: false },
+  ]);
+  try {
+    withClaudeHome(home, () => {
+      // It still shows on the note — `sessionsUnder` returns it — but `pj work`
+      // starts a new one rather than resuming work somebody finished.
+      assert.equal(sessionsUnder('/wt/plat-wt-ship-it').length, 1);
+      assert.equal(openingFor('/wt/plat-wt-ship-it').how, 'new');
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('starting work records the workspace on the note, once', () => {
+  const parent = mkdtempSync(pathJoin(tmpdir(), 'projector-wt-'));
+  const repo = mkdtempSync(pathJoin(tmpdir(), 'projector-repo-'));
+  const home = claudeHomeWith([]);
+  const root = vaultSaying(parent);
+  const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
+  try {
+    git('init', '-b', 'main');
+    git('config', 'user.email', 'a@b.c');
+    git('config', 'user.name', 'A');
+    writeFileSync(pathJoin(repo, 'f.txt'), 'x\n', 'utf8');
+    git('add', '.');
+    git('commit', '-m', 'first');
+
+    writeFileSync(pathJoin(root, 'ship-it.md'), '---\ntitle: Ship it\n---\n\nbody\n', 'utf8');
+    const ctx = workCtx(project({ repos: [repo] }));
+    const plan = planWork(ctx, root);
+
+    const first = withClaudeHome(home, () => startWork(ctx, plan, root));
+    assert.equal(first.recorded, true);
+    assert.equal(first.recordError, null);
+    const links = () => readAll(paths(root).notes).notes.get('ship-it')!.links.map((l) => l.raw);
+    assert.deepEqual(links(), [`workspace:${plan.workspace}`]);
+
+    // Reopening is the same act, so it must not append a second copy — nor bump
+    // `updated` on a note nothing changed about.
+    const again = withClaudeHome(home, () => startWork(ctx, plan, root));
+    assert.equal(again.recorded, false);
+    assert.deepEqual(links(), [`workspace:${plan.workspace}`]);
+  } finally {
+    for (const d of [parent, repo, home, root]) rmSync(d, { recursive: true, force: true });
+  }
+});
+
 
 
 // ---------------------------------------------------------------- history

@@ -52,32 +52,35 @@ pj work <id>
 ```
 
 Which does, in order: a workspace directory outside every repo; one `git worktree` per project repo
-on a single branch; `AGENT_BRIEFING.md` at the root with the note's full context embedded; and a
-Terminal running `claude "Read AGENT_BRIEFING.md and follow it exactly."`
+on a single branch; `AGENT_BRIEFING.md` at the root with the note's full context embedded;
+`workspace:<path>` appended to the note; and the desktop app opened on that directory.
 
 Report the workspace path and which repos were prepared. **One repo failing does not stop the
 others** — the result says which, and the briefing tells the new session that those are out of scope.
 
-Add `--no-open` when the user wants the workspace without a terminal, and give them the command to
-run themselves.
+Add `--no-open` when the user wants the workspace without opening anything, and give them the command
+to run themselves.
 
-## 5. Close the loop
+## 5. Running it again
 
-The briefing already instructs the new session to run `pj link <id> --session` as its last step, so the
-note accumulates its own history. If you are *inside* a workspace and it has not happened yet:
+Running it twice does not make a second session. If something is already working in that workspace,
+`pj work` reopens it rather than adding another beside it — and if that session was started from a
+terminal, the app has no way to reach it, so nothing is opened and the command says so. Pass `--new`
+when a second session alongside the first is what the user actually wants, which is a real thing to
+want and never the accident.
 
-```bash
-pj link <id> --session
-```
+There is nothing to run afterwards to make the session show up on the note. The workspace is recorded
+at launch and every session that ever runs there is read back off the directory — live and finished
+both — so the note's `workspace:` row shows what is working, how many sessions there have been, and
+when the last one was active. The old `pj link <id> --session` step is gone from the briefing.
 
-That finds the live session working in this directory and appends `claude:<uuid>` to the note, which
-then renders on the board with what it is doing — working, waiting on you, closed — and its last
-activity.
+`pj link <id> --session` still exists, for a session that is **not** in a `pj work` workspace — one
+you started by hand in a repo checkout. Inside a workspace it is redundant.
 
 ## What this does not do
 
 - It does not commit, push, or open a pull request. The workspace is prepared; the work is the new
   session's, and the branch is left for the user.
-- It does not modify the note beyond adding a session link.
+- It does not modify the note beyond recording the workspace.
 - It does not touch the main checkouts. Every repo in the workspace is a worktree; if a change
   belongs somewhere not laid out, stop and say so.

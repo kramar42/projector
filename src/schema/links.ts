@@ -18,12 +18,13 @@ export const LINK_KINDS = [
   'gh:branch',
   'gh:commit',
   'claude',
+  'workspace',
   'doc',
   'slack',
   'url',
 ] as const;
 
-const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'doc', 'slack'];
+const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'workspace', 'doc', 'slack'];
 
 /**
  * Parse a link string into kind and ref. A bare URL becomes kind `url`.
@@ -55,6 +56,8 @@ export function fallbackLabel(link: Link): string {
       return link.ref.split('@').pop() ?? link.ref;
     case 'claude':
       return 'session ' + link.ref.slice(-6);
+    case 'workspace':
+      return link.ref.split('/').filter(Boolean).pop() ?? link.ref;
     case 'doc':
       return link.ref.split('/').pop() ?? link.ref;
     case 'slack':
@@ -74,13 +77,14 @@ export function fallbackLabel(link: Link): string {
  * needs no fetcher and never gets one, rendered as dead text with the full URL
  * repeated underneath it. The URL was in the ref the whole time.
  *
- * Six of the eight kinds resolve here, and none of them ever needed a network
- * call to do it — a fetcher adds a title, a status and a diff size, never the
- * ability to click. The two that return `null` are the two that genuinely have
- * nowhere on the web to go:
+ * Most kinds resolve here, and none of them ever needed a network call to do it
+ * — a fetcher adds a title, a status and a diff size, never the ability to
+ * click. The ones that return `null` are the ones that genuinely have nowhere on
+ * the web to go:
  *
  * - `claude` is a session on this machine. It has an app deep link and a
  *   `--resume` command, which is what its fetcher supplies.
+ * - `workspace` is a directory on this machine, for the same reason.
  * - `doc` is a file in the vault, not a URL at all.
  *
  * `jiraBase` is configuration rather than a fetch (`PROJECTOR_JIRA_URL`), so it
@@ -114,6 +118,7 @@ export function fallbackHref(link: Link, jiraBase?: string | null): string | nul
     }
 
     case 'claude':
+    case 'workspace':
     case 'doc':
       return null;
 

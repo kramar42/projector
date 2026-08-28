@@ -525,3 +525,76 @@ function longestContaining(live: LiveSession[], want: string): LiveSession[] {
   const deepest = Math.max(...containing.map((s) => resolve(s.cwd).length));
   return containing.filter((s) => resolve(s.cwd).length === deepest);
 }
+
+/**
+ * The `~/.claude/projects` directory name a working directory's transcripts land
+ * in — the path with every separator flattened to `-`.
+ *
+ * Lossy and known to be: a `.` and a `/` flatten to the same character, so two
+ * different paths can share a slug. That is why `sessionsUnder` treats a slug
+ * match as a *candidate* and confirms it against the `cwd` recorded inside the
+ * transcript, which is exact. Normalising both sides through the same function
+ * means a separator this does not anticipate cannot silently lose a session.
+ */
+function slugOf(path: string): string {
+  return path.replace(/[^A-Za-z0-9]/g, '-');
+}
+
+/** One session that worked in a directory, with what it is doing now. */
+export interface DirSession extends SessionStatus {
+  uuid: string;
+}
+
+/**
+ * Every session that has ever run in a directory or below it, newest first.
+ *
+ * The point of this is that it needs nobody's cooperation. `pj work` records the
+ * workspace on the note (`workspace:` link) and the sessions are read back from
+ * here — live *and* finished, since Claude keeps a transcript per session under
+ * a directory named for its cwd. Before this, a session appeared on a note only
+ * if the agent working in it remembered to run `pj link --session`, which meant
+ * a session that was still running had not registered yet and one that was
+ * abandoned never did (C8: derived signals are deterministic, and C11: nothing
+ * derivable is also stored).
+ *
+ * Two passes, cheap first: `readdirSync` of the projects directory to find the
+ * slugs that could belong to `dir`, then a read of each transcript to confirm
+ * its `cwd` really is inside it. The confirming read is free — `describeTranscript`
+ * has to open the file anyway to say what state the session is in.
+ */
+export function sessionsUnder(dir: string): DirSession[] {
+  if (!existsSync(projectsDir())) return [];
+  const want = slugOf(resolve(dir));
+  const inside = resolve(dir);
+  const live = liveById();
+  const out: DirSession[] = [];
+
+  for (const slug of readdirSync(projectsDir())) {
+    const norm = slugOf(slug);
+    if (norm !== want && !norm.startsWith(want + '-')) continue;
+    let files: string[];
+    try {
+      files = readdirSync(join(projectsDir(), slug));
+    } catch {
+      continue; // not a directory, or gone between the two reads
+    }
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      const uuid = f.slice(0, -'.jsonl'.length);
+      const file = join(projectsDir(), slug, f);
+      try {
+        const status = describeTranscript({ file }, live.get(uuid) ?? null);
+        // The slug is lossy; the recorded cwd is not. A transcript that never
+        // wrote one is kept on the slug's word rather than dropped — the file is
+        // in the right directory and being unable to prove it is not evidence
+        // against it.
+        const cwd = status.summary.cwd;
+        if (cwd && resolve(cwd) !== inside && !resolve(cwd).startsWith(inside + '/')) continue;
+        out.push({ ...status, uuid });
+      } catch {
+        continue; // unreadable mid-write, or removed between the two reads
+      }
+    }
+  }
+  return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}

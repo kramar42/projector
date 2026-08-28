@@ -32,6 +32,7 @@ export const LINK_KINDS: Record<string, { glyph: string; hue?: string }> = {
   'gh:branch': { glyph: 'br', hue: 'green' },
   'gh:commit': { glyph: 'sha', hue: 'green' },
   claude: { glyph: 'AI', hue: 'orange' },
+  workspace: { glyph: 'wt', hue: 'orange' },
   doc: { glyph: 'doc', hue: 'yellow' },
   slack: { glyph: 'sl', hue: 'pink' },
   url: { glyph: '↗' },

@@ -71,6 +71,7 @@ test('a vault with no config file behaves exactly as one did before there was on
       'gh:commit',
       'gh:pr',
       'jira',
+      'workspace',
     ]);
   } finally {
     cleanup();
@@ -112,6 +113,26 @@ test('`gh` covers its three ref kinds, because they are one credential', () => {
     assert.deepEqual(Object.keys(registry(root)).sort(), ['gh:branch', 'gh:commit', 'gh:pr']);
   } finally {
     cleanup();
+  }
+});
+
+test('`claude` covers `workspace`, because they are one source', () => {
+  const { root, cleanup } = vault('enrich: [claude]\n');
+  try {
+    // A workspace resolves by reading `~/.claude` and nothing else, so a vault
+    // that has said it does not want its sessions read has said it about both —
+    // and one that does want them should not have to name two kinds.
+    assert.equal(enrichEnabled(root, 'workspace'), true);
+    assert.deepEqual(Object.keys(registry(root)).sort(), ['claude', 'workspace']);
+  } finally {
+    cleanup();
+  }
+
+  const off = vault('enrich: [jira]\n');
+  try {
+    assert.equal(enrichEnabled(off.root, 'workspace'), false);
+  } finally {
+    off.cleanup();
   }
 });
 

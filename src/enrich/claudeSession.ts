@@ -1,6 +1,8 @@
-import { desktopSessionFor, describeSession, type SessionState } from '../sources/claude.ts';
+import { existsSync } from 'node:fs';
+import { desktopSessionFor, describeSession, sessionsUnder, type SessionState } from '../sources/claude.ts';
+import { BRIEFING_PROMPT, desktopLink } from '../agent/worktree.ts';
 import { ago } from '../sources/run.ts';
-import { unavailable, type Fetcher, type Tone } from './types.ts';
+import { unavailable, type Badge, type Fetcher, type Tone } from './types.ts';
 
 /**
  * A `claude:` ref, resolved for display.
@@ -92,6 +94,72 @@ export const sessionFetcher: Fetcher = {
       // the session's own rather than replacing them.
       action: how.action,
       command: how.command,
+    };
+  },
+};
+
+/**
+ * A `workspace:` ref, resolved for display: the sessions that have worked in a
+ * directory `pj work` prepared.
+ *
+ * The other half of the same idea as the fetcher above, which is why it lives
+ * beside it rather than in a file of its own. A `claude:` ref names one session
+ * somebody chose to record; a `workspace:` ref names a *place*, and the sessions
+ * fall out of it — every one that ever ran there, without any of them having had
+ * to register (C8, C11). `pj work` writes one of these at launch and nothing has
+ * to be written again for the note to keep up.
+ *
+ * The row summarises and does not enumerate. One live session is the interesting
+ * case and gets the badge and the title; the rest become a count, because a note
+ * with six finished sessions on it should read as a note, not as a log.
+ */
+export const workspaceFetcher: Fetcher = {
+  // Same reasoning as the session fetcher: local, cheap, and stale is the one
+  // thing a running session must not read as.
+  ttl: 60,
+  async fetch(ref) {
+    const dir = ref.trim();
+    if (!dir.startsWith('/')) return unavailable(`"${ref}" is not an absolute path`);
+    if (!existsSync(dir)) return unavailable('the workspace directory is gone');
+
+    const sessions = sessionsUnder(dir);
+    const label = dir.split('/').filter(Boolean).pop() ?? dir;
+    if (!sessions.length) {
+      return {
+        label,
+        title: 'prepared, but nothing has worked in it yet',
+        badges: [{ label: '○ no sessions', tone: 'neutral' }],
+        fields: [{ k: 'path', v: dir }],
+        // Nothing to reopen, so the offer is the one `pj work` would have made.
+        action: { label: 'open in Claude', href: desktopLink(dir, BRIEFING_PROMPT) },
+      };
+    }
+
+    // Newest first out of `sessionsUnder`, but a *live* one outranks a newer
+    // dead one: which session is running here is the question the board is
+    // being asked, and it is never answered by the most recent transcript.
+    const lead = sessions.find((s) => s.state !== 'closed') ?? sessions[0]!;
+    const badges: Badge[] = [BADGE[lead.state]];
+    if (sessions.length > 1) {
+      badges.push({ label: `${sessions.length} sessions`, tone: 'neutral' });
+    }
+    if (lead.summary.branch) badges.push({ label: lead.summary.branch, tone: 'accent' });
+
+    return {
+      label,
+      title: lead.summary.opening || '(no opening prompt recorded)',
+      badges,
+      fields: [
+        { k: 'last activity', v: ago(lead.lastAt) },
+        { k: 'turns', v: String(lead.summary.turns) },
+        { k: 'path', v: dir },
+        // Only worth a line when there is more than one, and then it is the
+        // whole point: which of them is still going.
+        ...(sessions.length > 1
+          ? [{ k: 'sessions', v: sessions.map((s) => `${BADGE[s.state].label} ${s.uuid.slice(0, 8)}`).join('  ') }]
+          : []),
+      ].filter((f) => f.v),
+      ...resume(lead.uuid),
     };
   },
 };
