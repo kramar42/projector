@@ -32,6 +32,7 @@ import {
   sweep,
 } from '../intake/run.ts';
 import { pollOnce } from '../server/poll.ts';
+import { rejudge } from '../intake/rejudge.ts';
 import {
   resetWatermark,
   suppress,
@@ -256,6 +257,7 @@ const HELP = `pj — projector CLI${vaultNote}
      [--seen n] [--captured n]                         or say where by hand
   pj intake known <fingerprint>...                     which notes already carry these refs
   pj intake poll                                       sweep, judge, and write what deserves a note
+  pj intake rejudge [--limit n]                        run the pass again over what is still unjudged
   pj intake suppress <fp>... --reason <why>             record a "not a note", so sweeps stop offering it
   pj intake suppressed [--channel c] [--q text] [--limit n] [--json]
                                                        what a judgement hid, and why
@@ -848,6 +850,35 @@ try {
         console.log(
           `${res.created.length} note(s), ${res.declined} declined, ${res.skipped} already known` +
             (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
+        );
+        break;
+      }
+
+      /**
+       * Run the pass again over what is still unjudged.
+       *
+       * The migration path for cards written by a thinner version of the pass,
+       * and the way a changed `classify.md` reaches the queue without emptying it
+       * by hand. It rewrites; it never deletes — a card it would no longer keep is
+       * named, and removing one is `pj rm`, which records the decline.
+       */
+      if (sub === 'rejudge') {
+        const res = await rejudge(root, {
+          ...(flags.get('limit')?.[0] ? { limit: Number(flags.get('limit')![0]) } : {}),
+        });
+        if (res.held) {
+          console.log(`held — ${res.held}. Nothing was rewritten.`);
+          process.exit(1);
+        }
+        for (const c of res.changed) console.log(`${pad('rewrote', 10)} ${pad(c.id, 34)} ${c.title.slice(0, 60)}`);
+        for (const w of res.wouldDrop) {
+          console.log(`${pad('stale?', 10)} ${pad(w.id, 34)} ${w.reason.slice(0, 60)}`);
+        }
+        console.log(
+          `${res.changed.length} rewritten, ${res.same} unchanged` +
+            (res.wouldDrop.length
+              ? ` — ${res.wouldDrop.length} the pass would no longer keep; remove with pj rm, which records the decline`
+              : ''),
         );
         break;
       }

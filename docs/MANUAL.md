@@ -733,6 +733,17 @@ new boundary is a file rather than a line in a terminal you have already closed.
 
 Without a server, `pj intake poll` runs exactly the same tick once, by hand.
 
+**`pj intake rejudge` runs the pass again over what is still in the queue.** A card is written once, on
+the way in, so cards from before you changed `.projector/classify.md` — or from an earlier version of
+the app — keep whatever they were given. This is how they catch up, and it is the only command that
+rewrites a note rather than creating one.
+
+What it may touch is the queue and nothing else: a card still carrying `intake: unjudged` has had
+nothing confirmed, and one without it is yours — you accepted the values, which makes them yours as
+surely as typing them would. It **never deletes.** A card the pass would no longer keep is named so you
+can look; removing it is `pj rm`, which records the decline. The one thing to know: a card you corrected
+but did not judge is, by its own flag, still a proposal, so a rejudge would write over your correction.
+
 **Every tick judges before it writes, and writes the card while it is there.** One pass answers both
 questions: does this deserve a note, and if so what is the note. So a card arrives with a title a person
 would actually use, a body saying where the work got to, and the axes it belongs on — rather than a
@@ -968,6 +979,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
+| `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
 | `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · put one back in |
 | `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |

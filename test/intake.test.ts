@@ -11,6 +11,7 @@ import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
+import { rejudge } from '../src/intake/rejudge.ts';
 import { instructions } from '../src/intake/mcp.ts';
 import { deleteNote } from '../src/server/mutate.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
@@ -1524,6 +1525,132 @@ test('an MCP channel with no tools named calls no agent at all', async () => {
     assert.equal(slack.fetched, false);
     assert.equal(slack.nextCursor, null);
     assert.match(slack.reason ?? '', /mcp\.slack/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Rejudging: the only operation that overwrites a note rather than creating one,
+ * so what it may touch is the whole of what is worth pinning.
+ */
+
+test('rejudge rewrites an unjudged card and leaves a judged one alone', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "ok so the thing is broken can you look"\nfacets: { intake: [unjudged] }\n---\nsome cwd @ some branch\n`,
+    mine: `---\nid: mine\ntitle: "A title I chose"\nfacets: { }\n---\nmy own words\n`,
+  });
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'keep',
+        reason: 'x',
+        title: 'The thing is broken',
+        body: 'Rewritten.',
+      })),
+    );
+  try {
+    const res = await rejudge(root, { ask: judge });
+    assert.deepEqual(res.changed.map((c) => c.id), ['raw']);
+
+    const after = reindex(root).notes;
+    assert.equal(after.get('raw')!.title, 'The thing is broken');
+    assert.deepEqual(after.get('raw')!.facets.intake, ['unjudged'], 'it is still unjudged');
+
+    // Accepting is what makes a card yours, and this one has been accepted —
+    // there is no `intake` on it, so the pass is not entitled to an opinion.
+    assert.equal(after.get('mine')!.title, 'A title I chose');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejudge never deletes, however sure the pass is', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "routine commit"\nfacets: { intake: [unjudged] }\n---\nbody\n`,
+  });
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'drop',
+        reason: 'own routine progress',
+      })),
+    );
+  try {
+    const res = await rejudge(root, { ask: judge });
+    // Named, not removed. The card may have a body somebody has written on since,
+    // and the asymmetry that governs intake governs this harder.
+    assert.deepEqual(res.wouldDrop.map((w) => w.id), ['raw']);
+    assert.equal(res.changed.length, 0);
+    assert.ok(reindex(root).notes.has('raw'), 'the file is still there');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a rejudge that cannot reach the classifier rewrites nothing', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "original"\nfacets: { intake: [unjudged] }\n---\nbody\n`,
+  });
+  try {
+    const res = await rejudge(root, { ask: async () => null });
+    assert.ok(res.held);
+    assert.equal(res.changed.length, 0);
+    assert.equal(reindex(root).notes.get('raw')!.title, 'original');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a card the pass agrees with is counted, not rewritten', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "Already right"\nfacets: { intake: [unjudged] }\n---\nAlready said.\n`,
+  });
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'keep',
+        reason: 'x',
+        title: 'Already right',
+        body: 'Already said.',
+      })),
+    );
+  try {
+    // A write that changes nothing still moves the file's `updated` stamp, which
+    // would make every rejudge look like a day's work on the whole queue.
+    const res = await rejudge(root, { ask: judge });
+    assert.equal(res.same, 1);
+    assert.equal(res.changed.length, 0);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a date axis is described by what it accepts, not by what notes carry', async () => {
+  const root = vault({ a: card('a') });
+  writeFileSync(
+    paths(root).facets,
+    'due:\n  label: Due\n  type: date\n  single: true\nstatus:\n  values: [active, done]\n',
+    'utf8',
+  );
+  try {
+    let seen = '';
+    await classify(root, [candidate('slack:1', 'x')], async (system) => {
+      seen = system;
+      return '[]';
+    });
+    // Listing the dates other notes happen to hold tells a model nothing about
+    // the shape to write, and it will offer "Friday".
+    assert.match(seen, /due \(single value; a date, YYYY-MM-DD\)/);
+    assert.match(seen, /status.*active, done/, 'a label axis still lists its values');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

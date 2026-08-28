@@ -445,6 +445,20 @@ it needs, so `more` is a fact about what was read rather than a second count ove
 justification: it is the audit trail for a decision the app made on its own, and the only place a wrong
 one can be put right.
 
+**A candidate must carry evidence or it can never extend anything.** `classify` may only name a merge
+target that appears in `evidence.matches`, which is what stops a model inventing a relationship — so a
+channel that gathers no evidence produces candidates that can only ever become new notes. The
+agent-fetched channels shipped that way and it silently cost the whole point of `extend` for them: a
+Slack message saying a ticket had moved could become a second card beside the one it was about, and
+nothing else. They match on text — a message has no `cwd` and no branch — which reaches a note through a
+Jira key it mentions or vocabulary it shares.
+
+**A typed axis is described by what it accepts, not by what notes carry.** `due` declares no vocabulary
+— the whole of a date is its vocabulary — so listing the values other notes happen to hold says nothing
+about the shape to write, and a model asked for a deadline will offer "Friday". A `date` or `number`
+axis is rendered with its format instead, which is the same service listing values performs for a label
+axis: say what would be accepted, in the terms the axis accepts.
+
 **Folding is a merge plus an answer, and the split is exact.** `merged()` leaves the survivor's
 classification alone on purpose — combining two `status` values would be a guess about which note you
 meant — and that left a sweep unable to say that something already tracked had *moved*. The route back
@@ -669,6 +683,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
 | the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
+| `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
 | `POST /api/intake/declined/:fp/restore` | one row removed from `.projector/intake.db`'s `suppressed` table | never a note; the only write the declined surface makes |
 | the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, and a git worktree plus its branch in each declared repo | never modifies a tracked file in a declared repo, and never writes inside the vault — so it is the one write path carrying no base mtime, there being no note to conflict with. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |

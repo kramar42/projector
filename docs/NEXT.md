@@ -144,6 +144,23 @@ things.
   not judge is still, by its own flag, a proposal, and a rejudge would overwrite the correction. It is
   a command you run deliberately, not something that happens to you.
 
+- **The C4 guard knows two spellings and there is a third.** `no facet a vault declares is named in
+  the code that serves every vault` catches a literal — `'source'` — and a property access —
+  `rec.facets.source`. It does not catch an **unquoted key in a facet map**, which is how a facet map is
+  actually written: `materialise` spells `{ source: [channel] }` and passes clean.
+
+  That one is real rather than hypothetical — the sweep tags a note with the channel that found it, on
+  an axis only the seeded vocabulary promises. It degrades honestly (a vault without the axis is simply
+  not tagged) and `views/intake.yaml` groups by the same name, so the convention is at least consistent
+  with itself. But it is a convention the code depends on, which is what C4 exists to stop.
+
+  Not fixed by widening the pattern, which was tried: `status:` appears in a dozen interfaces and every
+  probe object in `setup.ts`, so a key-shaped rule is mostly false positives, and the map that matters
+  spans several lines where the guard reads one. The honest repair is to make the axis a vault setting
+  with `source` as its default — then the code names a config key and a vault that calls it `origin`
+  says so. Filed rather than done because it is a schema change for one call site, and worth doing when
+  a second one wants the same thing.
+
 - **The secrets rule is asked of a model, not applied by code.** Both prompts that reach one — the
   classifier's and the fetching agent's — say a credential's value must never be reproduced, and a test
   pins the wording. But the maxim under *Ideas from elsewhere* applies: never ask a model to honour a

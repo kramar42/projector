@@ -1,3 +1,4 @@
+import { evidenceFor } from './match.ts';
 import { run } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
 import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.ts';
@@ -142,13 +143,32 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
         if (ctx.fingerprints.has(fingerprint) || ctx.links.has(fingerprint)) continue;
         const when = str(item.when, 40);
         if (when && (!newest || when > newest)) newest = when;
+        const title = str(item.title, 300) || id;
+        const detail = str(item.detail, 400);
         candidates.push({
           channel: kind,
           fingerprint,
-          title: str(item.title, 300) || id,
+          title,
           links: [fingerprint],
           ...(when ? { when } : {}),
-          ...(str(item.detail, 400) ? { detail: str(item.detail, 400) } : {}),
+          ...(detail ? { detail } : {}),
+          /**
+           * The same evidence every other channel attaches, and it is not a
+           * nicety: `classify` may only name a merge target that appears in
+           * `matches`, so a candidate with no evidence can never be judged
+           * `extend` — the verdict is demoted to a new note. Without this a Slack
+           * message that says a ticket has moved could only ever become a second
+           * card beside the one it was about.
+           *
+           * No `cwd` or `branch` to offer — a message has neither — so the match
+           * is on the text: a Jira key it mentions, or vocabulary it shares with
+           * a note.
+           */
+          evidence: evidenceFor(ctx, {
+            fingerprint,
+            links: [fingerprint],
+            text: [title, detail].filter(Boolean).join(' — '),
+          }),
         });
       }
 

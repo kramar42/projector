@@ -219,6 +219,21 @@ function vocabularyFor(root: string): {
      * letting a queue of unjudged cards sprawl the vocabulary.
      */
     const known = [...new Set([...(def.values ?? []), ...(inUse.get(name) ?? [])])];
+    /**
+     * A typed axis says what its values *are*, not which ones exist.
+     *
+     * `due` declares no vocabulary — the whole of a date is its vocabulary — so
+     * listing what other notes happen to carry tells a model nothing about the
+     * shape it should write, and it will offer "Friday" or a full timestamp. This
+     * is the same reason a label axis lists its values: say what would be
+     * accepted, in the terms the axis actually accepts.
+     */
+    if (def.type === 'date' || def.type === 'number') {
+      lines.push(
+        `- ${name} (single value; ${def.type === 'date' ? 'a date, YYYY-MM-DD' : 'a number'})`,
+      );
+      continue;
+    }
     const shown = known.length ? known.join(', ') : '(nothing yet)';
     lines.push(
       `- ${name}${def.single ? ' (single value)' : ''}: ${shown}` +
