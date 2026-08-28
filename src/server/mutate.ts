@@ -573,6 +573,13 @@ export function repointed(
  * Recorded as a person's decision, because deleting a file is one. `unsuppress`
  * is the way back if it was a mistake, and archiving is the way to keep the note
  * as a record instead.
+ *
+ * **Whether the note had been judged travels with the row**, because the same
+ * keystroke is two different acts. Deleting a card still carrying `intake` is
+ * declining an offer — the same act the classifier performs on a candidate it
+ * drops, and worth exactly as much to it. Deleting a note you accepted says the
+ * work is finished with, which is not a verdict on the offer that produced it.
+ * Both suppress; only the first teaches. See `was_judged` in `intake/db.ts`.
  */
 export function deleteNote(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
@@ -583,12 +590,19 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   let removedEdges = 0;
 
   const doomed = notes.get(id);
+  // Read off `intake` for the reason `rejudge` gives about the same axis:
+  // accepting is what makes a card yours, and the axis is the note-level record
+  // of whether that has happened. There is nothing else to consult.
+  const wasJudged = !doomed?.facets.intake?.length;
   for (const fp of [doomed?.source_fingerprint, ...(doomed?.absorbed_fingerprints ?? [])]) {
     if (!fp) continue;
     suppress(root, {
       fingerprint: fp,
-      reason: `deleted from the vault (was "${(doomed?.title ?? id).slice(0, 80)}")`,
+      reason: wasJudged
+        ? `deleted from the vault (was "${(doomed?.title ?? id).slice(0, 80)}")`
+        : `declined from the queue (was "${(doomed?.title ?? id).slice(0, 80)}")`,
       ...(doomed?.title ? { title: doomed.title } : {}),
+      wasJudged,
     });
   }
 

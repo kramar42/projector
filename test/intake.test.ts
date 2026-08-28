@@ -784,9 +784,9 @@ test('a suppression is reversible, because suppressing wrongly costs the item', 
   try {
     suppress(root, { fingerprint: 'git:abc', reason: 'noise' });
     assert.ok(suppressedFingerprints(root).has('git:abc'));
-    assert.equal(unsuppress(root, 'git:abc'), true);
+    assert.ok(unsuppress(root, 'git:abc'));
     assert.equal(suppressedFingerprints(root).size, 0);
-    assert.equal(unsuppress(root, 'git:abc'), false, 'and un-suppressing twice is not an error');
+    assert.equal(unsuppress(root, 'git:abc'), null, 'and un-suppressing twice is not an error');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1457,7 +1457,7 @@ test('a rescue is kept after the decline it corrects is gone', () => {
   const root = vault({ a: card('a') });
   try {
     suppress(root, { fingerprint: 'git:1', reason: 'routine commit', title: 'tidy', by: 'model' });
-    assert.equal(unsuppress(root, 'git:1'), true);
+    assert.ok(unsuppress(root, 'git:1'));
 
     // The suppression is gone and the correction is not. This is the signal that
     // says the judgement was wrong the expensive way, and it existed nowhere
@@ -1467,6 +1467,94 @@ test('a rescue is kept after the decline it corrects is gone', () => {
     assert.equal(back.length, 1);
     assert.equal(back[0]!.fingerprint, 'git:1');
     assert.equal(back[0]!.reason, 'routine commit', 'and it remembers what it was declined for');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('un-declining walks the cursor back, or it is offered again nowhere', () => {
+  const root = vault({ a: card('a') });
+  try {
+    commitWatermark(root, 'git', '2026-08-01T00:00:00Z');
+    suppress(root, { fingerprint: 'git:abc', reason: 'routine', channel: 'git' });
+
+    const back = unsuppress(root, 'git:abc');
+    assert.equal(back?.rewound, 'git');
+
+    // The row going is only half of it. Every channel fetches forward of its
+    // watermark, so an item behind the cursor is un-hidden and still out of
+    // reach — and a repair that repairs nothing is worse than no repair, because
+    // it reads as one.
+    assert.equal(watermarkFor(root, 'git'), null, "the channel falls back to its default window");
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the channel to reach back into is read off the fingerprint when the row lacks one', () => {
+  const root = vault({ a: card('a') });
+  try {
+    commitWatermark(root, 'jira', '2026-08-01T00:00:00Z');
+    // What the delete cascade writes: it knows the fingerprint the note answered
+    // for and has no channel to hand.
+    suppress(root, { fingerprint: 'jira:ABC-1', reason: 'declined from the queue' });
+
+    assert.equal(unsuppress(root, 'jira:ABC-1')?.rewound, 'jira');
+    assert.equal(watermarkFor(root, 'jira'), null);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a fingerprint naming no channel is still un-declined, and rewinds nothing', () => {
+  const root = vault({ a: card('a') });
+  try {
+    suppress(root, { fingerprint: 'no-colon-here', reason: 'hand-written' });
+    const back = unsuppress(root, 'no-colon-here');
+    assert.equal(back?.rewound, null);
+    assert.equal(suppressedFingerprints(root).size, 0, 'the decline is lifted either way');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('declining an offer teaches the classifier; discarding a note you kept does not', async () => {
+  const root = vault({
+    a: card('a'),
+    offered: card('offered', 'source_fingerprint: git:1\nfacets: { intake: [unjudged] }\n'),
+    mine: card('mine', 'source_fingerprint: git:2\n'),
+  });
+  try {
+    deleteNote(root, 'offered');
+    deleteNote(root, 'mine');
+
+    // Both stop a later sweep re-proposing the thing. That half is the same act.
+    assert.equal(suppressedFingerprints(root).size, 2);
+    const rows = suppressions(root).rows;
+    assert.deepEqual(
+      rows.map((r) => [r.fingerprint, r.wasJudged]).sort(),
+      [
+        ['git:1', false],
+        ['git:2', true],
+      ],
+    );
+
+    let seen = '';
+    await classify(root, [candidate('git:9', 'x')], async (system) => {
+      seen = system;
+      return '[]';
+    });
+
+    assert.match(seen, /offered/, 'a card turned down is a verdict on the offer');
+    assert.doesNotMatch(
+      seen,
+      /mine/,
+      'a note you accepted and then let go says the work is finished, not that it should never have been shown',
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

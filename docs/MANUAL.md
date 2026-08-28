@@ -779,7 +779,7 @@ pj intake commit --advance --captured 2 # promote what that sweep recorded
 
 pj intake suppress git:abc --reason "my own commit"   # a no, recorded
 pj intake suppressed                                  # what a no hid, and why
-pj intake unsuppress git:abc                          # offer it again
+pj intake unsuppress git:abc                          # offer it again, cursor and all
 ```
 
 **`pj intake` creates no note and moves no cursor.** `pj add`/`pj link` do the first after a human
@@ -911,6 +911,11 @@ records its fingerprint as declined on the way out, so no later sweep offers it 
 destroyed the one thing stopping the card coming back, which made the gesture that plainly means *no*
 the one that did not work.
 
+Deleting a card still waiting to be judged is *declining the offer* — the same thing the classifier does
+to a candidate it drops, and it teaches the classifier the same way. Deleting a note you had already
+accepted says something else: the work is finished with, not that it should never have been offered. Both
+stop the sweep re-proposing it; only the first is used as an example.
+
 **`pj intake suppress <fingerprint> --reason "…"`** says no to something that never became a note —
 which is what the classifier itself does, for everything it drops.
 
@@ -918,7 +923,12 @@ which is what the classifier itself does, for everything it drops.
 to find again; the note and its fingerprint both stay.
 
 Read the pile back with **`,d`** in the browser — or `pj intake suppressed` — and undo any of it with
-`bring back`, or `pj intake unsuppress`. The pile only ever grows, so both are paged and searchable:
+`bring back`, or `pj intake unsuppress`. Bringing one back does two things: it lifts the decline, and it
+forgets that channel's cursor, so the next sweep can actually reach the item again rather than only
+stopping it being hidden. What arrives is a **new card**, written fresh from the commit or session or
+issue the source still holds — not the card you deleted, and not your edits to it. One limit worth
+knowing: the channel falls back to its default window, so something declined longer ago than that will
+not return on its own — `pj intake --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
 the search reaches the reason as well as the title, because someone hunting for a card they
 half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI, a box and a
 `more` button in the panel. Both
@@ -1083,7 +1093,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
 | `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
-| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · put one back in |
+| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
 | `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |

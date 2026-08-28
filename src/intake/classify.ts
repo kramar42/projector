@@ -110,6 +110,13 @@ ONLY a JSON array, no prose and no code fences. One object per candidate, every 
  * A **decline** confirms the reader agreed. A **kept** note shows what surviving
  * looks like in this vault's own words.
  *
+ * **A discarded note is not a decline of the offer that produced it**, so the
+ * declines here are `wasJudged: false` — offers turned down, whoever turned them
+ * down. Deleting a note you accepted and worked on says the work is finished
+ * with; taught as a no, it reads as *you should not have shown me this*, and what
+ * a model learns from it is to withhold the kind of thing you keep for a month
+ * and then let go. Both still suppress. See `was_judged` in `db.ts`.
+ *
  * Two mistakes not inherited from the tool this idea came from. The order is
  * fixed rather than shuffled, so the prompt is the same prompt run to run and a
  * zero temperature buys what it is supposed to. And nothing is stamped with a
@@ -117,7 +124,7 @@ ONLY a JSON array, no prose and no code fences. One object per candidate, every 
  */
 function calibrationFor(root: string, notes: Map<string, Note>): string {
   const back = rescues(root, 8);
-  const no = suppressions(root, { limit: 8 }).rows;
+  const no = suppressions(root, { limit: 8, wasJudged: false }).rows;
   const yes = [...notes.values()]
     .filter((n) => n.source_fingerprint && !n.facets.intake?.length)
     .sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''))

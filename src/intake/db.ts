@@ -68,7 +68,20 @@ CREATE TABLE IF NOT EXISTS suppressed (
   -- prediction that may be wrong, and a person's is the ground truth you would
   -- check it against. Calibration cannot use a pile that does not say which is
   -- which, and neither can a reader deciding how much to trust an empty board.
-  decided_by  TEXT NOT NULL DEFAULT 'person'
+  decided_by  TEXT NOT NULL DEFAULT 'person',
+  -- Whether the thing declined had already been accepted as a note.
+  --
+  -- Deleting an unjudged card is *declining an offer*, and it is the same act the
+  -- classifier performs when it drops a candidate — one record, differing only in
+  -- who made it. Deleting a note you accepted and worked on is not that act. It
+  -- says the work is finished with, which is a fact about the work rather than
+  -- about the offer, and a classifier taught from it learns to withhold the kind
+  -- of thing you keep for a month and then let go.
+  --
+  -- Both still suppress, because both have to stop a later sweep re-proposing the
+  -- thing. Only one of them teaches: suppressions({ wasJudged: false }) is what
+  -- classify.ts calibrates from.
+  was_judged  INTEGER NOT NULL DEFAULT 0
 );
 
 -- A decline somebody took back.
@@ -118,6 +131,13 @@ function migrate(conn: DatabaseSync): void {
   );
   if (supp.size && !supp.has('decided_by')) {
     conn.exec("ALTER TABLE suppressed ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'person'");
+  }
+
+  // And `was_judged`, where 0 is right for every row that predates it: the only
+  // writer that sets it is the delete cascade, and until it could, nothing told a
+  // declined offer apart from a discarded note.
+  if (supp.size && !supp.has('was_judged')) {
+    conn.exec('ALTER TABLE suppressed ADD COLUMN was_judged INTEGER NOT NULL DEFAULT 0');
   }
 }
 
@@ -315,6 +335,8 @@ export interface Suppression {
   reason: string;
   at: string;
   decidedBy: DecidedBy;
+  /** True when what was declined had already been accepted as a note. */
+  wasJudged: boolean;
 }
 
 /**
@@ -339,14 +361,17 @@ export function suppress(
     title?: string;
     /** Defaults to 'person': a caller that does not say is a person at a keyboard. */
     by?: DecidedBy;
+    /** True when what is being declined had already been accepted. See `was_judged`. */
+    wasJudged?: boolean;
   },
 ): Suppression {
   const at = new Date().toISOString();
   const by: DecidedBy = entry.by ?? 'person';
+  const wasJudged = entry.wasJudged ?? false;
   openIntakeDb(dataRoot)
     .prepare(
-      `INSERT INTO suppressed (fingerprint, channel, title, reason, at, decided_by)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO suppressed (fingerprint, channel, title, reason, at, decided_by, was_judged)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(fingerprint) DO UPDATE SET
          channel = COALESCE(excluded.channel, suppressed.channel),
          title   = COALESCE(excluded.title, suppressed.title),
@@ -354,9 +379,18 @@ export function suppress(
          at      = excluded.at,
          -- A person overruling the model is the point of the pile being readable,
          -- so the later decision wins and says whose it was.
-         decided_by = excluded.decided_by`,
+         decided_by = excluded.decided_by,
+         was_judged = excluded.was_judged`,
     )
-    .run(entry.fingerprint, entry.channel ?? null, entry.title ?? null, entry.reason, at, by);
+    .run(
+      entry.fingerprint,
+      entry.channel ?? null,
+      entry.title ?? null,
+      entry.reason,
+      at,
+      by,
+      wasJudged ? 1 : 0,
+    );
   return {
     fingerprint: entry.fingerprint,
     channel: entry.channel ?? null,
@@ -364,6 +398,7 @@ export function suppress(
     reason: entry.reason,
     at,
     decidedBy: by,
+    wasJudged,
   };
 }
 
@@ -375,12 +410,37 @@ export function suppress(
  * the item. So every suppression has to be reversible and the pile has to be
  * readable, or raising a threshold is an act of faith.
  */
-export function unsuppress(dataRoot: string, fingerprint: string): boolean {
+export interface Restored {
+  fingerprint: string;
+  /**
+   * The channel whose cursor was walked back, or null when none could be named.
+   * Null is not a failure: the row is gone either way, and a sweep that already
+   * reaches this item needed no help.
+   */
+  rewound: string | null;
+}
+
+/**
+ * Which channel to reach back into, for a fingerprint.
+ *
+ * Every channel builds `<name>:<whatever it identifies things by>` — `git:repo@sha`,
+ * `jira:KEY`, `claude:<uuid>` — so the prefix is the channel, and a row written
+ * before `channel` was recorded still says which one it came from. Nothing here
+ * checks the name against the registry: `resetWatermark` matches a row or matches
+ * nothing, and a fingerprint with no colon simply names no channel.
+ */
+function channelOf(row: { fingerprint: string; channel: string | null }): string | null {
+  if (row.channel) return row.channel;
+  const at = row.fingerprint.indexOf(':');
+  return at > 0 ? row.fingerprint.slice(0, at) : null;
+}
+
+export function unsuppress(dataRoot: string, fingerprint: string): Restored | null {
   const conn = openIntakeDb(dataRoot);
   const row = conn
     .prepare('SELECT fingerprint, channel, title, reason FROM suppressed WHERE fingerprint = ?')
     .get(fingerprint) as Suppression | undefined;
-  if (!row) return false;
+  if (!row) return null;
 
   // Recorded before the delete, and kept after it. A rescue is the one signal
   // that says the judgement was wrong the expensive way, and it existed nowhere
@@ -394,7 +454,34 @@ export function unsuppress(dataRoot: string, fingerprint: string): boolean {
     )
     .run(row.fingerprint, row.channel ?? null, row.title ?? null, row.reason, new Date().toISOString());
   conn.prepare('DELETE FROM suppressed WHERE fingerprint = ?').run(fingerprint);
-  return true;
+
+  /**
+   * Walk that channel's cursor back, or the un-hiding means nothing.
+   *
+   * Every channel fetches forward of its watermark, so removing the row only
+   * stops the item being *filtered* — it does not bring it back within reach, and
+   * for anything but the last sweep's work it never will. A pile whose one repair
+   * is a no-op is worse than no pile, because it reads as a repair.
+   *
+   * **The whole cursor, not a step back to the item.** Rewinding precisely would
+   * mean knowing when the underlying thing happened, and a cursor is
+   * channel-defined and opaque — an ISO date for the ones `pj` fetches, a Slack
+   * `ts` or a Gmail date for the ones an agent does — so there is often nothing an
+   * item's timestamp could be compared against. Recording the time on the row
+   * would fix that for a candidate the classifier dropped and not for a card you
+   * deleted, because a card records the fingerprint and the links and never the
+   * source's own clock.
+   *
+   * So it falls back to the channel's default window, which is cheap for the
+   * reason this store already gives about losing itself: everything behind the
+   * cursor is either on a note — where `source_fingerprint` stops it being
+   * captured twice — or still suppressed. A re-sweep re-proposes almost nothing.
+   * What it costs is the only real limit here, and it is worth saying out loud:
+   * **an item older than that window does not come back on its own.**
+   */
+  const channel = channelOf(row);
+  if (channel) resetWatermark(dataRoot, channel);
+  return { fingerprint, rewound: channel };
 }
 
 export interface Rescue {
@@ -416,6 +503,14 @@ export function rescues(dataRoot: string, limit = 12): Rescue[] {
 
 export interface SuppressionQuery {
   channel?: string;
+  /**
+   * Narrow to declined offers (`false`) or to discarded notes (`true`).
+   *
+   * A fact filter rather than a policy one: the caller that wants a corpus to
+   * learn from asks for `false`, and the surface that shows the pile asks for
+   * neither, because a reader is owed the whole pile.
+   */
+  wasJudged?: boolean;
   /** Free text over the title, the reason and the fingerprint. */
   q?: string;
   /** Page size. One more than this is fetched to answer `more` without a count. */
@@ -458,6 +553,10 @@ export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): Sup
     where.push('channel = ?');
     args.push(opts.channel);
   }
+  if (opts.wasJudged !== undefined) {
+    where.push('was_judged = ?');
+    args.push(opts.wasJudged ? 1 : 0);
+  }
   if (opts.q?.trim()) {
     // Three columns, because a reader looking for something they half-remember
     // may remember the wording of the reason rather than the title.
@@ -475,13 +574,19 @@ export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): Sup
   // than a second COUNT over a growing table.
   const rows = conn
     .prepare(
-      `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy
+      `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy, was_judged
          FROM suppressed ${clause} ORDER BY at DESC LIMIT ?`,
     )
-    .all(...args, limit + 1) as unknown as Suppression[];
+    .all(...args, limit + 1) as unknown as (Omit<Suppression, 'wasJudged'> & {
+    was_judged: number;
+  })[];
 
   const total = (conn.prepare('SELECT count(*) AS n FROM suppressed').get() as { n: number }).n;
-  return { rows: rows.slice(0, limit), more: rows.length > limit, total };
+  const page = rows.slice(0, limit).map(({ was_judged, ...r }) => ({
+    ...r,
+    wasJudged: Boolean(was_judged),
+  }));
+  return { rows: page, more: rows.length > limit, total };
 }
 
 /**

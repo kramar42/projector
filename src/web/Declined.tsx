@@ -178,7 +178,7 @@ export function DeclinedPanel({
                       size="tiny"
                       disabled={busy === r.fingerprint}
                       onClick={() => void restore(r.fingerprint)}
-                      title="Offer this again on the next sweep"
+                      title="Offer this again — the channel's cursor goes back, so the next sweep re-fetches it and writes a fresh card"
                     >
                       bring back
                     </Button>

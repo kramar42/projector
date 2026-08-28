@@ -398,6 +398,36 @@ fetched", except that the first could never come back, and it meant a rejection 
 anything afterwards. `pj intake suppress` is the missing half: a fingerprint, a reason, and a
 timestamp, dropped from the candidates of every later sweep. `unsuppress` puts it back.
 
+**Un-declining is a re-offer, not an undo.** `unsuppress` removes the row *and forgets that channel's
+cursor*, because removing the row on its own repairs nothing: every channel fetches forward of its
+watermark, so an item behind the cursor stops being filtered and stays out of reach, and a repair that
+repairs nothing is worse than none because it reads as one. What comes back is a **fresh card**, written
+by the next sweep out of raw material the source still holds — the commit is in the repo, the transcript
+on disk, the issue in Jira — and not the card that was there before. Losing that card is the design
+rather than a cost: it was a proposal, and its replacement is written against calibration that has moved
+since it was turned down.
+
+**The rewind is the whole cursor, not a step back to the item.** Rewinding precisely would mean
+comparing the item's own timestamp against the cursor, and a cursor is channel-defined and opaque — an
+ISO date for the channels `pj` fetches, a Slack `ts` or a Gmail date for the ones an agent does — so
+there is frequently nothing to compare it with. Recording the time on the row would answer for a
+candidate the classifier dropped and not for a card somebody deleted, because a card records its
+fingerprint and its links and never the source's own clock. So the channel falls back to its default
+window, which is cheap for the reason this store already gives about losing itself: everything behind
+the cursor is either on a note, where `source_fingerprint` prevents a second capture, or still
+suppressed, so a re-sweep re-proposes almost nothing. The limit is worth stating rather than burying —
+**an item older than that window does not come back on its own**, and `pj intake --since` is how to
+reach further.
+
+**A decline is a decline, and two acts share the delete key.** Deleting a card still carrying `intake`
+is *declining an offer*: the same act the classifier performs when it drops a candidate, worth the same
+to it, and recorded as the same row — which is why there is one table and not two. Deleting a note you
+accepted and worked on is a different sentence. It says the work is finished with, which is no verdict
+on the offer that produced it; taught as a decline it reads as *you should not have shown me this*, and
+what a model learns from it is to withhold the kind of thing you keep for a month and then let go. Both
+suppress, because both have to stop a later sweep re-proposing the thing. `was_judged` on the row is
+which, `deleteNote` reads it off the `intake` axis, and `calibrationFor` learns from the offers alone.
+
 Only *judgements* are stored. A channel declining a merge commit or a session with no prompt re-derives
 that answer identically on every run, so keeping it would be storing something derivable (C11). A
 judgement about whether work matters is not reproducible — a different threshold or a different reader
@@ -712,7 +742,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
 | `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one, and `assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten |
 | `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block, and the same move when it added a `project:` block | never touches the body |
-| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, and every reference that pointed at them | nothing outside the vault |
+| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, every reference that pointed at them, and one `suppressed` row per fingerprint the note answered for | nothing outside the vault. The suppression says whether the note had been judged, because deleting a card and deleting a note you kept are two acts (see *A decline is a decline*) |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose note still exists |
 | `DELETE /api/view/:name` | one view file | never touches the notes it selected |
@@ -720,10 +750,10 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
-| `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table | never a note; records a decline by fingerprint so a later sweep stops offering it |
+| `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table — and on the way back, one in `rescued` plus that channel's `watermark` row removed | never a note; records a decline by fingerprint so a later sweep stops offering it, and un-declining walks the cursor back so a later sweep can still reach it |
 | the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
-| `POST /api/intake/declined/:fp/restore` | one row removed from `.projector/intake.db`'s `suppressed` table | never a note; the only write the declined surface makes |
+| `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
 | the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, a git worktree plus its branch in each declared repo, and `workspace:<path>` appended to the note | never modifies a tracked file in a declared repo. The one note write is an append of a ref derived from the note itself, so it carries no base mtime — appending it twice is a no-op, and it cannot fail the command: the worktrees are already on disk by then, so a failure comes back as `recordError` rather than a refusal. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
@@ -981,7 +1011,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
-| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
+| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
 | `keys.test.ts` | the keyboard grammar, and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |

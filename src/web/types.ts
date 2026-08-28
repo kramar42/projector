@@ -126,6 +126,11 @@ export interface Declined {
   at: string;
   /** `model` when the classifier decided, `person` when you did. */
   decidedBy: 'model' | 'person';
+  /**
+   * True when this was a note you had accepted, rather than an offer turned down.
+   * Both are here and both are reversible; only an offer teaches the classifier.
+   */
+  wasJudged: boolean;
 }
 
 /**

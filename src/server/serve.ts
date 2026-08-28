@@ -920,7 +920,10 @@ app.get('/api/intake/declined', (c) => {
 app.post('/api/intake/declined/:fp/restore', (c) => {
   const root = vaultOf(c);
   const fp = decodeURIComponent(c.req.param('fp'));
-  return c.json({ restored: unsuppress(root, fp) });
+  const back = unsuppress(root, fp);
+  // `rewound` is the channel whose cursor went back, so the surface can say what
+  // will actually happen rather than implying the note reappears here and now.
+  return c.json({ restored: Boolean(back), rewound: back?.rewound ?? null });
 });
 
 app.get('/api/events', (c) =>

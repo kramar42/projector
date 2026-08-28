@@ -939,9 +939,14 @@ try {
       if (sub === 'unsuppress') {
         if (!channels.length) fail('pj intake unsuppress <fingerprint>...');
         for (const fp of channels) {
+          const back = unsuppress(root, fp);
           console.log(
-            unsuppress(root, fp)
-              ? `${fp} — back in the next sweep`
+            back
+              ? `${fp} — back in the next sweep` +
+                  // Naming it because it is a side effect on a different table
+                  // than the one the command is about, and because it is what
+                  // makes the first half of the sentence true.
+                  (back.rewound ? ` (${back.rewound}'s cursor reset, so it is in reach again)` : '')
               : `${fp} — was not suppressed`,
           );
         }
