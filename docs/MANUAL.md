@@ -341,6 +341,7 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 
 ```
 [ vault ▾ ]                                       ( 191 notes · 16 projects )
+                                                  ( 7 unjudged · 12 declined )
 [ saved view ▾ ]  modified · save · revert
 ──────────────────────────────────────────
 [ shape: board ▾ ]   group by [ priority ▾ ]   then by [ — ▾ ]
@@ -351,7 +352,7 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 [ focus ]    note · via · direction · depth
 [ filter ]   the facet panel
 ──────────────────────────────────────────
-( 121 shown · 38 filtered out · 6 for context · clear )
+( 121 shown · 38 filtered out ✕ · 6 for context )
 [ search ]
 ```
 
@@ -365,7 +366,10 @@ canvas is what only a canvas can do *and* only while one is open:
 The bulk-selection bar floats over whichever shape has a selection, for the same reason: it exists
 only while one does.
 The footer always says how many notes are shown, how many the filter is hiding and how many are
-context, with a one-click *clear* — so a note that is missing is never a mystery.
+context — so a note that is missing is never a mystery. The **✕** that clears the filter and the
+search sits against *filtered out*, because that is the count it undoes. What a sweep declined is not
+a fact about the current query, so it reads with the vault stats at the top of the rail instead,
+beside the size of the unjudged queue.
 
 ## filter
 
@@ -1687,7 +1691,7 @@ the test suite is where that showed up.
 
 **Pins where a pin is the only thing there is.** Dependencies carry `^` ranges because the lockfile
 is already the pin: the range says what is acceptable, the lockfile says what you got. A runtime has
-no lockfile, so `mise.toml` *is* the pin: it names both runtimes at concrete versions rather than
+no lockfile, so `.mise.toml` *is* the pin: it names both runtimes at concrete versions rather than
 `latest`, otherwise two people on two days get two of each. It tracks newer than the floor, because CI
 tests the floor. Nothing pins a package manager, because no particular one is required.
 

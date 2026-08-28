@@ -4,7 +4,7 @@ import { FilterPanel } from './FilterPanel.tsx';
 import { SavedViews } from './SavedViews.tsx';
 import { FacetsSection, ShapeSection } from './QueryControls.tsx';
 import { FocusSection } from './FocusSection.tsx';
-import { Button } from '../components/Button.tsx';
+import { IconButton } from '../components/Button.tsx';
 import { GLYPH_OF, ROLES, tallyMeans, tallyRoles } from '../components/CardBody.tsx';
 import { type Patch } from '../query.ts';
 import { clearFilters, setSearch } from '../../view/intents.ts';
@@ -127,8 +127,33 @@ export function Sidebar({
             «
           </button>
         </div>
+        {/*
+          * Two lines, because these are two questions. The first is how big the
+          * vault is; the second is how much of it is waiting on a person — the
+          * unjudged queue and the pile a sweep turned down. Both of those used to
+          * live at the far end of the rail, in the footer's sentence about the
+          * current query, where a fact about the vault reads as a fact about the
+          * result set and moves every time the filter does.
+          */}
         <div className="rail-stats">
-          {meta.counts.notes} notes · {meta.counts.projects} projects
+          <div>
+            {meta.counts.notes} notes · {meta.counts.projects} projects
+          </div>
+          <div>
+            {meta.counts.unjudged ?? 0} unjudged ·{' '}
+            {meta.declined > 0 ? (
+              <button
+                type="button"
+                className="rail-declined"
+                onClick={onShowDeclined}
+                title="What a sweep turned down, and why"
+              >
+                {meta.declined} declined
+              </button>
+            ) : (
+              <>0 declined</>
+            )}
+          </div>
         </div>
       </div>
 
@@ -159,12 +184,7 @@ export function Sidebar({
       </div>
 
       <div className="rail-foot">
-        <ActiveStats
-          data={data}
-          edit={edit}
-          declined={meta.declined}
-          onShowDeclined={onShowDeclined}
-        />
+        <ActiveStats data={data} edit={edit} />
         <SearchBox spec={data?.spec} edit={edit} />
       </div>
     </nav>
@@ -179,28 +199,51 @@ export function Sidebar({
  * The worst failure mode of global filtering is "the note isn't there and I don't
  * know why", so the count of what is hidden and a one-click clear are always
  * visible — right under the filter that caused it.
+ *
+ * The declined pile is the one answer that moved out. It is a fact about the
+ * vault rather than about this query, so it reads wrong in a sentence that
+ * changes every time the filter does; it sits with the vault stats at the top of
+ * the rail now.
  */
-function ActiveStats({
-  data,
-  edit,
-  declined,
-  onShowDeclined,
-}: {
-  data: QueryResponse | null;
-  edit: Edit;
-  /** Candidates a sweep turned down. Not notes, so not part of `data`. */
-  declined: number;
-  onShowDeclined: () => void;
-}) {
+function ActiveStats({ data, edit }: { data: QueryResponse | null; edit: Edit }) {
   if (!data) return <div className="rail-active">…</div>;
   const hidden = Math.max(0, data.universe - data.total);
   const active = Object.values(data.spec.query.filter ?? {}).filter((v) => v.length).length;
   const extra = data.spec.query.q ? active + 1 : active;
+  /*
+   * Against the clause it undoes, rather than parked at the end of the row.
+   *
+   * It clears the filter and the search, and `filtered out` is the count those
+   * two produce — so it sits tight against that clause while the rest of the
+   * sentence keeps its `·` spacing. At the end it read as acting on whichever
+   * clause happened to be last, which on a canvas is a remark about drawing
+   * order. The fallback is for the case where there is nothing to sit beside: a
+   * search matching everything hides nothing and still needs clearing.
+   *
+   * The size is inline because the glyph table's 15px is a button metric and this
+   * is a mark inside a 10px mono line; `IconButton` spreads the override for
+   * exactly this.
+   */
+  const clear = extra > 0 && (
+    <IconButton
+      glyph="close"
+      extra="rail-clear"
+      style={{ fontSize: '12px' }}
+      title="Clear the filter and the search"
+      aria-label="Clear the filter and the search"
+      onClick={() => edit(clearFilters)}
+    />
+  );
 
   return (
     <div className="rail-active">
       <b>{data.total}</b> shown
-      {hidden > 0 && <> · {hidden} filtered out</>}
+      {hidden > 0 && (
+        <>
+          {' '}
+          · {hidden} filtered out{clear}
+        </>
+      )}
       {data.context.length > 0 && (
         <> · <span title="unmatched ancestors kept so the graph stays connected">{data.context.length} for context</span></>
       )}
@@ -222,31 +265,7 @@ function ActiveStats({
             </span>
           </>
         ))}
-      {/*
-        * The other reason there is less on screen than you expected, and the one
-        * no filter explains: a sweep judged something not worth a note. This
-        * section exists so "it isn't there and I don't know why" always has an
-        * answer, and until now it only answered for the filter.
-        */}
-      {declined > 0 && (
-        <>
-          {' '}
-          ·{' '}
-          <button
-            type="button"
-            className="rail-declined"
-            onClick={onShowDeclined}
-            title="What a sweep turned down, and why"
-          >
-            {declined} declined
-          </button>
-        </>
-      )}
-      {extra > 0 && (
-        <Button tone="ghost" size="tiny" onClick={() => edit(clearFilters)}>
-          clear
-        </Button>
-      )}
+      {hidden === 0 && clear}
     </div>
   );
 }

@@ -59,6 +59,14 @@ export function counts(db: DatabaseSync, facets: Facets): Record<string, number>
       `SELECT count(*) AS n FROM facets WHERE facet IN (${placeholders})`,
       ...refs,
     ),
+    // What a sweep filed but nobody has confirmed. A vault stat rather than a
+    // query one for the same reason `declined` is: it is the size of a queue,
+    // and it must not move when the reader filters.
+    unjudged: one(
+      'SELECT count(DISTINCT record_id) AS n FROM facets WHERE facet = ? AND value = ?',
+      'intake',
+      'unjudged',
+    ),
     links: one('SELECT count(*) AS n FROM links'),
     facetValues: one('SELECT count(*) AS n FROM facets'),
   };

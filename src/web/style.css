@@ -694,6 +694,26 @@ body {
   color: var(--ink);
 }
 
+/*
+ * The clear, sized to the line it interrupts.
+ *
+ * A mark inside the footer's sentence rather than a control beside it, so the box
+ * is the line's own height: a button that grew the row would shift the search
+ * field under it every time a filter was set, and the footer would twitch as you
+ * filtered. The 2px is what binds it to `filtered out` — the rest of the sentence
+ * is spaced by `·`, so anything looser reads as its own clause.
+ */
+.rail-active .rail-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
 /* Fills the rail's footer row. The register and the focus exception are
    `.field-recessed`'s, which this rule used to restate declaration for
    declaration — including the exception, whose comment said the same thing in
@@ -4527,10 +4547,11 @@ input[data-nav]:focus + .checkbox {
 /*
  * The other reason there is less on screen than you expected.
  *
- * A link in prose rather than a button in a row: it sits inside the sentence the
- * footer is already saying, and reads as the last clause of it. So it takes that
- * sentence's font and the accent, not the button chrome — pressing it opens a
- * surface, it does not act on the view.
+ * A link in prose rather than a button in a row: it sits inside the vault stats
+ * line and reads as the last clause of it, so it takes that line's font rather
+ * than the button chrome — pressing it opens a surface, it does not act on the
+ * view. It sat in the footer's sentence about the current query until the count
+ * moved to the top block, where a fact about the vault belongs.
  */
 .rail-declined {
   /* The footer's own register — mono, chip step — because this is the last clause
@@ -4541,7 +4562,12 @@ input[data-nav]:focus + .checkbox {
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent);
+  /* Brighter than the line it sits in, and no hue.
+     The accent is this app's one pointing finger and it is spent on selection
+     and focus; a standing count that is nonzero most of the time would wear it
+     permanently, which is how an accent stops meaning anything. One step up the
+     ink ladder plus the underline is enough to read as pressable. */
+  color: var(--ink-2);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;

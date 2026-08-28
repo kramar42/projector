@@ -471,9 +471,9 @@ captured — and the separation is worth keeping: one file decides what is *true
 nothing for the query compiler to answer about it and no shape to draw it in — C9 is about views over
 notes, and this was never going to be one. It is reached with `?declined=1` over the single route, the
 way `?note=` reaches the panel: no second route, still deep-linkable, back button still closes it.
-`GET /api/intake/declined` reads it and `meta.declined` carries the count, which is what lets the
-sidebar footer — *what is on screen, and why it is not more* — answer for the sweep as well as for the
-filter. `,d` opens it from the keyboard.
+`GET /api/intake/declined` reads it and `meta.declined` carries the count, which the sidebar draws
+with the vault stats rather than in the footer: the footer answers *what is on screen, and why it is
+not more* about the current query, and a pile a sweep turned down does not move when you filter. `,d` opens it from the keyboard.
 
 It is **paged on `at` and searched with `LIKE`**, because the pile only ever grows: every sweep that
 declines something adds a row and only a rescue removes one. A cursor rather than an offset, for the
