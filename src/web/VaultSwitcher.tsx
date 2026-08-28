@@ -26,6 +26,7 @@ export function VaultSwitcher({
 }) {
   return (
     <PopoverButton
+      rail="vault"
       className="vaultbtn"
       minWidth={280}
       title={meta.vault}

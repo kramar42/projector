@@ -1352,12 +1352,22 @@ anything.
 Each rail row draws its letter without the comma — every row in the rail is `,` plus one letter, so
 repeating the prefix seven times said nothing and made the letters different widths.
 
-## Not bound yet
+## The palette
 
-One, and `?` does not list it: `.` for a command palette. NEXT.md says what is left for it to do —
-a short list of rare per-note acts that have a control and no address: rename, the project toggle,
-refreshing enrichment, removing one link, restoring a declined candidate, switching vault. Everything
-else that was on that list now has a key or sits in a list the walk reaches.
+`.` lists every act by name, filtered by typing: letters in order, anything
+between, and no ranking — so the list narrows and never reshuffles. `↑`/`↓` walk
+it, `⏎` runs what is under the cursor, `Esc` closes it.
+
+It is not a second keyboard. Each row shows the key that also reaches it, which
+is what makes the palette the way you *stop* needing it, and the rows come from
+the same registry `bind` and `?` read — there is no list to keep in step. Its
+actual job is the four acts with a control and no key: renaming, making or
+unmaking a project, re-fetching a note's links, and switching vault.
+
+Two things are deliberately not in it. Removing one link and bringing back one
+declined candidate both need to know *which*, and a palette row names an act with
+no argument — so both are walks instead: `g l` steps a note's links, and `,d`
+lands the keyboard in the declined pile where `⏎` brings a row back.
 
 **What a pointer can do, the keyboard can do**, with three deliberate exceptions. Positioning a card
 on the canvas is a drag; the keyboard moves a *selected* node with the arrow keys instead. Spotlighting

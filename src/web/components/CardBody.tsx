@@ -338,6 +338,9 @@ export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => 
   return (
     <button
       className={`recordmark is-${role} is-toggle`}
+      // Drawn only by the panel, which is the one place this is a control rather
+      // than a glyph — so the address can live on the component.
+      data-act="project"
       title={`${means}\n${next}`}
       onClick={(e) => {
         // The title beside it opens the rename editor on click.

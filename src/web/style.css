@@ -4261,6 +4261,91 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 }
 
 /*
+ * The palette, which is the cheatsheet's shell at a different width.
+ *
+ * Narrow because it is one column of sentences rather than five of key pairs,
+ * and pinned near the top rather than centred: the list shrinks as you type, and
+ * a centred box whose height changes on every keystroke moves the row you were
+ * about to press out from under you.
+ */
+.palette {
+  width: min(520px, 92vw);
+  top: 14vh;
+  transform: translate(-50%, 0);
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The field is the palette's whole chrome: no heading, because the placeholder
+   already says what this is and a title over a search box is a line of text
+   nobody reads twice. */
+.palette-input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  padding: 11px 14px;
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+
+.palette-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.palette-list {
+  max-height: 46vh;
+  overflow: auto;
+  padding: 6px;
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--ink-2);
+  /* A button gets no font from anywhere but its own rule — the UA hands it one
+     otherwise, which `theme.test.ts` refuses. This row is a sentence, so sans. */
+  font-family: var(--sans);
+  font-size: var(--text-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* One cursor, whether a pointer or an arrow key put it there — `onMouseMove`
+   moves the same index the keys do, so the row under the mouse and the row Enter
+   would take are never two different rows. */
+.palette-row.is-here {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.palette-label {
+  flex: 1;
+}
+
+/* The key, quiet: it is what this row is teaching, not what it is. The chip step
+   and the mono register the rest of the app spends on a keystroke. */
+.palette-keys {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.palette-empty {
+  padding: 10px 8px;
+}
+
+/*
  * Multi-column, not grid.
  *
  * A grid puts each section in a *cell*, so every row of cells is as tall as the

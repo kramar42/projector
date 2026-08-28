@@ -273,6 +273,31 @@ documented and missing from `?`, and `⌫` grown a second meaning its row never
 mentioned. A cheatsheet row that is nothing but bindings now derives its keys from
 them and keeps its own prose, which is the half worth writing by hand.
 
+### The palette is a view of the registry
+
+`.` lists every act by name. What kept it unbuilt for months was that a palette is
+usually a second copy of the keyboard, and two lists of one thing drift — so it is
+not written. `PALETTE` is derived: a binding appears because it declares a
+`palette:` label, and an act with no stroke appears because `ACTS` names it. A row
+cannot exist without something `bind` or the dispatcher already knows about.
+
+Three rules fall out of that and are worth stating, because each was a decision:
+
+- **It runs the same `Command` objects a key produces**, through the same
+  dispatcher. There is no second path from a name to an act, so nothing can behave
+  one way from the keyboard and another from here — and the write-path table needs
+  no row, because the palette adds no write.
+- **It lists acts, not motion.** A row for "move down one card" is a row nobody
+  picks, on a surface whose value is that every row is worth picking.
+- **It lists nothing that needs an argument.** Removing one link and restoring one
+  declined candidate are always about *which*, and a palette row cannot carry that.
+  Both are walks — `g l` and the navlist in the declined pile.
+
+The filter is `src/view/fuzzy.ts`: letters in order, anything between, and no
+score. The absence of the score is the design — a ranked list reorders itself as
+you type and takes away the one thing a reader learns from using a list, which is
+where things sit (C8).
+
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there

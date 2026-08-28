@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   BINDINGS,
   CHEATSHEET_IDS,
+  PALETTE,
   KEYMAP,
   RESERVED,
   bind,
@@ -690,14 +691,14 @@ test('every command the grammar emits is one the dispatcher acts on', () => {
     [...SRC('../src/web/App.tsx').matchAll(/case '([a-zA-Z]+)':/g)].map((m) => m[1]!),
   );
   /**
-   * The one exception, and it carries its reason rather than being a hole.
+   * Empty, and worth keeping as a set rather than deleting.
    *
-   * `palette` is bound to `.` and consumed by nothing. NEXT.md keeps it parked —
-   * its job keeps shrinking as the map covers more of it — and MANUAL's *Not
-   * bound yet* says so to a reader. Deleting the binding would be the other
-   * honest answer; what is not honest is a third one nobody wrote down.
+   * `palette` lived here for as long as `.` was bound to nothing. The exception
+   * was written with its reason and with a check that it stops being one, which
+   * is what made it safe to leave — and it did stop, so it went. The next command
+   * to arrive before its dispatcher has somewhere honest to sit.
    */
-  const parked = new Set(['palette']);
+  const parked = new Set<string>();
 
   const orphans = [...commandKinds()].filter((k) => !handled.has(k) && !parked.has(k)).sort();
   assert.deepEqual(
@@ -747,15 +748,6 @@ test('a surface that draws controls is reachable from the keyboard', () => {
     'FrontmatterEditor.tsx',
     'Popover.tsx', //        the shell for the lists below; its contents carry the nav
     'Button.tsx', //         the button itself — its callers decide what addresses it
-    /**
-     * The one entry that is a *deferral* rather than a reason.
-     *
-     * `CardBody` draws the `▣` project toggle, which has no key. It is a rare,
-     * structural act on one note and it is filed under the palette in NEXT.md
-     * with the rest of that tier. Listing it here is what stops the deferral
-     * being invisible: the day the palette lands, this line comes out.
-     */
-    'CardBody.tsx',
   ]);
 
   const dir = fileURLToPath(new URL('../src/web', import.meta.url));
@@ -876,6 +868,11 @@ test('every command is reachable, and how is written down', () => {
     declined: ',d',
     view: '⌥1–9',
     reorder: '⌥j / ⌥k',
+    // The four the palette exists for: a control, no key, and `ACTS` names them.
+    rename: 'the palette',
+    toggleProject: 'the palette',
+    enrich: 'the palette',
+    switchVault: 'the palette',
   };
 
   // Widened: `commandKinds()` reads the union out of the source as plain strings,
@@ -887,18 +884,26 @@ test('every command is reachable, and how is written down', () => {
   // And nothing claims to need an escape hatch it no longer uses.
   const stale = Object.keys(NOT_FLAT).filter((k) => !commandKinds().has(k));
   assert.deepEqual(stale, [], `named here and gone from the union: ${stale.join(', ')}`);
+
+  /**
+   * And "the palette" has to be true. A kind whose only way in is a palette row
+   * is unreachable the moment the row goes, which no other check would notice —
+   * `PALETTE` is derived, so an entry can vanish by a label being deleted.
+   */
+  const viaPalette = new Set(PALETTE.map((e) => e.command.kind as string));
+  const promised = Object.entries(NOT_FLAT)
+    .filter(([, how]) => how === 'the palette')
+    .map(([k]) => k)
+    .filter((k) => !viaPalette.has(k));
+  assert.deepEqual(promised, [], `said to be in the palette and absent from it: ${promised.join(', ')}`);
 });
 
 test('the cheatsheet accounts for every binding, once', () => {
   const listed = CHEATSHEET_IDS;
   assert.equal(new Set(listed).size, listed.length, 'a binding is on two rows');
 
-  /**
-   * `palette` is bound to `.` and consumed by nothing, so `?` deliberately does
-   * not name it — a cheatsheet row for a key that does nothing puts every other
-   * row in doubt. MANUAL's *Not bound yet* is where it is written down instead.
-   */
-  const parked = new Set(['palette']);
+  /** Nothing is bound-but-unlisted now; `.` opens the palette and `?` says so. */
+  const parked = new Set<string>();
   const unlisted = BINDINGS.map((b) => b.id).filter((id) => !listed.includes(id) && !parked.has(id));
   assert.deepEqual(unlisted, [], `bound and not on the cheatsheet: ${unlisted.join(', ')}`);
 

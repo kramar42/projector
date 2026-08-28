@@ -254,6 +254,22 @@ export type Command =
    * every other list already has.
    */
   | { kind: 'reachList'; list: 'bulk' | 'toolbar' }
+  /**
+   * The acts with a control and no key.
+   *
+   * Each is rare enough that a letter would be spent badly and real enough that
+   * Tab-only was the wrong answer. They reach the palette instead, which is the
+   * job the palette turned out to have once the floating bars got a navlist and
+   * took merge, delete and save-layout off the list.
+   *
+   * All four aim at their button, like `work` and `judge`: the button knows
+   * whether it applies — the panel draws no rename on a note it has not loaded —
+   * so the command inherits that instead of re-deriving it.
+   */
+  | { kind: 'rename' }
+  | { kind: 'toggleProject' }
+  | { kind: 'enrich' }
+  | { kind: 'switchVault' }
   /** Step within whatever list of chips currently holds focus. */
   | { kind: 'listMove'; delta: number }
   | { kind: 'open' }
@@ -711,6 +727,18 @@ export interface Binding {
   stroke: string;
   /** As a reader sees it, where the two differ. */
   glyph?: string;
+  /**
+   * What the palette calls this, when it belongs there.
+   *
+   * Absent for motion. A palette is a list of *acts* — things that change
+   * something or open something — and "move down one card" in a searchable list
+   * of commands is a row nobody will ever pick, on a surface whose whole value is
+   * that everything in it is worth picking.
+   *
+   * Its own wording rather than the cheatsheet's: `does` is terse because it sits
+   * beside a key that carries half the meaning, and a palette row has only itself.
+   */
+  palette?: string;
   command: Command;
 }
 
@@ -737,26 +765,26 @@ export const BINDINGS: readonly Binding[] = [
   { id: 'select.toggle', stroke: 'x', command: { kind: 'select', how: 'toggle' } },
   { id: 'select.down', stroke: 'J', command: { kind: 'select', how: 'extend', delta: 1 } },
   { id: 'select.up', stroke: 'K', command: { kind: 'select', how: 'extend', delta: -1 } },
-  { id: 'select.all', stroke: '*', command: { kind: 'select', how: 'all' } },
+  { id: 'select.all', stroke: '*', palette: 'Select everything on screen', command: { kind: 'select', how: 'all' } },
 
   /**
    * `U` rather than a chord: this is not a modal editor, and a pair you reach for
    * as often as these two should be one hand and no modifier.
    */
-  { id: 'undo', stroke: 'u', command: { kind: 'undo' } },
-  { id: 'redo', stroke: 'U', command: { kind: 'redo' } },
+  { id: 'undo', stroke: 'u', palette: 'Undo', command: { kind: 'undo' } },
+  { id: 'redo', stroke: 'U', palette: 'Redo', command: { kind: 'redo' } },
 
-  { id: 'palette', stroke: '.', command: { kind: 'palette' } },
-  { id: 'search', stroke: '/', command: { kind: 'search' } },
-  { id: 'help', stroke: '?', command: { kind: 'help' } },
-  { id: 'newCard', stroke: 'n', command: { kind: 'newCard' } },
+  { id: 'palette', stroke: '.', palette: undefined, command: { kind: 'palette' } },
+  { id: 'search', stroke: '/', palette: 'Search notes', command: { kind: 'search' } },
+  { id: 'help', stroke: '?', palette: 'Show the keyboard map', command: { kind: 'help' } },
+  { id: 'newCard', stroke: 'n', palette: 'New card in this column', command: { kind: 'newCard' } },
 
   /**
    * Hand this note to a session. See `Command`'s `work` for why it is a bare mark
    * and why that mark is this one. Safe among the letters because `!` is not one:
    * no vocabulary can reach it, so it shadows nothing even in principle.
    */
-  { id: 'work', stroke: '!', command: { kind: 'work' } },
+  { id: 'work', stroke: '!', palette: 'Start work on this note', command: { kind: 'work' } },
   /**
    * Judge a candidate: fold it if it extends something, accept it if not.
    *
@@ -765,13 +793,59 @@ export const BINDINGS: readonly Binding[] = [
    * fold and is free again — the two acts turned out to be one decision the card
    * had already made.
    */
-  { id: 'judge', stroke: '+', command: { kind: 'judge' } },
+  { id: 'judge', stroke: '+', palette: 'Judge this candidate', command: { kind: 'judge' } },
   /**
    * Delete, confirmed by whatever it is aimed at. Not a letter: `d` is spent on
    * `due` by both shipped vocabularies, where `dd` already means that axis's row.
    */
-  { id: 'remove', stroke: 'Backspace', glyph: '⌫', command: { kind: 'remove' } },
+  { id: 'remove', stroke: 'Backspace', glyph: '⌫', palette: 'Delete', command: { kind: 'remove' } },
 ];
+
+/**
+ * The acts with no stroke, and the constant rail controls.
+ *
+ * Two kinds of thing the registry above cannot hold. The first four have a
+ * control and no key at all — too rare to spend a letter on, too real to leave
+ * on Tab — and are why the palette exists at all. The rest are reached by the
+ * `,` leader, which is a sequence rather than a binding, so their keys are
+ * written here for the palette to show; the ones that take an axis letter are
+ * *templates* and are left out until the palette can expand them.
+ */
+export interface Act {
+  id: string;
+  palette: string;
+  command: Command;
+  /** The sequence that also reaches it, where one does. */
+  keys?: string;
+}
+
+export const ACTS: readonly Act[] = [
+  { id: 'act.rename', palette: 'Rename this note', command: { kind: 'rename' } },
+  { id: 'act.project', palette: 'Make / unmake a project', command: { kind: 'toggleProject' } },
+  { id: 'act.enrich', palette: 'Re-fetch this note’s links', command: { kind: 'enrich' } },
+  { id: 'act.vault', palette: 'Switch vault', command: { kind: 'switchVault' } },
+
+  { id: 'act.view', palette: 'Saved views', keys: ', v', command: { kind: 'rail', control: 'view' } },
+  { id: 'act.save', palette: 'Save changes into this view', keys: ', V', command: { kind: 'rail', control: 'save' } },
+  { id: 'act.shape', palette: 'Change the shape', keys: ', s', command: { kind: 'rail', control: 'shape' } },
+  { id: 'act.sortDir', palette: 'Flip the sort direction', keys: ', O', command: { kind: 'rail', control: 'sortDir' } },
+  { id: 'act.filter', palette: 'The filter rail', keys: ', F', command: { kind: 'rail', control: 'filter' } },
+  { id: 'act.focus', palette: 'Focus: walk from a note', keys: ', w', command: { kind: 'rail', control: 'focus' } },
+  { id: 'act.clear', palette: 'Clear the filters', keys: ', c', command: { kind: 'rail', control: 'clear' } },
+  { id: 'act.collapse', palette: 'Collapse the rail', keys: ', \\', command: { kind: 'rail', control: 'collapse' } },
+  { id: 'act.declined', palette: 'What a sweep declined, and why', keys: ', d', command: { kind: 'declined' } },
+  { id: 'act.bulk', palette: 'The bulk bar', keys: ', b', command: { kind: 'reachList', list: 'bulk' } },
+  { id: 'act.toolbar', palette: 'The canvas toolbar', keys: ', t', command: { kind: 'reachList', list: 'toolbar' } },
+];
+
+/** What the palette lists: every act, keyed or not, in one declared order. */
+export interface PaletteEntry {
+  id: string;
+  label: string;
+  command: Command;
+  /** Shown beside the row, so the palette teaches the key rather than replacing it. */
+  keys?: string;
+}
 
 /** By stroke, for `start`. Built once; a duplicate stroke is a test failure. */
 const FLAT = new Map(BINDINGS.map((b) => [b.stroke, b]));
@@ -801,17 +875,16 @@ const BY_ID = new Map(BINDINGS.map((b) => [b.id, b]));
  * digits mean whatever the current grouping axis declares, and the facet keys are
  * the vault's. `?` fills both in from the payload it has.
  *
- * **Only what works is listed.** `bind` emits one command nothing consumes yet —
- * `palette` — and it was on this table until the table was read as a promise
- * rather than a plan. A cheatsheet naming a key that does nothing is worse than
- * one that is short: the reader presses it, nothing happens, and now every other
- * row is in doubt. It is filed in MANUAL's *Not bound yet*, where a list of
- * intentions belongs.
+ * **Only what works is listed**, and everything now does. This paragraph used to
+ * name the commands `bind` emitted that nothing consumed — `openAxisControl`,
+ * `newCard`, `reorder`, and last of all `palette` — because a cheatsheet naming a
+ * key that does nothing is worse than one that is short: the reader presses it,
+ * nothing happens, and every other row is in doubt.
  *
- * `openAxisControl`, `newCard` and `reorder` were named here too and are all
- * consumed now. The comment outlived them, which is the failure mode a list of
- * names has: `test/keys.test.ts` asserts the set rather than trusting this
- * paragraph, so the next one cannot rot silently.
+ * The list outlived each of them by months, which is the failure mode a list of
+ * names has. `test/keys.test.ts` asserts the set instead, from both directions,
+ * so a command with no way in fails and a note claiming an exception that is no
+ * longer one fails too.
  */
 export interface KeyRow {
   keys: string;
@@ -931,6 +1004,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { keys: '⌥1–9', does: 'the nth saved view' },
       { ids: ['search'], does: 'search' },
       { ids: ['help'], does: 'this' },
+      { ids: ['palette'], does: 'every command by name — the ones with no key included' },
     ],
   },
 ];
@@ -956,6 +1030,24 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = SPEC.map(({ section
 
 /** Which binding ids the cheatsheet accounts for — `test/keys.test.ts` holds it. */
 export const CHEATSHEET_IDS: readonly string[] = SPEC.flatMap((s) => s.rows.flatMap((r) => r.ids ?? []));
+
+/**
+ * The palette's rows: the bindings that are acts, then the acts with no binding.
+ *
+ * Derived, so there is no list to keep in step — a binding that gains a
+ * `palette:` label appears here, and one that loses it goes. Declared order, not
+ * a ranking: the filter narrows this list and never reorders it, so where a row
+ * sat is where it stays (C8).
+ */
+export const PALETTE: readonly PaletteEntry[] = [
+  ...BINDINGS.filter((b) => b.palette).map((b) => ({
+    id: b.id,
+    label: b.palette!,
+    command: b.command,
+    keys: b.glyph ?? b.stroke,
+  })),
+  ...ACTS.map((a) => ({ id: a.id, label: a.palette, command: a.command, ...(a.keys ? { keys: a.keys } : {}) })),
+];
 
 /** Which shapes offer motion. A canvas is a plane; `j` has no meaning on it. */
 export const MOVES: readonly Shape[] = ['board', 'table'];

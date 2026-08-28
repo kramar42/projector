@@ -160,7 +160,15 @@ export function DeclinedPanel({
                 <th />
               </tr>
             </thead>
-            <tbody>
+            {/*
+              A navlist, so the pile can be worked without a pointer.
+
+              The rows are the whole surface and each has one act, so `j`/`k` walk
+              them and `⏎` brings one back — which is the shape the panel's link
+              list already has. There is no palette entry for restoring: a palette
+              row names an act with no argument, and this one is always *which*.
+            */}
+            <tbody data-navlist="declined" data-nav-flow="column">
               {rows.map((r) => (
                 <tr key={r.fingerprint}>
                   <td>
@@ -176,6 +184,7 @@ export function DeclinedPanel({
                   <td>
                     <Button
                       size="tiny"
+                      data-nav="pick"
                       disabled={busy === r.fingerprint}
                       onClick={() => void restore(r.fingerprint)}
                       title="Offer this again — the channel's cursor goes back, so the next sweep re-fetches it and writes a fresh card"

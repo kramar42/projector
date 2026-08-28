@@ -13,6 +13,7 @@ import { TouchedProvider } from './touched.tsx';
 import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { Cheatsheet } from './Cheatsheet.tsx';
+import { Palette } from './Palette.tsx';
 import { currentVault, setCurrentVault } from './vault.ts';
 import {
   NOTE_PARAM,
@@ -211,6 +212,7 @@ export function App() {
     return () => clearTimeout(t);
   }, [notice]);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   /**
    * The column `n` asked to create a card in.
    *
@@ -499,6 +501,8 @@ export function App() {
     toggleRail: () => setSidebarCollapsed((c) => !c),
     helpOpen,
     setHelpOpen,
+    paletteOpen,
+    setPaletteOpen,
     setDeclined,
     doStep,
     history,
@@ -659,6 +663,14 @@ export function App() {
           {content}
         </main>
         {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
+        {paletteOpen && (
+          <Palette
+            onClose={() => setPaletteOpen(false)}
+            /* Straight into the same dispatcher a key reaches, so a command
+               cannot behave one way from the keyboard and another from here. */
+            onRun={(command) => keys.current && run(command, keys.current)}
+          />
+        )}
         {declinedOpen && (
           <DeclinedPanel
             onClose={() => setDeclined(false)}
@@ -739,6 +751,8 @@ interface KeyState {
   nudgeCard: (delta: number) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
   /** Open or close the declined surface. See `setDeclined` for why it is a URL edit. */
   setDeclined: (open: boolean) => void;
   /** Go to a note and record it on the trail — what `H` comes back from. */
@@ -1441,7 +1455,51 @@ function run(command: Command, s: KeyState): void {
     }
 
     case 'declined':
-      return s.setDeclined(true);
+      s.setDeclined(true);
+      /*
+       * And step into it. Opening a surface without putting the keyboard in it is
+       * how `,d` came to be a key that showed you something you then had to reach
+       * for with a mouse — the same landing `,F` makes into the filter rail.
+       */
+      return focusSoon(() =>
+        document.querySelector<HTMLElement>('[data-navlist="declined"] [data-nav]'),
+      );
+
+    /**
+     * The four acts the palette exists for.
+     *
+     * One shape, because they are one kind of thing: a control the panel or the
+     * rail already draws, with no key of its own. Aimed rather than
+     * reimplemented, so the button stays the only thing that decides whether the
+     * act applies — and so a confirm, where there is one, cannot be skipped.
+     */
+    case 'rename':
+    case 'toggleProject':
+    case 'enrich':
+    case 'switchVault': {
+      if (command.kind === 'switchVault') {
+        const row = document.querySelector<HTMLButtonElement>('[data-rail="vault"]');
+        if (!row) return s.notify({ tone: 'info', text: 'no vault picker here' });
+        return row.click();
+      }
+      const act = { rename: 'rename', toggleProject: 'project', enrich: 'enrich' }[command.kind];
+      const on = openNote ?? cursor.id;
+      if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
+      if (!openNote) setOpenNote(on);
+      return focusSoon(
+        () => {
+          const button = document.querySelector<HTMLElement>(`.panel [data-act="${act}"]`);
+          if (!button) {
+            s.notify({ tone: 'info', text: `this note has no ${act} control` });
+            return null;
+          }
+          button.click();
+          return button;
+        },
+        10,
+        () => s.notify({ tone: 'info', text: 'the note did not open' }),
+      );
+    }
 
     /**
      * Step into a floating bar.
@@ -1539,6 +1597,8 @@ function run(command: Command, s: KeyState): void {
       // The first link of the chain that stage 7 finishes: the sheet is the
       // topmost thing on screen, so it is the first thing Escape takes off it.
       if (s.helpOpen) return s.setHelpOpen(false);
+      // Then the palette, which sits at the same depth and is opened the same way.
+      if (s.paletteOpen) return s.setPaletteOpen(false);
       /**
        * Then whatever control focus is *in*, as distinct from what is on screen.
        *
@@ -1578,6 +1638,15 @@ function run(command: Command, s: KeyState): void {
 
     case 'help':
       return s.setHelpOpen(!s.helpOpen);
+
+    /**
+     * Every act by name, for the four that have no key.
+     *
+     * A toggle like `?` beside it, and for the same reason: the key that opens it
+     * is the key that shuts it, so there is no state to get stuck in.
+     */
+    case 'palette':
+      return s.setPaletteOpen(!s.paletteOpen);
 
     /**
      * The rail, reached by attribute.

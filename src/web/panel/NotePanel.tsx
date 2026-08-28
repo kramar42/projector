@@ -358,6 +358,7 @@ function NoteCard({
                   className="panel-title-text"
                   role="button"
                   tabIndex={0}
+                  data-act="rename"
                   title="Rename"
                   onClick={() => setEditTitle(card.title)}
                   onKeyDown={(e) => {

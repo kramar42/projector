@@ -447,6 +447,7 @@ export function Links({
         <span className="section-do">
           <IconButton
             glyph="refresh"
+            data-act="enrich"
             title="Re-fetch every link on this note"
             aria-label="Re-fetch every link on this note"
             onClick={() => refresh(card.links.map((l) => l.raw))}
