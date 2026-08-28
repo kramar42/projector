@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
 import { validateViews, validateVocabulary } from '../src/view/validate.ts';
-import { parseSpec, specFromFile } from '../src/view/spec.ts';
+import { parseSpec, specFromFile, specToParams, withSavedOnly } from '../src/view/spec.ts';
+import { SHAPES } from '../src/web/query.ts';
 import { declaredFacets, loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { groupsFor, labelFor } from '../src/web/views/groups.ts';
@@ -456,6 +457,38 @@ test('a lists view draws its children as columns, and its own query does nothing
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a composition keeps its shape against a URL that says otherwise', () => {
+  // `?view=triage&shape=board` is what the shape control writes, and it used to
+  // win: the composition was carried across but `composeLists` saw a shape that
+  // was not `lists`, bailed, and fell through to the parent's own query — which a
+  // composition is forbidden to have, so the board drew *every note in the vault*
+  // as one flat list. Switching shape and back turned a 9-note triage board into
+  // a 234-note one, silently.
+  const saved = specFromFile('triage', {
+    shape: 'lists',
+    title: 'Triage',
+    lists: ['needs-status'],
+  });
+  const resolved = withSavedOnly(parseSpec({ ...specToParams(saved), shape: 'board' }), saved);
+  assert.equal(resolved.shape, 'lists', 'the composition is the view, not a projection of one');
+  assert.deepEqual(resolved.lists, ['needs-status']);
+
+  // And an ordinary view still switches freely — the pin is about compositions,
+  // not about saved views.
+  const plain = specFromFile('home', { shape: 'board', title: 'Home' });
+  assert.equal(
+    withSavedOnly(parseSpec({ ...specToParams(plain), shape: 'table' }), plain).shape,
+    'table',
+  );
+
+  // The control offers no `lists`, so it cannot be chosen for a view that has no
+  // children to draw.
+  assert.deepEqual(
+    SHAPES.map((s) => s.value),
+    ['board', 'canvas', 'table'],
+  );
 });
 
 test('a composition is checked: children exist, stay flat, and do not nest', () => {

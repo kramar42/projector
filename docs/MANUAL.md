@@ -486,6 +486,10 @@ express the question. A grouped board derives its columns from one axis over one
 *carries a priority but no status* and its mirror — conditions on two different axes at once — can be
 filtered one at a time and never drawn beside each other.
 
+**A composition's shape is not a live control.** The other three shapes project one query three ways;
+a composition has no query of its own, so there is nothing to switch into — the shape select is
+disabled on one, and a `shape=` in the URL loses to the file.
+
 A composition is one level deep: a view named in `lists:` may not name others, and may not group by
 anything, since a column is one flat list. Nothing on it is draggable, and that is not a limitation to
 work around — there is no facet value a drop into *needs a project* could write. A note leaves a

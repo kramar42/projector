@@ -22,6 +22,7 @@ import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
 export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit: Edit }) {
   const spec = data?.spec;
   const shape: Shape = spec?.shape ?? 'board';
+  const composed = Boolean(spec?.lists?.length);
   const query = spec?.query ?? {};
   const group = query.groupBy ?? [];
   const facets = data?.counts.map((c) => ({ value: c.facet, label: c.label })) ?? [];
@@ -33,12 +34,21 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
           Shape
           <KeyHint keys="s" means="comma then s" />
         </label>
+        {/*
+          * Disabled on a composition, which has no query to project. `lists` is
+          * not among the options for that reason, so a select left live here
+          * would show a blank value and turn the view into its own empty filter
+          * — the whole vault as one flat list — on the first nudge.
+          */}
         <select
           className="rail-select"
           data-rail="shape"
-          value={shape}
+          value={composed ? '' : shape}
+          disabled={composed}
+          title={composed ? 'a lists view draws other views, so it has no shape to switch' : undefined}
           onChange={(e) => edit((spec) => setShape(spec, e.target.value as Shape))}
         >
+          {composed && <option value="">Lists</option>}
           {SHAPES.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}

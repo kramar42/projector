@@ -313,6 +313,14 @@ export function withSavedOnly(spec: ViewSpec, saved: ViewSpec | null | undefined
   spec.lists = saved?.lists;
   spec.unlisted = saved?.unlisted;
   spec.expect = saved?.expect;
+  // A composition's shape is not an override anyone can win.
+  //
+  // `shape` is a live control for the three shapes that *project a query*: the
+  // same result set, arranged three ways. A composition has no query of its own
+  // — the validator refuses one — so any other shape draws its empty filter,
+  // which is the whole vault as one flat list. That is not a different view of
+  // the same answer, it is a different and much larger question, silently.
+  if (spec.lists?.length) spec.shape = 'lists';
   return spec;
 }
 

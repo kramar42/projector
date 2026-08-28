@@ -265,11 +265,12 @@ export function BoardView({
         />
       )}
 
-      {!groupBy && (
-        <div className="board-nudge">
-          ungrouped — one flat list. Pick a <b>group by</b> in the sidebar for columns.
-        </div>
-      )}
+      {/*
+        * There is no nudge for an ungrouped board. One flat list is a legitimate
+        * answer — `unblocked` is one, and every column of a composition is one —
+        * so a permanent line telling you to pick an axis was advice on a state
+        * that is usually deliberate, in the one place it could not be dismissed.
+        */}
       {!viewName && groupBy && (
         <div className="board-nudge">
           drag between columns to set <b>{groupBy}</b>. Reordering <em>within</em> a column needs a
