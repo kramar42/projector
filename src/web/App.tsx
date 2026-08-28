@@ -1325,23 +1325,27 @@ function run(command: Command, s: KeyState): void {
      * say so rather than look broken.
      */
     /**
-     * Fold a candidate into what it extends.
+     * Judge a candidate — one verb, and the card decides which act it is.
      *
-     * Aims at the button rather than doing the merge here, exactly as `work`
-     * does and for the same reason: one path from the gesture to the act, so the
-     * confirm cannot be skipped by arriving from the keyboard. The button only
-     * exists on a note carrying `extends`, so a press on anything else finds
-     * nothing and says so instead of doing something surprising.
+     * Aims at a button rather than doing the work here, exactly as `work` does
+     * and for the same reason: one path from the gesture to the act, so a
+     * confirm cannot be skipped by arriving from the keyboard. Which button is
+     * the whole of the decision, and the panel has already made it — it draws
+     * `fold` on a candidate carrying `extends` and `accept` on one that does
+     * not, so reading the DOM is reading the card's own state rather than
+     * re-deriving it from a copy of the note that may be a render old.
      */
-    case 'fold': {
+    case 'judge': {
       const on = openNote ?? cursor.id;
       if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
       if (!openNote) setOpenNote(on);
       return focusSoon(
         () => {
-          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="fold"]');
+          const button =
+            document.querySelector<HTMLButtonElement>('.panel [data-act="fold"]') ??
+            document.querySelector<HTMLButtonElement>('.panel [data-act="accept"]');
           if (!button) {
-            s.notify({ tone: 'info', text: 'this note does not extend another one' });
+            s.notify({ tone: 'info', text: 'this note is not waiting to be judged' });
             // Returned so `focusSoon` stops: the absence is the answer, not a
             // panel that has not opened yet.
             return null;
@@ -1349,33 +1353,30 @@ function run(command: Command, s: KeyState): void {
           button.click();
         },
         10,
-        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was folded' }),
+        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was judged' }),
       );
     }
 
     /**
-     * Accept a candidate as its own note.
+     * Delete, through the panel's own confirm.
      *
-     * Aimed at the button like `fold` and `work`, for the same reason: one path
-     * writes it, so the keyboard cannot reach a state the panel would not.
-     * Nothing here confirms, because nothing is destroyed — two facets come off a
-     * note that stays exactly where it was.
+     * The one command that destroys something, so it is the one that most needs
+     * the aim-at-the-button rule: the confirm names the note and says the file is
+     * in git, and a keyboard path that wrote directly would be a second way to
+     * delete with no second confirm to match.
      */
-    case 'accept': {
+    case 'remove': {
       const on = openNote ?? cursor.id;
       if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
       if (!openNote) setOpenNote(on);
       return focusSoon(
         () => {
-          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="accept"]');
-          if (!button) {
-            s.notify({ tone: 'info', text: 'this note is not waiting to be judged' });
-            return null;
-          }
+          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="delete"]');
+          if (!button) return null;
           button.click();
         },
         10,
-        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was accepted' }),
+        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was deleted' }),
       );
     }
 

@@ -1,5 +1,6 @@
 import { readAll } from '../index/indexer.ts';
 import { classify, type Ask } from './classify.ts';
+import { judgedBody } from './materialise.ts';
 import { patchNote } from '../server/mutate.ts';
 import { paths } from '../config.ts';
 import type { Candidate } from './types.ts';
@@ -125,7 +126,8 @@ export async function rejudge(
      * only the model's half is touched: normalising the note's own body would
      * add a line every time the pass agreed with it.
      */
-    const body = verdict.body ? `\n${verdict.body.trim()}\n` : note.body;
+    const judged = verdict.body ? judgedBody(verdict, undefined) : undefined;
+    const body = judged ? `\n${judged.trim()}\n` : note.body;
     const facetsMoved = Object.keys({ ...facets, ...note.facets }).some(
       (k) => !same(facets[k], note.facets[k]),
     );

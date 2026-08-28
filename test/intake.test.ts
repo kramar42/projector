@@ -1649,8 +1649,10 @@ test('a rejudge that cannot reach the classifier rewrites nothing', async () => 
 });
 
 test('a card the pass agrees with is counted, not rewritten', async () => {
+  // Carrying the quoted reason, because that is what the pass writes — a card
+  // materialised by this version leads with why it was kept.
   const root = vault({
-    raw: `---\nid: raw\ntitle: "Already right"\nfacets: { intake: [unjudged] }\n---\nAlready said.\n`,
+    raw: `---\nid: raw\ntitle: "Already right"\nfacets: { intake: [unjudged] }\n---\n> x\n\nAlready said.\n`,
   });
   const judge: Ask = async (_s, user) =>
     JSON.stringify(
@@ -1668,6 +1670,35 @@ test('a card the pass agrees with is counted, not rewritten', async () => {
     const res = await rejudge(root, { ask: judge });
     assert.equal(res.same, 1);
     assert.equal(res.changed.length, 0);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * And the other half of the same rule: a card from before the reason was written
+ * down *is* rewritten, once. That is what the pass is for — the same catch-up a
+ * changed `classify.md` gets — and the second run then agrees with itself.
+ */
+test('a card written before the reason was carried catches up, then settles', async () => {
+  const root = vault({
+    raw: `---\nid: raw\ntitle: "Already right"\nfacets: { intake: [unjudged] }\n---\nAlready said.\n`,
+  });
+  const judge: Ask = async (_s, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'keep',
+        reason: 'x',
+        title: 'Already right',
+        body: 'Already said.',
+      })),
+    );
+  try {
+    assert.equal((await rejudge(root, { ask: judge })).changed.length, 1);
+    assert.match(readFileSync(join(paths(root).notes, 'raw.md'), 'utf8'), /---\n\n> x\n\nAlready said\.\n$/);
+    assert.equal((await rejudge(root, { ask: judge })).same, 1, 'and it stops moving');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1718,8 +1749,8 @@ test('a rewritten body keeps the blank line the file format wants', async () => 
     // `patchNote` writes a body verbatim on purpose — the panel hands back the
     // bytes it read — so a model's bare prose arrives welded to the closing
     // fence unless the caller does what `createNote` does.
-    assert.match(text, /---\n\nA new body\.\n$/);
-    assert.doesNotMatch(text, /---\nA new body/, 'no blank line is a malformed note');
+    assert.match(text, /---\n\n> x\n\nA new body\.\n$/);
+    assert.doesNotMatch(text, /---\n>/, 'no blank line is a malformed note');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

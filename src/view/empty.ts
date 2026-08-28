@@ -7,9 +7,15 @@ import type { ViewSpec } from './spec.ts';
  *
  * An empty result has more than one cause and they had one rendering. "No notes
  * match" is true of a filter that is too tight, of a search that found nothing,
- * and of an axis **no note in the vault has ever carried** — three different
- * problems whose next moves are, in order: widen the filter, try another word,
- * and go and set the axis on something. The third one is the one that had no way
+ * and of an axis **no note in the vault carries** — three different problems
+ * whose next moves are, in order: widen the filter, try another word, and go and
+ * set the axis on something.
+ *
+ * The wording is present tense throughout, which is a correction rather than a
+ * style: `axisPopulation` counts what notes carry *now*, and the first draft said
+ * "has ever been on", claiming a history the count cannot see. An axis emptied by
+ * being drained reads identically to one never used, and on the intake queue that
+ * is precisely what happens. The third one is the one that had no way
  * of being said, and the one that makes a view read as broken rather than empty:
  * a board grouped by an unused axis draws its declared columns and every one of
  * them is blank, which looks exactly like a query that excluded everything.
@@ -116,6 +122,22 @@ export function emptyReason(meta: EmptyVocabulary, data: EmptyResult): EmptyReas
   const ctx = contextOf(meta, data);
   if (ctx.total > 0) return null;
 
+  /*
+   * A view that says what its own emptiness means outranks every deduction here.
+   *
+   * Everything below explains an empty result as a *problem* — the filter, the
+   * search, an unused axis — and on a queue or a rule board it is the goal. The
+   * intake board is the sharp case: drain it and the last thing the loop ever
+   * says to you is that nothing matched, at the one moment something did.
+   *
+   * It also outranks the unused-axis branch on purpose, and that is not a
+   * preference. `intake` is carried only by unjudged cards, so judging the last
+   * one leaves the axis with no rows and the deduction below would say the axis
+   * is unused — which is false in the way that matters: it was in use a moment
+   * ago and you are the reason it is not.
+   */
+  if (ctx.spec.whenEmpty) return { text: ctx.spec.whenEmpty };
+
   if (!ctx.vaultNotes) {
     return { text: 'This vault has no notes yet.' };
   }
@@ -130,7 +152,7 @@ export function emptyReason(meta: EmptyVocabulary, data: EmptyResult): EmptyReas
     if (axis && unused(axis, ctx)) {
       return {
         axis,
-        text: `Nothing has ever been on ${nameOf(axis, ctx.facets)}. The axis is declared and no note in this vault carries it.`,
+        text: `No note carries a value on ${nameOf(axis, ctx.facets)} — the axis is declared and unused.`,
       };
     }
   }
@@ -165,6 +187,6 @@ export function unusedGrouping(meta: EmptyVocabulary, data: EmptyResult): EmptyR
   if (!axis || !unused(axis, ctx)) return null;
   return {
     axis,
-    text: `Nothing has ever been on ${nameOf(axis, ctx.facets)}. The axis is declared and no note in this vault carries it, so every column here is empty.`,
+    text: `No note carries a value on ${nameOf(axis, ctx.facets)}, so every column here is empty.`,
   };
 }

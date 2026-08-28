@@ -460,7 +460,7 @@ function NoteCard({
                   data-act="fold"
                   disabled={folding}
                   aria-label={`Fold ${card.title} into ${foldTarget}`}
-                  title={`Fold this into "${foldTarget}" — decide what it changes, then its body, links and fingerprint move across (=)`}
+                  title={`Fold this into "${foldTarget}" — decide what it changes, then its body, links and fingerprint move across (+)`}
                   onClick={() => setFolding(true)}
                 />
               )}
@@ -483,8 +483,9 @@ function NoteCard({
                 tone="danger"
                 size="normal"
                 extra="panel-x"
+                data-act="delete"
                 aria-label={`Delete ${card.title}`}
-                title={`Delete "${card.title}" — the file is in git, so it can be recovered`}
+                title={`Delete "${card.title}" — the file is in git, so it can be recovered (⌫)`}
                 onClick={() => {
                   if (!confirm(`Delete "${card.title}"?\n\nThe file is in git, so this is recoverable.`))
                     return;

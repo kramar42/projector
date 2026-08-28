@@ -647,7 +647,7 @@ const result = (query: object, total = 0, universe = 0) =>
 
 test('an axis nobody has ever set says so, rather than blaming the filter', () => {
   const r = emptyReason(VOCAB, result({ filter: { waiting_on: ['person-a'] } }));
-  assert.match(r!.text, /Nothing has ever been on Waiting on/);
+  assert.match(r!.text, /No note carries a value on Waiting on/);
   assert.equal(r!.axis, 'waiting_on', 'the caller can point at the row at fault');
 });
 
@@ -660,7 +660,7 @@ test('an axis nobody has ever set says so, rather than blaming the filter', () =
 test('a computed blocking value is explained by the axis underneath it', () => {
   const r = emptyReason(VOCAB, result({ filter: { blocked: ['waiting_on'] } }));
   assert.equal(r!.axis, 'waiting_on');
-  assert.match(r!.text, /Nothing has ever been on Waiting on/);
+  assert.match(r!.text, /No note carries a value on Waiting on/);
 
   // Two blocking values is a question with two answers, so it is not answered.
   const both = emptyReason(VOCAB, result({ filter: { blocked: ['waiting_on', 'blocked_by'] } }));
@@ -682,6 +682,25 @@ test('asking for the absence of an unused axis is not a broken axis', () => {
   assert.match(r!.text, /No note matches this filter/);
 });
 
+/**
+ * A view that says what its own emptiness means outranks every deduction.
+ *
+ * The intake queue is the case that forced it: `intake` is carried only by
+ * unjudged cards, so judging the last one empties the axis and the unused-axis
+ * branch would call an axis you just drained "declared and unused".
+ */
+test('a view can say what its own emptiness means, and it wins', () => {
+  const done = { spec: { query: { filter: { intake: ['unjudged'] } }, whenEmpty: 'The queue is clear.' } as unknown as ViewSpec, total: 0, universe: 9 };
+  assert.equal(emptyReason(VOCAB, done)!.text, 'The queue is clear.');
+
+  // Even against the unused-axis branch, which is the one that would be wrong.
+  const drained = { ...done, spec: { ...done.spec, query: { filter: { waiting_on: ['person-a'] } } } as unknown as ViewSpec };
+  assert.equal(emptyReason(VOCAB, drained)!.text, 'The queue is clear.');
+
+  // And not at all when there is something to draw.
+  assert.equal(emptyReason(VOCAB, { ...done, total: 3 }), null);
+});
+
 test('the general answers name what actually narrowed it', () => {
   assert.match(emptyReason(VOCAB, result({}, 0, 5))!.text, /this filter/);
   assert.match(emptyReason(VOCAB, result({ q: 'keycloak' }))!.text, /keycloak/);
@@ -700,8 +719,13 @@ test('the general answers name what actually narrowed it', () => {
 test('a board grouped by an unused axis is told so while its result is full', () => {
   const full = result({ groupBy: ['waiting_on'] }, 9, 9);
   assert.equal(emptyReason(VOCAB, full), null, 'nine notes is not an empty result');
-  assert.match(unusedGrouping(VOCAB, full)!.text, /Nothing has ever been on Waiting on/);
+  assert.match(unusedGrouping(VOCAB, full)!.text, /No note carries a value on Waiting on/);
   assert.match(unusedGrouping(VOCAB, full)!.text, /every column here is empty/, 'and why it looks like this');
+  // Present tense, always: `axisPopulation` counts what notes carry *now*, so a
+  // claim about history is a claim the number cannot support. An axis drained to
+  // zero — which is what judging the last intake card does — reads identically to
+  // one never used, and only one of those two sentences would be true.
+  assert.doesNotMatch(unusedGrouping(VOCAB, full)!.text, /\b(ever|never)\b/i);
   // The gesture belongs to `.board-nudge`, which says it already. Two
   // instructions about one drag on one board is the thing this avoids.
   assert.doesNotMatch(unusedGrouping(VOCAB, full)!.text, /drag/i);

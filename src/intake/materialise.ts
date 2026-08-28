@@ -56,6 +56,34 @@ export interface Materialised {
  * rather than standing alone. Every value was validated against the vocabulary
  * before it got here — this function writes, it does not judge.
  */
+/**
+ * The body a card arrives with, led by why the classifier kept it.
+ *
+ * The reason was computed for every verdict and then thrown away for the ones
+ * that were kept — `suppress` stored it on a decline and nothing stored it on a
+ * keep. So the pile you are *not* looking at explained itself and the queue you
+ * have to work through did not, which put the reconstruction cost on the
+ * expensive direction: declining a card meant re-deriving the model's reasoning
+ * from its description.
+ *
+ * A blockquote rather than a frontmatter field because it is prose about this
+ * note, which is what a body is (C6) — and because it then survives every path
+ * that already handles bodies: the panel renders it, the editor edits it, `pj`
+ * prints it, and folding carries it across. A reserved key would have needed all
+ * four taught about it.
+ *
+ * It is the model's words and it is yours to delete. Accepting the card makes the
+ * whole body yours the way every other proposed value becomes yours, and a
+ * `rejudge` rewrites it along with the rest — both already true of the body, so
+ * the quote inherits the rule rather than needing one.
+ */
+export function judgedBody(v: Verdict, detail: string | undefined): string | undefined {
+  const body = v.body ?? detail;
+  if (!v.reason) return body;
+  const quote = `> ${v.reason}`;
+  return body ? `${quote}\n\n${body}` : quote;
+}
+
 export function materialise(
   root: string,
   channel: string,
@@ -87,7 +115,7 @@ export function materialise(
       },
       links: c.links,
       fingerprint: c.fingerprint,
-      ...(v.body ?? c.detail ? { body: v.body ?? c.detail } : {}),
+      ...(judgedBody(v, c.detail) ? { body: judgedBody(v, c.detail)! } : {}),
     });
     if (res.existed) out.skipped++;
     else {

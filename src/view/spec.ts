@@ -51,6 +51,21 @@ export interface ViewSpec {
    * nothing" was answered by the one you forgot.
    */
   show: string[];
+  /**
+   * What to say when this view draws nothing, for a view whose emptiness is the
+   * *goal* rather than a problem.
+   *
+   * `src/view/empty.ts` explains an empty result from facts — the filter, the
+   * search, an axis nothing carries — and every one of those explanations reads
+   * as a failure. On a queue, a rule board or a nudge list, an empty result is
+   * the thing you were working towards, and reporting it as "no note matches
+   * this filter" tells you nothing worked at the one moment something did.
+   *
+   * Which of the two a view is cannot be derived — it is what the view is *for*
+   * — so this is a saved-file key with no live control and no URL, like `lists`
+   * and the arrangement (C9).
+   */
+  whenEmpty?: string;
   /** Saved views only: positions, and card order within a column. */
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
@@ -238,6 +253,9 @@ export const VIEW_KEYS: readonly string[] = [
   'lists',
   'unlisted',
   'expect',
+  // What an empty result means here, when it means success. Saved-file only for
+  // the same reason: no control can derive what a view is *for*.
+  'whenEmpty',
   // Arrangement. Written by `saveArrangement`, never by hand.
   'nodes',
   'order',
@@ -270,6 +288,9 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   spec.title = String(raw.title ?? name);
 
   if (Array.isArray(raw.lists)) spec.lists = raw.lists.map(String);
+  if (typeof raw.whenEmpty === 'string' && raw.whenEmpty.trim()) {
+    spec.whenEmpty = raw.whenEmpty.trim();
+  }
   if (raw.unlisted === true) spec.unlisted = true;
   if (raw.expect === 'empty') spec.expect = 'empty';
 
@@ -331,6 +352,7 @@ export function withSavedOnly(spec: ViewSpec, saved: ViewSpec | null | undefined
   spec.order = saved?.order;
   spec.lists = saved?.lists;
   spec.unlisted = saved?.unlisted;
+  spec.whenEmpty = saved?.whenEmpty;
   spec.expect = saved?.expect;
   // A composition's *primary* grouping is not an override anyone can win.
   //

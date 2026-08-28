@@ -226,6 +226,13 @@ The third one is what makes a working view read as a broken one: a board grouped
 draws its declared columns and every one is blank, which is indistinguishable from a query that
 excluded everything.
 
+A view whose emptiness is the *goal* outranks all of it: `whenEmpty:` is a saved-file key (C9 — no
+control can derive what a view is for) and short-circuits the deduction. The intake queue is why it
+exists, and not only for tone. `intake` is carried by unjudged cards alone, so judging the last one
+leaves the axis with no rows and the deduction below would call an axis you had just drained
+*unused* — the reason every sentence here is present tense, since `axisPopulation` counts what notes
+carry now and cannot see that an axis was in use a minute ago.
+
 `src/view/empty.ts` answers it, from facts the payload already carries — no ranking and no heuristic,
 so two readers with the same screen get the same sentence (C8). The fact it needed is
 `meta.axisPopulation`: per stored axis, how many notes in the **vault** carry a value on it.

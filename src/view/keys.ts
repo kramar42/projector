@@ -196,28 +196,40 @@ export type Command =
    */
   | { kind: 'work' }
   /**
-   * Fold this candidate into the note it extends.
+   * Judge this candidate — one verb, because the queue has one question.
    *
-   * Only meaningful on a note carrying `extends`, and the dispatcher does not
-   * check: the panel draws the control only when there is one, and pressing the
-   * key with nothing to fold says so rather than doing something else. Same shape
-   * as `work` — the key aims at the button so the confirm cannot be skipped by
-   * arriving from the keyboard.
+   * What it does is read off the card rather than chosen by the reader: a
+   * candidate carrying `extends` **folds** into that note, and one carrying
+   * none is **accepted** as its own. It was two keys, `+` and `=`, and the
+   * choice they offered was the wrong one to have to make in advance — you
+   * pressed one before you could see what target the classifier had picked,
+   * and the targets come off a spectrum from a working directory (certain) to
+   * shared words (a guess). The fold dialog names the target, so choosing after
+   * opening it is choosing informed.
+   *
+   * Keeping a card that proposes a target separate is therefore removing the
+   * `extends` reference and judging it again — deliberately the longer path,
+   * because it is the rarer intent and it is a claim about the target rather
+   * than about the card.
+   *
+   * Aimed at the panel's button, like `work`, so the fold's confirm cannot be
+   * skipped by arriving from the keyboard.
    */
-  | { kind: 'fold' }
+  | { kind: 'judge' }
   /**
-   * Accept this candidate as its own note: the `intake` flag comes off, and the
-   * fold target with it.
+   * Delete the note under the cursor, behind the panel's own confirm.
    *
-   * `extends` goes too because accepting *is* the decision not to fold — the
-   * classifier proposed a target and you said no. Leaving it would strand a fold
-   * control on an ordinary note for ever, which is the one way the queue leaked
-   * into the rest of the vault.
+   * `⌫` rather than a letter, and that is not a preference. Commands here take
+   * punctuation so that no vocabulary can shadow them — and `d`, the letter this
+   * wants, is spent on `due` by both the seeded vocabulary and the shipped
+   * tutorial, where `dd` already means that axis's own row. `RESERVED` settled
+   * the same trade for `b`: a command worth one keystroke is not worth a letter
+   * a vault wants more.
    *
-   * Unlike `fold` there is nothing to confirm: one facet comes off and one
-   * reference with it, and both are visible in the panel and reversible there.
+   * In the queue this is *decline*: the file goes and `deleteNote` records the
+   * suppression, so the fingerprint does not come back on the next sweep.
    */
-  | { kind: 'accept' }
+  | { kind: 'remove' }
   /** Open the declined pile — what a sweep turned down, and why. */
   | { kind: 'declined' }
   /** Step within whatever list of chips currently holds focus. */
@@ -663,24 +675,24 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
     case '!':
       return emit({ kind: 'work' });
     /**
-     * Accept a candidate as its own note.
+     * Judge a candidate: fold it if it extends something, accept it if not.
      *
      * Punctuation for the same reason `!` is: not a letter, so no vocabulary can
-     * reach it and it shadows nothing even in principle. `+` is *add this to the
-     * vault* — the candidate becomes an ordinary note and nothing merges.
+     * reach it and it shadows nothing even in principle. `+` because both
+     * outcomes are *this belongs in the vault*, which is the one question the
+     * queue asks. `=` held the fold and is free again — the two acts turned out
+     * to be one decision the card had already made.
      */
     case '+':
-      return emit({ kind: 'accept' });
+      return emit({ kind: 'judge' });
     /**
-     * Fold a candidate into what it extends.
+     * Delete, confirmed by the panel.
      *
-     * `=` because a fold is the claim that *this is that*: two candidates for one
-     * piece of work turning out to be the same one. It held `+` while it was the
-     * only act in the queue, and `+` reads as *new* beside an accept that makes
-     * one — so the two swapped rather than crowding one glyph.
+     * Not a letter: see the command's own note above for why `dd` is not
+     * available and would not be right if it were.
      */
-    case '=':
-      return emit({ kind: 'fold' });
+    case 'Backspace':
+      return emit({ kind: 'remove' });
   }
 
   /**
@@ -766,8 +778,8 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       // The one row here that acts rather than reaching, which the wording has to
       // carry on its own: every other line in this section moves the keyboard.
       { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
-      { keys: '+', does: 'accept a candidate as its own note' },
-      { keys: '=', does: 'fold a candidate into the note it extends' },
+      { keys: '+', does: 'judge a candidate — fold it in, or accept it as its own note' },
+      { keys: '⌫', does: 'delete the note, after a confirm' },
     ],
   },
   {

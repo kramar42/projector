@@ -490,6 +490,12 @@ read by nothing — a canvas knows it is hand-arranged because `nodes` is there.
 **Those are all the keys there are.** `pj check` rejects any other, because a view with a misspelled
 or retired key parses exactly like one that works and then does nothing.
 
+**A view can say what its own emptiness means.** `whenEmpty:` replaces the deduced sentence with one
+of your own, for a view whose empty state is the *goal* rather than a problem — a queue you drain, a
+rule board that should stay at zero. Without it the intake board reports the moment you finish
+judging as "no note matches this filter", which is the one moment the loop pays you back. Saved-file
+only, like `lists:` and the arrangement: no control can derive what a view is *for*.
+
 ## Rules you can check
 
 Three of those keys are one feature. A **rule** is an ordinary saved view that says what should never
@@ -823,6 +829,17 @@ but did not judge is, by its own flag, still a proposal, so a rejudge would writ
 questions: does this deserve a note, and if so what is the note. So a card arrives with a title a person
 would actually use, a body saying where the work got to, and the axes it belongs on — rather than a
 commit subject, a provenance string and nothing else.
+
+**A card leads with why it was kept.** The first line of the body is the classifier's own reason as a
+`>` quote — under a dozen words, the same sentence a decline is recorded with. Without it the declined
+pile explained itself and the queue did not, which put the reading on the expensive side: turning a
+card down meant re-deriving the model's reasoning from its description. It is prose in the body like
+everything else there, so it is yours to delete, and a `rejudge` rewrites it along with the rest.
+
+**Judging a card is one key.** `+` folds it into what it `extends`, or accepts it as its own note when
+it extends nothing — the card has already decided which, and the fold dialog names the target before
+anything moves. Declining is `⌫`, which deletes the file and records the fingerprint so the next sweep
+does not propose it again.
 
 Candidates that do not deserve a note are recorded as declined, with the reason, and never become
 files — so a sweep of your own afternoon leaves the board empty and the declined pile three lines
@@ -1210,7 +1227,8 @@ clicked was on screen already, so the view stays exactly where it was and the pa
 | `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
 | `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
 | `!` | **start work** on the cursor's note: worktrees, a briefing, a session in the app. Confirmed first, and the confirm names what it is about to create |
-| `+` | **fold in** a candidate that `extends` another note: its body, links and fingerprint move across and its card goes. Confirmed first; nothing happens on a note that extends nothing |
+| `+` | **judge** a candidate. One key, because the card has already decided which act it is: one carrying `extends` folds into that note — confirmed first, and the dialog names the target — and one carrying none is accepted as its own note. To keep a card that proposes a target separate, remove the `extends` reference and judge it again |
+| `⌫` | **delete** the note, after a confirm that names it. In the queue this is *declining*: the file goes and the fingerprint is recorded, so the next sweep does not propose it again. Not `dd` — `d` is an axis letter in the shipped vocabularies, where `dd` already means that axis's own row |
 
 `!` is the odd one out here: every other key in this section *reaches* something, and `!` does
 something. It reads that way from vim, where `!` is the key that hands what you have to an external

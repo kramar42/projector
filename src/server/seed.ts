@@ -273,6 +273,11 @@ show: [project, priority]
 # filters on \`status\`, and a candidate has none until you give it one.
 shape: board
 title: Unjudged
+# Drained is the goal, so an empty board here is the one moment this loop pays
+# you back. Without this it reports the ending as a failure — and worse: \`intake\`
+# is carried only by unjudged cards, so judging the last one leaves the axis with
+# no rows and the deduction would call it unused.
+whenEmpty: The queue is clear — every candidate a sweep proposed has been judged.
 filter:
   intake: [unjudged]
 sort: [updated:desc]
@@ -295,6 +300,10 @@ shape: board
 title: Needs project
 unlisted: true
 expect: empty
+# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# holds. Two questions about one view — is zero correct, and what does zero say —
+# so neither is derivable from the other.
+whenEmpty: Nothing is unfiled — every accepted note has a project.
 filter:
   intake: ['(none)']
   project: ['(none)']
@@ -315,6 +324,10 @@ shape: board
 title: Needs status
 unlisted: true
 expect: empty
+# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# holds. Two questions about one view — is zero correct, and what does zero say —
+# so neither is derivable from the other.
+whenEmpty: Nothing is planned-but-uncommitted — every note with a priority has a status.
 filter:
   intake: ['(none)']
   priority: ['-(none)']
@@ -335,6 +348,10 @@ shape: board
 title: Needs priority
 unlisted: true
 expect: empty
+# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# holds. Two questions about one view — is zero correct, and what does zero say —
+# so neither is derivable from the other.
+whenEmpty: Nothing is committed-but-unplanned — every note with a status has a priority.
 filter:
   intake: ['(none)']
   status: ['-(none)']
