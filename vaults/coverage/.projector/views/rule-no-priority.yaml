@@ -1,0 +1,9 @@
+# The mirror of the one beside it, on a different axis — which is the whole
+# reason a composition exists. No single filter holds these two apart.
+title: Needs priority
+unlisted: true
+filter:
+  priority: ['(none)']
+  status: [active, blocked]
+sort: [updated:desc]
+show: [priority, status]

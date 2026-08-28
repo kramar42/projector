@@ -13,6 +13,7 @@ import { IconButton } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { useCursorFocus } from '../cursor.ts';
+import { LISTS_AXIS } from '../../schema/vocabulary.ts';
 
 /**
  * Columns from the primary grouping axis; when a second axis is set, lanes as
@@ -61,7 +62,16 @@ export function BoardView({
   const [problem, setProblem] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
-  const groupBy = data.spec.query.groupBy?.[0] ?? '';
+  /**
+   * The column axis, *as a facet a drop can write* — which `LISTS_AXIS` is not.
+   *
+   * A composition's columns are other views' answers, so there is no value to
+   * set: dropping a card into "Needs status" cannot make it need one. Every
+   * other use of the axis here is a write, so the empty string is the honest
+   * spelling and `columnsAreLists` carries the rest.
+   */
+  const columnsAreLists = data.spec.query.groupBy?.[0] === LISTS_AXIS;
+  const groupBy = columnsAreLists ? '' : data.spec.query.groupBy?.[0] ?? '';
   // The second axis is a facet like the first, so a drag across a swimlane is a
   // write like any other. It used to be a row label and nothing else.
   const laneBy = data.spec.query.groupBy?.[1] ?? '';
@@ -74,9 +84,17 @@ export function BoardView({
     ...new Set(Object.values(cards).flatMap((c) => c.links.map((l) => l.raw))),
   ]);
 
-  // A card can only be dragged onto an axis that exists. Ungrouped is a single
-  // flat column, which is the "what's next" list and needs no drop targets.
-  const draggableBoard = Boolean(groupBy);
+  /**
+   * A card can only be dragged onto an axis that exists. Ungrouped is a single
+   * flat column, which is the "what's next" list and needs no drop targets.
+   *
+   * Either axis is enough, and on a composition only the second one ever is:
+   * columns write nothing, lanes write the facet they are grouped by. So a
+   * triage board with `groupBy: [lists, priority]` is draggable *down* and inert
+   * *across*, which is exactly the two things those axes are. `dropOutcome`
+   * already decides the two independently, so nothing there had to learn this.
+   */
+  const draggableBoard = Boolean(groupBy || laneBy);
 
   /**
    * The ids of one column, in the order it renders: stored order first, then
@@ -275,6 +293,12 @@ export function BoardView({
         <div className="board-nudge">
           drag between columns to set <b>{groupBy}</b>. Reordering <em>within</em> a column needs a
           saved view — card order lives in a file, the way positions do.
+        </div>
+      )}
+      {!viewName && !groupBy && laneBy && (
+        <div className="board-nudge">
+          drag between rows to set <b>{laneBy}</b>. The columns are saved views, so there is nothing
+          a drop across one could write.
         </div>
       )}
     </div>

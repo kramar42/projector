@@ -1,0 +1,9 @@
+# A rule, and therefore a column. Flat and `unlisted`: it is drawn inside
+# `compose`, and `pj audit` runs it, but it is not something to pick from a menu.
+title: Needs project
+unlisted: true
+filter:
+  project: ['(none)']
+  status: [active, blocked]
+sort: [updated:desc]
+show: [priority, status]

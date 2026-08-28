@@ -1,5 +1,5 @@
 import { COMPUTED } from '../index/query.ts';
-import { HUES, isRef } from '../schema/vocabulary.ts';
+import { HUES, LISTS_AXIS, isRef } from '../schema/vocabulary.ts';
 import { KEY_ORDER } from '../schema/frontmatter.ts';
 import { BUILTIN_FACETS, STRUCTURAL } from '../schema/facets.ts';
 import type { Facets, Issue } from '../schema/types.ts';
@@ -37,7 +37,15 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * declare one — to label it, colour it, or ask for it in triage. What it may not
  * do is change its shape, which is the separate check below.
  */
-export const RESERVED: readonly string[] = [...KEY_ORDER, 'body', ...Object.keys(COMPUTED)].filter(
+export const RESERVED: readonly string[] = [
+  ...KEY_ORDER,
+  'body',
+  // Grouping reaches for this name before any facet — see `LISTS_AXIS` — so a
+  // facet wearing it would store values, validate writes and then never group.
+  // The same correctness collision the computed axes have, one layer up.
+  LISTS_AXIS,
+  ...Object.keys(COMPUTED),
+].filter(
   // `project` names both a frontmatter block and a built-in facet, so it reaches
   // this list through `KEY_ORDER` and has to be lifted back out: the structural
   // check below is the one that judges it, and it judges it more precisely.
@@ -233,7 +241,13 @@ export function validateViews(
     };
 
     for (const name of Object.keys(spec.query.filter ?? {})) axis(name, `filter.${name}`);
-    for (const name of spec.query.groupBy ?? []) axis(name, 'groupBy');
+    // `LISTS_AXIS` is the one grouping axis that is not a facet — its values are
+    // other views — so it has no vocabulary to be known by. Whether it is *usable*
+    // here is the composition check below: naming it without `lists:` is an
+    // error there, with a message that says what to do about it.
+    for (const name of spec.query.groupBy ?? []) {
+      if (name !== LISTS_AXIS) axis(name, 'groupBy');
+    }
     for (const name of spec.show) axis(name, 'show');
 
     for (const key of spec.query.sort ?? []) {
@@ -257,21 +271,43 @@ export function validateViews(
       at('unlisted', `unlisted is "${String(raw.unlisted)}" — it is true or it is absent`);
     }
 
-    if (spec.shape === 'lists' && !spec.lists?.length) {
-      at('lists', 'shape is "lists" but no lists are named — the view would draw no columns');
+    // `shape: lists` was the fourth shape and is now the `lists:` key plus an
+    // ordinary shape. An older file saying it still draws — `specFromFile` falls
+    // through to `board`, which is what it drew — so this is a nudge and not an
+    // error, and it is worth one because the word now claims something untrue.
+    if (raw?.shape === 'lists') {
+      at(
+        'shape',
+        spec.lists?.length
+          ? '"lists" is no longer a shape — the "lists:" key makes this a composition, and the shape is how it is drawn ("board", "table" or "canvas"). Drop this line or name one of the three'
+          : '"lists" is no longer a shape, and no "lists:" key names any children — this view draws as a board',
+      );
     }
-    if (spec.lists?.length && spec.shape !== 'lists') {
-      at('shape', `lists are named but the shape is "${spec.shape}" — only "lists" draws them`);
+
+    if (raw && 'groupBy' in raw && !spec.lists?.length) {
+      const named = (raw.groupBy as unknown[] | undefined) ?? [];
+      if (named.map(String).includes(LISTS_AXIS)) {
+        at('groupBy', `"${LISTS_AXIS}" groups by which child view claims a note, and this view names no "lists:" — the column axis would be empty`);
+      }
     }
 
     if (spec.lists?.length) {
-      // A composition has no query of its own. One that carries a filter reads
-      // as though it narrowed its columns, and it does not: each child runs its
-      // own query whole.
-      for (const key of ['filter', 'q', 'focus', 'groupBy', 'sort', 'show'] as const) {
-        if (raw && key in raw) {
-          at(key, `a lists view draws its children's answers, so "${key}" here does nothing`);
-        }
+      // A composition owns its *primary* axis and nothing else. Everything the
+      // three shapes share is a live control here exactly as it is anywhere —
+      // the filter and the search narrow every column at once, `sort` orders
+      // within one, and a second `groupBy` entry makes lanes.
+      const named = ((raw?.groupBy as unknown[] | undefined) ?? []).map(String);
+      if (named.length && named[0] !== LISTS_AXIS) {
+        at(
+          'groupBy',
+          `the columns are the views in "lists:", so "${named[0]}" cannot be the first grouping axis — write "[${LISTS_AXIS}, ${named[0]}]" to keep the columns and make ${named[0]} the lanes`,
+        );
+      }
+      if (named.filter((axis) => axis === LISTS_AXIS).length > 1 || named.slice(1).includes(LISTS_AXIS)) {
+        at('groupBy', `"${LISTS_AXIS}" is the column axis, so it can only appear once and only first`);
+      }
+      if (named.length > 2) {
+        at('groupBy', 'two grouping axes at most — columns and lanes, and there is no third level to draw');
       }
 
       const titles = new Map<string, string>();
@@ -298,6 +334,20 @@ export function validateViews(
         const clash = titles.get(title);
         if (clash) at('lists', `"${child}" and "${clash}" are both titled "${title}" — one column would swallow the other`);
         else titles.set(title, child);
+      }
+
+      // A curated order is keyed by the column heading, which for a composition
+      // is a child's *title* — so retitling a child would orphan its arrangement
+      // with nothing on screen to say so. This is the check that makes keying by
+      // the heading safe, and it is the same check a facet board wants for the
+      // same reason: a renamed vocabulary value orphans an order identically.
+      for (const key of Object.keys(spec.order ?? {})) {
+        if (!titles.has(key)) {
+          at(
+            'order',
+            `"${key}" is not a column of this view — an order under it is never read. The columns are titled ${[...titles.keys()].map((t) => `"${t}"`).join(', ')}`,
+          );
+        }
       }
     }
 

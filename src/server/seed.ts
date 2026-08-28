@@ -344,16 +344,25 @@ show: [project, status]
     path: 'triage.yaml',
     body: `# Everything waiting on a decision, in one board.
 #
-# \`shape: lists\` draws other views as its columns. It exists because grouping
+# \`lists:\` draws other views as this one's columns. It exists because grouping
 # cannot answer this: a grouped board derives its columns from one axis over one
 # result set, and two of these four are conditions on two axes at once. Each
 # column is an ordinary view file, which is the same file \`pj audit\` runs — so a
 # rule and the place you fix it are one object rather than two that can disagree.
 #
-# Nothing here is draggable, and that is not a limitation to work around: there
-# is no facet value a drop could write. A note leaves a column by being edited,
-# or — in the first one — by being accepted or folded in.
-shape: lists
+# Naming any children groups this view by \`lists\` — the one axis whose values
+# are other views rather than something read off a note. Everything else is an
+# ordinary view: \`shape\` below draws it as a board, and \`table\` and \`canvas\`
+# draw the same columns as sections and as bands.
+#
+# Drop \`groupBy\` in and the columns gain lanes:
+#
+#     groupBy: [lists, priority]
+#
+# which is also the only way anything here is draggable. A column is a query, so
+# no drop across one could write a value — but a *lane* is a facet value like any
+# other, so dragging a card down a row sets it.
+shape: board
 title: Triage
 lists: [intake, needs-project, needs-status, needs-priority]
 `,

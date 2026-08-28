@@ -150,18 +150,36 @@ export function splitSelection(selection: readonly string[]): {
 }
 
 /**
- * The projections of one note database.
+ * The projections of one note database. All three project one query, and every
+ * one of them is editable rather than merely viewable (C5).
  *
- * The first three project a *single* query — one result set, arranged by an axis.
- * `lists` is the one that does not: its columns are other views, so it answers
- * questions no grouping can, because grouping derives columns from one axis over
- * one result set and two of the questions a triage board asks ("has a priority
- * but no status", "has a status but no priority") are conditions on different
- * axes at once.
+ * `lists` used to be a fourth. It never was one: a composition does not *draw*
+ * differently, it decides where the columns come from — so it belongs beside
+ * `groupBy`, not beside `board`. As a shape it had to forbid the other three,
+ * which cost a triage board its table and its canvas for no reason anyone could
+ * state. It is `LISTS_AXIS` now.
  */
-export type Shape = 'board' | 'canvas' | 'table' | 'lists';
+export type Shape = 'board' | 'canvas' | 'table';
 
-export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table', 'lists'];
+export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
+
+/**
+ * The grouping axis whose values are other views.
+ *
+ * Every other axis reads a value *off* each note; this one asks each child view
+ * which notes it claims. That is the whole of what a composition is, and saying
+ * it as an axis rather than as a shape is what lets the rest of the model apply
+ * unchanged — a second axis beside it makes lanes, `sort` orders within a
+ * column, and a board, a table and a canvas all draw it.
+ *
+ * Reserved, so no vault can declare a facet by this name and shadow it.
+ *
+ * It is the one axis that is also a **filter**: a facet axis partitions every
+ * hit, since a note with no value still lands in `(none)`, but a note no child
+ * claims is in no column and is not in the view. There is deliberately no
+ * `(none)` column — "matches none of my rules" is the rest of the vault.
+ */
+export const LISTS_AXIS = 'lists';
 
 /** Which way a focus traversal walks a reference facet. */
 export type Dir = 'out' | 'in' | 'both';

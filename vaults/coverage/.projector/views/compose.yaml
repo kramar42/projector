@@ -1,0 +1,12 @@
+# A composition: the columns are the three rules beside this file, not values of
+# an axis. The only view here that reaches `lists` — the one grouping axis whose
+# values are other views — and so the only one that draws a note in two columns
+# at once, which is what the footer's "extra placements" counts.
+#
+# `shape` is an ordinary control on it: switch to a table for sections, or to a
+# canvas for bands. The columns stay the columns.
+shape: board
+title: Compose
+lists: [rule-no-project, rule-no-priority, rule-stale]
+sort: [title:asc]
+show: [project, priority, status]

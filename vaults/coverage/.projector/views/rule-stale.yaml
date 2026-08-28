@@ -1,0 +1,7 @@
+# A third column, on a computed axis, so the board reaches one of those too.
+title: Going stale
+unlisted: true
+filter:
+  staleness: [stale, ancient]
+sort: [updated:asc]
+show: [priority, status]

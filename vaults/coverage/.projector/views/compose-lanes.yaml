@@ -1,0 +1,10 @@
+# The same composition with a second axis: columns are still the rules, rows are
+# a facet. This is the one board where a drag is half-live — a drop across a
+# column writes nothing, because a column is a query, while a drop into another
+# lane sets `priority` like any other swimlane board.
+shape: board
+title: Compose · lanes
+lists: [rule-no-project, rule-no-priority, rule-stale]
+groupBy: [lists, priority]
+sort: [title:asc]
+show: [project, priority, status]

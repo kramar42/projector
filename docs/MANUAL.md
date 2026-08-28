@@ -415,15 +415,15 @@ and auto-ordered, and *Save layout* on one asks for a name first: naming a query
 somewhere for its layout to live.
 
 ```yaml
-shape: board | canvas | table | lists
+shape: board | canvas | table
 title: Home
 filter: { status: [planning, active] }
 focus: { id: platform, via: parent, dir: in, depth: 2 }
 q: keycloak
-groupBy: [priority, project]
+groupBy: [priority, project]       # columns, then lanes
 sort: [due:asc, priority:asc]
 show: [parent, project, tech]      # references first: the canvas lays out by the first
-lists: [needs-project, needs-status]  # `shape: lists` only — columns that are other views
+lists: [needs-project, needs-status]  # columns that are other views — see below
 unlisted: true                     # keep it out of the picker; still openable by name
 expect: empty                      # `pj audit` asserts this view comes back empty
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
@@ -472,28 +472,44 @@ internally consistent, which has the same right answer in every vault. A rule is
 a dangling reference and twelve untidy notes would leave by the same exit code with nothing to tell
 them apart.
 
-**`shape: lists` draws rules side by side.** Its columns are other views, named in order:
+**`lists:` draws rules side by side.** Its columns are other views, named in order:
 
 ```yaml
 # views/triage.yaml — everything waiting on a decision
-shape: lists
+shape: board
 title: Triage
 lists: [intake, needs-project, needs-status, needs-priority]
 ```
 
-This is the one view whose columns do not come from an axis, and it exists because grouping cannot
-express the question. A grouped board derives its columns from one axis over one result set, so
-*carries a priority but no status* and its mirror — conditions on two different axes at once — can be
-filtered one at a time and never drawn beside each other.
+That is a **composition**, and it exists because grouping cannot *derive* the question. A grouped
+board reads its columns off one axis over one result set, so *carries a priority but no status* and
+its mirror — conditions on two different axes at once — can be filtered one at a time and never drawn
+beside each other.
 
-**A composition's shape is not a live control.** The other three shapes project one query three ways;
-a composition has no query of its own, so there is nothing to switch into — the shape select is
-disabled on one, and a `shape=` in the URL loses to the file.
+**Naming children is grouping.** `lists:` sets this view's first grouping axis to `lists`, the one
+axis whose values are other views rather than something read off a note. You need not write it; you
+may. Everything that follows from that is what follows from grouping anywhere else:
+
+| control | on a composition |
+|---|---|
+| `shape` | board, table or canvas, like any view. Columns become sections and bands |
+| `groupBy` | pinned to `lists` — the columns *are* the children, so there is nothing to switch it to |
+| `groupBy: [lists, priority]` | a second axis makes **lanes**: columns across, priority down |
+| `sort` | orders within each column |
+| `filter`, `q`, `focus` | narrow every column at once — *this board, but only project X* |
+| `order` | a curated arrangement per column, keyed by the column heading |
+
+`lists` was a fourth `shape` until it earned its place as an axis. As a shape it had to forbid the
+other three, so a triage board could not be a table, and every control above was inert.
+
+**Only a lane can be dragged.** A column is a query result, so there is no facet value a drop into
+*needs a project* could write — a note leaves a column by being edited. A lane is an ordinary facet
+value, so on `groupBy: [lists, priority]` dragging a card down a row sets its priority, exactly as on
+any swimlane board. Sideways does nothing, and that asymmetry is the two axes being different kinds
+of thing.
 
 A composition is one level deep: a view named in `lists:` may not name others, and may not group by
-anything, since a column is one flat list. Nothing on it is draggable, and that is not a limitation to
-work around — there is no facet value a drop into *needs a project* could write. A note leaves a
-column by being edited.
+anything itself, since a column is one flat list.
 
 **`unlisted: true` keeps a view out of the picker.** Not hidden: `pj ls --view needs-status` runs it,
 `pj audit` enumerates it, and it is drawn in plain sight as a column. It is absent from the *index*,

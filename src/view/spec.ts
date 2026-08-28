@@ -1,7 +1,7 @@
 import type { Focus, Query } from '../index/query.ts';
-import { DIRS, NONE, SHAPES, type Dir, type Shape } from '../schema/vocabulary.ts';
+import { DIRS, LISTS_AXIS, NONE, SHAPES, type Dir, type Shape } from '../schema/vocabulary.ts';
 
-export { DIRS, NONE, SHAPES, type Dir, type Shape };
+export { DIRS, LISTS_AXIS, NONE, SHAPES, type Dir, type Shape };
 
 /**
  * The one description of a view, shared by the three places that describe one:
@@ -55,7 +55,7 @@ export interface ViewSpec {
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
   /**
-   * `shape: lists` only: the views this one draws as columns, in order.
+   * The views this one draws as columns, in order — a **composition**.
    *
    * By reference rather than inline, because the same file is then two things at
    * once — a column here and a rule `pj audit` runs — and one object cannot
@@ -64,6 +64,13 @@ export interface ViewSpec {
    * Saved-file only, like `nodes` and `order` (C9). A composition is
    * hand-curated rather than derivable, so there is no live control that builds
    * one and no URL that carries it.
+   *
+   * Naming any makes `LISTS_AXIS` this view's primary grouping — implicitly, so
+   * a file need not spell `groupBy: [lists]`, though it may. Everything else
+   * stays a live control: `shape` draws it as a board, a table or a canvas, a
+   * second `groupBy` entry makes lanes, and `sort` and the filter apply across
+   * every column. It was a *shape* once, which had to forbid the other three and
+   * could not say why.
    */
   lists?: string[];
   /**
@@ -266,6 +273,18 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (raw.unlisted === true) spec.unlisted = true;
   if (raw.expect === 'empty') spec.expect = 'empty';
 
+  // The same pin `withSavedOnly` applies, for the callers that never see a URL:
+  // `pj ls --view`, `pj audit`, and every read of the view index. Without it a
+  // composition drew its columns only when it arrived through the server.
+  //
+  // `shape: lists` in an older file lands on `board` by itself — it is not in
+  // `SHAPES` any more, so `one()` falls through to the default — which is what
+  // it always drew. `pj check` names it so the word can be dropped.
+  if (spec.lists?.length) {
+    const rest = (spec.query.groupBy ?? []).filter((axis) => axis !== LISTS_AXIS);
+    spec.query.groupBy = [LISTS_AXIS, ...rest].slice(0, 2);
+  }
+
   const nodes = raw.nodes as Record<string, { x?: number; y?: number }> | undefined;
   if (nodes && typeof nodes === 'object') spec.nodes = nodes;
   const order = raw.order as Record<string, string[]> | undefined;
@@ -313,14 +332,22 @@ export function withSavedOnly(spec: ViewSpec, saved: ViewSpec | null | undefined
   spec.lists = saved?.lists;
   spec.unlisted = saved?.unlisted;
   spec.expect = saved?.expect;
-  // A composition's shape is not an override anyone can win.
+  // A composition's *primary* grouping is not an override anyone can win.
   //
-  // `shape` is a live control for the three shapes that *project a query*: the
-  // same result set, arranged three ways. A composition has no query of its own
-  // — the validator refuses one — so any other shape draws its empty filter,
-  // which is the whole vault as one flat list. That is not a different view of
-  // the same answer, it is a different and much larger question, silently.
-  if (spec.lists?.length) spec.shape = 'lists';
+  // Everything else about it is: the shape, the sort, the filter and a second
+  // grouping axis are the same live controls they are on any other view, which
+  // is the whole point of `LISTS_AXIS` being an axis rather than a shape. But
+  // the columns *are* the children, so the first grouping position is spoken
+  // for, and a URL that says otherwise is asking for a view this file is not.
+  //
+  // Written here rather than required in the file so `lists:` alone is a
+  // complete composition, and re-asserted rather than trusted so `?group=` can
+  // add a lane axis without being able to displace the columns.
+  if (spec.lists?.length) {
+    const rest = (spec.query.groupBy ?? []).filter((axis) => axis !== LISTS_AXIS);
+    // Two levels, as everywhere: columns and lanes. There is no third to draw.
+    spec.query.groupBy = [LISTS_AXIS, ...rest].slice(0, 2);
+  }
   return spec;
 }
 

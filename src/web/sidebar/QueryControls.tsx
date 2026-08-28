@@ -2,6 +2,7 @@ import { PopoverButton } from '../components/Popover.tsx';
 import { Button } from '../components/Button.tsx';
 import { KeyHint } from '../components/KeyHint.tsx';
 import { SHAPES } from '../query.ts';
+import { LISTS_AXIS } from '../../schema/vocabulary.ts';
 import { setGroupBy, setShape, setShow, setSort } from '../../view/intents.ts';
 import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
 
@@ -35,20 +36,18 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
           <KeyHint keys="s" means="comma then s" />
         </label>
         {/*
-          * Disabled on a composition, which has no query to project. `lists` is
-          * not among the options for that reason, so a select left live here
-          * would show a blank value and turn the view into its own empty filter
-          * — the whole vault as one flat list — on the first nudge.
+          * Live on a composition too. It was disabled, on the reasoning that a
+          * composition has no query to project — but the columns are the thing
+          * it does not project, and a board, a table and a canvas all draw
+          * columns. What it cannot switch is its *grouping*, which is the
+          * control below.
           */}
         <select
           className="rail-select"
           data-rail="shape"
-          value={composed ? '' : shape}
-          disabled={composed}
-          title={composed ? 'a lists view draws other views, so it has no shape to switch' : undefined}
+          value={shape}
           onChange={(e) => edit((spec) => setShape(spec, e.target.value as Shape))}
         >
-          {composed && <option value="">Lists</option>}
           {SHAPES.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
@@ -62,22 +61,40 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
           Group by
           <KeyHint keys="g" means="comma then g — then an axis key to set it outright" />
         </label>
+        {/*
+          * The one control a composition pins, and the only one. Its columns
+          * *are* the views it names, so the primary axis is spoken for — there
+          * is no value to switch it to that would not be a different view. Every
+          * other control here stays live: `then by` below makes lanes out of the
+          * columns, and sort and the filter cross all of them.
+          */}
         <select
           className="rail-select"
           data-rail="group"
-          value={group[0] ?? ''}
+          value={composed ? LISTS_AXIS : group[0] ?? ''}
+          disabled={composed}
+          title={
+            composed
+              ? 'the columns are the views this one composes — group by is what it already is'
+              : undefined
+          }
           onChange={(e) => edit((spec) => setGroupBy(spec, 0, e.target.value || null))}
         >
-          <option value="">—</option>
-          {facets.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
+          {composed ? (
+            <option value={LISTS_AXIS}>Lists</option>
+          ) : (
+            <option value="">—</option>
+          )}
+          {!composed &&
+            facets.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
         </select>
       </div>
 
-      {group[0] && (
+      {(composed || group[0]) && (
         <>
           <div className="rail-row">
             <label className="rail-label">

@@ -19,7 +19,7 @@ import { blockedSet, blockingFacets } from './blocking.ts';
 
 /** Absence of any value for a facet. Also the trailing group's label, as in P0. */
 export { NONE } from '../schema/vocabulary.ts';
-import { NONE, STRUCTURE_AXIS, splitSelection } from '../schema/vocabulary.ts';
+import { LISTS_AXIS, NONE, STRUCTURE_AXIS, splitSelection } from '../schema/vocabulary.ts';
 
 export type { Dir } from './refs.ts';
 import type { Dir } from './refs.ts';
@@ -644,6 +644,23 @@ export interface RunOpts {
    * hierarchy and pulling context from another.
    */
   connect?: string;
+  /**
+   * The `LISTS_AXIS` membership, supplied rather than read off the notes.
+   *
+   * A composition's columns are other views' answers, and this module cannot run
+   * a view — it has no view index and gaining one would make the query layer
+   * depend on the layer built on top of it. So the caller that *does* have one
+   * (`payload.ts`) runs the children and hands the memberships down.
+   *
+   * Only membership, deliberately: order is not the caller's to decide. The ids
+   * of a column come out of `hits`, which is already sorted by this query's own
+   * `sort`, so a composition sorts by the same control as every other board
+   * rather than by whichever child happened to answer.
+   *
+   * Ignored unless `groupBy[0]` is `LISTS_AXIS`, and its absence there is an
+   * error the validator raises rather than an empty board.
+   */
+  lists?: { order: string[]; members: Map<string, Set<string>> };
 }
 
 export function runQuery(
@@ -669,7 +686,20 @@ export function runQuery(
     universe.push(rec);
   }
 
-  const hits = universe.filter((rec) => matches(rec, filter, ctx));
+  const grouping = (query.groupBy ?? []).filter(Boolean);
+  // The one axis whose values are not read off a note, and the one that is also
+  // a filter — see `LISTS_AXIS`. Resolved before anything else looks at the
+  // result set, because a note no column claims is not in the view at all: it is
+  // not a hit, it is not counted, and a canvas must not walk its ancestors in as
+  // context.
+  const claiming = grouping[0] === LISTS_AXIS ? opts.lists : undefined;
+  const claimed = claiming
+    ? new Set(claiming.order.flatMap((v) => [...(claiming.members.get(v) ?? [])]))
+    : null;
+
+  const hits = universe.filter(
+    (rec) => matches(rec, filter, ctx) && (!claimed || claimed.has(rec.id)),
+  );
   hits.sort(comparator(query.sort, ctx));
   const ids = hits.map((r) => r.id);
 
@@ -689,7 +719,6 @@ export function runQuery(
     }
   }
 
-  const grouping = (query.groupBy ?? []).filter(Boolean);
   let groups: Group[] | null = null;
   let primary: string[] = [];
   let secondary: string[] = [];
@@ -747,7 +776,21 @@ export function runQuery(
       return { order, buckets };
     };
 
-    const first = spread(grouping[0]!);
+    const first = claiming
+      ? {
+          order: claiming.order,
+          // Filtered out of `ids` rather than taken from the caller, so a column
+          // arrives in this query's sort order and holds nothing this query's
+          // filter excluded. Membership is the child's; everything else — which
+          // notes, in what order — is the parent's.
+          buckets: new Map(
+            claiming.order.map((value) => [
+              value,
+              ids.filter((id) => claiming.members.get(value)?.has(id)),
+            ]),
+          ),
+        }
+      : spread(grouping[0]!);
     primary = first.order;
 
     if (grouping.length === 1) {

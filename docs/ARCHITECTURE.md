@@ -14,7 +14,7 @@ number.
 | C2 | Nothing is written where somebody else reads | no code path writes to Jira, GitHub, Trello or Slack. A sink only you read — a notification to yourself — is not one of those |
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
-| C5 | Every shape a query projects into is equally first-class | board, canvas and table are editable, not just viewable. `lists` is not one of them: it projects several queries rather than one, and has no axis a drop could write |
+| C5 | Every shape a query projects into is equally first-class | board, canvas and table are editable, not just viewable — and there are exactly three. A composition is not a fourth: it decides where the columns come from, not how they are drawn, so it is the `lists` grouping axis and every shape draws it |
 | C6 | The note body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
@@ -123,14 +123,28 @@ not drift while the response half was assembled inside a hono handler the CLI co
 `pj ls --view unblocked` and opening that view in the browser go through the same code, and now return
 the same thing.
 
-**A composition is answered here too.** `shape: lists` names other views as its columns, and
-`payload.ts` runs each child's query and returns the answers as the groups the board already knows how
-to draw — so the client needs no case of its own and gets a non-draggable board for free, `groupBy`
-being empty. It exists because grouping cannot express the question: a grouped board derives its
-columns from one axis over one result set, and "carries a priority but no status" and its mirror are
-conditions on two different axes at once. Applying **C9** — a view is a query — a rule *is* a view, so
-the file a column draws from is the same file `pj audit` asserts, and there is no second place to
-declare one.
+**A composition is answered here too.** `lists:` names other views as this one's columns. It exists
+because grouping cannot *derive* the question: a grouped board reads its columns off one axis over one
+result set, and "carries a priority but no status" and its mirror are conditions on two different axes
+at once. Applying **C9** — a view is a query — a rule *is* a view, so the file a column draws from is
+the same file `pj audit` asserts, and there is no second place to declare one.
+
+**It is an axis, not a shape.** `lists` was a fourth `shape` for a while, and being one meant forbidding
+the other three: a triage board could not be a table or a canvas, and every control on the rail was
+inert, because the view sat outside `view = filter × search × focus × group × sort × shape × show`
+(C9) rather than inside it. It is `LISTS_AXIS` now — the one grouping axis whose values are other
+views rather than something read off a note — so naming children *is* grouping, and everything else
+means what it means everywhere. `payload.ts` runs each child and hands `runQuery` the **memberships
+only**; which notes, in what order, under what filter and split across which second axis are the
+parent's, decided by the same code every board uses. Handing back finished ids is what used to make
+`sort` here a control that did nothing.
+
+Two consequences worth stating. It is the one axis that is also a **filter** — a facet axis partitions
+every hit, since a note with no value still lands in `(none)`, but a note no child claims is in no
+column and not in the view. And it is the one axis a drop cannot write: a column is a query result, so
+nothing a card is dragged into a column could set. A *second* axis beside it is an ordinary facet, so
+`groupBy: [lists, priority]` is draggable down its lanes and inert across its columns — which is
+exactly what those two axes are.
 
 **The engine holds no filing policy.** There was a `triage` axis computed from an `expected:` key in
 `facets.yaml`, and it went: saying a facet is expected asserts that every note is work, while the model
@@ -894,7 +908,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
-| `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect |
+| `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |
 | `keys.test.ts` | the keyboard grammar: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
@@ -907,7 +921,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
 | `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, seeding a fresh vault not being the same act as adopting one, and the shipped tutorial passing `pj check` with no warnings — every shape in it is a recommendation whether it was meant as one or not |
-| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy, and composition — a `shape: lists` view drawing its children as columns named by their titles, `unlisted` keeping them out of the picker, a URL's `shape` losing to the composition while an ordinary view still switches, and the checks that a child exists, stays flat, does not nest and does not collide |
+| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy, and composition — a `lists:` view drawing its children as columns named by their titles, `unlisted` keeping them out of the picker, shape/sort/filter/lanes all live over those columns, a URL losing the *column* axis alone, and the checks that a child exists, stays flat, does not nest, does not collide and owns every `order` key it declares |
 | `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query; plus the one asymmetry it allows — the built-in relation carries its own `inverse`, a vault may rename it, and declaring the axis for any other reason does not erase it |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine

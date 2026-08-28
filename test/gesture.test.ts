@@ -358,3 +358,67 @@ test('connecting two nodes moves a hierarchy edge and adds an ordinary one', () 
  * blocked itself, ten times over — the SQL closure applied neither of the two
  * rules `refsOf` applies, and was depth-capped at 10.
  */
+
+/**
+ * A composition's two axes are different kinds of thing, and a drag is where
+ * that stops being a distinction and starts being a behaviour.
+ *
+ * The columns are other views — `LISTS_AXIS` — so no value exists for a drop
+ * across one to write: dropping a card into *needs a status* cannot make it need
+ * one. A lane is an ordinary facet value, so a drop into one writes it exactly
+ * as on any swimlane board. `BoardView` spells the column axis as the empty
+ * string for precisely this reason, and the two `if`s here were already
+ * independent, so neither of them had to learn what a composition is.
+ */
+const composed = {
+  onCard: null,
+  // Not `'lists'`: the board passes what a drop can *write*, and this axis has
+  // no value to write. Passing the axis name would have set `lists: "Needs
+  // status"` on the card.
+  groupBy: '',
+  laneBy: 'priority',
+  mode: 'replace' as DragMode,
+  selected: new Set<string>(),
+  order: ['a', 'b'],
+  viewName: 'triage',
+};
+
+test('on a composition a drag down a lane writes, and a drag across a column does not', () => {
+  // Down: an ordinary facet write.
+  const down = dropOutcome({
+    ...composed,
+    cardId: 'a',
+    from: 'Needs status',
+    fromLane: 'someday',
+    to: 'Needs status',
+    toLane: 'now',
+  });
+  assert.ok(down.kind === 'facet');
+  assert.deepEqual(down.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
+
+  // Across, same lane: nothing to write, and on a saved view what is left is the
+  // curated order — which is the parent's, keyed by the column heading.
+  const across = dropOutcome({
+    ...composed,
+    cardId: 'a',
+    from: 'Needs status',
+    fromLane: 'now',
+    to: 'Needs priority',
+    toLane: 'now',
+    onCard: { id: 'b', index: 1, below: true },
+  });
+  assert.ok(across.kind !== 'facet', 'a column is a query, so a drop across one writes no facet');
+
+  // Diagonal: the lane still writes, and the column still does not — one move,
+  // not two, and not none.
+  const diagonal = dropOutcome({
+    ...composed,
+    cardId: 'a',
+    from: 'Needs status',
+    fromLane: 'someday',
+    to: 'Needs priority',
+    toLane: 'now',
+  });
+  assert.ok(diagonal.kind === 'facet');
+  assert.deepEqual(diagonal.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
+});

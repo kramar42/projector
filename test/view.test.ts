@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { patchYamlFile, } from '../src/schema/frontmatter.ts';
 import { validateViews, validateVocabulary } from '../src/view/validate.ts';
-import { parseSpec, specFromFile, specToParams, withSavedOnly } from '../src/view/spec.ts';
+import { parseSpec, specFromFile, specToParams, withSavedOnly, type ViewSpec } from '../src/view/spec.ts';
+import { LISTS_AXIS } from '../src/schema/vocabulary.ts';
 import { SHAPES } from '../src/web/query.ts';
 import { declaredFacets, loadFacets, } from '../src/schema/facets.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
@@ -422,15 +423,17 @@ test('a lists view draws its children as columns, and its own query does nothing
       }),
     ];
     const parent = specFromFile('triage', {
-      shape: 'lists',
       title: 'Triage',
       lists: ['needs-status', 'needs-priority'],
+      sort: ['title:asc'],
     });
     const views = [...children, parent];
-    const payload = queryPayload({ facets, db, notes, views, today: '2026-08-28' }, parent, parent);
+    const run = (spec: ViewSpec) =>
+      queryPayload({ facets, db, notes, views, today: '2026-08-28' }, spec, parent);
+    const payload = run(parent);
 
     // One column per child, in declared order, named by the child's *title* —
-    // which is what a board prints as a column name.
+    // which is what a board prints as a column name and what `order` is keyed by.
     assert.deepEqual(payload.groupOrder.primary, ['Needs status', 'Needs priority']);
     assert.deepEqual(
       payload.groups?.map((g) => [g.value, g.ids]),
@@ -441,12 +444,21 @@ test('a lists view draws its children as columns, and its own query does nothing
     );
 
     // `both` answers neither question, so it is in no column and not in `ids`.
-    assert.deepEqual(payload.ids, ['planned', 'committed']);
+    // The lists axis is the one grouping that is also a filter.
+    //
+    // `ids` is in the *view's* order — its `sort`, applied across the result —
+    // and not the columns concatenated. That is the change that makes `sort` a
+    // live control here: it used to be each child's own answer, already ordered,
+    // and nothing downstream could reorder what it had been handed.
+    assert.deepEqual(payload.ids, ['committed', 'planned']);
     assert.equal(payload.notes.both, undefined);
+    assert.equal(payload.total, 2);
+    assert.equal(payload.universe, 3);
 
-    // No grouping axis, which is what makes the board non-draggable: there is no
-    // facet value a drop into one of these columns could write.
-    assert.deepEqual(payload.spec.query.groupBy, undefined);
+    // Naming children *is* grouping by `lists`, without the file having to say
+    // so. That is what makes every other control on the view mean what it means
+    // everywhere else.
+    assert.deepEqual(payload.spec.query.groupBy, [LISTS_AXIS]);
 
     // `unlisted` keeps the columns out of the picker while leaving them
     // addressable — the same objects `pj audit` runs.
@@ -459,43 +471,132 @@ test('a lists view draws its children as columns, and its own query does nothing
   }
 });
 
-test('a composition keeps its shape against a URL that says otherwise', () => {
-  // `?view=triage&shape=board` is what the shape control writes, and it used to
-  // win: the composition was carried across but `composeLists` saw a shape that
-  // was not `lists`, bailed, and fell through to the parent's own query — which a
-  // composition is forbidden to have, so the board drew *every note in the vault*
-  // as one flat list. Switching shape and back turned a 9-note triage board into
-  // a 234-note one, silently.
+test('a composition is a query like any other: shape, sort, filter and lanes all bite', () => {
+  const root = mkdtempSync(join(tmpdir(), 'projector-lists-live-'));
+  try {
+    mkdirSync(paths(root).config, { recursive: true });
+    const note = (id: string, facets: string) =>
+      writeFileSync(
+        join(paths(root).notes, `${id}.md`),
+        `---\nid: ${id}\ntitle: ${id}\nfacets: ${facets}\n---\n\n`,
+        'utf8',
+      );
+    // Two notes each column claims, so sort has something to order and the lane
+    // axis has two values to split them across.
+    note('a-now', '{status: [active], priority: [now]}');
+    note('b-later', '{status: [active], priority: [later]}');
+    note('c-nostatus', '{priority: [now]}');
+    writeFileSync(
+      paths(root).facets,
+      'status:\n  values: [active]\npriority:\n  values: [now, later]\n',
+      'utf8',
+    );
+
+    const facets = loadFacets(paths(root).facets);
+    const { db, notes } = reindex(root);
+    const views = [
+      specFromFile('active', { title: 'Active', unlisted: true, filter: { status: ['active'] } }),
+      specFromFile('urgent', { title: 'Urgent', unlisted: true, filter: { priority: ['now'] } }),
+    ];
+    const compose = (raw: Record<string, unknown>) => {
+      const parent = specFromFile('board', { title: 'Board', lists: ['active', 'urgent'], ...raw });
+      views.push(parent);
+      const out = queryPayload({ facets, db, notes, views, today: '2026-08-28' }, parent, parent);
+      views.pop();
+      return out;
+    };
+    const cells = (p: ReturnType<typeof compose>) =>
+      p.groups?.map((g) => [g.lane ?? null, g.value, g.ids] as const);
+
+    // `shape` is a live control again. It was pinned, on the reasoning that a
+    // composition has no query to project — but columns are exactly what a
+    // table draws as sections and a canvas as bands.
+    for (const shape of ['board', 'table', 'canvas'] as const) {
+      assert.equal(compose({ shape }).spec.shape, shape, `${shape} draws a composition`);
+    }
+
+    // `sort` orders *within* a column, which it could not when each child sorted
+    // its own answer and handed back finished ids.
+    assert.deepEqual(cells(compose({ sort: ['title:asc'] }))?.[0]?.[2], ['a-now', 'b-later']);
+    assert.deepEqual(cells(compose({ sort: ['title:desc'] }))?.[0]?.[2], ['b-later', 'a-now']);
+
+    // The filter crosses every column at once — "this board, but only the
+    // urgent ones" — rather than being refused as a line that does nothing.
+    const filtered = compose({ filter: { priority: ['now'] } });
+    assert.deepEqual(cells(filtered), [
+      [null, 'Active', ['a-now']],
+      [null, 'Urgent', ['a-now', 'c-nostatus']],
+    ]);
+    // …and `universe - total` still says how many the filter is hiding.
+    assert.equal(filtered.universe, 3);
+
+    // A second axis makes lanes out of the columns: `value × lane` is the cell,
+    // exactly as on a two-axis facet board.
+    const laned = compose({ groupBy: [LISTS_AXIS, 'priority'], sort: ['title:asc'] });
+    assert.deepEqual(laned.groupOrder.primary, ['Active', 'Urgent']);
+    assert.deepEqual(laned.groupOrder.secondary, ['now', 'later']);
+    assert.deepEqual(cells(laned), [
+      ['now', 'Active', ['a-now']],
+      ['now', 'Urgent', ['a-now', 'c-nostatus']],
+      ['later', 'Active', ['b-later']],
+      ['later', 'Urgent', []],
+    ]);
+    // A note in two columns is two placements and one note, on both axes.
+    assert.equal(laned.placements, 4);
+    assert.equal(laned.total, 3);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a composition pins its columns and nothing else', () => {
   const saved = specFromFile('triage', {
-    shape: 'lists',
     title: 'Triage',
     lists: ['needs-status'],
   });
-  const resolved = withSavedOnly(parseSpec({ ...specToParams(saved), shape: 'board' }), saved);
-  assert.equal(resolved.shape, 'lists', 'the composition is the view, not a projection of one');
-  assert.deepEqual(resolved.lists, ['needs-status']);
+  const url = (params: Record<string, string>) =>
+    withSavedOnly(parseSpec({ ...specToParams(saved), ...params }), saved);
 
-  // And an ordinary view still switches freely — the pin is about compositions,
-  // not about saved views.
+  // The columns are the children, so the first grouping position is spoken for
+  // and a URL cannot displace it. It used to be the *shape* that was pinned,
+  // which cost a triage board its table and its canvas to protect the one thing
+  // that was actually at risk.
+  assert.deepEqual(url({ group: 'priority' }).query.groupBy, [LISTS_AXIS, 'priority']);
+  assert.deepEqual(url({ group: 'priority,status' }).query.groupBy, [LISTS_AXIS, 'priority']);
+  // Naming it explicitly is the same view, not a doubled axis.
+  assert.deepEqual(url({ group: 'lists,priority' }).query.groupBy, [LISTS_AXIS, 'priority']);
+  assert.deepEqual(url({}).query.groupBy, [LISTS_AXIS]);
+
+  // Everything else the three shapes share is live, shape included.
+  for (const shape of ['board', 'canvas', 'table'] as const) {
+    assert.equal(url({ shape }).shape, shape);
+  }
+  assert.deepEqual(url({ sort: 'title:desc' }).query.sort, ['title:desc']);
+
+  // And an ordinary view is untouched by any of it.
   const plain = specFromFile('home', { shape: 'board', title: 'Home' });
   assert.equal(
     withSavedOnly(parseSpec({ ...specToParams(plain), shape: 'table' }), plain).shape,
     'table',
   );
+  assert.deepEqual(
+    withSavedOnly(parseSpec({ ...specToParams(plain), group: 'priority' }), plain).query.groupBy,
+    ['priority'],
+  );
 
-  // The control offers no `lists`, so it cannot be chosen for a view that has no
-  // children to draw.
+  // Three shapes, and `lists` is not one of them — it never drew differently,
+  // it decided where the columns came from.
   assert.deepEqual(
     SHAPES.map((s) => s.value),
     ['board', 'canvas', 'table'],
   );
 });
 
-test('a composition is checked: children exist, stay flat, and do not nest', () => {
+test('a composition is checked: children exist, stay flat, nest never, and own only their columns', () => {
   const facets = loadFacets(facetsFile('status: { values: [active] }\n'));
   const child = specFromFile('leaf', { title: 'Leaf', filter: { status: ['active'] } });
   const grouped = specFromFile('grouped', { title: 'Grouped', groupBy: ['status'] });
-  const nested = specFromFile('nested', { shape: 'lists', title: 'Nested', lists: ['leaf'] });
+  const nested = specFromFile('nested', { title: 'Nested', lists: ['leaf'] });
   const at = (spec: ReturnType<typeof specFromFile>, raw: Record<string, unknown>) => ({
     spec,
     file: `/data/views/${spec.name}.yaml`,
@@ -515,26 +616,51 @@ test('a composition is checked: children exist, stay flat, and do not nest', () 
 
   // Every one of these is a line that parses and then does nothing, which is the
   // failure this validator exists for.
-  assert.match(issues({ shape: 'lists' })[0]!.message, /no lists are named/);
-  assert.match(issues({ lists: ['leaf'] })[0]!.message, /only "lists" draws them/);
-  assert.match(
-    issues({ shape: 'lists', lists: ['gone'] })[0]!.message,
-    /no view "gone"/,
-  );
-  assert.match(
-    issues({ shape: 'lists', lists: ['nested'] })[0]!.message,
-    /one level deep/,
-  );
-  assert.match(
-    issues({ shape: 'lists', lists: ['grouped'] })[0]!.message,
-    /which a column cannot draw/,
-  );
-  assert.match(
-    issues({ shape: 'lists', lists: ['leaf'], filter: { status: ['active'] } })[0]!.message,
-    /does nothing/,
-  );
+  assert.match(issues({ lists: ['gone'] })[0]!.message, /no view "gone"/);
+  assert.match(issues({ lists: ['nested'] })[0]!.message, /one level deep/);
+  assert.match(issues({ lists: ['grouped'] })[0]!.message, /which a column cannot draw/);
   assert.match(issues({ expect: 'none' })[0]!.message, /the only assertion is "empty"/);
   assert.match(issues({ unlisted: 'yes' })[0]!.message, /true or it is absent/);
+
+  // `shape: lists` was the fourth shape. An older file saying it still draws —
+  // it falls through to `board`, which is what it drew — so it is named rather
+  // than refused, because the word now claims something untrue.
+  assert.match(issues({ shape: 'lists', lists: ['leaf'] })[0]!.message, /no longer a shape/);
+  assert.match(issues({ shape: 'lists' })[0]!.message, /draws as a board/);
+
+  // The columns are the children, so nothing else may claim the first grouping
+  // position — and the message says how to keep both.
+  assert.match(
+    issues({ lists: ['leaf'], groupBy: ['status'] })[0]!.message,
+    /cannot be the first grouping axis/,
+  );
+  assert.match(
+    issues({ lists: ['leaf'], groupBy: ['status'] })[0]!.message,
+    /\[lists, status\]/,
+  );
+  // …and the axis is meaningless without children to be the values of it.
+  assert.match(issues({ groupBy: ['lists'] })[0]!.message, /names no "lists:"/);
+  assert.match(
+    issues({ lists: ['leaf'], groupBy: ['lists', 'status', 'status'] })[0]!.message,
+    /two grouping axes at most/,
+  );
+
+  // A curated order is keyed by the column heading, so one that names no column
+  // is an arrangement nothing will ever read — which is what a retitled child
+  // leaves behind.
+  assert.match(
+    issues({ lists: ['leaf'], order: { Gone: ['x'] } })[0]!.message,
+    /is not a column of this view/,
+  );
+
+  // The filter, the search and the sort are live controls on a composition now,
+  // so none of them is a line that does nothing.
+  assert.deepEqual(
+    issues({ lists: ['leaf'], filter: { status: ['active'] }, sort: ['title:asc'] }),
+    [],
+  );
+  // A lane axis beside the columns is the shape this replaced `swimlanes` with.
+  assert.deepEqual(issues({ lists: ['leaf'], groupBy: ['lists', 'status'] }), []);
 
   // Two columns cannot share a name: one would swallow the other's notes.
   const twin = specFromFile('twin', { title: 'Leaf', filter: { status: ['active'] } });
@@ -542,17 +668,14 @@ test('a composition is checked: children exist, stay flat, and do not nest', () 
     [
       at(child, {}),
       at(twin, {}),
-      at(specFromFile('v', { shape: 'lists', lists: ['leaf', 'twin'] }), {
-        shape: 'lists',
-        lists: ['leaf', 'twin'],
-      }),
+      at(specFromFile('v', { lists: ['leaf', 'twin'] }), { lists: ['leaf', 'twin'] }),
     ],
     facets,
   ).filter((i) => i.id === 'v');
   assert.match(clash[0]!.message, /would swallow the other/);
 
   assert.deepEqual(
-    validateViews([at(child, {}), at(nested, { shape: 'lists', lists: ['leaf'] })], facets),
+    validateViews([at(child, {}), at(nested, { lists: ['leaf'] })], facets),
     [],
     'a well-formed composition is clean',
   );

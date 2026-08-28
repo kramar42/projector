@@ -149,31 +149,28 @@ export function patchSearch(search: string, patch: Patch): string {
 // ---------------------------------------------------------------- reading back
 
 /**
- * The shapes you can switch a query *into*, with their button labels — the labels
- * being the only thing `vocabulary.ts` has no opinion about.
+ * The shapes, with their button labels — the labels being the only thing
+ * `vocabulary.ts` has no opinion about.
  *
  * Derived from the shared list rather than typed out again. It was typed out
- * again, and a fourth shape went missing here silently: the select rendered
- * `value="lists"` against three options that did not include it, so opening a
- * composition showed the wrong shape selected and one nudge of the control threw
- * the composition away.
+ * again, and a shape went missing here silently: the select rendered a value
+ * against three options that did not include it, so one nudge of the control
+ * changed the view to something nobody asked for.
  *
- * `lists` is filtered out on purpose, and the exclusion is the interesting half.
- * The other three *project one query* — the same result set arranged three ways,
- * which is what makes shape a live control. A composition has no query of its
- * own; it is a property of the saved file, like `nodes` and `order`. So there is
- * nothing to switch *into*, and `withSavedOnly` pins it.
+ * There is no exclusion left to make. `lists` was a fourth entry here and then
+ * a filtered-out one; it is not a shape at all now but a grouping axis, so a
+ * composition switches between these three like anything else.
  */
 const LABELS: Record<Shape, string> = {
   board: 'Board',
   canvas: 'Canvas',
   table: 'Table',
-  lists: 'Lists',
 };
 
-export const SHAPES: { value: Shape; label: string }[] = ALL_SHAPES.filter(
-  (s) => s !== 'lists',
-).map((value) => ({ value, label: LABELS[value] }));
+export const SHAPES: { value: Shape; label: string }[] = ALL_SHAPES.map((value) => ({
+  value,
+  label: LABELS[value],
+}));
 
 
 /**
