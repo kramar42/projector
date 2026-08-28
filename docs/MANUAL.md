@@ -665,6 +665,11 @@ is a body write like any other, so a note an agent changed underneath you is ref
 
 See [Keyboard](#keyboard) for the whole map.
 
+**Typing filters by shape, not by prefix.** The note picker — and anything else with a filter box —
+matches a query whose letters appear **in order**, anything between: `kc` finds *keycloak*, `nst`
+finds *needs status*. What it does not do is rank: results stay in the order their source declared, so
+the list does not reshuffle as you type and where something sat is where it stays.
+
 **Bulk actions** make a few hundred notes tractable: ⌘-click a selection, then set or clear any one
 facet, merge, or delete, across all of it. The facet control follows the same rule as the panel —
 **the control its type picks** — so choosing a reference axis opens the note picker over every note in

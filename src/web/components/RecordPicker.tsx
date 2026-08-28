@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.ts';
+import { fuzzyAny } from '../../view/fuzzy.ts';
 import { RecordMark } from './CardBody.tsx';
 import type { NoteDTO } from '../types.ts';
 
@@ -57,7 +58,7 @@ export function RecordPicker({
     const skip = new Set(exclude);
     return all
       .filter((r) => !skip.has(r.id))
-      .filter((r) => !needle || r.title.toLowerCase().includes(needle) || r.id.includes(needle))
+      .filter((r) => !needle || fuzzyAny(needle, r.title, r.id))
       .sort((a, b) => {
         if (a.isProject !== b.isProject) return a.isProject ? -1 : 1;
         return a.title.localeCompare(b.title);

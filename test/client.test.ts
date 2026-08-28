@@ -6,6 +6,7 @@ import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
 import { specFromFile, type ViewSpec } from '../src/view/spec.ts';
 import { emptyReason, unusedGrouping } from '../src/view/empty.ts';
+import { fuzzy, fuzzyAny, subsequence } from '../src/view/fuzzy.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
@@ -733,4 +734,46 @@ test('a board grouped by an unused axis is told so while its result is full', ()
   assert.equal(unusedGrouping(VOCAB, result({ groupBy: ['status'] }, 9, 9)), null);
   // The second grouping axis makes lanes, not columns, so it is not this state.
   assert.equal(unusedGrouping(VOCAB, result({ groupBy: ['status', 'waiting_on'] }, 9, 9)), null);
+});
+
+// ------------------------------------------------------------------- fuzzy
+
+/**
+ * fzf's rule without fzf's ranking: characters in order, anything between, and
+ * no score. The absence of the score is the part worth testing — a ranked list
+ * would reorder itself as you type, and the app does not make claims it cannot
+ * compute (C8).
+ */
+test('a needle matches when its letters appear in order', () => {
+  assert.ok(fuzzy('nst', 'needs status'));
+  assert.ok(fuzzy('gp', 'group by'));
+  assert.ok(fuzzy('status', 'status'), 'an exact match is still a match');
+  assert.ok(fuzzy('SsT', 'needs status'), 'both sides fold case');
+  assert.ok(fuzzy('', 'anything'), 'an untouched filter box matches everything');
+
+  assert.ok(!fuzzy('tsn', 'needs status'), 'order is the whole rule');
+  assert.ok(!fuzzy('zz', 'needs status'));
+});
+
+test('the positions are the earliest ones, so they can be drawn', () => {
+  assert.deepEqual(subsequence('nd', 'needs'), [0, 3]);
+  assert.deepEqual(subsequence('', 'needs'), []);
+  assert.equal(subsequence('x', 'needs'), null);
+  // Greedy and left-to-right, which is what makes it the same answer every time.
+  assert.deepEqual(subsequence('ee', 'needs'), [1, 2]);
+});
+
+test('a space in the needle is intent, not a character to find', () => {
+  // Someone typing two words means both of them; the gap is how they said so,
+  // and a haystack with no literal space would otherwise never match.
+  assert.ok(fuzzy('new card', 'newcard'));
+  assert.ok(fuzzy('nc', 'new card'));
+});
+
+test('the characters may not be spread across two fields', () => {
+  // `fuzzyAny` asks each field on its own. Letting a match straddle a title and
+  // an id would pair rows no reader would call related.
+  assert.ok(fuzzyAny('kc', 'keycloak', 'other-id'));
+  assert.ok(fuzzyAny('oth', 'keycloak', 'other-id'));
+  assert.ok(!fuzzyAny('keyother', 'keycloak', 'other-id'));
 });
