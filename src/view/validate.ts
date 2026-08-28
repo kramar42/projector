@@ -210,6 +210,7 @@ export function validateViews(
   // A stored axis or a computed one: `blocked` is no less askable than `status`
   // for being derived (C4), and a view may name either.
   const known = (name: string) => !!facets[name] || !!COMPUTED[name];
+  const byName = new Map(views.map(({ spec }) => [spec.name ?? '', spec]));
 
   for (const { spec, file, raw } of views) {
     const at = (field: string, message: string) =>
@@ -241,6 +242,63 @@ export function validateViews(
       // and the comparator sorts by them directly.
       if (name === 'updated' || name === 'created' || name === 'title') continue;
       axis(name, 'sort');
+    }
+
+    // --- composition ---
+    //
+    // Every one of these is the same failure this module exists for: a line that
+    // parses and then does nothing. `specFromFile` drops a value it does not
+    // recognise, so without a check here `expect: none` or `unlisted: yes` is a
+    // rule that silently never runs.
+    if (raw && 'expect' in raw && raw.expect !== 'empty') {
+      at('expect', `expect is "${String(raw.expect)}" — the only assertion is "empty"`);
+    }
+    if (raw && 'unlisted' in raw && raw.unlisted !== true) {
+      at('unlisted', `unlisted is "${String(raw.unlisted)}" — it is true or it is absent`);
+    }
+
+    if (spec.shape === 'lists' && !spec.lists?.length) {
+      at('lists', 'shape is "lists" but no lists are named — the view would draw no columns');
+    }
+    if (spec.lists?.length && spec.shape !== 'lists') {
+      at('shape', `lists are named but the shape is "${spec.shape}" — only "lists" draws them`);
+    }
+
+    if (spec.lists?.length) {
+      // A composition has no query of its own. One that carries a filter reads
+      // as though it narrowed its columns, and it does not: each child runs its
+      // own query whole.
+      for (const key of ['filter', 'q', 'focus', 'groupBy', 'sort', 'show'] as const) {
+        if (raw && key in raw) {
+          at(key, `a lists view draws its children's answers, so "${key}" here does nothing`);
+        }
+      }
+
+      const titles = new Map<string, string>();
+      for (const child of spec.lists) {
+        const target = byName.get(child);
+        if (!target) {
+          at('lists', `no view "${child}" — a column naming one draws nothing, silently`);
+          continue;
+        }
+        // One level. Resolving deeper would need a cycle check and an order to
+        // reason about, and nothing wants a column that is itself columns.
+        if (target.lists?.length) {
+          at('lists', `"${child}" is itself a lists view — a composition is one level deep`);
+        }
+        // A column is one flat list: composition takes the child's *ids* and
+        // draws them, so an axis it groups by is read by nobody. The same silent
+        // failure as a filter on the parent, at the other end of the reference.
+        if (target.query.groupBy?.length) {
+          at('lists', `"${child}" groups by ${target.query.groupBy.join(', ')}, which a column cannot draw`);
+        }
+        // The column's name is the child's title, so two children sharing one
+        // would draw as a single column that swallows the other's notes.
+        const title = target.title ?? child;
+        const clash = titles.get(title);
+        if (clash) at('lists', `"${child}" and "${clash}" are both titled "${title}" — one column would swallow the other`);
+        else titles.set(title, child);
+      }
     }
 
     const via = spec.query.focus?.via;

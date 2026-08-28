@@ -37,7 +37,12 @@ things.
   reasons to wait: it would not retire `projectRollups`, whose `direct`/`total` is a transitive walk
   over the membership graph rather than an aggregate over the visible set, so the mechanism would sit
   beside the special case instead of absorbing it; and there is nothing to aggregate — no numeric facet
-  in use, no deadlines. Revisit when there is a question on screen that cannot be answered.
+  in use, no deadlines. **It now has one concrete customer.** `untriaged` left `projectRollups` with
+  the `expected:` key it stood on, and nothing replaced it: a per-project count of half-filed notes is
+  an aggregate over a query — `views/needs-status.yaml` grouped by `project` — which is exactly this
+  and was not worth a bespoke config key on one rollup while its three siblings had none. Worth noting
+  what that column could never count: a note with no project is not reachable from any project, so the
+  unfiled notes were never in it.
 
 - **`container: true`, when the proxy breaks.** Three semantics are inferred from `single: true` on a
   reference facet: which notes are siblings, which relation the bulk bar's "set …" button writes, and

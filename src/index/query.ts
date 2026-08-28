@@ -148,31 +148,28 @@ function daysSince(date: string | undefined, today: string): number | null {
   return date ? daysBetween(date, today) : null;
 }
 
-/** Which facets a vault expects a well-filed note to carry, in declaration order. */
-export function expectedFacets(facets: Facets): string[] {
-  return Object.entries(facets)
-    .filter(([, def]) => def.expected)
-    .map(([name]) => name);
-}
-
-/**
- * The expected facets a note is missing.
+/*
+ * There is deliberately no `expectedFacets` / `triageGaps` pair here any more,
+ * and no `triage` axis built on them.
  *
- * It named `project`, `priority` and `status` in code, and carried two
- * exemptions with them: a project note needed neither a project nor a
- * priority, and a node needed no status. Both were *policy* — which is to say
- * they belonged in the view that asks the question, not in the engine that
- * answers it. `views/triage.yaml` filters `type` for exactly this, and a filter
- * you can see and change beats an exemption you cannot.
+ * They were the last policy the engine held. `expected: true` asserted that
+ * every note is work — while the model's own rule is that *whether a note is
+ * work is whether it carries a `status`*, so a note deliberately left without
+ * one could never be filed: absence was defined as a gap. The two statements
+ * cannot both be true, and it was the expectation that was wrong.
  *
- * What is left is one sentence with no facet in it, and a vault choosing which
- * axes it means. The one definition of "needs triage", behind the `triage` axis.
+ * What replaces it is not a cleverer predicate. A vault states its filing rules
+ * as views — one query each, composed into a board by `shape: lists` and
+ * asserted by `pj audit` — because the questions worth asking are conditions on
+ * *different* axes at once ("carries a priority but no status", and its mirror),
+ * which no single expectation could express and no grouping could draw. The
+ * queue of things nobody has judged is the `intake` axis, which a sweep writes
+ * and judging removes: an explicit "not yet", where an absence had been asked to
+ * mean two different things.
+ *
+ * So `facets.yaml` says what values are *legal*, and views say what is
+ * *expected*. This module is left with axes that compute.
  */
-export function triageGaps(rec: Note, facets: Facets): string[] {
-  return expectedFacets(facets)
-    .filter((name) => !rec.facets[name]?.length)
-    .map((name) => `needs-${name}`);
-}
 
 /**
  * Computed axes, offered in the filter panel exactly like the facets in
@@ -210,14 +207,6 @@ export const COMPUTED: Record<string, Computed> = {
     label: 'Blocked',
     values: (facets) => [...blockingFacets(facets), 'clear'],
     of: (rec, ctx) => ctx.blocked.get(rec.id) ?? ['clear'],
-  },
-  triage: {
-    label: 'Triage',
-    values: (facets) => [...expectedFacets(facets).map((n) => `needs-${n}`), 'complete'],
-    of: (rec, ctx) => {
-      const missing = triageGaps(rec, ctx.facets);
-      return missing.length ? missing : ['complete'];
-    },
   },
   /**
    * How long since the note was last written — `updated`, in four buckets.
@@ -806,10 +795,21 @@ export interface Rollup {
   /** …plus everything in a project that belongs to this one, transitively. */
   total: number;
   blocked: number;
-  untriaged: number;
   /** Most recent `updated` across the transitive set. */
   touched: string | null;
 }
+/*
+ * `untriaged` used to sit here, counting members with a triage gap. It went with
+ * the expectation it stood on, and nothing replaced it in kind: a per-project
+ * count of half-filed notes is an *aggregate over a query*, which is what the
+ * per-column summaries entry in NEXT.md describes and this module deliberately
+ * does not invent a second time. `pj audit` answers it now, and
+ * `pj ls --view needs-status --group project` answers it per project.
+ *
+ * Note what it could never have counted: a note with no project is not reachable
+ * from any project, so the unfiled notes — the ones you would most want a number
+ * for — were never in it.
+ */
 
 /**
  * Roll-ups for every project note — the numbers the projects table exists for.
@@ -837,15 +837,11 @@ export function projectRollups(
     reach.delete(rec.id); // a project is not a member of itself
 
     let blocked = 0;
-    let untriaged = 0;
     let touched: string | null = null;
     for (const id of reach) {
       const member = notes.get(id);
       if (!member) continue;
       if (waitedOn.has(id)) blocked++;
-      // `triageGaps` directly: reaching through the computed axis needed a `Ctx`,
-      // and it is the same answer one layer less indirect.
-      if (triageGaps(member, facets).length) untriaged++;
       if (member.updated && (!touched || member.updated > touched)) touched = member.updated;
     }
 
@@ -853,7 +849,6 @@ export function projectRollups(
       direct: [...notes.values()].filter((r) => r.facets.project?.includes(rec.id)).length,
       total: reach.size,
       blocked,
-      untriaged,
       touched,
     };
   }

@@ -61,10 +61,10 @@ export const BUILTIN_FACETS: Facets = {
    * change, which is why there is no `judged` value: a second value would be a
    * state the vault stores and the vault can already answer by absence (C11).
    *
-   * A vault that declared `expected: true` here would mark every judged note as
-   * needing one, which is backwards. Nothing refuses it; `expected` is a vault's
-   * business on every other axis and inventing a third class of unchangeable key
-   * for one footgun costs more than the footgun.
+   * Nothing anywhere declares that a note *ought* to carry this — or any other
+   * axis. A vault states its filing rules as views now, so the queue of unjudged
+   * candidates is this axis read by `views/intake.yaml` rather than an
+   * expectation the engine holds.
    */
   intake: {
     label: 'Intake',
@@ -113,7 +113,7 @@ export const BUILTIN_FACETS: Facets = {
  * The reason `project` is built in at all is that its *shape* must hold: the
  * config chain walks it as a relation, so retyping it to `label` would strand
  * inheritance with nothing to say so. None of that is true of what it is called
- * or whether a note is expected to carry one — those are a vault's business.
+ * — that is a vault's business.
  *
  * It declares no `hue`, and that is the point rather than an omission: `builtin`
  * is what the client reads, and the app's own axis draws in the app's own colour.
@@ -183,7 +183,6 @@ export function loadFacets(file: string): Facets {
       ...(buckets?.length ? { buckets } : {}),
       ...(typeof d.overflow === 'string' ? { overflow: d.overflow } : {}),
       ...(Array.isArray(d.closed) ? { closed: d.closed.map(String) } : {}),
-      ...(d.expected === true ? { expected: true } : {}),
       ...(d.blocking === true ? { blocking: true } : {}),
       ...(typeof d.hue === 'string' ? { hue: d.hue } : {}),
       // Lower-cased on the way in, so `key: P` and `key: p` are the same
@@ -196,13 +195,13 @@ export function loadFacets(file: string): Facets {
     };
   }
   // Built-ins lead the order, and win their structural keys. A vault may still
-  // set the rest — its label, whether a note is expected to carry one — so a
-  // declaration merges *under* the built-in's shape rather than being discarded.
+  // set the rest — its label, its hue, its key — so a declaration merges *under*
+  // the built-in's shape rather than being discarded.
   //
   // Only the keys the file actually *wrote*. A normalised definition carries a
   // value for everything, including a `label` defaulted to the facet's own name —
-  // so merging the whole of it made `project: {expected: true}` silently rename
-  // the axis to lowercase `project`. What a vault did not say is not a setting.
+  // so merging the whole of it made `project: {key: r}` silently rename the axis
+  // to lowercase `project`. What a vault did not say is not a setting.
   const merged: Facets = { ...BUILTIN_FACETS, ...out };
   for (const [name, builtin] of Object.entries(BUILTIN_FACETS)) {
     const declared = out[name];

@@ -205,6 +205,19 @@ export type Command =
    * arriving from the keyboard.
    */
   | { kind: 'fold' }
+  /**
+   * Accept this candidate as its own note: the `intake` flag comes off, and the
+   * fold target with it.
+   *
+   * `extends` goes too because accepting *is* the decision not to fold — the
+   * classifier proposed a target and you said no. Leaving it would strand a fold
+   * control on an ordinary note for ever, which is the one way the queue leaked
+   * into the rest of the vault.
+   *
+   * Unlike `fold` there is nothing to confirm: one facet comes off and one
+   * reference with it, and both are visible in the panel and reversible there.
+   */
+  | { kind: 'accept' }
   /** Open the declined pile — what a sweep turned down, and why. */
   | { kind: 'declined' }
   /** Step within whatever list of chips currently holds focus. */
@@ -650,13 +663,23 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
     case '!':
       return emit({ kind: 'work' });
     /**
-     * Fold a candidate into what it extends.
+     * Accept a candidate as its own note.
      *
-     * Punctuation for the same reason `!` is: it is not a letter, so no
-     * vocabulary can reach it and it shadows nothing even in principle. `+` reads
-     * as *add this into that*, which is what the merge does.
+     * Punctuation for the same reason `!` is: not a letter, so no vocabulary can
+     * reach it and it shadows nothing even in principle. `+` is *add this to the
+     * vault* — the candidate becomes an ordinary note and nothing merges.
      */
     case '+':
+      return emit({ kind: 'accept' });
+    /**
+     * Fold a candidate into what it extends.
+     *
+     * `=` because a fold is the claim that *this is that*: two candidates for one
+     * piece of work turning out to be the same one. It held `+` while it was the
+     * only act in the queue, and `+` reads as *new* beside an accept that makes
+     * one — so the two swapped rather than crowding one glyph.
+     */
+    case '=':
       return emit({ kind: 'fold' });
   }
 
@@ -743,7 +766,8 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       // The one row here that acts rather than reaching, which the wording has to
       // carry on its own: every other line in this section moves the keyboard.
       { keys: '!', does: 'start work on it — worktrees, briefing, a session' },
-      { keys: '+', does: 'fold a candidate into the note it extends' },
+      { keys: '+', does: 'accept a candidate as its own note' },
+      { keys: '=', does: 'fold a candidate into the note it extends' },
     ],
   },
   {

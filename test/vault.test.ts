@@ -161,7 +161,19 @@ test('every seeded file parses as what it claims to be', () => {
   // of a reader.
   assert.deepEqual(
     SEED_VIEWS.map((v) => v.path).sort(),
-    ['due.yaml', 'everything.yaml', 'home.yaml', 'intake.yaml', 'projects.yaml', 'unblocked.yaml', 'week.yaml'],
+    [
+      'due.yaml',
+      'everything.yaml',
+      'home.yaml',
+      'intake.yaml',
+      'needs-priority.yaml',
+      'needs-project.yaml',
+      'needs-status.yaml',
+      'projects.yaml',
+      'triage.yaml',
+      'unblocked.yaml',
+      'week.yaml',
+    ],
   );
 });
 

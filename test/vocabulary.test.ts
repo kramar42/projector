@@ -227,20 +227,21 @@ test('a vault with notes, views and no vocabulary is a working vault', () => {
     // true of `type` in some vaults too and is a separate question from this one.
     assert.deepEqual(
       payload.counts.map((c) => c.facet),
-      ['type', 'blocked', 'triage', 'staleness', 'linked'],
+      ['type', 'blocked', 'staleness', 'linked'],
     );
     assert.deepEqual(
       payload.counts.find((c) => c.facet === 'blocked')!.values.map((v) => v.value),
       ['clear'],
     );
 
-    // `triage` is empty rather than permanently red: no facet is expected, so no
-    // note is missing one. That absence is the point of `expected:`.
-    const triage = payload.counts.find((c) => c.facet === 'triage')!;
-    assert.deepEqual(
-      triage.values.map((v) => v.value),
-      ['complete'],
-      'nothing is expected, so every note is complete',
+    // There is no `triage` axis to offer. It was computed from `expected:`, which
+    // asserted that every note is work — so a vault with no vocabulary at all got
+    // a rail row saying every note was complete, which is a question nobody
+    // asked answered for a vault that declared nothing.
+    assert.equal(
+      payload.counts.find((c) => c.facet === 'triage'),
+      undefined,
+      'filing rules are views now, so no axis claims to know them',
     );
   } finally {
     cleanup();
@@ -276,10 +277,10 @@ test('the built-in relation names its own other end, and a vault may rename it',
     const file = join(root, 'facets.yaml');
 
     // Renaming it is a vault's business, like `label`.
-    writeFileSync(file, 'project:\n  inverse: Owners\n  expected: true\n', 'utf8');
+    writeFileSync(file, 'project:\n  inverse: Owners\n  hue: purple\n', 'utf8');
     const renamed = loadFacets(file);
     assert.equal(renamed.project!.inverse, 'Owners');
-    assert.equal(renamed.project!.expected, true);
+    assert.equal(renamed.project!.hue, 'purple');
     // …and it is still the built-in's shape underneath, which is the whole
     // reason the definition is not read from the file.
     assert.equal(renamed.project!.type, 'ref');

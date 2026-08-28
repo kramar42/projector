@@ -32,7 +32,7 @@ import { isRef } from '../schema/facets.ts';
 import { loadViews, findView } from './views.ts';
 import { meta } from './meta.ts';
 import type { DragMode } from '../view/dropOutcome.ts';
-import { parseSpec, specToFile, specToParams, type ViewSpec } from '../view/spec.ts';
+import { parseSpec, specToFile, specToParams, withSavedOnly, type ViewSpec } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
 import { inboundCounts } from '../index/refs.ts';
 import { toDTO } from '../view/dto.ts';
@@ -250,12 +250,12 @@ function resolveSpec(
   const saved = params.view ? findView(root, params.view) : undefined;
   if (params.view && !saved) return { error: `no view "${params.view}"` };
 
-  const spec: ViewSpec = parseSpec(saved ? { ...specToParams(saved), ...params } : params);
-  spec.name = saved?.name;
-  spec.title = saved?.title;
-  // Arrangement is never a query parameter: it comes from the file or nowhere.
-  spec.nodes = saved?.nodes;
-  spec.order = saved?.order;
+  // Arrangement and composition are never query parameters: they come from the
+  // file or nowhere, which is what `withSavedOnly` carries across.
+  const spec: ViewSpec = withSavedOnly(
+    parseSpec(saved ? { ...specToParams(saved), ...params } : params),
+    saved,
+  );
   // The saved view travels too: a control that changes a view has to know what it
   // is overriding, and only this function has both halves in hand.
   return { spec, saved: saved ?? null };

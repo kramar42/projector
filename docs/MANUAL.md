@@ -17,7 +17,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **note** | one markdown file in the vault, and the only kind of thing a vault holds. It becomes work by carrying a lifecycle facet; most never do |
 | **facet** | an axis a note carries a value on, declared in `facets.yaml`. Every value is an array |
 | **axis** | anything a query can filter, group or sort by: a facet, or a computed axis. `created`, `updated` and `title` are note fields the sort accepts, and are not axes |
-| **computed axis** | an axis with no stored value, worked out per query and marked `ƒ`: `type`, `blocked`, `triage`, `linked`, `staleness` |
+| **computed axis** | an axis with no stored value, worked out per query and marked `ƒ`: `type`, `blocked`, `linked`, `staleness` |
 | **value** | one entry on an axis. `(none)` is not a value but a *refinement* — "carries nothing here" |
 | **bucket** | the named range an ordered facet presents itself as, so a date filters as `overdue` and sorts as `2026-09-01` |
 | **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
@@ -53,7 +53,6 @@ end — these are things a vault *says*, in five keys beside `type`:
 |---|---|
 | `closed:` | which values mean *no further work expected* — what makes a blocker stop blocking |
 | `blocking:` | while this axis is unsatisfied the note cannot proceed |
-| `expected:` | a well-filed note carries this; the triage axis is built from it |
 | `inverse:` | what the other end of a relation is called |
 | `hue:` | which family this axis draws in |
 
@@ -85,27 +84,32 @@ is what makes it cheap — the engine reads a facet in exactly two places.
 
 ## Computed axes
 
-Five axes are computed rather than stored. They appear in the filter panel alongside the facets and
+Four axes are computed rather than stored. They appear in the filter panel alongside the facets and
 behave identically — filter, group, sort, count — and carry `ƒ` to say nothing stores them:
 
 | | Values | Computed from |
 |---|---|---|
 | `type` | `project`, `node`, `plain` | a `project:` block · being named through any reference facet |
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
-| `triage` | one `needs-<facet>` per `expected:` facet, then `complete` | absence of those facets |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a note carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today — and it reads as **Updated**, because that is the field it is |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
 absence, a note's links, or the app-written `updated` field. Each is a count, a date comparison or
-the presence of a reference — never a judgement. `type=project` *is* the projects view, and `triage`
-turns the untriaged pile into something you can drag out of. The three `type` values are exclusive — a
-project that something is part of stays a `project` — so the counts always add up.
+the presence of a reference — never a judgement. `type=project` *is* the projects view. The three
+`type` values are exclusive — a project that something is part of stays a `project` — so the counts
+always add up.
 
-Two of them take their *values* from your vocabulary. `blocked` names one value per facet declared
-`blocking:`, and `triage` one per facet declared `expected:` — so declaring a fourth blocking axis
-gives it a value on the filter, the grouping and the sort, and a vault that declares none has a
-`blocked` axis reading `clear` for everything.
+One of them takes its *values* from your vocabulary. `blocked` names one value per facet declared
+`blocking:`, so declaring a fourth blocking axis gives it a value on the filter, the grouping and the
+sort, and a vault that declares none has a `blocked` axis reading `clear` for everything.
+
+There used to be a fifth, `triage`, computed from an `expected:` key in `facets.yaml`. It is gone, and
+the key with it. Saying a facet is expected asserts that *every* note is work — while the rule this
+app runs on is that whether a note is work is whether it carries a `status`, so a note deliberately
+left without one could never be filed: the expectation defined its absence as a gap. Filing rules are
+conditional and belong to you rather than to the engine, so they are **views** now. See
+[Rules you can check](#rules-you-can-check).
 
 **Every one of them computes.** Nothing computable is also stored, which is why there is no
 `status: blocked` to disagree with the `blocked` axis and no `status: waiting` to disagree with
@@ -411,7 +415,7 @@ and auto-ordered, and *Save layout* on one asks for a name first: naming a query
 somewhere for its layout to live.
 
 ```yaml
-shape: board | canvas | table
+shape: board | canvas | table | lists
 title: Home
 filter: { status: [planning, active] }
 focus: { id: platform, via: parent, dir: in, depth: 2 }
@@ -419,6 +423,9 @@ q: keycloak
 groupBy: [priority, project]
 sort: [due:asc, priority:asc]
 show: [parent, project, tech]      # references first: the canvas lays out by the first
+lists: [needs-project, needs-status]  # `shape: lists` only — columns that are other views
+unlisted: true                     # keep it out of the picker; still openable by name
+expect: empty                      # `pj audit` asserts this view comes back empty
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
 order: { now: [id, id] }           # written by a drag, not by hand
 ```
@@ -429,6 +436,65 @@ read by nothing — a canvas knows it is hand-arranged because `nodes` is there.
 
 **Those are all the keys there are.** `pj check` rejects any other, because a view with a misspelled
 or retired key parses exactly like one that works and then does nothing.
+
+## Rules you can check
+
+Three of those keys are one feature. A **rule** is an ordinary saved view that says what should never
+be true, and `pj audit` runs every view that declares one:
+
+```yaml
+# views/needs-status.yaml — planned, but never committed to as work
+shape: board
+title: Needs status
+unlisted: true
+expect: empty
+filter: { intake: ['(none)'], priority: ['-(none)'], status: ['(none)'] }
+```
+
+```console
+$ pj audit
+ok      needs-status             Needs status
+BROKEN  needs-priority        7  Needs priority
+           impl-1498-grainger-rate-calls-time
+           …
+
+1 of 2 rule(s) hold
+```
+
+**`expect: empty` is the only assertion, and that is deliberate.** It states an *invariant* — zero is
+the only correct state, and anything here is inconsistent rather than merely untidy. A number would
+fold a *budget* into the same key ("about seven things this week"), and being over budget is not a
+defect. If a cap ever earns its place it becomes `expect: {max: n}`, with `empty` kept as sugar for
+zero.
+
+**`pj audit` is not `pj check`, on purpose.** `pj check` asks whether the vault is loadable and
+internally consistent, which has the same right answer in every vault. A rule is *your* policy. Fused,
+a dangling reference and twelve untidy notes would leave by the same exit code with nothing to tell
+them apart.
+
+**`shape: lists` draws rules side by side.** Its columns are other views, named in order:
+
+```yaml
+# views/triage.yaml — everything waiting on a decision
+shape: lists
+title: Triage
+lists: [intake, needs-project, needs-status, needs-priority]
+```
+
+This is the one view whose columns do not come from an axis, and it exists because grouping cannot
+express the question. A grouped board derives its columns from one axis over one result set, so
+*carries a priority but no status* and its mirror — conditions on two different axes at once — can be
+filtered one at a time and never drawn beside each other.
+
+A composition is one level deep: a view named in `lists:` may not name others, and may not group by
+anything, since a column is one flat list. Nothing on it is draggable, and that is not a limitation to
+work around — there is no facet value a drop into *needs a project* could write. A note leaves a
+column by being edited.
+
+**`unlisted: true` keeps a view out of the picker.** Not hidden: `pj ls --view needs-status` runs it,
+`pj audit` enumerates it, and it is drawn in plain sight as a column. It is absent from the *index*,
+which is why the word is `unlisted`. Rules want it, because a dozen one-question views would otherwise
+bury the handful of views you actually open.
 
 ---
 
@@ -478,8 +544,8 @@ from the decomposition tree.
 
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** note counts, blocked,
-untriaged, last activity — where total follows the `project` chain, so a project with one direct
-member and six nested ones reads `1 / 7`.
+last activity — where total follows the `project` chain, so a project with one direct member and six
+nested ones reads `1 / 7`.
 
 ## Editing
 
@@ -880,6 +946,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
+| `pj audit [--json]` | run this vault's rules: every saved view declaring `expect: empty`. Exits non-zero if one is broken |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
 **Every flag shortens.** One dash or two, cut to any prefix that names exactly one flag of that
@@ -902,7 +969,8 @@ The CLI and the app share one query compiler *and* one payload builder, so `pj l
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`
 returns. There is no `pj next` or `pj untriaged`: those were two queries hardcoded in TypeScript, and
 they are `views/unblocked.yaml` and `views/triage.yaml` now — askable from either surface, and checked
-by `pj check` like anything else.
+by `pj check` like anything else. `pj audit` is the other half of that: it *runs* the views that say
+what should never happen. See [Rules you can check](#rules-you-can-check).
 
 ---
 
@@ -1256,7 +1324,6 @@ status:
   open: false                              # new values rejected by the validator
   single: true                             # a second value rejected too
   closed: [done, archived]                 # no further work expected, whatever the outcome
-  expected: true                           # the triage axis asks for it
   hue: green                               # which family its chips draw in
   key: s                                   # `s3` sets its third value; `,g s` groups by it
 parent:
@@ -1281,11 +1348,16 @@ due:
 A `ref`, `date` or `number` facet declares no `values`: its vocabulary is the vault or the number
 line, so `open` is implied and a declared list is dropped rather than half-honoured.
 
-The five keys past `type` are where a facet's *behaviour* is declared. `closed` defines finished, for
+The four keys past `type` are where a facet's *behaviour* is declared. `closed` defines finished, for
 the blocked axis and for `pj log`; `blocking` puts an axis on the blocked axis under its own name;
-`expected` puts it on the triage axis; `inverse` names the computed row the panel draws beside a
-relation; `hue` picks a family from the app's palette. All five are optional — declare none and the
-axis is an ordinary one you can filter, group and sort by.
+`inverse` names the computed row the panel draws beside a relation; `hue` picks a family from the
+app's palette. All four are optional — declare none and the axis is an ordinary one you can filter,
+group and sort by.
+
+There is deliberately no key here for *a well-filed note carries this*. Whether an axis should be
+filled is a rule about how you work rather than a property of the axis, it is usually conditional, and
+`facets.yaml` has nowhere to say a condition. [Rules you can check](#rules-you-can-check) is where it
+went.
 
 `pj check` rejects a declaration that cannot take effect: an `inverse:` on a facet that is not a
 reference, a `hue:` outside the palette, a `closed:` value the vocabulary does not list.
@@ -1301,13 +1373,13 @@ axis you declared.
 `project` is the older one. Its definition is not read from `facets.yaml` because config inheritance
 walks it as a relation, so its shape is fixed.
 
-A vault may declare `project:` to set what is its to set — its label, its hue, whether triage asks for
-it, what its other end is called — and `pj check` errors only if the declaration touches the shape:
+A vault may declare `project:` to set what is its to set — its label, its hue, its key, what its other
+end is called — and `pj check` errors only if the declaration touches the shape:
 
 ```yaml
 project:
   label: Portfolio      # fine
-  expected: true        # fine
+  hue: purple           # fine
   inverse: Owners       # fine — renames the derived row, `Members` by default
   type: label           # error: project is built in and its shape is fixed
 ```
@@ -1357,19 +1429,22 @@ to a real note would sit in that note's children and roll-ups while it waited. N
 It is a facet rather than a flag on the file so that the queue is a *view*: `filter: {intake:
 [unjudged]}` is a board like any other, and the panel, the bulk bar, the cursor and `pj ls` all reach
 it without any of them being taught what intake is. The other side of that is worth setting up
-deliberately — an unjudged candidate is missing every expected facet by construction, so a triage view
-wants `filter: {intake: ['(none)']}` or the queue will swamp it:
+deliberately — a candidate nobody has looked at is missing nearly everything by construction, so every
+*other* filing rule wants `filter: {intake: ['(none)']}` on it or the queue will swamp them:
 
 ```yaml
 # views/intake.yaml — what a sweep left for you
 shape: board
+title: Unjudged
 filter: { intake: [unjudged] }
-groupBy: [source]
 
-# views/triage.yaml — notes you started and left, and not the queue
-filter: { intake: ['(none)'] }
-groupBy: [triage]
+# views/needs-project.yaml — judged, and still unfiled
+filter: { intake: ['(none)'], project: ['(none)'], type: [plain, node] }
 ```
+
+Judging a candidate is removing the axis. The panel's **+** does it, and clears the fold target with
+it: accepting a candidate as its own note *is* the decision not to fold it, and a stale `extends`
+would leave a fold control on an ordinary note for ever.
 
 # Theme
 

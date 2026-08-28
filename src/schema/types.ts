@@ -142,15 +142,18 @@ export interface FacetDef {
    */
   closed?: string[];
   /**
-   * A well-filed note in this vault carries this axis.
+  /*
+   * `expected?: boolean` used to live here, and the `triage` axis was computed
+   * from it. It said "a well-filed note carries this axis" — of *every* note,
+   * which is the assertion that broke it: a note deliberately carrying no
+   * `status`, because it is context rather than work, could never be filed, since
+   * the expectation defined its absence as a gap.
    *
-   * Not enforced on write — a note missing one is a gap, not an error, which is
-   * the distinction `validate` already draws between a warning and an error. It
-   * is what the `triage` axis is computed from, and it has to be declared: it
-   * cannot be inferred from `single` or from a closed vocabulary, because
-   * `energy` and `owner` are both of those and nobody wants to be nagged for them.
+   * Filing rules are conditional and belong to the vault, so they are views now
+   * — one query each, drawn together by `shape: lists` and asserted by
+   * `pj audit`. This file describes what a facet *is*; what a vault wants filled
+   * is not a property of an axis.
    */
-  expected?: boolean;
   /**
    * While this axis is unsatisfied, a note carrying it cannot proceed.
    *

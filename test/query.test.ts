@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
 import { loadFacets } from '../src/schema/facets.ts';
 import { NONE, focused, ftsPrefixQuery, runQuery, type Query } from '../src/index/query.ts';
+import { negate } from '../src/schema/vocabulary.ts';
 import { adjacency, refsOf } from '../src/index/refs.ts';
 import { specFromFile } from '../src/view/spec.ts';
 import { SEED_VIEWS } from '../src/server/seed.ts';
@@ -95,9 +96,8 @@ const FACETS = `
 parent:     { label: Part of,  type: ref, single: true }
 blocked_by: { label: blocked by, type: ref, blocking: true }
 due:        { label: Due, type: date, single: true, buckets: { overdue: -1, today: 0, week: 7 }, overflow: later }
-priority:   { label: Priority, values: [now, month, backlog], open: false, single: true, expected: true }
-status:     { label: Status,   values: [planning, active, done], open: false, single: true, closed: [done], expected: true }
-project:    { expected: true }
+priority:   { label: Priority, values: [now, month, backlog], open: false, single: true }
+status:     { label: Status,   values: [planning, active, done], open: false, single: true, closed: [done] }
 tech:       { label: Tech,     values: [keycloak, kafka], open: true }
 waiting_on: { label: Waiting on, values: [], open: true, blocking: true }
 `;
@@ -183,22 +183,20 @@ test('computed axes filter exactly like stored ones', () => {
     assert.deepEqual(ids(root, { filter: { type: ['node'] } }), ['blocker', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { type: ['plain'] } }), ['blocked-card', 'kafka-schema', 'kc-realms', 'loose']);
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
-    // A note missing two axes lands in both buckets. `project-b` and `project-a` are project
-    // notes and appear here too: the engine no longer exempts them, the triage
-    // view does.
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), [
+    // What the `triage` axis used to answer, asked as the queries that replaced
+    // it. Both are conditions on an absence, and the second is a condition on
+    // two axes at once — which is why they are views rather than one axis: no
+    // grouping can draw a column per pair of facets.
+    assert.deepEqual(ids(root, { filter: { project: [NONE], type: ['plain', 'node'] } }), [
       'blocker',
       'loose',
-      'project-a',
       'project-a-eventing',
-      'project-b',
     ]);
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-priority'] } }), [
-      'loose',
-      'project-a',
-      'project-a-eventing',
-      'project-b',
-    ]);
+    assert.deepEqual(
+      ids(root, { filter: { status: [negate(NONE)], priority: [NONE] } }),
+      ['loose', 'project-a', 'project-b'],
+      'committed to as work, and unplanned — project notes included, since the view is what exempts them',
+    );
     assert.deepEqual(ids(root, { filter: { staleness: ['older'] } }), ['loose', 'project-a-eventing']);
     assert.deepEqual(ids(root, { filter: { staleness: ['month'] } }), ['project-a']);
   } finally {
@@ -206,32 +204,26 @@ test('computed axes filter exactly like stored ones', () => {
   }
 });
 
-test('triage asks for the facets the vault says it expects, and nothing else', () => {
+test('there is no triage axis: a vault states its filing rules as views', () => {
   const { root, cleanup } = vault();
   try {
-    // One value per expected facet, in declaration order, then `complete`. The
-    // list used to be a literal naming three facets; a vault deciding a fourth
-    // now gets it everywhere without an edit here.
-    // Built-ins lead the vocabulary, so `project` leads this too.
-    assert.deepEqual(open(root)({ groupBy: ['triage'] }).groupOrder.primary, [
-      'needs-project',
-      'needs-priority',
-      'needs-status',
-      'complete',
-    ]);
+    // It was computed from `expected: true`, which asserted that every note is
+    // work — so a note deliberately carrying no `status`, because it is context,
+    // could never be filed. The axis is gone rather than narrowed.
+    assert.deepEqual(ids(root, { filter: { triage: ['needs-project'] } }), []);
+    // Grouping by it now does what grouping by any name the vocabulary does not
+    // have does: one column, holding everything, for the value nothing carries.
+    // `validateViews` is what stops a saved view saying it silently.
+    assert.deepEqual(open(root)({ groupBy: ['triage'] }).groupOrder.primary, [NONE]);
 
-    // No exemptions live here any more. `project-b` and `project-a` are project notes with
-    // no priority, and the axis says so — `views/triage.yaml` narrows to
-    // `type: [plain]`, which is where that judgement is now visible and arguable.
-    assert.ok(ids(root, { filter: { triage: ['needs-priority'] } }).includes('project-b'));
-    assert.deepEqual(
-      ids(root, { filter: { triage: ['needs-priority'], type: ['plain'] } }).includes('project-b'),
+    // And no exemption moved into the engine with it. A project note carries no
+    // `project` facet, so the view that asks says which types it means.
+    assert.ok(ids(root, { filter: { project: [NONE] } }).includes('project-b'));
+    assert.equal(
+      ids(root, { filter: { project: [NONE], type: ['plain', 'node'] } }).includes('project-b'),
       false,
       'and the view is what exempts it',
     );
-
-    // An axis the vault does not expect is never asked for, however empty.
-    assert.deepEqual(ids(root, { filter: { triage: ['needs-tech'] } }), []);
   } finally {
     cleanup();
   }

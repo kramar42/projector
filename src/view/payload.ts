@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Facets, Note } from '../schema/types.ts';
 import { isRef } from '../schema/facets.ts';
 import { blockedBy, unblocks } from '../index/blocking.ts';
-import { computedReader, projectRollups, runQuery } from '../index/query.ts';
+import { computedReader, projectRollups, runQuery, type Group } from '../index/query.ts';
 import { inboundCounts, refsOf } from '../index/refs.ts';
 import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
 import { toDTO, type NoteDTO } from './dto.ts';
@@ -81,11 +81,20 @@ export function queryPayload(
   const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
   const res = runQuery(db, notes, facets, spec.query, { connect: layout });
 
+  // A composition's columns are its children's answers, so they replace the
+  // grouping this query produced — which is none, a lists view having no axis of
+  // its own. Everything downstream reads `groups`/`groupOrder` and needs no case
+  // of its own: the board draws three columns, and finds no `groupBy` to drag
+  // against, which is exactly right for columns no drop could write.
+  const composed = composeLists(deps, spec, today);
+
   // Ordered here, so every surface receives the view's curated order rather than
   // each renderer deciding whether to honour it.
-  const groups = res.groups?.map((g) => ({ ...g, ids: applyOrder(g.ids, spec.order?.[g.value]) })) ?? res.groups;
+  const groups =
+    composed?.groups ?? res.groups?.map((g) => ({ ...g, ids: applyOrder(g.ids, spec.order?.[g.value]) })) ?? res.groups;
 
-  const shown = [...res.ids, ...res.context];
+  const ids = composed?.ids ?? res.ids;
+  const shown = [...ids, ...res.context];
   const byId: Record<string, NoteDTO> = {};
   // One walk for every note on screen, rather than the same walk once per note.
   const inbound = inboundCounts(notes, facets);
@@ -109,14 +118,16 @@ export function queryPayload(
     spec,
     savedSpec: saved,
     notes: byId,
-    ids: res.ids,
+    ids,
     context: res.context,
     groups,
-    groupOrder: res.groupOrder,
+    groupOrder: composed ? { primary: composed.primary, secondary: [] } : res.groupOrder,
     counts: res.counts,
-    total: res.total,
+    total: composed ? ids.length : res.total,
     universe: res.universe,
-    placements: res.placements,
+    placements: composed
+      ? composed.groups.reduce((n, g) => n + g.ids.length, 0)
+      : res.placements,
     // Computed here rather than in the client, so the relation a canvas lays out
     // by and the one `connect` walked cannot come apart (C8).
     layout: layout ?? null,
@@ -126,6 +137,52 @@ export function queryPayload(
     rollups: projectRollups(notes, facets),
     views: summariseViews(views),
   };
+}
+
+/**
+ * A `shape: lists` view's columns: one per child view, in declared order.
+ *
+ * Grouping cannot express this. A grouped board derives its columns from one
+ * axis over one result set, and two of the three questions a triage board asks —
+ * "carries a priority but no status" and the mirror of it — are conditions on
+ * *different* axes, which no single filter can hold apart. Composition answers
+ * them by running the queries separately and putting the answers side by side.
+ *
+ * A column's value is the child's **title**, because that is what the board
+ * prints as a column name; the validator refuses two children whose titles
+ * collide, since one column would swallow the other. A child that does not exist
+ * is skipped rather than thrown on — `pj check` names it, and a stale reference
+ * should cost a column, not the view.
+ */
+function composeLists(
+  deps: PayloadDeps,
+  spec: ViewSpec,
+  today: string,
+): { groups: Group[]; primary: string[]; ids: string[] } | null {
+  if (spec.shape !== 'lists' || !spec.lists?.length) return null;
+  const byName = new Map(deps.views.map((v) => [v.name ?? '', v]));
+
+  const groups: Group[] = [];
+  const primary: string[] = [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+
+  for (const name of spec.lists) {
+    const child = byName.get(name);
+    if (!child) continue;
+    const res = runQuery(deps.db, deps.notes, deps.facets, child.query, { today });
+    const value = child.title ?? name;
+    primary.push(value);
+    // A child of a composition is flat, so the one group it would have had is
+    // the nameless one — which is the key its own `order` is stored under.
+    groups.push({ value, ids: applyOrder(res.ids, child.order?.['']) });
+    for (const id of res.ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return { groups, primary, ids };
 }
 
 /**

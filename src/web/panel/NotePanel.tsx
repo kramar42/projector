@@ -231,6 +231,17 @@ function NoteCard({
   const foldTarget = card?.facets?.extends?.[0] ?? null;
   const [folding, setFolding] = useState(false);
 
+  /**
+   * Whether this note is still waiting to be judged.
+   *
+   * Read off `intake` rather than off `extends`, which is the distinction the
+   * fold control gets wrong on its own: a candidate judged *without* folding kept
+   * its `extends`, and so kept a fold button for ever on a note that was no
+   * longer a candidate. `accept` clears both, so the two controls now appear and
+   * disappear together.
+   */
+  const unjudged = Boolean(card?.facets?.intake?.length);
+
   /** The head's one banner slot — see the comment where it renders. */
   const banner: { tone: string; message: string; canReload?: boolean } | null =
     write.banner ?? work.banner;
@@ -417,6 +428,29 @@ function NoteCard({
                 * links and fingerprint, and its file goes. So the glyph is the
                 * tick rather than something merge-shaped.
                 */}
+              {/*
+                * Accept it as its own note. Drawn before the fold because it is
+                * the answer to the plainer question — *is this a real thing?* —
+                * and because a candidate the sweep proposed a target for may
+                * still be genuinely new, so both controls have to be reachable
+                * rather than one standing for the other.
+                *
+                * `add` rather than the tick: `+` is *make one*, and the tick
+                * belongs to the fold, where you are literally ticking which
+                * values survive the merge.
+                */}
+              {unjudged && (
+                <IconButton
+                  glyph="add"
+                  size="normal"
+                  extra="panel-x"
+                  data-act="accept"
+                  disabled={Boolean(write.busy)}
+                  aria-label={`Accept ${card.title} as its own note`}
+                  title="Accept this as its own note — the intake flag comes off, and the fold target with it (+)"
+                  onClick={write.accept}
+                />
+              )}
               {foldTarget && (
                 <IconButton
                   glyph="check"
@@ -425,7 +459,7 @@ function NoteCard({
                   data-act="fold"
                   disabled={folding}
                   aria-label={`Fold ${card.title} into ${foldTarget}`}
-                  title={`Fold this into "${foldTarget}" — decide what it changes, then its body, links and fingerprint move across (+)`}
+                  title={`Fold this into "${foldTarget}" — decide what it changes, then its body, links and fingerprint move across (=)`}
                   onClick={() => setFolding(true)}
                 />
               )}

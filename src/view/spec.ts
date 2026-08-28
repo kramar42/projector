@@ -54,6 +54,42 @@ export interface ViewSpec {
   /** Saved views only: positions, and card order within a column. */
   nodes?: Record<string, { x?: number; y?: number }>;
   order?: Record<string, string[]>;
+  /**
+   * `shape: lists` only: the views this one draws as columns, in order.
+   *
+   * By reference rather than inline, because the same file is then two things at
+   * once — a column here and a rule `pj audit` runs — and one object cannot
+   * disagree with itself. One level deep: a view named here may not name others.
+   *
+   * Saved-file only, like `nodes` and `order` (C9). A composition is
+   * hand-curated rather than derivable, so there is no live control that builds
+   * one and no URL that carries it.
+   */
+  lists?: string[];
+  /**
+   * Keep this view out of the picker.
+   *
+   * Not hidden — `pj ls --view <name>` runs it, `pj audit` enumerates it, and it
+   * is drawn in plain sight as a column of whatever composes it. It is absent
+   * from the *index*, which is why the word is `unlisted` rather than `hidden`.
+   *
+   * Declared rather than derived from "is a column of something", because the
+   * rules that are a column of nothing — an audit rule standing alone — want it
+   * just as much, and a picker that silently loses entries when a composition is
+   * added elsewhere is a surprise.
+   */
+  unlisted?: boolean;
+  /**
+   * What `pj audit` asserts about this view's result.
+   *
+   * `empty` is an *invariant*: zero is the only correct state and a violation
+   * means something is inconsistent. Deliberately not an integer, which would
+   * fold a *budget* — "about seven things this week" — into the same key, and a
+   * budget overrun is not a defect. That distinction is the same line `pj check`
+   * and `pj audit` draw, one level down. If a cap ever earns its place this
+   * becomes `{ max: n }` with `empty` kept as sugar for zero.
+   */
+  expect?: 'empty';
 }
 
 // ---------------------------------------------------------------- parsing
@@ -189,6 +225,12 @@ export const VIEW_KEYS: readonly string[] = [
   'groupBy',
   'sort',
   'show',
+  // Composition and the two flags that ride with it. Saved-file only: no live
+  // control writes them, so `specToFile` never emits one and only `specFromFile`
+  // below reads them.
+  'lists',
+  'unlisted',
+  'expect',
   // Arrangement. Written by `saveArrangement`, never by hand.
   'nodes',
   'order',
@@ -220,6 +262,10 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   spec.name = name;
   spec.title = String(raw.title ?? name);
 
+  if (Array.isArray(raw.lists)) spec.lists = raw.lists.map(String);
+  if (raw.unlisted === true) spec.unlisted = true;
+  if (raw.expect === 'empty') spec.expect = 'empty';
+
   const nodes = raw.nodes as Record<string, { x?: number; y?: number }> | undefined;
   if (nodes && typeof nodes === 'object') spec.nodes = nodes;
   const order = raw.order as Record<string, string[]> | undefined;
@@ -246,6 +292,30 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
   };
 }
 
+/**
+ * Carry a saved view's file-only keys onto the spec resolved from it.
+ *
+ * `specToParams`/`parseSpec` is the *query* round-trip, and deliberately narrow:
+ * everything it carries is a live control. Arrangement and composition are
+ * neither, so they survive a resolve only by being copied across — and both the
+ * server (a URL over a saved view) and `pj ls --view` have to do it.
+ *
+ * One function because it was one line in the server and none in the CLI, which
+ * is why `pj ls --view portfolio` quietly ignored a column's curated order. A
+ * `lists` view would have failed the same way and far louder: every column
+ * dropped, the board drawn empty, and nothing to say why.
+ */
+export function withSavedOnly(spec: ViewSpec, saved: ViewSpec | null | undefined): ViewSpec {
+  spec.name = saved?.name;
+  spec.title = saved?.title;
+  spec.nodes = saved?.nodes;
+  spec.order = saved?.order;
+  spec.lists = saved?.lists;
+  spec.unlisted = saved?.unlisted;
+  spec.expect = saved?.expect;
+  return spec;
+}
+
 /** A saved view as a picker needs it: enough to list and open, not to run. */
 export interface SavedViewSummary {
   name: string;
@@ -265,10 +335,15 @@ export interface SavedViewSummary {
  * stops the two routes disagreeing about which.
  */
 export function summariseViews(views: ViewSpec[]): SavedViewSummary[] {
-  return views.map((v) => ({
-    name: v.name ?? '',
-    title: v.title ?? v.name ?? '',
-    shape: v.shape,
-  }));
+  return views
+    // `unlisted` is honoured here rather than at either call site, because this
+    // is the only projection both of them use: filtering downstream is how the
+    // picker and the payload would come to disagree about what exists.
+    .filter((v) => !v.unlisted)
+    .map((v) => ({
+      name: v.name ?? '',
+      title: v.title ?? v.name ?? '',
+      shape: v.shape,
+    }));
 }
 

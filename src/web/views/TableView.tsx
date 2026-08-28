@@ -103,7 +103,6 @@ export function TableView({
                   Notes
                 </th>
                 <th className="num">Blocked</th>
-                <th className="num">Untriaged</th>
               </>
             )}
             <th className="col-updated">Updated</th>
@@ -275,7 +274,6 @@ function Row({
             )}
           </td>
           <td className="num">{rollup?.blocked || ''}</td>
-          <td className="num">{rollup?.untriaged || ''}</td>
         </>
       )}
       <td className="col-updated">{rollup?.touched ?? card.updated ?? ''}</td>

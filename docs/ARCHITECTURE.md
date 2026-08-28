@@ -14,7 +14,7 @@ number.
 | C2 | Nothing is written where somebody else reads | no code path writes to Jira, GitHub, Trello or Slack. A sink only you read — a notification to yourself — is not one of those |
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
-| C5 | Every shape is equally first-class | all three are editable, not just viewable |
+| C5 | Every shape a query projects into is equally first-class | board, canvas and table are editable, not just viewable. `lists` is not one of them: it projects several queries rather than one, and has no axis a drop could write |
 | C6 | The note body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
@@ -123,9 +123,26 @@ not drift while the response half was assembled inside a hono handler the CLI co
 `pj ls --view unblocked` and opening that view in the browser go through the same code, and now return
 the same thing.
 
+**A composition is answered here too.** `shape: lists` names other views as its columns, and
+`payload.ts` runs each child's query and returns the answers as the groups the board already knows how
+to draw — so the client needs no case of its own and gets a non-draggable board for free, `groupBy`
+being empty. It exists because grouping cannot express the question: a grouped board derives its
+columns from one axis over one result set, and "carries a priority but no status" and its mirror are
+conditions on two different axes at once. Applying **C9** — a view is a query — a rule *is* a view, so
+the file a column draws from is the same file `pj audit` asserts, and there is no second place to
+declare one.
+
+**The engine holds no filing policy.** There was a `triage` axis computed from an `expected:` key in
+`facets.yaml`, and it went: saying a facet is expected asserts that every note is work, while the model
+says whether a note is work is whether it carries a `status` — so a note deliberately without one could
+never be filed, its absence being defined as a gap. Filing rules are conditional, and `facets.yaml` has
+nowhere to say a condition. `facets.yaml` says what values are legal; views say what is expected. The
+validator had already made this move once, when the "no project" warning left it for the view that asks
+the question.
+
 **Filtering runs in memory** over the note map rather than in SQL. Not a performance trade — at this
 scale both are free — it is what lets a computed axis be indistinguishable from a real one. In SQL,
-`blocked` and `triage` would each need their own expression in the filter, the grouping *and* the
+`blocked` and `staleness` would each need their own expression in the filter, the grouping *and* the
 histogram; in JS they need one function and the rest of the engine cannot tell them apart. SQLite keeps
 the one job it is genuinely better at: full text (FTS5), which `search()` reads out of the `fts` table
 joined to `notes`. `src/index/queries.ts` holds only that, plus `counts` — which reads which facets
@@ -146,7 +163,7 @@ makes it work, being named by **any** reference facet is what makes it a contain
 entirely (C11).
 `type` and `is_project` are derived from the `project:` block, which is not a facet, so those earn
 their place — and `type` also reads the reference graph, since its third value `node` is "some other
-note names this one, through any reference facet". Five compute in all: `type`, `blocked`, `triage`, `staleness`, `linked`.
+note names this one, through any reference facet". Four compute in all: `type`, `blocked`, `staleness`, `linked`.
 
 **Focus and filter are the same operation at two levels, deliberately.** A focus is a filter clause
 whose test is transitive rather than one level deep, so in principle
@@ -588,7 +605,7 @@ empty admitted column is somewhere to drag a note to.
 
 **A filter on the axis you group by decides which columns exist, not just what lands in them.** It read
 every declared value whatever the filter said, so `due` — grouped by `due`, filtered to three of its
-four buckets — drew a `later` column no note could reach, and `triage` drew `complete` the same way. It
+four buckets — drew a `later` column no note could reach. It
 also dropped every *undeclared* value, so whether an excluded value survived came down to whether
 somebody had written it in `facets.yaml`. `admitted` answers for both: the axis is the vocabulary
 narrowed to the selection. Two consequences worth stating. A selection by *range* (`f.due=>2026-09-01`)
@@ -883,14 +900,14 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, and multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order |
-| `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS |
+| `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist |
 | `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, seeding a fresh vault not being the same act as adopting one, and the shipped tutorial passing `pj check` with no warnings — every shape in it is a recommendation whether it was meant as one or not |
-| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy |
+| `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy, and composition — a `shape: lists` view drawing its children as columns named by their titles, `unlisted` keeping them out of the picker, and the checks that a child exists, stays flat, does not nest and does not collide |
 | `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query; plus the one asymmetry it allows — the built-in relation carries its own `inverse`, a vault may rename it, and declaring the axis for any other reason does not erase it |
 
 The query tests build their own temp vault rather than reading the real one, so they assert the engine

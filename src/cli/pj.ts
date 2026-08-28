@@ -12,7 +12,7 @@ import { validateViews, validateVocabulary } from '../view/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
-import { SPEC_PARAMS, parseSpec, specToParams, type ViewSpec } from '../view/spec.ts';
+import { SPEC_PARAMS, parseSpec, specToParams, withSavedOnly, type ViewSpec } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
@@ -242,6 +242,7 @@ const HELP = `pj — projector CLI${vaultNote}
          [--session [id]] [--cwd dir]                       add or remove links; --session names the
                                                        live Claude session working here
   pj check                                             validate every note file and saved view
+  pj audit [--json]                                    run the views that assert expect: empty
   pj reindex                                           rebuild the index, and report what it holds
   pj search <query>                                    full-text search, most relevant first
   pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
@@ -343,7 +344,9 @@ function cmdLs(argv: string[]): void {
     if (v && v !== 'true') params[key] = v;
   }
 
-  const spec = parseSpec(params);
+  // The saved view's file-only halves — its composition and its curated order —
+  // which the query round-trip does not carry. See `withSavedOnly`.
+  const spec = withSavedOnly(parseSpec(params), saved);
   spec.name = named;
 
   // The same assembly the web app receives, from the same module (C9). A second
@@ -375,7 +378,13 @@ function cmdLs(argv: string[]): void {
   }
 
   const axes = spec.query.groupBy ?? [];
-  console.log(`# grouped by ${axes.join(' \u00d7 ')}\n`);
+  // A composition has columns without an axis, so it says what it is instead of
+  // naming the grouping it does not have.
+  console.log(
+    spec.lists?.length
+      ? `# ${spec.lists.length} list(s)\n`
+      : `# grouped by ${axes.join(' \u00d7 ')}\n`,
+  );
   for (const g of payload.groups) {
     console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
     for (const id of g.ids) console.log(line(id));
@@ -543,6 +552,58 @@ function cmdCheck(): void {
 }
 
 /**
+ * Run this vault's filing rules: every saved view that declares `expect`.
+ *
+ * Deliberately *not* part of `pj check`. That command answers "is this vault
+ * loadable and internally consistent", which has the same right answer in every
+ * vault; this one answers "am I working the way I said I would", which is a
+ * vault's own policy. Fused, a dangling reference and twelve untidy notes would
+ * leave by the same exit code with nothing to tell them apart — and the
+ * validator has already had this argument once, when the "no project" warning
+ * moved out of it and into the view that asks the question.
+ *
+ * A rule is one view file, which is the same file the board draws as a column.
+ * So there is no second place to declare one, and no rule that is checked but
+ * cannot be opened and drained.
+ */
+function cmdAudit(argv: string[]): void {
+  const { flags } = argFlags(argv, ['json'], ['json']);
+  const facets = loadFacets(p.facets);
+  const { db, notes } = reindex(root);
+  const views = loadViews(root);
+
+  const rules = views.filter((v) => v.expect);
+  const results = rules.map((v) => {
+    const payload = queryPayload({ facets, db, notes, views }, v, v);
+    return { name: v.name ?? '', title: v.title ?? v.name ?? '', ids: payload.ids };
+  });
+
+  if (flags.has('json')) {
+    console.log(JSON.stringify({ rules: results }, null, 2));
+    if (results.some((r) => r.ids.length)) process.exit(1);
+    return;
+  }
+
+  if (!rules.length) {
+    console.log('no rules — a view declares one with `expect: empty`');
+    return;
+  }
+
+  for (const r of results) {
+    const held = r.ids.length;
+    console.log(`${held ? 'BROKEN ' : 'ok     '} ${pad(r.name, 24)} ${held || ''} ${r.title}`);
+    // The notes themselves, because a rule that only reports a number sends you
+    // to a second command to find out what it means.
+    for (const id of r.ids) console.log(`           ${id}`);
+  }
+  const broken = results.filter((r) => r.ids.length);
+  console.log(
+    `\n${rules.length - broken.length} of ${rules.length} rule(s) hold`,
+  );
+  if (broken.length) process.exit(1);
+}
+
+/**
  * Rebuild the index, and report what it holds.
  *
  * The report iterates `counts()` rather than naming its keys. It used to name
@@ -624,6 +685,9 @@ try {
     case 'check':
       argFlags(argv, []);
       cmdCheck();
+      break;
+    case 'audit':
+      cmdAudit(argv);
       break;
     case 'reindex':
       argFlags(argv, []);

@@ -149,10 +149,19 @@ export function splitSelection(selection: readonly string[]): {
   return { wanted, unwanted };
 }
 
-/** The three projections of one note database. */
-export type Shape = 'board' | 'canvas' | 'table';
+/**
+ * The projections of one note database.
+ *
+ * The first three project a *single* query — one result set, arranged by an axis.
+ * `lists` is the one that does not: its columns are other views, so it answers
+ * questions no grouping can, because grouping derives columns from one axis over
+ * one result set and two of the questions a triage board asks ("has a priority
+ * but no status", "has a status but no priority") are conditions on different
+ * axes at once.
+ */
+export type Shape = 'board' | 'canvas' | 'table' | 'lists';
 
-export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
+export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table', 'lists'];
 
 /** Which way a focus traversal walks a reference facet. */
 export type Dir = 'out' | 'in' | 'both';

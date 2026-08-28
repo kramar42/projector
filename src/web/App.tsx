@@ -1351,6 +1351,32 @@ function run(command: Command, s: KeyState): void {
       );
     }
 
+    /**
+     * Accept a candidate as its own note.
+     *
+     * Aimed at the button like `fold` and `work`, for the same reason: one path
+     * writes it, so the keyboard cannot reach a state the panel would not.
+     * Nothing here confirms, because nothing is destroyed — two facets come off a
+     * note that stays exactly where it was.
+     */
+    case 'accept': {
+      const on = openNote ?? cursor.id;
+      if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
+      if (!openNote) setOpenNote(on);
+      return focusSoon(
+        () => {
+          const button = document.querySelector<HTMLButtonElement>('.panel [data-act="accept"]');
+          if (!button) {
+            s.notify({ tone: 'info', text: 'this note is not waiting to be judged' });
+            return null;
+          }
+          button.click();
+        },
+        10,
+        () => s.notify({ tone: 'info', text: 'the note did not open, so nothing was accepted' }),
+      );
+    }
+
     case 'declined':
       return s.setDeclined(true);
 

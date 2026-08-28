@@ -76,6 +76,22 @@ export interface NoteWriter {
    * render ago.
    */
   facet(name: string, values: string[], mode?: FacetMode): void;
+  /**
+   * Judge a candidate: `intake` comes off, and `extends` with it.
+   *
+   * Two writes rather than one, because the browser may only ever send *one*
+   * facet at a time — its copy of the map is as old as its last render, so the
+   * whole-map form would revert whatever an agent changed on another axis. They
+   * are chained through `run` rather than fired at `press` twice: `run` advances
+   * the base mtime as each lands, so the second write is not a lost update
+   * against the first.
+   *
+   * One status for the pair, because it is one act. A failure half way leaves the
+   * note carrying `extends` and no `intake`, which is exactly the stale-fold-
+   * control state this exists to prevent — so `intake` is cleared *last*, and a
+   * candidate that fails mid-accept is still visibly a candidate.
+   */
+  accept(): void;
   title(next: string): void;
   links(next: string[]): void;
   projectBlock(block: Record<string, unknown> | null): void;
@@ -159,6 +175,17 @@ export function usePanelWriter(o: {
       (name, values, mode: FacetMode = 'set') => press({ kind: 'facet', name, values, mode }),
       [press],
     ),
+    accept: useCallback(() => {
+      const n = ++seq.current;
+      setStatus((s) => nextStatus(s, { t: 'start', seq: n, label: 'accepting' }));
+      run({ kind: 'facet', name: 'extends', values: [], mode: 'set' })
+        .then(() => run({ kind: 'facet', name: 'intake', values: [], mode: 'set' }))
+        .then(
+          () => setStatus((s) => nextStatus(s, { t: 'settled', seq: n, failure: null })),
+          (err: unknown) =>
+            setStatus((s) => nextStatus(s, { t: 'settled', seq: n, failure: classify(err) })),
+        );
+    }, [run]),
     title: useCallback((title) => press({ kind: 'title', title }), [press]),
     links: useCallback((links) => press({ kind: 'links', links }), [press]),
     projectBlock: useCallback((block) => press({ kind: 'projectBlock', block }), [press]),

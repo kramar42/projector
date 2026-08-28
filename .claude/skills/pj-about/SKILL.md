@@ -90,7 +90,8 @@ pj ls --filter linked=jira                  # which notes carry a Jira link
 pj ls --filter status=active,planning
 pj ls --filter project=-project-a                 # everything *except* Project A — see below
 pj ls --view unblocked       # actionable now: open, nobody waited on, no unfinished blocker
-pj ls --view triage --json   # notes missing project/priority/status, grouped by what is missing
+pj ls --view triage --json   # everything waiting on a decision, one column per question
+pj audit                     # run the vault's rules: the views declaring `expect: empty`
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
 pj enrich <ref> --force      # resolve a link's live state
@@ -195,10 +196,15 @@ Adding an axis is two steps and no code: declare it here, then set it with `pj s
 Removing one leaves the values on the notes — `pj check` then reports them as unknown rather than
 dropping them, which is the behaviour you want when a rename is half-done.
 
-**Five axes are computed and are *not* in this file** — `type`, `blocked`, `triage`, `staleness`,
-`linked`. Each reads something a facet cannot describe: a `project:` block, the reference graph, an
-absence, a note's links, the app-written `updated`. They filter and group exactly like declared
-facets. Never try to write one onto a note.
+**Four axes are computed and are *not* in this file** — `type`, `blocked`, `staleness`, `linked`. Each
+reads something a facet cannot describe: a `project:` block, the reference graph, a note's links, the
+app-written `updated`. They filter and group exactly like declared facets. Never try to write one onto
+a note.
+
+**There is no `triage` axis and no `expected:` key**, and neither is coming back. Saying a facet is
+expected asserts that every note is work — while whether a note is work is whether it carries a
+`status`, so a note deliberately without one could never be filed. A vault states its filing rules as
+**views** instead: `facets.yaml` says what values are legal, views say what is expected.
 
 ## Views — `.projector/views/*.yaml`
 
@@ -206,7 +212,7 @@ facets. Never try to write one onto a note.
 what a URL and `pj ls` flags describe, so a saved view and a live query are the same object.
 
 ```yaml
-shape: board                  # board · canvas · table
+shape: board                  # board · canvas · table · lists
 title: Home
 filter:
   status: [planning, active]  # facet → any of these values. `(none)` matches absence
@@ -218,8 +224,37 @@ show: [project, tech]         # which facets this view surfaces, in order
 ```
 
 **The two halves are not the same kind of thing.** Everything above is *derivable*, so it is also a
-live control in the UI. `nodes` (canvas x/y) and `order` (note order within a column) are hand-curated
-**arrangement**, and exist only in a saved file — which is why an ad-hoc query cannot hold a layout.
+live control in the UI. `nodes` (canvas x/y), `order` (note order within a column) and the three
+composition keys below are hand-curated, and exist only in a saved file — which is why an ad-hoc query
+cannot hold a layout or a rule.
+
+**A rule is a view.** Three saved-file-only keys make one:
+
+```yaml
+# views/needs-status.yaml — planned, but never committed to as work
+shape: board
+title: Needs status
+unlisted: true                # out of the picker; still `pj ls --view needs-status`
+expect: empty                 # `pj audit` asserts this comes back empty, and exits 1 if not
+filter: { intake: ['(none)'], priority: ['-(none)'], status: ['(none)'] }
+
+# views/triage.yaml — the rules drawn side by side
+shape: lists
+title: Triage
+lists: [intake, needs-project, needs-status, needs-priority]
+```
+
+- **`expect: empty` is the only assertion.** It is an invariant, not a budget — zero is the only
+  correct state. `pj audit` runs every view that declares one; `pj check` does not, and that separation
+  is deliberate: `pj check` asks whether the vault is *valid*, which is the same question in every
+  vault, and a rule is this vault's policy.
+- **`shape: lists` draws other views as columns**, one level deep, in the order named. A child may not
+  itself have `lists:` and may not `groupBy:` anything — a column is one flat list. It exists because
+  grouping cannot express a condition on two axes at once, which is what half these rules are.
+- **Nothing on a lists board is draggable.** There is no facet value a drop could write. Notes leave a
+  column by being edited.
+- **Every rule but the queue excludes the queue** with `intake: ['(none)']`. A candidate nobody has
+  judged is missing nearly everything by construction, and would otherwise fill every column at once.
 
 - **`show` is one list and its order matters.** How each facet is drawn follows from what it is: a
   label facet is a chip and a table column; a reference facet is that *and* a line on a canvas — and

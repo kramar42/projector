@@ -260,18 +260,102 @@ show: [project, priority]
 # needs no state of its own — it is a filter, which is what keeps the queue a
 # board you already know how to use rather than a second kind of place.
 #
-# Grouped by \`source\` because the channels are the columns: a run of your own
-# commits reads as one stack instead of interleaving with everything else.
+# Flat, and not grouped by \`source\`. The channels were the columns while these
+# arrived as an import from somewhere else; a candidate is written as an ordinary
+# note carrying its own link now, so which pipe it came down is a chip on the
+# card rather than the shape of the queue. It is also a column of \`triage\`,
+# and a column cannot group.
 #
 # Nothing has to be excluded from the other seeded views — every one of them
 # filters on \`status\`, and a candidate has none until you give it one.
 shape: board
-title: Intake
+title: Unjudged
 filter:
   intake: [unjudged]
-groupBy: [source]
 sort: [updated:desc]
-show: [project, priority, status]
+show: [source, project, priority, status]
+`,
+  },
+  {
+    path: 'needs-project.yaml',
+    body: `# Judged, and still unfiled.
+#
+# \`intake: [(none)]\` is what makes this drainable rather than permanent: a
+# candidate nobody has looked at is not a filing failure, it is a queue. The
+# question here is only asked of notes you have already accepted.
+#
+# \`type\` exempts projects, and only projects. A root project carries a
+# \`project:\` block and no \`project\` facet, so without this every project in
+# the vault sits here for ever. A container is not exempt — a note things hang
+# off still belongs somewhere.
+shape: board
+title: Needs project
+unlisted: true
+expect: empty
+filter:
+  intake: ['(none)']
+  project: ['(none)']
+  type: [plain, node]
+sort: [updated:desc]
+show: [status, priority]
+`,
+  },
+  {
+    path: 'needs-status.yaml',
+    body: `# Planned, but not committed to: it says when you mean to do it and never says
+# it is work.
+#
+# One of the two halves of a note that claims to be work on one axis and not the
+# other. Both are invariants rather than piles — zero is the only correct state —
+# which is what \`expect: empty\` asserts and \`pj audit\` runs.
+shape: board
+title: Needs status
+unlisted: true
+expect: empty
+filter:
+  intake: ['(none)']
+  priority: ['-(none)']
+  status: ['(none)']
+sort: [updated:desc]
+show: [project, priority]
+`,
+  },
+  {
+    path: 'needs-priority.yaml',
+    body: `# Committed to as work, but unplanned: it has a lifecycle and no horizon, so
+# nothing on a board grouped by \`priority\` will ever show it to you.
+#
+# The mirror of \`needs-status\`. See it for why these are two views rather than
+# two values of one axis: they are conditions on *different* facets at once, and
+# no single filter — and therefore no grouping — can hold them apart.
+shape: board
+title: Needs priority
+unlisted: true
+expect: empty
+filter:
+  intake: ['(none)']
+  status: ['-(none)']
+  priority: ['(none)']
+sort: [updated:desc]
+show: [project, status]
+`,
+  },
+  {
+    path: 'triage.yaml',
+    body: `# Everything waiting on a decision, in one board.
+#
+# \`shape: lists\` draws other views as its columns. It exists because grouping
+# cannot answer this: a grouped board derives its columns from one axis over one
+# result set, and two of these four are conditions on two axes at once. Each
+# column is an ordinary view file, which is the same file \`pj audit\` runs — so a
+# rule and the place you fix it are one object rather than two that can disagree.
+#
+# Nothing here is draggable, and that is not a limitation to work around: there
+# is no facet value a drop could write. A note leaves a column by being edited,
+# or — in the first one — by being accepted or folded in.
+shape: lists
+title: Triage
+lists: [intake, needs-project, needs-status, needs-priority]
 `,
   },
   {

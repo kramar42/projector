@@ -93,7 +93,7 @@ semantics that make "a note in two columns" a gesture and never an accident (rep
 remove / drop into `(none)`). Canvas: a tree laid out from its roots plus free positioning once saved,
 bands when grouped, and filtering as match-plus-context so a filtered graph still reads as a graph.
 Table: the one thing the others cannot give — columns of numbers, with project roll-ups as
-`direct / total`, blocked, untriaged, last activity.
+`direct / total`, blocked, last activity.
 
 **Editing has two channels.** Structure is edited by gesture — drag, bulk bar, canvas handles — and
 content in the note panel. Creation is the exception, in two places: inline in a board column, which
@@ -103,15 +103,16 @@ prompts for a title and sets no facets at all.
 **Conflicts are refused, not merged.** If a file changed since the panel read it, the write is refused
 and says so. This matters specifically because an agent may hold the same note in another window.
 
-**Five computed axes compute and are never stored:** `type`, `blocked`, `triage`, `linked`,
+**Four computed axes compute and are never stored:** `type`, `blocked`, `linked`,
 `staleness`. Nothing derivable is also storable — which is why there is no `status: blocked` able to
 disagree with the `blocked` axis.
 
 **Ordered facets present buckets and compare raw.** `due` filters and groups as
 `overdue · today · week · later` while sorting and range filters see the date.
 
-**Views are saved queries.** There is no hardcoded `pj next` or `pj untriaged`; they are
-`views/unblocked.yaml` and `views/triage.yaml`, askable from either surface and validated by
+**Views are saved queries, and a vault's filing rules are among them.** There is no hardcoded
+`pj next` or `pj untriaged`; they are `views/unblocked.yaml` and `views/triage.yaml`, askable from
+either surface and validated by
 `pj check`.
 
 **Technical constraints.** Node 24+ runs the TypeScript directly — no build step for server or CLI.
