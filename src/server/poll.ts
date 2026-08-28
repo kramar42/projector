@@ -4,6 +4,8 @@ import { materialise } from '../intake/materialise.ts';
 import { settingsFor } from '../settings.ts';
 import { suppress } from '../intake/db.ts';
 import { sweep } from '../intake/run.ts';
+import { basename } from 'node:path';
+import { count, info, tally, warn } from './log.ts';
 
 /**
  * The sweep, unattended.
@@ -54,6 +56,27 @@ export interface PollResult {
   notify: { id: string; title: string }[];
   /** Set when the classifier could not be reached, so the tick held. */
   held?: string;
+  /**
+   * The same tick, per channel.
+   *
+   * The totals above answer "did anything happen"; these answer "which source is
+   * working", which is the question you actually have when a board has been
+   * empty for two days. A channel that fetched and found nothing is a *row of
+   * zeroes* here rather than an absence — that distinction is the whole point,
+   * and it is the one the totals cannot carry.
+   */
+  channels: {
+    channel: string;
+    /** What the channel offered, before the classifier saw any of it. */
+    seen: number;
+    created: number;
+    skipped: number;
+    declined: number;
+    /** Of `created`, those waiting to be merged into a note that exists. */
+    extending: number;
+    /** Absent when the channel answered; the reason when it did not. */
+    unreachable?: string;
+  }[];
 }
 
 /**
@@ -70,6 +93,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     declined: 0,
     extending: 0,
     notify: [],
+    channels: [],
   };
   const { reports } = await sweep(root);
   const wantsJudgement = settingsFor(root).classify.enabled;
@@ -80,7 +104,17 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
       // Slack and Gmail every tick, by design — they have no credential here and
       // are fetched by an agent through MCP. A failing channel lands here too,
       // since `collectSafely` gives a thrown collect the same shape.
-      out.unreachable.push({ channel: report.channel, reason: report.reason ?? 'not fetched here' });
+      const reason = report.reason ?? 'not fetched here';
+      out.unreachable.push({ channel: report.channel, reason });
+      out.channels.push({
+        channel: report.channel,
+        seen: 0,
+        created: 0,
+        skipped: 0,
+        declined: 0,
+        extending: 0,
+        unreachable: reason,
+      });
       continue;
     }
 
@@ -89,6 +123,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
      * so the write path is one path. The card is then as thin as the channel
      * made it, which is what `classify.enabled: false` is asking for.
      */
+    let declinedHere = 0;
     let kept: Classified['keep'] = report.candidates.map((candidate) => ({
       candidate,
       verdict: { fingerprint: candidate.fingerprint, decision: 'keep', reason: '' },
@@ -103,6 +138,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
         return out;
       }
       kept = judged.keep;
+      declinedHere = judged.drop.length;
       for (const d of judged.drop) {
         suppress(root, {
           fingerprint: d.candidate.fingerprint,
@@ -123,6 +159,14 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     out.skipped += res.skipped;
     out.extending += res.extending;
     out.notify.push(...res.notify);
+    out.channels.push({
+      channel: report.channel,
+      seen: report.candidates.length,
+      created: res.created.length,
+      skipped: res.skipped,
+      declined: declinedHere,
+      extending: res.extending,
+    });
   }
 
   /**
@@ -154,7 +198,6 @@ const timers = new Map<string, Timer>();
  */
 export function startPolling(
   root: string,
-  log: (msg: string) => void = () => {},
   /** Called with what a tick judged worth interrupting for. Local delivery only. */
   onAttention: (notes: { id: string; title: string }[]) => void = () => {},
 ): boolean {
@@ -162,33 +205,63 @@ export function startPolling(
   const { poll } = settingsFor(root);
   if (!poll.enabled) return false;
 
+  const name = basename(root);
+
   const tick = async () => {
+    const started = Date.now();
     try {
       const res = await pollOnce(root);
       if (res.held) {
         // Loud, because a held tick looks exactly like a quiet channel from the
-        // outside and the two mean opposite things.
-        log(`intake: held — ${res.held}`);
+        // outside and the two mean opposite things: nothing to write, versus
+        // plenty to write and no way to judge it.
+        warn('intake', `${name} held — ${res.held}`);
         return;
       }
-      if (res.created.length || res.declined) {
-        log(`intake: ${res.created.length} new, ${res.declined} declined in ${root}`);
+
+      // One line per channel, always — a channel that answered and found nothing
+      // is a row of zeroes rather than a silence, because "quiet" and "broken"
+      // are the two readings this log exists to separate.
+      for (const c of res.channels) {
+        if (c.unreachable) {
+          // Not an error. Slack and Gmail land here every tick by design: they
+          // have no credential on this side and are fetched by an agent through
+          // MCP. A channel that has been unreachable for a week is still worth
+          // seeing, which is why it is a line and not a shrug.
+          warn('intake', `${name}/${c.channel} not fetched — ${c.unreachable}`);
+          continue;
+        }
+        const tail = tally({
+          new: c.created,
+          extending: c.extending,
+          declined: c.declined,
+          known: c.skipped,
+        });
+        info('intake', `${name}/${c.channel} saw ${c.seen}${tail ? `  ${tail}` : ''}`);
       }
+
+      // The tick's own line, after the channels, so the summary reads as a total
+      // of what is above it rather than as a fifth channel.
+      info(
+        'intake',
+        `${name} tick in ${Date.now() - started}ms  ` +
+          `${count(res.created.length, 'note')} written, ` +
+          `${res.declined} declined, ` +
+          `${count(res.advanced.length, 'cursor')} advanced`,
+      );
       // After the log, so a tick that writes and interrupts says both.
       onAttention(res.notify);
-      for (const u of res.unreachable) {
-        // Not an error and not silent. A channel that has been unreachable for a
-        // week is worth noticing, and a poller that swallowed it would look like
-        // a quiet channel — the reading the sweep is careful never to produce.
-        log(`intake: ${u.channel} not fetched — ${u.reason}`);
+      if (res.notify.length) {
+        info('intake', `${name} ${count(res.notify.length, 'note')} worth interrupting for`);
       }
     } catch (e) {
       // A tick that throws must not stop the timer: the next one may well work,
       // and a poller that dies on one bad sweep is worse than one that is noisy.
-      log(`intake: tick failed — ${e instanceof Error ? e.message : String(e)}`);
+      warn('intake', `${name} tick failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
+  info('intake', `${name} polling every ${poll.everySeconds}s`);
   const timer = setInterval(tick, poll.everySeconds * 1000);
   // Never hold the process open on our account. A timer is not a reason for a
   // server to refuse to exit.

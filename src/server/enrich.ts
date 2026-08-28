@@ -5,6 +5,7 @@ import { paths } from '../config.ts';
 import { parseLink } from '../schema/links.ts';
 import { NOT_ENRICHED, registry } from '../enrich/registry.ts';
 import { isUnavailable, type Enrichment, type Fetcher, type Unavailable } from '../enrich/types.ts';
+import { count, info, tally, warn } from './log.ts';
 
 /**
  * The enrichment cache, and the stale-while-revalidate policy around it.
@@ -242,6 +243,13 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): Pro
   }
 
   return (async () => {
+    // Counted by kind rather than totalled, because the kinds fail
+    // independently — an expired GitHub token and a Jira that is merely slow
+    // look identical in a single number, and "gh:0 jira:7" says which.
+    const done: Record<string, number> = {};
+    const failed: Record<string, number> = {};
+    const started = Date.now();
+
     // Small concurrency: these are subprocesses and HTTP calls, and a board can
     // reference dozens of links at once.
     const queue = [...todo];
@@ -256,8 +264,10 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): Pro
           const fetcher = fetchers[next.kind]!;
           const link = parseLink(next.ref);
           store(opts.dataRoot, next.ref, next.kind, await fetcher.fetch(link.ref));
+          done[next.kind] = (done[next.kind] ?? 0) + 1;
         } catch (err) {
           // A fetcher that throws is a bug, but it must not take the server down.
+          failed[next.kind] = (failed[next.kind] ?? 0) + 1;
           store(opts.dataRoot, next.ref, next.kind, {
             unavailable: true,
             reason: `fetcher failed: ${(err as Error).message}`,
@@ -271,6 +281,18 @@ export function refresh(opts: EnrichOptions, refs: string[], force = false): Pro
     // Ours and anything borrowed: the promise says "every ref this call asked
     // about has settled", not "the refs this call happened to own have settled".
     await Promise.all([...workers, ...borrowed]);
+
+    // One line for the batch, not one per ref: a board opening resolves dozens
+    // at once and they are one event — "the chips on this board filled in".
+    const resolved = Object.values(done).reduce((a, b) => a + b, 0);
+    const lost = Object.values(failed).reduce((a, b) => a + b, 0);
+    const tail = [tally(done), lost ? `(${tally(failed)} failed)` : ''].filter(Boolean).join(' ');
+    info('enrich', `${count(resolved, 'link')} in ${Date.now() - started}ms  ${tail}`);
+    // Separately and louder, because a fetcher throwing is a bug rather than a
+    // ref that has no answer — `unavailable` is an ordinary result and says so
+    // on the card, but nothing surfaces a broken fetcher except this.
+    if (lost) warn('enrich', `${count(lost, 'fetcher error')}  ${tally(failed)}`);
+
     opts.onRefreshed?.();
   })();
 }

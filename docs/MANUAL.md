@@ -717,6 +717,12 @@ poll:
 channels: [git, claude, jira]
 ```
 
+**It is off unless the file says so.** `poll.enabled` is `true` only when written `true` — an absent
+`poll:` block is not a default of "yes, sweep my vault on a timer", because a server that started
+writing notes because you opened it once would be a surprise. If your intake board has been empty for
+days, this is the first thing to check: `pj intake status` shows each channel's last run, and a *last
+run* hours old with no poller means every sweep you have had was one you typed.
+
 It starts when the vault is first opened, and each candidate that survives judgement lands as an
 ordinary note carrying `intake: unjudged` — so an open board shows it appear without doing anything.
 Running twice writes nothing twice: a fingerprint the vault already holds short-circuits. Slack and
@@ -1511,6 +1517,40 @@ only. `test` is `node --test`; substituted, that reads `bun --test`, and Bun's r
 bun test                          # under Bun
 node --run test                   # under Node
 ```
+
+## What the server says while it runs
+
+The banner names the port and the vaults it knows. Everything after it is **background work** — the
+things that happen with nobody watching, which are the things you cannot otherwise tell apart from a
+server that is doing nothing at all:
+
+```
+[INFO] 2026-08-28 13:52:02 intake pollvault/claude saw 25  new:25
+[INFO] 2026-08-28 13:52:02 intake pollvault/git saw 0
+[WARN] 2026-08-28 13:52:02 intake pollvault/slack not fetched — no Slack tools named for this vault…
+[INFO] 2026-08-28 13:52:02 intake pollvault tick in 1127ms  29 notes written, 0 declined, 3 cursors advanced
+[INFO] 2026-08-28 13:51:01 watch  coverage new note  log-probe.md
+[INFO] 2026-08-28 13:51:26 enrich 3 links in 478ms  doc:1 gh:branch:1 gh:pr:1
+[INFO] 2026-08-28 13:50:50 index  coverage rebuilt in 52ms
+```
+
+Four areas, and each line is an **event** rather than progress:
+
+| area | one line when |
+|---|---|
+| `intake` | a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate |
+| `watch` | a note, a view or a vocabulary file **arrives**. Edits are deliberately silent: a vault under an editor changes on every save, and a log that said so is one nobody reads |
+| `enrich` | a batch of links resolves, counted by kind — `gh:0 jira:7` says which integration is down, where a single total cannot |
+| `index` | the vault is reloaded after a change, with how long it took |
+
+`WARN` is for something that did not work while the run carried on anyway — an unreachable channel, a
+fetcher that threw, a tick that held because the classifier could not be answered. Every one of those
+is survivable by design, which is also how a system rots quietly, so they are visible without being
+fatal.
+
+Requests are **not** logged. They have a caller, a status code and a client that can see the answer;
+adding them would bury the four lines above that nothing else reports. Times are local, not UTC — this
+is read next to the clock in the corner of your screen.
 
 Both run the whole suite, CI runs each, and both must pass. Everything else — `serve`, `dev`, `pj`,
 `redate`, and the scripts that call a binary rather than a runtime — substitutes cleanly.

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { paths } from '../config.ts';
+import { info } from '../server/log.ts';
 
 /**
  * A memo over "read the whole vault", keyed on a stamp of the files it was built
@@ -111,7 +112,13 @@ export function cached<T>(root: string, build: (root: string) => T, dispose?: (v
   const hit = entries.get(root) as Entry<T> | undefined;
   if (hit && hit.stamp === stamp && hit.handle === handleOf(root)) return hit.value;
 
+  const started = Date.now();
   const value = build(root);
+  // The one line about work that happens *inside* a request but is not the
+  // request's own: a rebuild is triggered by a file changing, and how long the
+  // vault takes to reload is exactly the number you want when the app feels
+  // slow. A cache hit says nothing, so this is one line per actual rebuild.
+  info('index', `${basename(root)} rebuilt in ${Date.now() - started}ms`);
   // After `build`, which is what created the file whose identity this is.
   entries.set(root, { stamp, handle: handleOf(root), value });
   if (hit) {

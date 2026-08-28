@@ -105,7 +105,7 @@ the two are expected to be editing the same note at the same time.
 | `src/schema/` | note and facet types, frontmatter read/write, validation, how notes fold together |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, `dropOutcome.ts`, what a drag means, `keys.ts`, what a keystroke means and which letters a vault may not claim, and `undo.ts`, the write that puts a write back |
-| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding, and `poll.ts` — the sweep on a timer |
+| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding, `poll.ts` — the sweep on a timer — and `log.ts`, what the background says about itself |
 | `src/web/` | React: sidebar, three shapes, note panel. `cursor.ts` is where the keyboard is and `views/motion.ts` is where it can go |
 | `src/cli/` | `pj` |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
@@ -675,6 +675,18 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
 
+**What the background says about itself.** `src/server/log.ts` is one line per *event* from the four
+things that run with nobody watching — the poll timer, the file watcher, the enrichment fetchers and
+the index rebuild. Requests log nothing: they have a caller and a status code, and burying four
+background lines under a request log is how both become unreadable. Nor do file *edits*, which a vault
+under an editor produces continuously.
+
+Its sink is `null` until `serve.ts` sets it, and that is the load-bearing part rather than a
+convenience. `cache.ts` and `enrich.ts` are imported by `pj` and by the test suite as readily as by the
+server, so a module-level `console.log` would put a server's health log into `pj ls --json` and into
+`node --test`. Opting in at one place means library code can say what it did without first working out
+who is listening.
+
 **What goes out, and what it is allowed to do.** Enrichment and the fetching channels are reads: `gh pr
 view`, `gh api` GETs, Jira GETs. Those modules export no mutation functions, so there is no code path
 to write back.
@@ -907,6 +919,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
+| `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all; plus evidence reasons, worktree path parsing, and an FTS query built from a prompt full of operators |

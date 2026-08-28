@@ -59,12 +59,12 @@ import { noteContext } from '../agent/context.ts';
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { watch } from 'chokidar';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
+import { info, logTo } from './log.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import { startPolling } from './poll.ts';
 import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
-import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
 
@@ -800,7 +800,32 @@ function ensureWatched(root: string): void {
     ignoreInitial: true,
     ignored: (path: string) => path.includes('.tmp-') || derived(path, roots),
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
-  }).on('all', (_event: string, changed?: string) => bump(root, notesTouched(root, changed)));
+  }).on('all', (event: string, changed?: string) => {
+    /**
+     * Arrivals only, and that is the whole editorial decision.
+     *
+     * A vault under an editor changes on every keystroke that reaches disk, and
+     * an agent rewriting frontmatter touches a dozen files in a second — a log
+     * that reported those would be one nobody reads, which is the same as no log.
+     * A file *appearing* is an event: a sweep materialised a candidate, an agent
+     * wrote a note, or somebody dropped one in by hand. Those are worth a line
+     * each, and there are few enough of them that each one stays readable.
+     *
+     * Deletions are not logged either, for a weaker reason than edits: they are
+     * rare but they are also how a decline is applied, so they would mostly
+     * duplicate a line `intake` has already written.
+     */
+    if (event === 'add' && changed) {
+      const p2 = paths(root);
+      const where = changed.startsWith(p2.views)
+        ? 'view'
+        : changed.startsWith(p2.notes)
+          ? 'note'
+          : 'vocabulary';
+      info('watch', `${basename(root)} new ${where}  ${basename(changed)}`);
+    }
+    bump(root, notesTouched(root, changed));
+  });
   watched.set(root, w);
 
   /**
@@ -810,9 +835,9 @@ function ensureWatched(root: string): void {
    * so the watcher above turns each one into the SSE the open board already
    * listens for — a candidate appears without the client learning anything new.
    */
-  if (startPolling(root, (msg) => console.log(msg), (notes) => bumpAttention(root, notes))) {
-    console.log(`polling ${root} every ${settingsFor(root).poll.everySeconds}s`);
-  }
+  // It announces its own interval through the log, so there is nothing to say
+  // here about a vault that opted in — and a vault that did not is not news.
+  startPolling(root, (notes) => bumpAttention(root, notes));
 }
 
 /**
@@ -915,12 +940,20 @@ if (existsSync(dist)) {
   app.get('*', serveStatic({ path: join(dist, 'index.html') }));
 }
 
-serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (info) => {
-  console.log(`projector  http://127.0.0.1:${info.port}`);
+serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (addr) => {
+  console.log(`projector  http://127.0.0.1:${addr.port}`);
   const known = listVaults();
   if (!known.length) console.log('vaults   none yet — the app will ask for a folder');
   for (const v of known) {
     console.log(`vault    ${v.name}  ${v.path}${v.exists ? '' : ' (missing)'}`);
   }
   if (!existsSync(dist)) console.log('ui       not built — run the `build` script, or `dev:web` for the dev server');
+
+  /**
+   * The banner above is what this process *is*; everything after it is what it
+   * *does*. Switched on here and nowhere else, so `pj` and `node --test` — which
+   * import the same modules — stay silent without either of them opting out.
+   */
+  logTo((line) => console.log(line));
+  console.log(`logging  background events — watcher, intake and enrichment`);
 });
