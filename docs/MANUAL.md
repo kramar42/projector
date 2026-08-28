@@ -1343,7 +1343,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,t` | the canvas toolbar — what drags create, `+ note`, Save layout |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |
 | `⌥j` `⌥k` | move the cursor's card down / up its column. Card order is arrangement, so it needs a saved view — an ad-hoc query has no file to keep it in |
-| `/` | the search box |
+| `/` | the search box. `Esc` leaves it without clearing it — the search is yours until `,c` |
 | `?` | the cheatsheet |
 
 `,g` `,G` `,o` and `,f` take an axis letter directly: `,g p` groups by that axis without opening
@@ -1442,8 +1442,8 @@ are the ones the shipped tutorial vault declares; `project` ships without one, s
 18. **The nth view.** Press `⌥3`. You land on the third view in the `,v` list. (On macOS `⌥3` types
     `£`; it is read from the physical key, so it must still work.)
 19. **Search.** Press `/`. The rail's search box takes focus. Type a word — the board narrows. Press
-    `Esc` — the box empties. Press `Esc` again — focus leaves the box, and the next `j` moves the
-    cursor rather than typing a letter.
+    `Esc` — focus leaves the box and **the search stays applied**, so the next `j` moves the cursor
+    rather than typing a letter. `,c` is what empties it, along with the filters.
 20. **Typing is never a shortcut.** With focus still in the search box, type `jjj333`. The text
     appears in the box; the cursor does not move and no card is written.
 21. **The panel is not modal.** Open a card, then press `Tab` a few times. Focus moves through the

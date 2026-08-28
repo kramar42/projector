@@ -299,15 +299,31 @@ function SearchBox({ spec, edit }: { spec: ViewSpec | undefined; edit: Edit }) {
         onKeyDown={(e) => {
           if (e.key !== 'Escape') return;
           /**
-           * Clear, then leave.
+           * Leave. Only leave.
            *
-           * A field owns every key it is given, so the app's chain never sees this
-           * one — which meant Escape emptied the box and left the keyboard in it,
-           * with no way back to the cards but the mouse. Two steps rather than
-           * one because they are two different regrets: the search was wrong, or
-           * you are done searching.
+           * A field owns every key it is given, so the app's chain never sees
+           * this one and the box has to answer for itself. It used to clear
+           * first and leave on a second press — two regrets, the reasoning went:
+           * the search was wrong, or you are done searching.
+           *
+           * The wrong one was first. **Escape means *step out* everywhere else in
+           * this app** — the map says "close · leave a list · deselect" and not
+           * one of those destroys anything — so the single place it emptied
+           * something was the outlier, and it emptied the one piece of query state
+           * the app deliberately *keeps*: `CARRIED` carries the search across a
+           * change of view because what you are looking for is not something a
+           * view answers. Throwing it away on the key that means "I am done here"
+           * fought that.
+           *
+           * Clearing has other doors and always did — `,c` empties the filters and
+           * the search together, and the box is a text field with a whole keyboard
+           * pointed at it. Getting *out* had exactly one, and it cost you the
+           * query to use it.
+           *
+           * Blur rather than a landing: with focus off the field the shell's chain
+           * has the key back, so a second Escape does whatever it would have done
+           * anyway.
            */
-          if (text) return setText('');
           e.currentTarget.blur();
         }}
       />
