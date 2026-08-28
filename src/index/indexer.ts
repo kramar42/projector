@@ -50,7 +50,7 @@ export function readAll(
   return { notes, unreadable, duplicates };
 }
 
-const STAMP_VERSION = 'v1';
+const STAMP_VERSION = 'v2'; // v2: payload stores bodiless, vault-relative records
 
 /**
  * An exact stamp of everything `reindex` reads: every note file's mtime, the
@@ -102,18 +102,32 @@ export function reindex(dataRoot: string, { force = false } = {}): IndexResult {
       if (row) {
         const payload = JSON.parse(row.value) as {
           stamp: string;
-          notes: [string, Note][];
+          notes: Omit<Note, 'body'>[];
           unreadable: IndexResult['unreadable'];
           duplicates: IndexResult['duplicates'];
         };
         if (payload.stamp === stamp) {
-          return {
-            db,
-            cached: true,
-            notes: new Map(payload.notes),
-            unreadable: payload.unreadable,
-            duplicates: payload.duplicates,
-          };
+          const notes = new Map<string, Note>();
+          for (const rec of payload.notes) {
+            if (!rec.file.startsWith('/')) rec.file = join(p.notes, rec.file);
+            let body: string | undefined;
+            Object.defineProperty(rec, 'body', {
+              enumerable: true,
+              configurable: true,
+              get(): string {
+                if (body === undefined) {
+                  const res = loadNote(rec.file, p.notes);
+                  body = res.ok ? res.rec.body : '';
+                }
+                return body;
+              },
+              set(v: string) {
+                body = v;
+              },
+            });
+            notes.set(rec.id, rec as Note);
+          }
+          return { db, cached: true, notes, unreadable: payload.unreadable, duplicates: payload.duplicates };
         }
       }
       db.close();
@@ -152,7 +166,21 @@ export function reindex(dataRoot: string, { force = false } = {}): IndexResult {
     insFts.run(rec.id, rec.title, rec.body);
   }
   db.prepare("INSERT INTO meta (key, value) VALUES ('payload', ?)").run(
-    JSON.stringify({ stamp, notes: [...notes.entries()], unreadable, duplicates }),
+    JSON.stringify({
+      stamp,
+      // Bodies are the bulk of the payload and most commands never touch one —
+      // they are parsed back lazily, per note, on first access. The stamp is
+      // what makes that sound: a matching stamp says the file still holds
+      // exactly the bytes this record was parsed from.
+      // File paths are stored vault-relative so the payload survives the vault
+      // being moved; the revive path restores them to absolute.
+      notes: [...notes.values()].map(({ body: _body, ...rest }) => ({
+        ...rest,
+        file: rest.file.startsWith(p.notes + '/') ? rest.file.slice(p.notes.length + 1) : rest.file,
+      })),
+      unreadable,
+      duplicates,
+    }),
   );
   db.exec('COMMIT');
 

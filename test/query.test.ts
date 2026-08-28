@@ -1279,6 +1279,7 @@ test('the persisted index answers until a note changes', () => {
   const second = reindex(root);
   assert.equal(second.cached, true, 'nothing changed, so nothing is re-read');
   assert.equal(second.notes.get('one')?.title, 'One');
+  assert.match(second.notes.get('one')?.body ?? '', /first body/, 'a body parses lazily on demand');
   second.db.close();
 
   const forced = reindex(root, { force: true });

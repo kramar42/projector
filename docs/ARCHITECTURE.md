@@ -323,7 +323,12 @@ the same contract: the built notes are persisted into `index.db` (a `meta` paylo
 of every note file, the vocabulary, the views and `.projector/ignore`; a later process whose stamp
 matches answers from the payload instead of re-reading the vault. `pj reindex` passes `force`, because
 a command named reindex must actually reindex. A database from before the `meta` table simply fails
-the payload read and is rebuilt fresh.
+the payload read and is rebuilt fresh. The payload stores records without bodies (vault-relative
+paths, so it survives a moved vault); a body parses back lazily on first access — sound because a
+matching stamp says the file still holds the bytes the record came from. At workspace scale the gate's
+remaining cost is the tree walk itself, which no stamp can avoid from a cold process; the next step
+there is not a daemon but delegation — a CLI that finds a live server for the vault asks it instead
+of walking.
 
 The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
 ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —
