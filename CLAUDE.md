@@ -15,7 +15,7 @@ bun run dev:web     # hot-reloading UI on 5176, alongside bun run serve
 bun run pj -- ls    # the CLI, needs nothing running
 ```
 
-**Bun is the default, not a requirement.** `mise.toml` pins both runtimes; every script above spells
+**Bun is the default, not a requirement.** `.mise.toml` pins both runtimes; every script above spells
 `node`, and `bun run` substitutes itself for it (`bunfig.toml`), so the runtime is whichever launcher
 you type. On a machine without mise or without Bun, `node --run <script>` runs any of these under Node
 — `node --run serve`, `node --run typecheck` — and `npm`, `pnpm` and `yarn` all install. Node is the
