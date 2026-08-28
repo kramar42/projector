@@ -34,6 +34,7 @@ import { useRequestEnrichment } from '../enrichment.tsx';
 import type { NoteDTO, QueryResponse, Meta } from '../types.ts';
 import { Button } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
+import { emptyReason } from '../../view/empty.ts';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { CommitInput } from '../components/CommitInput.tsx';
 import { edgeColour } from '../hue.ts';
@@ -511,10 +512,20 @@ export function CanvasView({
     }
   };
 
+  /*
+   * The canvas had no empty state at all — an empty graph is a blank plane with
+   * a minimap on it, which is the least legible of the three ways to draw
+   * nothing. It gets the same sentence the other two shapes get, over the top of
+   * the plane rather than instead of it: the toolbar's `+ node` is right there
+   * and is the way out of the state.
+   */
+  const empty = emptyReason(meta, data);
+
   return (
     <div className="canvas-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
       <div className="canvas">
+        {empty && <div className="emptystate canvas-empty">{empty.text}</div>}
         <ReactFlow
           nodes={litNodes}
           edges={edges}

@@ -1,6 +1,7 @@
 import type { Facets, Note } from '../schema/types.ts';
 import { adjacency, inboundCounts, walk } from './refs.ts';
 import { isRef } from '../schema/facets.ts';
+import { blockingFacets } from '../schema/vocabulary.ts';
 import { isProject } from './project.ts';
 
 /**
@@ -43,11 +44,7 @@ export function isClosed(rec: Note | undefined, facets: Facets): boolean {
 }
 
 /** Every facet a vault has declared blocking. */
-export function blockingFacets(facets: Facets): string[] {
-  return Object.entries(facets)
-    .filter(([, def]) => def.blocking)
-    .map(([name]) => name);
-}
+export { blockingFacets } from '../schema/vocabulary.ts';
 
 /**
  * Those of them that name notes, so they have an other end to walk.

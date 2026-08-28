@@ -1399,20 +1399,26 @@ screen apart in one panel. Both are now one `.icon-button` with the `edit` glyph
 which is also the first time either announced that state: `aria-pressed` arrives with `on`, and two
 plain buttons reading `read` and `edit` had announced nothing at all.
 
-### The canvas that says nothing when it is empty
+### The canvas that used to say nothing when it was empty
 
-Six surfaces state their own emptiness — the board, the table, the filter rail, the note picker, the
-vault gate's folder browser and the panel's body — through `.emptystate`. The canvas does not: a query
-matching nothing leaves
-an empty dot grid.
+Seven surfaces state their own emptiness through `.emptystate` — the board, the table, the filter
+rail, the note picker, the vault gate's folder browser, the panel's body, and now the canvas.
 
-It stays that way. The minimap empties with it, so two things on screen agree that there is nothing
-there, which is the information a message would carry. And the canvas is the one surface with no
-chrome of its own by construction — the toolbar floats and vanishes — so a centred sentence would
-be the only fixed element it ever draws.
+The canvas was the holdout, and the entry here defended it: the minimap empties with it, so two
+things on screen already agree that there is nothing there, and the canvas is the one surface with no
+chrome of its own by construction, so a centred sentence would be the only fixed element it ever
+draws. Both halves are still true. What changed is the premise underneath them — **that "there is
+nothing there" was the whole of what a message could carry.**
 
-To change it: it would want the same `.emptystate` register the other six use, not an illustration
-— see the Don't list.
+It is not, since `src/view/empty.ts`. An empty result now has a *reason*: a filter that is too tight,
+a search that found nothing, or an axis no note in the vault has ever carried. A blank minimap agrees
+there is nothing there and cannot say which of the three it is, and the third one is the case where a
+working canvas reads as a broken one. So the sentence is carrying information the minimap never had,
+and the argument that retired it no longer applies.
+
+It takes the `.emptystate` register the other six use, not an illustration — see the Don't list — and
+`pointer-events: none`, so the one fixed element the canvas draws cannot swallow a drag across the
+middle of it.
 
 ### The three left edges outside the note vocabulary
 

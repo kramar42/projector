@@ -539,6 +539,7 @@ export function App() {
     if (shape === 'table')
       return (
         <TableView
+          meta={meta}
           data={data}
           onOpen={openCard}
           selection={selection}
@@ -549,6 +550,7 @@ export function App() {
       );
     return (
       <BoardView
+        meta={meta}
         data={data}
         onOpen={openCard}
         selection={selection}

@@ -3,7 +3,8 @@ import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import type { NoteDTO, Group, QueryResponse } from '../types.ts';
+import { emptyReason, unusedGrouping } from '../../view/empty.ts';
+import type { Meta, NoteDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE } from '../../schema/vocabulary.ts';
 import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
@@ -25,6 +26,7 @@ import { LISTS_AXIS } from '../../schema/vocabulary.ts';
  * selection does.
  */
 export function BoardView({
+  meta,
   data,
   onOpen,
   selection,
@@ -34,6 +36,8 @@ export function BoardView({
   onNewHandled,
   reload,
 }: {
+  /** For the vocabulary and the vault-wide axis population an empty board explains itself with. */
+  meta: Meta;
   data: QueryResponse;
   onOpen: (id: string) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
@@ -224,9 +228,22 @@ export function BoardView({
   // written to behind your back.
   const acting = visibleSelection(selected, data.ids);
 
+  /*
+   * The board's two ways of looking broken, which are not the same state.
+   *
+   * `unused` is the loud one and it is not an empty result at all: group by an
+   * axis nothing carries and every note lands in `(none)` while each declared
+   * column draws blank. `total` is healthy, so the empty-state text below
+   * correctly says nothing, and the screen still reads as a failure. The columns
+   * stay — they are the only drag target that can give the axis its first value.
+   */
+  const unused = unusedGrouping(meta, data);
+  const empty = emptyReason(meta, data);
+
   return (
     <div className="board-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
+      {unused && <div className="board-unused">{unused.text}</div>}
 
       <div className="board-scroll">
         {lanes.map((lane) => (
@@ -263,7 +280,9 @@ export function BoardView({
                   onCreated={reload}
                 />
               ))}
-              {!columns(lane).length && <div className="emptystate board-empty">nothing here</div>}
+              {!columns(lane).length && (
+                <div className="emptystate board-empty">{empty?.text ?? 'nothing here'}</div>
+              )}
             </div>
           </div>
         ))}

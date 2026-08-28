@@ -5,6 +5,8 @@ import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
 import { specFromFile, type ViewSpec } from '../src/view/spec.ts';
+import { emptyReason, unusedGrouping } from '../src/view/empty.ts';
+import { NONE } from '../src/schema/vocabulary.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
 import type { FacetDef } from '../src/schema/types.ts';
@@ -617,4 +619,94 @@ test('only a table of projects earns the roll-up columns', () => {
   // An id the payload does not carry is not a project. Optional chaining decides
   // this, so it is worth stating: a stale `?sel=` must not conjure a column.
   assert.equal(earnsRollups(['ghost'], notes), false);
+});
+
+// ------------------------------------------------------------- empty states
+
+/**
+ * An empty result had one rendering and more than one cause.
+ *
+ * "No notes match" is true of a filter that is too tight, of a search that found
+ * nothing, and of an axis no note in the vault has ever carried. The next move
+ * differs every time — widen, rephrase, or go and set the axis on something — and
+ * the third was the one with no way of being said.
+ */
+const VOCAB = {
+  facets: {
+    status: { label: 'Status', type: 'label', values: ['planning', 'active'], open: false, single: true },
+    waiting_on: { label: 'Waiting on', type: 'label', values: [], open: true, single: false, blocking: true },
+    blocked_by: { label: 'Blocked by', type: 'ref', values: [], open: true, single: false, blocking: true },
+  } as unknown as Parameters<typeof emptyReason>[0]['facets'],
+  // `waiting_on` and `blocked_by` are declared and carried by nobody.
+  axisPopulation: { status: 9 },
+  counts: { notes: 9 },
+};
+
+const result = (query: object, total = 0, universe = 0) =>
+  ({ spec: { query } as unknown as ViewSpec, total, universe });
+
+test('an axis nobody has ever set says so, rather than blaming the filter', () => {
+  const r = emptyReason(VOCAB, result({ filter: { waiting_on: ['person-a'] } }));
+  assert.match(r!.text, /Nothing has ever been on Waiting on/);
+  assert.equal(r!.axis, 'waiting_on', 'the caller can point at the row at fault');
+});
+
+/**
+ * The hop the aging view needs. `blocked` is computed and every note has a value
+ * on it, so the axis is never unpopulated — but its values *are* the names of the
+ * blocking facets, so an empty `blocked: [waiting_on]` is a fact about
+ * `waiting_on` and can be reported as one.
+ */
+test('a computed blocking value is explained by the axis underneath it', () => {
+  const r = emptyReason(VOCAB, result({ filter: { blocked: ['waiting_on'] } }));
+  assert.equal(r!.axis, 'waiting_on');
+  assert.match(r!.text, /Nothing has ever been on Waiting on/);
+
+  // Two blocking values is a question with two answers, so it is not answered.
+  const both = emptyReason(VOCAB, result({ filter: { blocked: ['waiting_on', 'blocked_by'] } }));
+  assert.equal(both!.axis, undefined);
+
+  // `clear` is not a blocking facet, so there is no axis to blame.
+  assert.equal(emptyReason(VOCAB, result({ filter: { blocked: ['clear'] } }))!.axis, undefined);
+});
+
+test('a populated axis is never blamed, and a full result is never explained', () => {
+  assert.match(emptyReason(VOCAB, result({ filter: { status: ['active'] } }))!.text, /No notes match/);
+  assert.equal(emptyReason(VOCAB, result({ filter: { waiting_on: ['x'] } }, 3)), null, 'not empty');
+});
+
+test('asking for the absence of an unused axis is not a broken axis', () => {
+  // Every note satisfies `waiting_on: (none)` when nothing carries it, so an
+  // empty result there means something *else* narrowed it — never the axis.
+  const r = emptyReason(VOCAB, result({ filter: { waiting_on: [NONE], status: ['active'] } }, 0, 4));
+  assert.match(r!.text, /No note matches this filter/);
+});
+
+test('the general answers name what actually narrowed it', () => {
+  assert.match(emptyReason(VOCAB, result({}, 0, 5))!.text, /this filter/);
+  assert.match(emptyReason(VOCAB, result({ q: 'keycloak' }))!.text, /keycloak/);
+  assert.match(
+    emptyReason({ ...VOCAB, counts: { notes: 0 } }, result({}))!.text,
+    /no notes yet/,
+    'an empty vault is not a filter problem',
+  );
+});
+
+/**
+ * The board's other failure, which is not an empty result at all: group by an
+ * unused axis and every note lands in `(none)` while the declared columns draw
+ * blank. `total` is healthy, so the empty text must stay silent and this must not.
+ */
+test('a board grouped by an unused axis is told so while its result is full', () => {
+  const full = result({ groupBy: ['waiting_on'] }, 9, 9);
+  assert.equal(emptyReason(VOCAB, full), null, 'nine notes is not an empty result');
+  assert.match(unusedGrouping(VOCAB, full)!.text, /Nothing has ever been on Waiting on/);
+  assert.match(unusedGrouping(VOCAB, full)!.text, /every column here is empty/, 'and why it looks like this');
+  // The gesture belongs to `.board-nudge`, which says it already. Two
+  // instructions about one drag on one board is the thing this avoids.
+  assert.doesNotMatch(unusedGrouping(VOCAB, full)!.text, /drag/i);
+
+  assert.equal(unusedGrouping(VOCAB, result({ groupBy: ['status'] }, 9, 9)), null);
+  // The second grouping axis makes lanes, not columns, so it is not this state.
+  assert.equal(unusedGrouping(VOCAB, result({ groupBy: ['status', 'waiting_on'] }, 9, 9)), null);
 });

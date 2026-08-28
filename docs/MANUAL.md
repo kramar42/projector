@@ -615,6 +615,16 @@ connected, drawn muted and counted separately, so a filtered graph still reads a
 walked along the relation the canvas is *laid out by*, so a portfolio canvas never pulls in context
 from the decomposition tree.
 
+**When a shape draws nothing, it says which kind of nothing.** An empty screen has three causes and
+they used to have one sentence. A filter that excluded everything says so; a search that found nothing
+names the words; and an axis **no note in the vault has ever carried** says *that*, which is the one
+worth telling apart — a board grouped by an unused axis draws all its declared columns and every one
+is blank, which looks exactly like a query that is too tight. The board keeps those columns, because
+dragging a card into one is how the axis gets its first value, and says above them what is going on.
+This reaches the derived axes too: `blocked` takes one value per blocking axis, so a nudge list
+filtered to `blocked: [waiting_on]` that comes back empty tells you nobody is waiting on anyone,
+rather than that nothing matched.
+
 **Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** note counts, blocked,
 last activity — where total follows the `project` chain, so a project with one direct member and six

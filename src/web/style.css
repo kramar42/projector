@@ -300,10 +300,14 @@ body {
  * edge to the rows it replaces — 7px in the picker matching `.picker-item`, 2px in
  * the rail matching `.facet-head`, lane-level in the board, and pane-level in the
  * table, which is a `<table>` with a `thead` and no sub-container to indent into.
+ * `.canvas-empty` centres instead of indenting, because a plane has no rows to
+ * align a text edge to.
  *
- * NOT a member: `.board-nudge` (a hairline-bounded annotation, not an absence),
- * `.pop-note`, `.linkrow-note` and the `.editor-*` trio, which annotate a value
- * that exists. `.hint` is a member here and an annotation at the frontmatter
+ * NOT a member: `.board-nudge` (a hairline-bounded annotation, not an absence)
+ * and `.board-unused`, which is the same — the board under it is *full*, every
+ * note in `(none)` because the axis it is grouped by has never been set.
+ * `.pop-note`, `.linkrow-note` and the `.editor-*` trio annotate a value that
+ * exists. `.hint` is a member here and an annotation at the frontmatter
  * editor — one class doing both jobs, which is the split this rule makes.
  */
 .emptystate {
@@ -3632,6 +3636,27 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   padding: 8px 4px;
 }
 
+/*
+ * The axis nobody has ever used.
+ *
+ * Not an empty state either — the board below it is full, every note sitting in
+ * `(none)` while each declared column draws blank. That is the loudest way this
+ * app can look broken while working exactly as specified, so this sits *above*
+ * the columns rather than among them, where `.board-nudge` sits: a nudge is
+ * advice you have earned by doing something, and this is a fact about the vault
+ * that was true before you arrived.
+ *
+ * `.board-nudge`'s step and hairline, mirrored to the other edge, because they
+ * are the same register of remark and two annotations on one surface disagreeing
+ * about their type size is how a board stops reading as one thing.
+ */
+.board-unused {
+  font-size: var(--text-body-sm);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--rule);
+  padding: 8px 12px;
+}
+
 /* Not an empty state — an annotation about a surface that has content. It keeps
    its own step and its hairline boundary. */
 .board-nudge {
@@ -3712,6 +3737,22 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
    had the right padding and the wrong voice. */
 .table-empty {
   padding: 28px 12px;
+}
+
+/*
+ * The canvas had no way to say it was empty: a blank plane with a minimap on it
+ * is the least legible of the three ways to draw nothing. Centred over the plane
+ * rather than replacing it — the toolbar's `+ node` is the way out of the state
+ * and has to stay reachable — and `pointer-events: none` so a sentence cannot
+ * swallow a drag across the middle of the canvas.
+ */
+.canvas-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .table {

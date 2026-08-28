@@ -1,7 +1,8 @@
 # Fixture vocabulary — declared here in full, so this vault stands alone.
 # The intent: every declared value is carried by at least one note, so every
 # chip renders at least once. Nothing pins that, so treat a value no note takes
-# as a gap in the fixture rather than a promise kept.
+# as a gap in the fixture rather than a promise kept — with one exception,
+# `reviewer`, which is empty on purpose and says so where it is declared.
 
 # The built-in axis, declared only to give it a key. Shape — type, values, open,
 # single — is the built-in's and `pj check` refuses changing it, so this is the
@@ -74,6 +75,19 @@ owner:
   label: Owner
   values: []
   open: true
+  single: true
+
+# The one deliberate exception to the rule at the top of this file: declared,
+# and carried by no note on purpose. It is the only way to draw the state a
+# vault reaches by declaring an axis and never using it — a board grouped by it
+# shows three empty columns and a full `(none)`, which is indistinguishable from
+# an over-tight filter unless something says so. `src/view/empty.ts` is what
+# says so, and this is what lets it be seen. Give a note a `reviewer:` and the
+# state stops being drawn.
+reviewer:
+  label: Reviewer
+  values: [reviewer-a, reviewer-b, reviewer-c]
+  open: false
   single: true
 
 parent:

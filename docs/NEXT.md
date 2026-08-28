@@ -45,15 +45,6 @@ things.
   done until it is moved; if that turns out to be a common dead end, the toggle creating the folder is
   the smaller change.
 
-- **The aging view — who owes me what, and for how long.** A table filtered to `blocked: [waitingon]`,
-  sorted by staleness descending, showing `waiting_on` and the project: a nudge list in the order the
-  nudges are overdue. It needs no new mechanism — both axes compute, and it is one view file. Parked on
-  the data problem above: shipped now it would read empty and teach that the axis is decorative, so set
-  `waiting_on` for a fortnight of real weeks first. One design question when it lands: staleness is
-  measured from the file's `updated`, not from when the waiting started, so editing the body resets the
-  clock in exactly the case the view exists for. Either accept the approximation and say so, or
-  `waiting_on` needs a date beside the person — a shape the vocabulary does not have.
-
 - **Per-column summaries.** A built-in summary is a named aggregate — count, sum, average, min, max —
   which needs no parser, and `type: number` exists so the arithmetic ones would mean something. Two
   reasons to wait: it would not retire `projectRollups`, whose `direct`/`total` is a transitive walk
@@ -183,6 +174,23 @@ things.
   (see the native-dialog entry above).
 
 ## Decided against
+
+- **The aging view as a saved view.** A table filtered to `blocked: [waiting_on]`, sorted by staleness
+  descending: a nudge list in the order the nudges are overdue. The reason it was parked is gone —
+  shipped empty it would have taught that the axis is decorative, and `src/view/empty.ts` now says
+  *why* a result is empty, tracing the computed `blocked` value back to the `waiting_on` axis
+  underneath it. So the question stopped being "would it lie" and became "does it earn a row", and a
+  saved view **is** a row: the rail lists them. The answer is no. A nudge list is something you ask
+  when you want it, and asking it ad hoc now returns an honest answer instead of a blank table, which
+  is the whole of what the saved view would have bought. A permanent row that reads empty most weeks
+  is the shape of a control people learn to stop looking at.
+
+  What would change the answer is `waiting_on` being in daily use — a row that is usually non-empty is
+  a different control from one that is usually empty. The design question would come back with it, and
+  it is worth keeping: staleness is measured from the file's `updated`, not from when the waiting
+  started, so editing the body resets the clock in exactly the case the view exists for. Either accept
+  the approximation and say so, or `waiting_on` needs a date beside the person — a shape the
+  vocabulary does not have.
 
 - **`created` and `updated` as facets.** They are note fields, so `sort` accepts them and `filter` and
   `groupBy` do not. Making `updated` an app-owned facet was looked at properly and rejected: its values

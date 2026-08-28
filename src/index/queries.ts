@@ -63,3 +63,28 @@ export function counts(db: DatabaseSync, facets: Facets): Record<string, number>
     facetValues: one('SELECT count(*) AS n FROM facets'),
   };
 }
+
+/**
+ * How many notes in the whole vault carry anything at all on each axis.
+ *
+ * The question an empty screen cannot otherwise answer. A board grouped by an
+ * axis draws that axis's declared columns whether or not any note has ever taken
+ * one, so "your filter is too tight" and "nobody has ever set this" render
+ * identically — and they are opposite problems with opposite next moves.
+ *
+ * **Vault-wide, and deliberately not the universe.** `histogram` already answers
+ * the universe-scoped version and uses it to decide which axes the filter rail
+ * offers. That answer moves as you search, which is right for a rail and wrong
+ * here: an axis nothing has ever carried is a fact about the vault, and a reader
+ * asking why a column is empty is not asking about their search box.
+ *
+ * Only stored axes appear. A computed axis is never unpopulated — every note has
+ * a `type` and a `blocked` — so a zero here would be a category error rather than
+ * a finding, and `COMPUTED` is not in this table to produce one.
+ */
+export function axisPopulation(db: DatabaseSync): Record<string, number> {
+  const rows = db
+    .prepare('SELECT facet, count(DISTINCT record_id) AS n FROM facets GROUP BY facet')
+    .all() as { facet: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.facet, r.n]));
+}

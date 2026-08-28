@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
+import { axisPopulation } from '../src/index/queries.ts';
 import { loadFacets } from '../src/schema/facets.ts';
 import { NONE, focused, ftsPrefixQuery, runQuery, type Query } from '../src/index/query.ts';
 import { negate } from '../src/schema/vocabulary.ts';
@@ -1203,6 +1204,60 @@ test('a range can be negated', () => {
     // And it keeps `soon` *and* every note with no date at all: a note the range
     // cannot describe is not a note the range excludes.
     assert.ok(not.includes('soon') && not.includes('loose'));
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * The fact an empty screen cannot otherwise state.
+ *
+ * A board grouped by an axis draws that axis's declared columns whether or not
+ * any note has ever taken one, so "the filter is too tight" and "nobody has ever
+ * set this" render identically — opposite problems, opposite next moves. This is
+ * the vault-wide half of telling them apart; `histogram` above is the
+ * universe-scoped half, and they are deliberately two answers.
+ */
+test('an axis nobody has ever used is absent, not zero', () => {
+  const { root, cleanup } = vault();
+  try {
+    const { db } = reindex(root);
+    const pop = axisPopulation(db);
+
+    // `tech` is declared and carried, so it counts notes rather than values: a
+    // note with two tech values is one note here.
+    assert.ok((pop.tech ?? 0) >= 1, 'a carried axis is counted');
+    assert.equal(pop.status, Object.keys(CARDS).filter((id) => CARDS[id]!.includes('status:')).length);
+
+    // The property the caller stands on: an axis the vocabulary declares and no
+    // note carries has no key at all. Absent rather than 0, because the map is
+    // built from the rows that exist — and a caller reading `?? 0` gets the same
+    // answer either way, which is why nothing has to remember which it is.
+    const declared = Object.keys(loadFacets(paths(root).facets));
+    assert.ok(declared.includes('priority'), 'the fixture still declares what this asserts about');
+    for (const name of declared) {
+      const carried = Object.values(CARDS).some((t) => t.includes(`${name}:`));
+      assert.equal(name in pop, carried, `${name}: population disagrees with the fixture`);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+/**
+ * Computed axes are not in it, and that is the point rather than an omission.
+ *
+ * Every note has a `type` and a `blocked`, so a computed axis can never be
+ * unpopulated — a zero here would be a category error offered to a reader as a
+ * finding.
+ */
+test('a computed axis has no population, because it cannot be unpopulated', () => {
+  const { root, cleanup } = vault();
+  try {
+    const pop = axisPopulation(reindex(root).db);
+    for (const name of ['type', 'blocked', 'linked', 'staleness']) {
+      assert.ok(!(name in pop), `${name} is computed and should not be counted here`);
+    }
   } finally {
     cleanup();
   }

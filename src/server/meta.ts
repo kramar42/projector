@@ -3,7 +3,7 @@ import type { Facets } from '../schema/types.ts';
 import type { ViewSpec } from '../view/spec.ts';
 import { summariseViews, type SavedViewSummary } from '../view/spec.ts';
 export type { SavedViewSummary };
-import { counts } from '../index/queries.ts';
+import { axisPopulation, counts } from '../index/queries.ts';
 import { computedAxes } from '../index/query.ts';
 import { enrichmentStats } from './enrich.ts';
 import { listVaults } from '../vault.ts';
@@ -33,6 +33,16 @@ export interface Meta {
    */
   computed: { name: string; label: string }[];
   counts: Record<string, number>;
+  /**
+   * Per stored axis, how many notes in the vault carry any value on it.
+   *
+   * Here rather than on the query response for the reason everything else here
+   * is: it is a fact about the vault, asked once, and it does not move when the
+   * reader searches. An axis absent from this map is an axis no note has ever
+   * taken a value on — which is a different sentence from "nothing matches", and
+   * the one an empty column currently cannot say.
+   */
+  axisPopulation: Record<string, number>;
   enrichment: Record<string, number>;
   views: SavedViewSummary[];
   /**
@@ -58,6 +68,7 @@ export function meta(
     facets: deps.facets,
     computed: computedAxes(),
     counts: counts(deps.db, deps.facets),
+    axisPopulation: axisPopulation(deps.db),
     enrichment: enrichmentStats(root),
     views: summariseViews(deps.views),
     /**

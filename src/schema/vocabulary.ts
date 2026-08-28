@@ -22,6 +22,22 @@ export function isRef(def: FacetDef | undefined): boolean {
   return def?.type === 'ref';
 }
 
+/**
+ * The axes a vault has declared `blocking:`.
+ *
+ * A vocabulary question — which axes *say* they block — so it lives beside the
+ * other two predicates rather than in the engine that walks them. `blocking.ts`
+ * owns the graph; this owns the declaration, and the browser needs the
+ * declaration alone: `src/view/empty.ts` reads it to explain an empty
+ * `blocked: [...]` result, and importing the engine for it would drag
+ * `node:sqlite` into the bundle.
+ */
+export function blockingFacets(facets: Record<string, FacetDef>): string[] {
+  return Object.entries(facets)
+    .filter(([, def]) => def.blocking)
+    .map(([name]) => name);
+}
+
 /** An ordered facet compares its values rather than matching them. */
 export function isOrdered(def: FacetDef | undefined): boolean {
   return def?.type === 'date' || def?.type === 'number';

@@ -219,6 +219,29 @@ out of the panel — and is why a facet needs no scoping rule of its own. Values
 listed at zero, and a
 selected value always stays listed or it could never be unselected.
 
+**Why a screen is empty is a third question, and its scope is the vault.** "No notes match" was true
+of a filter that is too tight, of a search that found nothing, and of an axis **no note has ever
+carried** — three problems whose next moves are widen, rephrase, and go and set the axis on something.
+The third one is what makes a working view read as a broken one: a board grouped by an unused axis
+draws its declared columns and every one is blank, which is indistinguishable from a query that
+excluded everything.
+
+`src/view/empty.ts` answers it, from facts the payload already carries — no ranking and no heuristic,
+so two readers with the same screen get the same sentence (C8). The fact it needed is
+`meta.axisPopulation`: per stored axis, how many notes in the **vault** carry a value on it.
+Deliberately not the universe, which `histogram` already answers and which moves as you search — "nobody
+has ever set this" is a fact about the vault, and a reader asking why a column is blank is not asking
+about their own search box. Computed axes are absent from it and cannot be unpopulated: every note has
+a `type` and a `blocked`.
+
+One hop exists, and only one. `blocked` is defined as `[...blockingFacets(facets), 'clear']`, so every
+value it takes other than `clear` **is the name of a blocking facet** — which means an empty
+`blocked: [waiting_on]` is not a fact about the computed axis but about `waiting_on`, and can be
+reported as one. That hop is what lets a nudge list say "nothing has ever been on Waiting on" rather
+than drawing a blank table and teaching that the axis is decorative. `blockingFacets` therefore lives
+in `src/schema/vocabulary.ts`, beside `isRef`: it is a question about what a vault *declares*, and the
+browser needs the declaration without the engine that walks it.
+
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there
@@ -946,7 +969,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
 | `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
-| `client.test.ts` | body sanitising, asset path rewriting, the task list a body checkbox writes back to — the ordinal a click carries must name the same line the renderer drew a box for, fenced look-alikes included — edge collapse and direction, clearing a URL-only override |
+| `client.test.ts` | body sanitising, asset path rewriting, why a screen is empty — which of the filter, the search or an axis nobody has ever set is to blame, including the one hop from a computed blocking value to the axis underneath it — the task list a body checkbox writes back to — the ordinal a click carries must name the same line the renderer drew a box for, fenced look-alikes included — edge collapse and direction, clearing a URL-only override |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
@@ -956,7 +979,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
-| `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead |
+| `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead; plus vault-wide axis population, the fact that tells an over-tight filter apart from an axis nobody has ever set, absent for an unused axis and never present for a computed one |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
 | `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
 | `source.test.ts` | no source file hides a control byte from grep |

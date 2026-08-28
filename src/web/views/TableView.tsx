@@ -6,7 +6,8 @@ import { visibleSelection, type Selection } from '../selection.ts';
 import { useCursorFocus, useEdgeInset } from '../cursor.ts';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
-import type { NoteDTO, QueryResponse, Rollup } from '../types.ts';
+import { emptyReason } from '../../view/empty.ts';
+import type { Meta, NoteDTO, QueryResponse, Rollup } from '../types.ts';
 import { useTouched } from '../touched.tsx';
 
 /**
@@ -22,6 +23,7 @@ import { useTouched } from '../touched.tsx';
  * the same side of C10 here as it is on a board.
  */
 export function TableView({
+  meta,
   data,
   onOpen,
   selection,
@@ -29,6 +31,8 @@ export function TableView({
   onCursor,
   reload,
 }: {
+  /** For the vocabulary and the vault-wide axis population an empty table explains itself with. */
+  meta: Meta;
   data: QueryResponse;
   onOpen: (id: string) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
@@ -147,7 +151,7 @@ export function TableView({
           </tbody>
         ))}
       </table>
-      {!data.ids.length && <div className="emptystate table-empty">no notes match</div>}
+      {!data.ids.length && <div className="emptystate table-empty">{emptyReason(meta, data)?.text}</div>}
       </div>
 
       {acting.length > 0 && (
