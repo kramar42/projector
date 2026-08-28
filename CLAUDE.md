@@ -70,6 +70,24 @@ Two habits the docs are held to: **no number that decays by working** — a coun
 goes stale silently, so either pin it in a test or leave it out — and **one place per answer.** If a
 second document would have to restate something to be complete, link instead.
 
+## You are not the only session in this working tree
+
+Several agents work in this repository at once, and that is the normal way it is used, not an
+incident. Files you did not touch will change under you mid-task; the working tree will contain
+work in progress that is not yours.
+
+- **Do not report this as a problem.** A modified file you did not write needs no flag, no
+  investigation and no paragraph in your summary. Leave it alone and carry on. Say what *you*
+  changed; do not audit the rest of the tree.
+- **Commit granularly and atomically** — one coherent change per commit, so somebody else's commit
+  can land between yours without either needing untangling. Still never without consent, and never
+  `git push`.
+- **Never move the tree out from under another session.** No `git checkout`, no `switch`, no `stash`,
+  no `reset`, no branch change, unless the user asks for it in so many words. These are the
+  operations that destroy another agent's in-flight work, and they are silent when they do it.
+- **Test counts and suite output include everyone's work.** If you need to speak precisely about
+  what your change did, say so once and move on.
+
 ## Rules
 
 - **Never commit without consent.** Never `git push`.
