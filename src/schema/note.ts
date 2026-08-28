@@ -250,7 +250,10 @@ export function listNoteFiles(cardsDir: string): string[] {
     for (const name of entries) {
       if (skipped(name)) continue;
       const full = pathJoin(dir, name);
-      if (statSync(full).isDirectory()) walk(full);
+      // A dangling symlink stats to nothing; skip it rather than dying on it.
+      const st = statSync(full, { throwIfNoEntry: false });
+      if (!st) continue;
+      if (st.isDirectory()) walk(full);
       else if (name.endsWith('.md')) out.push(full);
     }
   };
