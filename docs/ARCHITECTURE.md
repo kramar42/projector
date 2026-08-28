@@ -293,6 +293,13 @@ Three rules fall out of that and are worth stating, because each was a decision:
   declined candidate are always about *which*, and a palette row cannot carry that.
   Both are walks — `g l` and the navlist in the declined pile.
 
+**Axis rows are expanded at draw time**, from the vault's own vocabulary, because
+that is the one thing a static table cannot hold (C4 — the client names no facet).
+Six templates × every declared axis, and the letterless ones are the point: a
+vault has twenty-six letters and no obligation to stop at twenty-six axes, and an
+axis that spent none had a pointer and nothing else. That was the condition
+`NEXT.md` named as the trigger for building any of this.
+
 The filter is `src/view/fuzzy.ts`: letters in order, anything between, and no
 score. The absence of the score is the design — a ranked list reorders itself as
 you type and takes away the one thing a reader learns from using a list, which is

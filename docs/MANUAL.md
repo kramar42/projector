@@ -1364,6 +1364,16 @@ the same registry `bind` and `?` read — there is no list to keep in step. Its
 actual job is the four acts with a control and no key: renaming, making or
 unmaking a project, re-fetching a note's links, and switching vault.
 
+**It reaches every axis, letter or no letter.** *Group by*, *Then by*, *Sort by*,
+*Show on the cards*, *Go to the note this names on*, and *Show everything that
+names this note on* appear once per axis your vocabulary declares. Six of those
+are addressable by a key only when the axis has spent one of the twenty-six —
+`layer` in the fixture vault has none, and `Group by Layer` is a palette row and
+nothing else. A row for an axis with a letter shows it, so the palette is how you
+find the key rather than a replacement for it. Computed axes are offered for the
+four that group, sort and show; nothing names a note on `blocked`, so there is
+nowhere to walk from it.
+
 Two things are deliberately not in it. Removing one link and bringing back one
 declined candidate both need to know *which*, and a palette row names an act with
 no argument — so both are walks instead: `g l` steps a note's links, and `,d`

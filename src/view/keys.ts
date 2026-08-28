@@ -1032,6 +1032,113 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = SPEC.map(({ section
 export const CHEATSHEET_IDS: readonly string[] = SPEC.flatMap((s) => s.rows.flatMap((r) => r.ids ?? []));
 
 /**
+ * The acts that take an axis, and the reason the palette was worth building.
+ *
+ * `g⟨axis⟩`, `⇧⟨axis⟩` and the four `,`-leader rows that accept a letter all
+ * address an axis by the `key:` it declares — and a vault has twenty-six letters
+ * and no obligation to stop at twenty-six axes. An axis with no letter is
+ * reachable by pointer and by nothing else, which is the condition NEXT.md named
+ * as the trigger for building this: *more axes worth reaching than there are
+ * letters*.
+ *
+ * Expanded at draw time from the vault's own vocabulary, because that is the one
+ * thing a static table cannot hold (C4 — the client names no facet). A letterless
+ * axis gets a row with no key beside it, which is exactly the honest rendering:
+ * there is no key.
+ */
+export interface AxisTemplate {
+  id: string;
+  label: (axis: string) => string;
+  command: (facet: string) => Command;
+  /** How the stroke reads, for an axis that declares a letter. */
+  keys?: (key: string) => string;
+  /** Whether a computed axis can take this. Most can; walking *from* one cannot. */
+  computed: boolean;
+}
+
+export const AXIS_TEMPLATES: readonly AxisTemplate[] = [
+  {
+    id: 'axis.group',
+    label: (a) => `Group by ${a}`,
+    command: (facet) => ({ kind: 'rail', control: 'group', facet }),
+    keys: (k) => `, g ${k}`,
+    computed: true,
+  },
+  {
+    id: 'axis.thenBy',
+    label: (a) => `Then by ${a}`,
+    command: (facet) => ({ kind: 'rail', control: 'thenBy', facet }),
+    keys: (k) => `, G ${k}`,
+    computed: true,
+  },
+  {
+    id: 'axis.sort',
+    label: (a) => `Sort by ${a}`,
+    command: (facet) => ({ kind: 'rail', control: 'sort', facet }),
+    keys: (k) => `, o ${k}`,
+    computed: true,
+  },
+  {
+    id: 'axis.show',
+    label: (a) => `Show ${a} on the cards`,
+    command: (facet) => ({ kind: 'rail', control: 'show', facet }),
+    keys: (k) => `, f ${k}`,
+    computed: true,
+  },
+  /**
+   * The two that walk the graph, and the reason `computed` is a flag rather than
+   * an assumption: `blocked` and `type` are computed *about* a note and name no
+   * other note, so there is nothing to go to and nothing that names this one back.
+   */
+  {
+    id: 'axis.goto',
+    label: (a) => `Go to the note this names on ${a}`,
+    command: (facet) => ({ kind: 'gotoRef', facet }),
+    keys: (k) => `g ${k}`,
+    computed: false,
+  },
+  {
+    id: 'axis.inverse',
+    label: (a) => `Show everything that names this note on ${a}`,
+    command: (facet) => ({ kind: 'focusInverse', facet }),
+    keys: (k) => `⇧${k.toUpperCase()}`,
+    computed: false,
+  },
+];
+
+/** What the palette needs to know about one axis to offer it. */
+export interface PaletteAxis {
+  name: string;
+  label: string;
+  /** The letter it declares, if it declares one. */
+  key?: string;
+  computed?: boolean;
+}
+
+/**
+ * The whole list, for a vault.
+ *
+ * Constant rows first in their declared order, then one block per template. Not
+ * a ranking — the filter narrows this and never reorders it, so a row's place is
+ * stable and worth learning (C8).
+ */
+export function paletteFor(axes: readonly PaletteAxis[]): PaletteEntry[] {
+  const rows: PaletteEntry[] = [...PALETTE];
+  for (const t of AXIS_TEMPLATES) {
+    for (const axis of axes) {
+      if (axis.computed && !t.computed) continue;
+      rows.push({
+        id: `${t.id}:${axis.name}`,
+        label: t.label(axis.label),
+        command: t.command(axis.name),
+        ...(axis.key && t.keys ? { keys: t.keys(axis.key) } : {}),
+      });
+    }
+  }
+  return rows;
+}
+
+/**
  * The palette's rows: the bindings that are acts, then the acts with no binding.
  *
  * Derived, so there is no list to keep in step — a binding that gains a

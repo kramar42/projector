@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { PALETTE, type Command } from '../view/keys.ts';
+import { paletteFor, type Command, type PaletteAxis } from '../view/keys.ts';
 import { fuzzy } from '../view/fuzzy.ts';
+import type { Meta } from './types.ts';
 
 /**
  * Every act, by name, for the ones with no key.
@@ -19,11 +20,39 @@ import { fuzzy } from '../view/fuzzy.ts';
  * returns no score, so the list is always in `PALETTE`'s declared order and a row
  * you have learned the position of stays there (C8).
  */
-export function Palette({ onRun, onClose }: { onRun: (command: Command) => void; onClose: () => void }) {
+export function Palette({
+  meta,
+  onRun,
+  onClose,
+}: {
+  meta: Meta;
+  onRun: (command: Command) => void;
+  onClose: () => void;
+}) {
   const [q, setQ] = useState('');
   const [at, setAt] = useState(0);
 
-  const rows = useMemo(() => PALETTE.filter((e) => fuzzy(q.trim(), e.label)), [q]);
+  /**
+   * The vault's axes, which is the half no table could hold.
+   *
+   * An axis is offered whether or not it declares a `key:`, and the letterless
+   * ones are the point: twenty-six letters do not stretch to an arbitrary
+   * vocabulary, and before this they were reachable by pointer alone.
+   */
+  const axes: PaletteAxis[] = useMemo(
+    () => [
+      ...Object.entries(meta.facets).map(([name, def]) => ({
+        name,
+        label: def.label,
+        ...(def.key ? { key: def.key } : {}),
+      })),
+      ...meta.computed.map((c) => ({ name: c.name, label: c.label, computed: true })),
+    ],
+    [meta],
+  );
+
+  const all = useMemo(() => paletteFor(axes), [axes]);
+  const rows = useMemo(() => all.filter((e) => fuzzy(q.trim(), e.label)), [all, q]);
   /** The list shrinks as you type, so the cursor has to be pulled back with it. */
   const here = Math.min(at, Math.max(0, rows.length - 1));
 

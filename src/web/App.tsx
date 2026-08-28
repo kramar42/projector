@@ -665,6 +665,7 @@ export function App() {
         {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
         {paletteOpen && (
           <Palette
+            meta={meta}
             onClose={() => setPaletteOpen(false)}
             /* Straight into the same dispatcher a key reaches, so a command
                cannot behave one way from the keyboard and another from here. */

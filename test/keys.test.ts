@@ -7,6 +7,7 @@ import {
   BINDINGS,
   CHEATSHEET_IDS,
   PALETTE,
+  paletteFor,
   KEYMAP,
   RESERVED,
   bind,
@@ -909,4 +910,49 @@ test('the cheatsheet accounts for every binding, once', () => {
 
   const listedParked = [...parked].filter((id) => listed.includes(id));
   assert.deepEqual(listedParked, [], `parked and listed anyway: ${listedParked.join(', ')}`);
+});
+
+/**
+ * The axis rows, which are why the palette was worth building at all.
+ *
+ * `g⟨axis⟩`, `⇧⟨axis⟩` and the four `,`-leader rows that take a letter address an
+ * axis by the one it declares — and a vault has twenty-six letters and no
+ * obligation to stop at twenty-six axes. An axis with no letter had a pointer and
+ * nothing else, which is the condition NEXT.md named as the trigger for this.
+ */
+test('a letterless axis is offered, and offered without a key', () => {
+  const rows = paletteFor([
+    { name: 'status', label: 'Status', key: 's' },
+    { name: 'layer', label: 'Layer' },
+  ]);
+
+  const group = rows.find((r) => r.label === 'Group by Layer');
+  assert.ok(group, 'an axis with no letter is still offered');
+  assert.equal(group.keys, undefined, 'and is honest that no stroke reaches it');
+  assert.deepEqual(group.command, { kind: 'rail', control: 'group', facet: 'layer' });
+
+  // One that does declare a letter says so, so the palette teaches the key.
+  assert.equal(rows.find((r) => r.label === 'Group by Status')?.keys, ', g s');
+});
+
+test('a computed axis is grouped and sorted by, never walked from', () => {
+  const rows = paletteFor([{ name: 'blocked', label: 'Blocked', computed: true }]);
+  const labels = rows.map((r) => r.label);
+
+  assert.ok(labels.includes('Group by Blocked'));
+  assert.ok(labels.includes('Sort by Blocked'));
+  // Nothing names a note on a computed axis, so there is nowhere to go and
+  // nothing that names this one back.
+  assert.ok(!labels.some((l) => l.includes('Go to the note this names on Blocked')));
+  assert.ok(!labels.some((l) => l.includes('names this note on Blocked')));
+});
+
+test('the constant rows lead, and the order is the declaration', () => {
+  const rows = paletteFor([{ name: 'status', label: 'Status', key: 's' }]);
+  assert.deepEqual(
+    rows.slice(0, PALETTE.length).map((r) => r.id),
+    PALETTE.map((r) => r.id),
+    'expanding the axes must not disturb what was already there',
+  );
+  assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a row id is used twice');
 });
