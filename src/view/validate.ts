@@ -34,8 +34,8 @@ import { VIEW_KEYS, type ViewSpec } from './spec.ts';
  * called `links` beside a note's links is a sentence you have to stop and parse.
  *
  * A built-in's *name* is not on this list, because a vault may legitimately
- * declare one — to label it, colour it, or ask for it in triage. What it may not
- * do is change its shape, which is the separate check below.
+ * declare one — to label it, colour it, or give it a key. What it may not do is
+ * change its shape, which is the separate check below.
  */
 export const RESERVED: readonly string[] = [
   ...KEY_ORDER,

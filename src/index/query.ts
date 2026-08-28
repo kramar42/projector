@@ -10,7 +10,7 @@ import { blockedSet, blockingFacets } from './blocking.ts';
  *
  * Filtering runs in memory over the note map rather than in SQL. That is not a
  * performance trade — at this scale both are free — it is what lets a computed axis
- * be indistinguishable from a real one. `blocked` and `triage` have no row
+ * be indistinguishable from a real one. `blocked` and `staleness` have no row
  * in the `facets` table, so in SQL each would need its own expression in the
  * filter, in the grouping and in the histogram; in JS they need one function and
  * the rest of the engine cannot tell them apart. SQLite keeps the two jobs it is
@@ -133,10 +133,11 @@ interface Computed {
   /**
    * The values this axis admits, in order.
    *
-   * A function of the vocabulary rather than a list, because `triage` names one
-   * value per *expected* facet and a vault decides which those are. The three
-   * places that read it — the histogram, the grouping order and the sort rank —
-   * all hold a `Ctx` already, so nothing needed threading to make it askable.
+   * A function of the vocabulary rather than a list, because `blocked` names one
+   * value per facet declared `blocking:` and a vault decides which those are. The
+   * three places that read it — the histogram, the grouping order and the sort
+   * rank — all hold a `Ctx` already, so nothing needed threading to make it
+   * askable.
    */
   values: (facets: Facets) => string[];
   of: (rec: Note, ctx: Ctx) => string[];

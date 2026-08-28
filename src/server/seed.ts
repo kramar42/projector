@@ -18,8 +18,6 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 #            those); \`pj check\` refuses a collision. Declare one for the axes you
 #            keep reaching for and leave the rest without — most axes want none
 #   closed:  values meaning no further work is expected, whatever the outcome
-#   expected: true  → a well-filed note carries this; the triage axis is built
-#            from it
 #   inverse: what the other end of a relation is called — \`parent\` is answered by
 #            children. Omit it and the relation gets an editable row and no
 #            derived one, which is right: nothing computes an inverse it has no
@@ -61,8 +59,15 @@ export const SEED_FACETS = `# Facet vocabulary. This file is the single place co
 # Everything below is a starting point, not a schema. Delete what your domain has
 # no use for; an empty file is a valid vault. The one facet you will not find here
 # is \`project\`, which is built in — its shape (type, values, open, single) is
-# fixed and \`pj check\` refuses changing those; label, expected, hue and key are
-# yours to set by declaring it.
+# fixed and \`pj check\` refuses changing those; label, hue and key are yours to
+# set by declaring it.
+#
+# There is no key here for "a well-filed note carries this". There was — \`expected:
+# true\`, which a \`triage\` axis was computed from — and it went because it asserts
+# that every note is work, while the model says a note is work by carrying a
+# \`status\`. A note deliberately without one could never be filed, its absence
+# being defined as a gap. Filing rules are conditional, so they live in views:
+# see \`views/triage.yaml\` and the three rules it draws.
 
 # Lifecycle only. Being blocked is derived — see blocking: below — so it is not a
 # value here: storing a reason beside the thing it is computed from gives two
@@ -75,7 +80,6 @@ status:
   # No further work expected, whatever the outcome — so abandonment counts and
   # on-hold does not. A closed note stops blocking whatever waits on it.
   closed: [done, archived]
-  expected: true
   hue: green
   key: s
 
@@ -84,7 +88,6 @@ priority:
   values: [now, month, backlog, someday]
   open: false
   single: true
-  expected: true
   hue: orange
   key: p
 

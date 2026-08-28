@@ -18,10 +18,16 @@ look for it.
 pj ls --view triage --json
 ```
 
-The view groups by `triage`, so each group names exactly what is missing — `needs-project`,
-`needs-priority`, `needs-status` — and a note short of two things appears under both. Work the groups
-it gives you. Do not scan the vault's markdown files yourself and do not invent a worklist: the view *is* the
-definition of untriaged, and it is the same one the board shows.
+The view is a **composition**: `groupBy` is `lists`, and each group is another view file — one rule
+per question, named by its title (*Needs project*, *Needs status*, *Needs priority*). So each group
+still names exactly what is missing, and a note short of two things appears under both. Work the
+groups it gives you. Do not scan the vault's markdown files yourself and do not invent a worklist: the
+view *is* the definition of untriaged, and it is the same one the board shows.
+
+There is no `triage` facet to filter on, and there never will be again — the columns are queries, so
+what counts as unfiled is written in the rule files rather than computed from the vocabulary. Read
+`spec.lists` in the JSON if you want to know which rules this vault runs; each name is a view file
+under `.projector/views/`, and `pj audit` runs the same files.
 
 If the user named a subset ("just the Trello ones", "only the research links"), filter that list;
 say how many you filtered out.

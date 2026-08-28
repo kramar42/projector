@@ -19,9 +19,9 @@ const DIR_MEANS: Record<string, string> = {
 
 /**
  * Focus is a traversal, not a facet — pick a note and walk edges from it. The
- * computed axes (`type`, `blocked`, `triage`, `linked`, `staleness`) are the
- * facet-like things that aren't facets, and they live in the filter panel,
- * indistinguishable from the real ones.
+ * computed axes (`type`, `blocked`, `linked`, `staleness`) are the facet-like
+ * things that aren't facets, and they live in the filter panel, indistinguishable
+ * from the real ones.
  */
 export function FocusSection({
   meta,

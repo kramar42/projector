@@ -292,9 +292,9 @@ test('the built-in relation names its own other end, and a vault may rename it',
     );
 
     // Declaring the axis without mentioning the inverse keeps the default: the
-    // merge takes only the keys the file actually wrote, so `expected: true`
-    // must not erase it. That is the bug this half exists for.
-    writeFileSync(file, 'project:\n  expected: true\n', 'utf8');
+    // merge takes only the keys the file actually wrote, so setting one unrelated
+    // key must not erase it. That is the bug this half exists for.
+    writeFileSync(file, 'project:\n  hue: blue\n', 'utf8');
     assert.equal(loadFacets(file).project!.inverse, 'Members');
   } finally {
     rmSync(root, { recursive: true, force: true });

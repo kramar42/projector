@@ -10,4 +10,5 @@ created: 2025-07-22  # older
 updated: 2026-08-22  # week
 ---
 
-Renders: `triage: needs-project`, and `(none)` on a project board.
+Renders: the *Needs project* column of `views/triage.yaml`, and `(none)` on a
+project board.

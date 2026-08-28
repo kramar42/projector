@@ -11,9 +11,9 @@ updated: 2025-07-22  # older
 
 Renders an **unjudged intake candidate**: the one state where a note carrying no
 project, priority or status is correct rather than half-filed. It is why
-`views/triage.yaml` filters `intake: ['(none)']` — every expected facet is
-missing here by construction, and a queue of these would swamp the board that
-exists to find notes somebody started and left.
+every column of `views/triage.yaml` filters `intake: ['(none)']` — a candidate is
+missing project, priority and status by construction, and a queue of these would
+swamp the board that exists to find notes somebody started and left.
 
 Judging it removes the axis. Declining it deletes the file and records the
 fingerprint through `pj intake suppress`, so the next sweep does not offer it

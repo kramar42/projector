@@ -1,9 +1,16 @@
 # A rule, and therefore a column. Flat and `unlisted`: it is drawn inside
-# `compose`, and `pj audit` runs it, but it is not something to pick from a menu.
+# `compose` and `triage`, and `pj audit` runs it, but it is not something to pick
+# from a menu.
+#
+# `type` exempts projects, and only projects. A root project carries a `project:`
+# block and no `project` facet, so without this every project in the vault sits
+# here for ever. A container is not exempt — a note things hang off still belongs
+# somewhere.
 title: Needs project
 unlisted: true
 filter:
   project: ['(none)']
   status: [active, blocked]
+  type: [plain, node]
 sort: [updated:desc]
 show: [priority, status]

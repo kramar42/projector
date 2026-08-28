@@ -3,11 +3,10 @@
 # chip renders at least once. Nothing pins that, so treat a value no note takes
 # as a gap in the fixture rather than a promise kept.
 
-# The built-in axis, declared for its triage expectation: with it the triage
-# axis has all four values — needs-project included — so this vault can draw
-# every one. Shape is the built-in's; only the expectation is set here.
+# The built-in axis, declared only to give it a key. Shape — type, values, open,
+# single — is the built-in's and `pj check` refuses changing it, so this is the
+# whole of what a vault may say about `project`.
 project:
-  expected: true
   # A key, so a derived row can draw its `g⇧R` hint — the one state an inbound
   # row has that no keyless axis reaches. `p` is priority's; `r` is the seed's
   # choice for the same reason.
@@ -21,7 +20,6 @@ status:
   # No further work expected, whatever the outcome — abandonment counts,
   # on-hold does not. A closed note stops blocking whatever waits on it.
   closed: [done, archived]
-  expected: true
   hue: green
 
 priority:
@@ -29,7 +27,6 @@ priority:
   values: [now, month, backlog, someday]
   open: false
   single: true
-  expected: true
   hue: orange
 
 due:

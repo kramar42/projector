@@ -367,7 +367,7 @@ test('the coverage vault declares exactly the due buckets the re-dater fills', (
 
 test('the seeded vocabulary covers every facet the seeded views use', () => {
   const facets = parse(SEED_FACETS) as Record<string, unknown>;
-  const computed = new Set(['type', 'blocked', 'triage', 'due', 'staleness']);
+  const computed = new Set(['type', 'blocked', 'due', 'staleness']);
   // A built-in is in every vault's vocabulary without the file saying so, which
   // is the whole point of it being built in. `intake` is the first one a seeded
   // view filters on; `project` had only ever appeared in a `show` list, which

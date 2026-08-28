@@ -1,5 +1,6 @@
-# Roll-ups: direct / total, blocked, untriaged, last activity — including the
-# project that owns nothing, whose row must read 0 / 0.
+# Roll-ups: direct / total, blocked, last activity — including the project that
+# owns nothing, whose row must read 0 / 0. There is no untriaged count: it was a
+# `projectRollups` number and it went with the `expected:` key it stood on.
 shape: table
 title: Portfolio
 filter:

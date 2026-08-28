@@ -1,0 +1,12 @@
+# The third gap, and the one that needs `type`. A note is work only by carrying a
+# status, so "no status" cannot simply be `status: ['(none)']` — that matches
+# every project note and every grouping note in the vault, none of which is
+# unfiled. `type: [plain]` is what asks the question of work alone.
+title: Needs status
+unlisted: true
+filter:
+  status: ['(none)']
+  intake: ['(none)']
+  type: [plain]
+sort: [updated:desc]
+show: [project, priority]

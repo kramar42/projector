@@ -187,8 +187,10 @@ export function validate(
   // to the view that asks the question, which is where you can see and change
   // it. A validator has no view, so generalising the warning meant reporting
   // every root project in the vault: twelve of nineteen, all of them correct as
-  // filed. The `triage` axis answers this now, with `views/triage.yaml`
-  // narrowing it, and `pj check` is left judging whether a *file* is valid.
+  // filed. `views/triage.yaml` answers this now — a `lists:` composition whose
+  // columns are the rule views, each free to carry the `type:` condition a
+  // validator has nowhere to say — and `pj check` is left judging whether a
+  // *file* is valid.
 
   // A project value has to name a note that actually carries configuration.
   // Stronger than the generic reference check above, which only asks whether the

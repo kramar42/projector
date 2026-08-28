@@ -19,8 +19,8 @@ const TYPES: readonly FacetType[] = ['label', 'ref', 'date', 'number'];
  * and lifting `project` out of it would mean bolting it back into every one of
  * them by hand. Being a facet is what stops it being a special case.
  *
- * They sort first, and permanently: a vault may declare one to set its label or
- * its triage expectation, but the position is the built-in's. That is the right
+ * They sort first, and permanently: a vault may declare one to set its label, its
+ * hue or its key, but the position is the built-in's. That is the right
  * place for the axis every vault shares, and it stops a barely-used local facet
  * pushing it off the rail.
  */

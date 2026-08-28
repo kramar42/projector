@@ -1,7 +1,9 @@
 # A composition: the columns are the three rules beside this file, not values of
-# an axis. The only view here that reaches `lists` — the one grouping axis whose
-# values are other views — and so the only one that draws a note in two columns
-# at once, which is what the footer's "extra placements" counts.
+# an axis. `lists` is the one grouping axis whose values are other views, which is
+# what lets a note land in two columns at once — the footer's "extra placements".
+#
+# `triage.yaml` beside it is the same mechanism over the three filing gaps; this
+# one reaches a computed axis (`staleness`) as a column, which that one does not.
 #
 # `shape` is an ordinary control on it: switch to a table for sections, or to a
 # canvas for bands. The columns stay the columns.

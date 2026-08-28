@@ -1,12 +1,20 @@
-# All four triage values, including `complete`.
+# Everything waiting on a decision, in one board.
 #
-# `intake: ['(none)']` excludes the unjudged queue. An unjudged candidate is
-# missing every expected facet by construction, so without this the intake
-# backlog would swamp the board that exists to find notes a person half-filed.
+# This was a board grouped by `triage`, a computed axis built from an `expected:`
+# key in facets.yaml. Both are gone: saying a facet is expected asserts that every
+# note is work, while the model says a note is work by carrying a `status` — so a
+# note deliberately without one could never be filed, its absence being defined as
+# a gap. Filing rules are conditional, and facets.yaml has nowhere to say one.
+#
+# So the question is asked by `lists:` instead. Each column is an ordinary view
+# file, which is the same file `pj audit` runs, so a rule and the place you fix it
+# are one object rather than two that can disagree — and `rule-no-status` can
+# carry the `type:` condition that killed the axis.
+#
+# `compose.yaml` beside this one is the same mechanism over a different three,
+# including a computed axis; this one is the set a person actually drains.
 shape: board
 title: Triage
-filter:
-  intake: ['(none)']
-groupBy: [triage]
+lists: [rule-no-project, rule-no-status, rule-no-priority]
 sort: [updated:desc]
 show: [project, priority, status]

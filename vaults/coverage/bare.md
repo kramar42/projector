@@ -5,5 +5,7 @@ created: 2025-07-22  # older
 ---
 
 Renders: the minimal face — `·`, a title, no chips, no meta line, no excerpt beyond
-this. Also `triage: needs-project,needs-priority,needs-status` all at once, and
-`staleness: undated`, since nothing wrote `updated`.
+this. It also lands in all three columns of `views/triage.yaml` at once — the note
+that shows a composition drawing one note more than once, which is what the
+footer's extra-placement count is for — and `staleness: undated`, since nothing
+wrote `updated`.
