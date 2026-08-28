@@ -126,14 +126,6 @@ things.
   answer is the first prompt that needs to show something a string cannot: the project-block prompt
   already wants to be a list and settles for naming the kinds.
 
-- **A body checkbox should toggle.** The rendered body draws each `- [ ]` as a real checkbox and
-  nothing listens — the panel's one false affordance, found the way false affordances are found: by
-  someone clicking it twice and concluding the app is broken. The fix is bounded and needs no new write
-  path: map the box's ordinal to the nth task marker in the source — the orders agree, since only a
-  real task item becomes a checkbox — flip that one character, and go through `write.body`, the same
-  mtime-guarded write the editor uses (C10). Until it lands, the honest interim is rendering the boxes
-  `disabled`, so the cursor says what a click will do.
-
 - **Three small panel things.** `updated` sits in the workshop block without the `ƒ` that marks its
   neighbours as resolved rather than stored. `.refchip-title` ellipsises at `26ch` while a `.reflink`
   row takes a full line, so the same note reads shorter as a Part-of chip than as a Children row. And

@@ -989,7 +989,10 @@ There were **three** checkboxes and **two** stray selects:
 - the facets popover's row — which had no `appearance: none` at all, so the shared field rule was
   dressing an OS checkbox in an input's border, radius and `5px 8px` padding
 - a markdown task list in a note body — content rather than a control, which is why the draft's
-  wording missed it, and the most visually foreign of the three
+  wording missed it, and the most visually foreign of the three. It has since become a control as
+  well: the box takes a click and writes the character back. Nothing about the drawing changed, which
+  is the useful part — the rule had already put an app-drawn box there, so the day it started
+  listening it needed a cursor and a focus ring and not a redesign
 - the bulk bar's select and the canvas toolbar's select — the draft asserted "every `<select>`
   already takes `appearance: none`"; the shared field rule has none, so only `.rail-select` did.
   Three selects, three type steps, two of them OS controls.

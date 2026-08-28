@@ -630,9 +630,14 @@ the one exception.
 Since a relation is a facet, dragging between columns of a `parent` board re-parents a note through
 exactly the code path that changes its priority.
 
+**A checklist in a body is live.** `- [ ]` renders as a checkbox and clicking it flips that one
+character in the file — no editor, no re-serialising, the rest of the line exactly as you left it. It
+is a body write like any other, so a note an agent changed underneath you is refused and says so. A
+`- [ ]` inside a fenced code block is a code sample and draws no box.
+
 | Where | What |
 |---|---|
-| Note panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, raw frontmatter, make/unmake a project, delete |
+| Note panel | rename, edit any facet through the control its type picks, add/remove links, edit the body, tick a checklist box in it without opening the editor, raw frontmatter, make/unmake a project, delete |
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
 | Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, click a line to spotlight it, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |

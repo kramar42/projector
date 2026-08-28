@@ -9,7 +9,7 @@ import { BodyEditor } from '../components/BodyEditor.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { focusSoon } from '../cursor.ts';
-import { renderBody } from '../../view/markdown.ts';
+import { renderBody, toggleTask } from '../../view/markdown.ts';
 import type { NoteWriter } from './usePanelWriter.ts';
 import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
 
@@ -529,7 +529,7 @@ export function Body({
   lit = false,
 }: {
   card: NoteDTO;
-  write: Pick<NoteWriter, 'body'>;
+  write: Pick<NoteWriter, 'body' | 'task'>;
   onDirtyChange: (dirty: boolean) => void;
   lit?: boolean;
 }) {
@@ -580,7 +580,32 @@ export function Body({
           onSave={write.body}
         />
       ) : card.body.trim() ? (
-        <div className="md" dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title) }} />
+        <div
+          className="md"
+          /*
+            The rendered body has exactly one control in it, and this is it.
+
+            Delegated rather than bound per box, because the HTML is handed over
+            wholesale — there is no element to attach a handler to. The box's
+            ordinal among its siblings is the whole of the mapping back to the
+            source; `taskLines` is what makes that ordinal mean the right line
+            when a code fence contains something that merely looks like a task.
+
+            The click is *not* prevented: the browser flips the box immediately
+            and the reload settles it. A refused write (409) is the one case
+            where that lies for a moment, and it is the right way round — the
+            banner says so, and the alternative is every checkbox in the app
+            waiting on a round-trip to admit it was pressed.
+          */
+          onClick={(e) => {
+            const box = (e.target as HTMLElement).closest('input[type="checkbox"]');
+            if (!box) return;
+            const boxes = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')];
+            const next = toggleTask(card.body, boxes.indexOf(box));
+            if (next !== null) write.task(next);
+          }}
+          dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title) }}
+        />
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>
       )}

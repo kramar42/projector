@@ -100,6 +100,17 @@ export interface NoteWriter {
   body(next: string): Promise<void>;
   frontmatter(yaml: string): Promise<{ warnings: string[] }>;
 
+  /**
+   * A body checkbox, flipped. The same `body` write, through `press` instead.
+   *
+   * Not a second write path — `CardWrite` gains nothing and the wire call is the
+   * one `body` already makes. What differs is who reports: the body *editor*
+   * reports for itself, which is why `body` rejects and notes nothing, and a
+   * checkbox has nowhere to put a failure. So this one raises the banner, by the
+   * rule stated above rather than despite it.
+   */
+  task(next: string): void;
+
   status: WriteStatus;
   busy: string | null;
   banner: ReturnType<typeof bannerFor>;
@@ -192,6 +203,7 @@ export function usePanelWriter(o: {
     remove: useCallback(() => press({ kind: 'delete' }), [press]),
 
     body: useCallback((body) => run({ kind: 'body', body }).then(() => {}), [run]),
+    task: useCallback((body) => press({ kind: 'body', body }), [press]),
     frontmatter: useCallback(
       (yaml) => run({ kind: 'frontmatter', yaml }).then((r) => ({ warnings: r.warnings ?? [] })),
       [run],

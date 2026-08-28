@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderBody } from '../src/view/markdown.ts';
+import { renderBody, taskLines, toggleTask } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
@@ -83,6 +83,55 @@ test('a relative asset path is rewritten to the server route', () => {
   assert.match(renderBody('![x](assets/card/shot.png)'), /src="\/api\/asset\/assets\/card\/shot\.png"/);
   // An absolute one is left alone.
   assert.doesNotMatch(renderBody('![x](https://example.com/a.png)'), /api\/asset/);
+});
+
+// ------------------------------------------------------------- body checkboxes
+
+/** How many checkboxes the panel would actually draw for this body. */
+const drawn = (md: string) => [...renderBody(md).matchAll(/<input type="checkbox"/g)].length;
+
+/**
+ * The property the click handler stands on.
+ *
+ * It maps a box's ordinal in the DOM to `taskLines()[n]`, so the two counts have
+ * to agree on every body — and the interesting bodies are the ones where a line
+ * *looks* like a task and draws no box. One test rather than two, because either
+ * half being right on its own is worth nothing here.
+ */
+test('a task line and a drawn checkbox are the same list, fences included', () => {
+  const body = [
+    '- [ ] real one',
+    '',
+    '```sh',
+    '- [ ] not a task, it is a code sample',
+    '```',
+    '',
+    '* [x] real two',
+    '1. [ ] real three',
+    '- not a task at all',
+  ].join('\n');
+
+  assert.deepEqual(taskLines(body), [0, 6, 7]);
+  assert.equal(drawn(body), taskLines(body).length);
+
+  // The box the reader clicks second is the one on line 6, not the code sample.
+  assert.match(toggleTask(body, 1)!.split('\n')[6]!, /^\* \[ \] real two$/);
+  // And the fenced line is untouched by every ordinal there is.
+  for (let n = 0; n < 3; n++) assert.match(toggleTask(body, n)!, /^- \[ \] not a task/m);
+});
+
+test('flipping a checkbox changes one character and nothing else', () => {
+  assert.equal(toggleTask('  - [ ]  buy milk  ', 0), '  - [x]  buy milk  ');
+  assert.equal(toggleTask('- [X] done', 0), '- [ ] done');
+  // Beyond the last box there is nothing to write, and the caller must not write.
+  assert.equal(toggleTask('- [ ] one', 1), null);
+  assert.equal(toggleTask('no tasks here', 0), null);
+});
+
+test('a body checkbox is enabled, because it now does something', () => {
+  // It shipped `disabled` for as long as nothing listened. That was honest then
+  // and a false affordance the moment `toggleTask` existed.
+  assert.doesNotMatch(renderBody('- [ ] a'), /disabled/);
 });
 
 // ---------------------------------------------------------------- canvas edges

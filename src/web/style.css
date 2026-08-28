@@ -2115,7 +2115,8 @@ code {
  * A task list in a note body — the third browser-drawn checkbox, and the one The
  * Drawn Control Rule's own wording missed because it names the two the app
  * renders itself. This one comes from the markdown, so it is content rather than
- * a control, and it arrives `disabled`: it states a fact, it does not take input.
+ * a control — and it now **takes input**: clicking it flips that character in the
+ * file. It used to arrive `disabled`, which was honest while nothing listened.
  *
  * Drawn on the input directly, unlike the filter row's, because marked emits no
  * sibling to hang a span on. Generated content on a checkbox with
@@ -2124,8 +2125,9 @@ code {
  * are zeroed for the same reason as there: `box-sizing: border-box` is global, so
  * the shared field rule's `5px 8px` floors an 11px box at 18 × 12.
  *
- * `ink-3` rather than the accent when checked. The accent is the app speaking
- * about live state; a tick a human typed into a markdown file is neither.
+ * `ink-3` rather than the accent when checked, and it stays `ink-3` now that the
+ * app writes it. The accent is the app speaking about live state; whose finger
+ * moved the tick never changed what the tick is — a line in someone's file.
  */
 .md li input[type='checkbox'] {
   appearance: none;
@@ -2139,6 +2141,20 @@ code {
   border-radius: var(--radius-xs);
   background: var(--surface-2);
   vertical-align: -0.08em;
+  cursor: pointer;
+}
+
+/* The two states a control owes a pointer and a keyboard. An 11px box inside
+   running prose is easy to miss, so hover lifts the border rather than the fill:
+   the fill is what `:checked` means, and a hover that borrowed it would say the
+   box was ticked while the pointer merely passed over it. */
+.md li input[type='checkbox']:hover {
+  border-color: var(--ink-3);
+}
+
+.md li input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .md li input[type='checkbox']:checked::before {
