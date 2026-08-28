@@ -108,7 +108,18 @@ export type RailControl =
   | 'focus'
   | 'filter'
   | 'clear'
-  | 'collapse';
+  | 'collapse'
+  /**
+   * Write the overrides into the saved view they are overriding.
+   *
+   * The ✓ beside the view name, which appears only when there is something to
+   * write. Its sibling — the ↺ that throws the overrides away — deliberately gets
+   * no letter of its own: `,v` and picking the view you are already on *is* the
+   * revert, since landing on a view replaces the query wholesale. One act, one
+   * key; the other was already reachable and a second letter would have been a
+   * second name for it.
+   */
+  | 'save';
 
 /**
  * Everything a keystroke can mean.
@@ -232,6 +243,17 @@ export type Command =
   | { kind: 'remove' }
   /** Open the declined pile — what a sweep turned down, and why. */
   | { kind: 'declined' }
+  /**
+   * Step into a floating bar — the bulk bar, the canvas toolbar.
+   *
+   * Neither is a rail row and neither belongs to a note, so no existing address
+   * reaches them: they appear over the content, hold most of the writes that act
+   * on a *selection* rather than on a card, and were reachable only by Tab. One
+   * command rather than one per bar, because the act is identical — put the
+   * keyboard on the first thing in it — and the walk that follows is the walk
+   * every other list already has.
+   */
+  | { kind: 'reachList'; list: 'bulk' | 'toolbar' }
   /** Step within whatever list of chips currently holds focus. */
   | { kind: 'listMove'; delta: number }
   | { kind: 'open' }
@@ -398,6 +420,9 @@ const REGIONS: Record<string, 'links' | 'facets' | 'body' | 'frontmatter'> = {
 /** The rail rows a leader letter reaches, and which of them take a facet. */
 const RAIL_LETTERS: Record<string, { control: RailControl; takesFacet: boolean }> = {
   v: { control: 'view', takesFacet: false },
+  /* Shift for the sibling, as `,g`/`,G` and `,f`/`,F` do: `,v` chooses a view,
+     `,V` writes what you have changed into the one you are on. */
+  V: { control: 'save', takesFacet: false },
   s: { control: 'shape', takesFacet: false },
   g: { control: 'group', takesFacet: true },
   G: { control: 'thenBy', takesFacet: true },
@@ -537,6 +562,10 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
        * be the table lying about what it holds.
        */
       if (stroke.key === 'd') return emit({ kind: 'declined' });
+      // Neither is a rail row, so both are named here rather than in
+      // `RAIL_LETTERS` — the same exception `,d` is, for the same reason.
+      if (stroke.key === 'b') return emit({ kind: 'reachList', list: 'bulk' });
+      if (stroke.key === 't') return emit({ kind: 'reachList', list: 'toolbar' });
       const row = RAIL_LETTERS[stroke.key];
       if (!row) return emit(null);
       if (!row.takesFacet) return emit({ kind: 'rail', control: row.control });
@@ -735,12 +764,17 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
  * digits mean whatever the current grouping axis declares, and the facet keys are
  * the vault's. `?` fills both in from the payload it has.
  *
- * **Only what works is listed.** `bind` emits commands nothing consumes yet —
- * `openAxisControl`, `newCard`, `reorder`, `palette` — and they were on this table
- * until it was read as a promise rather than a plan. A cheatsheet naming a key
- * that does nothing is worse than one that is short: the reader presses it,
- * nothing happens, and now every other row is in doubt. They are filed in
- * README's *Not bound yet*, where a list of intentions belongs.
+ * **Only what works is listed.** `bind` emits one command nothing consumes yet —
+ * `palette` — and it was on this table until the table was read as a promise
+ * rather than a plan. A cheatsheet naming a key that does nothing is worse than
+ * one that is short: the reader presses it, nothing happens, and now every other
+ * row is in doubt. It is filed in MANUAL's *Not bound yet*, where a list of
+ * intentions belongs.
+ *
+ * `openAxisControl`, `newCard` and `reorder` were named here too and are all
+ * consumed now. The comment outlived them, which is the failure mode a list of
+ * names has: `test/keys.test.ts` asserts the set rather than trusting this
+ * paragraph, so the next one cannot rot silently.
  */
 export interface KeyRow {
   keys: string;
@@ -815,6 +849,7 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
     section: 'The view',
     rows: [
       { keys: ', v', does: 'saved view' },
+      { keys: ', V', does: 'save changes into this view' },
       { keys: ', s', does: 'shape' },
       { keys: ', g', does: 'group by (+ axis key sets it)' },
       { keys: ', G', does: 'then by' },
@@ -826,6 +861,8 @@ export const KEYMAP: { section: string; rows: KeyRow[] }[] = [
       { keys: ', c', does: 'clear the filters' },
       { keys: ', \\', does: 'collapse the rail' },
       { keys: ', d', does: 'what a sweep declined, and why' },
+      { keys: ', b', does: 'the bulk bar, when something is selected' },
+      { keys: ', t', does: 'the canvas toolbar' },
       { keys: '⌥1–9', does: 'the nth saved view' },
       { keys: '/', does: 'search' },
       { keys: '?', does: 'this' },

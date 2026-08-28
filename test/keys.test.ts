@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   KEYMAP,
   RESERVED,
@@ -651,5 +654,138 @@ test('a vault that declares no keys simply has no gotos', () => {
     commandOf(['g', 'l'], bare),
     { kind: 'gotoRegion', region: 'links' },
     'a region is not a facet',
+  );
+});
+
+// ------------------------------------------------------- keyboard parity
+
+/**
+ * The two halves of the grammar have to agree, and neither can see the other.
+ *
+ * `keys.ts` decides what a stroke *means* and `App.tsx` decides what that does,
+ * which is the split that makes the first half testable at all. The cost is that
+ * a command can be emitted and never acted on: `bind` returned `openAxisControl`,
+ * `newCard` and `reorder` for months while the dispatcher had no case for them,
+ * so the keys were live, silent, and documented as working.
+ *
+ * Read from source rather than imported, the way `theme.test.ts` reads the
+ * stylesheet: `App.tsx` is a React component that reaches for `window` on the way
+ * in, and there is no jsdom here on purpose.
+ */
+const SRC = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+
+/** The `Command` union alone — `Pending` below it is the prefix machine's own. */
+function commandKinds(): Set<string> {
+  const src = SRC('../src/view/keys.ts');
+  const from = src.indexOf('export type Command =');
+  const to = src.indexOf('export type Pending =');
+  assert.ok(from > 0 && to > from, 'the Command union moved');
+  return new Set([...src.slice(from, to).matchAll(/kind: '([a-zA-Z]+)'/g)].map((m) => m[1]!));
+}
+
+test('every command the grammar emits is one the dispatcher acts on', () => {
+  const handled = new Set(
+    [...SRC('../src/web/App.tsx').matchAll(/case '([a-zA-Z]+)':/g)].map((m) => m[1]!),
+  );
+  /**
+   * The one exception, and it carries its reason rather than being a hole.
+   *
+   * `palette` is bound to `.` and consumed by nothing. NEXT.md keeps it parked —
+   * its job keeps shrinking as the map covers more of it — and MANUAL's *Not
+   * bound yet* says so to a reader. Deleting the binding would be the other
+   * honest answer; what is not honest is a third one nobody wrote down.
+   */
+  const parked = new Set(['palette']);
+
+  const orphans = [...commandKinds()].filter((k) => !handled.has(k) && !parked.has(k)).sort();
+  assert.deepEqual(
+    orphans,
+    [],
+    `emitted by keys.ts, acted on by nothing:\n  ${orphans.join('\n  ')}`,
+  );
+
+  // And the other direction: a parked command that quietly got wired should stop
+  // being described as parked.
+  const wired = [...parked].filter((k) => handled.has(k));
+  assert.deepEqual(wired, [], `no longer parked, so the exception should go: ${wired.join(', ')}`);
+});
+
+/**
+ * Keyboard parity: a control a pointer can reach, a keyboard can reach too.
+ *
+ * Coarse on purpose. Matching each `onClick` to its own element needs a parser,
+ * and the failure this exists to catch is not one misattributed handler — it is a
+ * whole surface shipping with no keyboard address at all, which is how the bulk
+ * bar and the canvas toolbar held every selection-scoped write in the app while
+ * being reachable only by Tab.
+ *
+ * So the unit is the file: anything that draws interactive controls either wires
+ * them into the grammar — a `data-navlist` to walk, a `data-nav` to land on, a
+ * `data-act` or `data-rail` for a key to aim at — or is named below as
+ * deliberately Tab-only, which is a decision rather than an oversight and reads
+ * as one here.
+ */
+test('a surface that draws controls is reachable from the keyboard', () => {
+  /**
+   * Tab-only, on purpose.
+   *
+   * Every one of these is a *modal* or a *gate*: it is already the only thing on
+   * screen, so Tab is navigation rather than a maze, and a key to reach it would
+   * address something that has nothing to compete with. The list is short and is
+   * meant to stay short — a new entry is a claim, not a formality.
+   */
+  const TAB_ONLY = new Set([
+    'Cheatsheet.tsx', //     `?` opens it, esc closes it; the body is a table you read
+    'Declined.tsx', //       `,d` opens it; a modal over everything
+    'FoldDialog.tsx', //     `+` opens it; a modal with two columns and a confirm
+    'VaultPicker.tsx', //    the gate, drawn when there is no vault to have a grammar for
+    'VaultSwitcher.tsx', //  lives in the gate and in one rail row
+    'CommitInput.tsx', //    a field: it *is* the keyboard, and ⏎ / esc are its whole API
+    'BodyEditor.tsx', //     CodeMirror owns its keys; `g c` reaches it and esc leaves
+    'FrontmatterEditor.tsx',
+    'Popover.tsx', //        the shell for the lists below; its contents carry the nav
+    'Button.tsx', //         the button itself — its callers decide what addresses it
+    /**
+     * The one entry that is a *deferral* rather than a reason.
+     *
+     * `CardBody` draws the `▣` project toggle, which has no key. It is a rare,
+     * structural act on one note and it is filed under the palette in NEXT.md
+     * with the rest of that tier. Listing it here is what stops the deferral
+     * being invisible: the day the palette lands, this line comes out.
+     */
+    'CardBody.tsx',
+  ]);
+
+  const dir = fileURLToPath(new URL('../src/web', import.meta.url));
+  const files: string[] = [];
+  const walk = (at: string) => {
+    for (const e of readdirSync(at, { withFileTypes: true })) {
+      const full = join(at, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith('.tsx')) files.push(full);
+    }
+  };
+  walk(dir);
+  assert.ok(files.length > 15, 'the component tree moved');
+
+  const unreachable: string[] = [];
+  for (const file of files) {
+    const name = file.slice(file.lastIndexOf('/') + 1);
+    if (TAB_ONLY.has(name)) continue;
+    const src = readFileSync(file, 'utf8');
+    // Only files that actually draw something clickable are asked the question.
+    if (!/onClick=/.test(src)) continue;
+    // `data-card` is the cursor's own address: a board and a table put the
+    // keyboard on a card with `j`/`k`/`h`/`l` and a roving tabindex, which is a
+    // different mechanism from the chip walk and just as much an address.
+    if (/data-nav|data-act|data-rail|data-card/.test(src)) continue;
+    unreachable.push(name);
+  }
+
+  assert.deepEqual(
+    unreachable,
+    [],
+    'these draw controls with no keyboard address and are not listed as Tab-only:\n  ' +
+      unreachable.join('\n  '),
   );
 });

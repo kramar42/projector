@@ -524,7 +524,34 @@ export function CanvasView({
   return (
     <div className="canvas-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
-      <div className="canvas">
+      {/*
+        `⏎` opens, the way it does on every other surface.
+
+        React Flow's own keyboard a11y is deliberately left on: it is what makes a
+        node Tab-reachable, `space` select it and the arrows move a selected one,
+        and reimplementing those to own the whole grammar would be three
+        mechanisms rebuilt to change one. What it also claims is `⏎`, which it
+        treats as a second select — so the one key the rest of the app spends on
+        *open* did nothing here but re-select what was already selected.
+
+        Taken back in the capture phase rather than by turning its a11y off:
+        React attaches at the root, so a capture listener on this element runs
+        before the node's own handler and `stopPropagation` is enough to keep the
+        key. `space` and the arrows fall through untouched, which is the half
+        worth keeping.
+      */}
+      <div
+        className="canvas"
+        onKeyDownCapture={(e) => {
+          if (e.key !== 'Enter') return;
+          const node = (e.target as HTMLElement).closest<HTMLElement>('.react-flow__node');
+          const id = node?.dataset.id;
+          if (!id) return;
+          e.stopPropagation();
+          e.preventDefault();
+          onOpen(id);
+        }}
+      >
         {empty && <div className="emptystate canvas-empty">{empty.text}</div>}
         <ReactFlow
           nodes={litNodes}
@@ -617,10 +644,15 @@ export function CanvasView({
           lives in the rail — and keeping context is now a property of the shape
           rather than a control, since nothing but a canvas ever honoured it.
         */}
-        <div className="canvas-float">
+        <div className="canvas-float" data-navlist="toolbar" data-nav-flow="row">
           <label className="relationpick">
             drag creates
-            <select value={newRelation} onChange={(e) => setNewRelation(e.target.value)}>
+            <select
+              data-nav="relation"
+              data-rail="relation"
+              value={newRelation}
+              onChange={(e) => setNewRelation(e.target.value)}
+            >
               {relations(meta).map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -629,12 +661,13 @@ export function CanvasView({
             </select>
           </label>
 
-          <Button size="small" onClick={() => void addRecord()}>
+          <Button size="small" data-nav="act" onClick={() => void addRecord()}>
             + note
           </Button>
           {dirty && !naming && (
             <Button
               tone="primary" size="small"
+              data-nav="act"
               disabled={saving}
               onClick={() => {
                 const name = data.spec.name;

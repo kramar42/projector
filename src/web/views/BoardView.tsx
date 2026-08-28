@@ -34,6 +34,8 @@ export function BoardView({
   onCursor,
   newIn,
   onNewHandled,
+  nudge,
+  onNudged,
   reload,
 }: {
   /** For the vocabulary and the vault-wide axis population an empty board explains itself with. */
@@ -60,6 +62,16 @@ export function BoardView({
    */
   newIn: string | null;
   onNewHandled: () => void;
+  /**
+   * A request from `⌥j` / `⌥k` to move the cursor's card within its column.
+   *
+   * A delta rather than an order, and a prop rather than a call, for the reason
+   * `newIn` is one: the shell knows a key was pressed and the board knows what a
+   * column is. Everything about *which* ids and *what order* stays here, beside
+   * the drag that answers the same question with a pointer.
+   */
+  nudge: number | null;
+  onNudged: () => void;
   reload: () => void;
 }) {
   const selected = selection.ids;
@@ -139,6 +151,37 @@ export function BoardView({
     },
     [viewName, reload],
   );
+
+  /**
+   * `⌥j` / `⌥k`: the drag within a column, keyed.
+   *
+   * Reordering is the one board gesture with no other door — every other drag
+   * writes a facet, and a facet is reachable from the panel — so until this
+   * landed the stored order could only be set with a pointer.
+   *
+   * The saved-view requirement is not a limitation to route around: order *is*
+   * arrangement, and an ad-hoc query has no file to keep it in. Saying so is
+   * better than a key that silently does nothing on most views.
+   */
+  useEffect(() => {
+    if (nudge === null) return;
+    onNudged();
+    if (!cursor) return;
+    if (!viewName) {
+      setProblem('Card order lives in a saved view. Save this query as one first.');
+      return;
+    }
+    const column = data.groups?.find((g) => g.ids.includes(cursor))?.value;
+    if (column === undefined) return;
+    const ids = orderedFor(column);
+    const at = ids.indexOf(cursor);
+    const to = at + nudge;
+    // The ends hold, the way `j` and `k` do at the ends of a column.
+    if (at === -1 || to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    next.splice(to, 0, ...next.splice(at, 1));
+    void reorder(column, next);
+  }, [nudge, onNudged, cursor, viewName, data.groups, orderedFor, reorder]);
 
   /**
    * A facet move, however many cards it applies to.

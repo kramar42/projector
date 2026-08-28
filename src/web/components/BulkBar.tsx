@@ -88,7 +88,7 @@ export function BulkBar({
       .catch((e: ApiError) => onProblem(e.message));
 
   return (
-    <div className="bulkbar" ref={bar}>
+    <div className="bulkbar" data-navlist="bulk" data-nav-flow="row" ref={bar}>
       <span className="bulkbar-count">{ids.length} selected</span>
 
       {/* One picker floats above the bar at a time: choosing an axis to write and
@@ -96,6 +96,8 @@ export function BulkBar({
           two would land on top of each other. */}
       <select
         className="bulkbar-select"
+        data-nav="facet"
+        data-rail="bulk"
         value={facet}
         onChange={(e) => {
           setMerging(false);
@@ -121,6 +123,7 @@ export function BulkBar({
               // colours on one screen, which is the drift one source is shared to
               // prevent.
               className={`togglechip ${hue}`}
+              data-nav="value"
               onClick={() =>
                 void run(() => api.bulk({ ids, op: 'facet', facet, values: [v.value], mode: 'set' }))
               }
@@ -130,6 +133,7 @@ export function BulkBar({
           ))}
           <button
             className="togglechip is-clear"
+            data-nav="value"
             onClick={() => void run(() => api.bulk({ ids, op: 'facet', facet, values: [], mode: 'set' }))}
           >
             clear
@@ -142,6 +146,7 @@ export function BulkBar({
       {ids.length > 1 && (
         <Button
           size="small"
+          data-nav="act"
           onClick={() => {
             setFacet('');
             setMerging((v) => !v);
@@ -166,7 +171,7 @@ export function BulkBar({
       >
         Delete
       </Button>
-      <Button tone="ghost" size="small" onClick={onClear}>
+      <Button tone="ghost" size="small" data-nav="act" onClick={onClear}>
         Clear selection
       </Button>
 
@@ -183,6 +188,7 @@ export function BulkBar({
                   <button
                     key={id}
                     className="picker-item"
+                    data-nav="pick"
                     onClick={() => {
                       const others = ids.filter((other) => other !== id);
                       if (

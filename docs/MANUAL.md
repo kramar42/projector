@@ -1212,7 +1212,12 @@ Three rules carry most of it:
 
 The cursor is the only pointer: with the panel open it **is** the panel, so `j` turns the page to the
 next card. It is not stored in the URL and starts unset — the first motion key puts it on the first
-drawn card. A canvas has no cursor: its nodes sit on a plane, so "the next one down" has no answer.
+drawn card.
+
+**A canvas has no cursor**: its nodes sit on a plane, so "the next one down" has no answer. It is
+worked with Tab instead — `space` selects the node you are on, the arrow keys move a selected one, and
+`⏎` opens it the way it does everywhere else. The first two are the canvas library's own; the third
+is not, and had to be taken back from it.
 
 **Only a key scrolls.** A motion key that lands on a card the open panel covers brings it out from
 under the panel, since it has no other way to show you where it went. Clicking never does: what you
@@ -1308,6 +1313,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | Keys | What |
 |---|---|
 | `,v` | saved views |
+| `,V` | write the overrides into the view you are on. Reverting is `,v` and picking that view again — landing on a view replaces the query wholesale, which is what a revert is |
 | `,s` | shape |
 | `,g` `,G` | group by · then by |
 | `,o` | sort. The same axis twice flips the direction |
@@ -1318,7 +1324,10 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,c` | clear the filters |
 | `,\` | collapse the rail |
 | `,d` | what a sweep declined, and why — paged and searchable |
+| `,b` | the bulk bar, once cards are selected. `h` `l` walk it, `⏎` takes what is under the cursor |
+| `,t` | the canvas toolbar — what drags create, `+ note`, Save layout |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |
+| `⌥j` `⌥k` | move the cursor's card down / up its column. Card order is arrangement, so it needs a saved view — an ad-hoc query has no file to keep it in |
 | `/` | the search box |
 | `?` | the cheatsheet |
 
@@ -1330,9 +1339,17 @@ repeating the prefix seven times said nothing and made the letters different wid
 
 ## Not bound yet
 
-Two, and `?` lists neither: `⌥j` / `⌥k` to reorder within a column, and `.` for a command palette.
-NEXT.md says why each is waiting — the short of it is that reordering is idle until a saved view is
-what you are working in, and the palette's job keeps shrinking as the map covers more of it.
+One, and `?` does not list it: `.` for a command palette. NEXT.md says what is left for it to do —
+a short list of rare per-note acts that have a control and no address: rename, the project toggle,
+refreshing enrichment, removing one link, restoring a declined candidate, switching vault. Everything
+else that was on that list now has a key or sits in a list the walk reaches.
+
+**What a pointer can do, the keyboard can do**, with three deliberate exceptions. Positioning a card
+on the canvas is a drag; the keyboard moves a *selected* node with the arrow keys instead. Spotlighting
+one canvas edge is a click and writes nothing. And creating an edge by dragging handle to handle has no
+keystroke — but an edge *is* a reference facet, so `g f` and the axis's own row set the same thing
+through the panel. `test/keys.test.ts` holds the rest of it shut: a component that draws a control
+either wires it into the grammar or is named there as deliberately Tab-only.
 
 ## Checking it works
 

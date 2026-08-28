@@ -69,20 +69,36 @@ things.
   axis can have. Generalise it the moment a second axis wants it; until then it is a key with exactly
   one setter, which is the shape of a thing that drifts.
 
-- **The keyboard's three leftovers.** `⌥j`/`⌥k` reordering within a column is cheap — a splice through
-  `saveArrangement` — and idle until a saved view is the thing being worked in; on an ad-hoc query
-  there is no file for the order to live in. A view's own `key:` (the fix facets already have, for
-  `⌥1`–`⌥9` renumbering when a view is added) is not worth it until the rail's order actually churns.
-  And focus restore on closing the panel: the cursor *is* that card and `j` picks up from it, so the
-  cost is one Tab in the rare case.
+- **The keyboard's two leftovers.** A view's own `key:` (the fix facets already have, for `⌥1`–`⌥9`
+  renumbering when a view is added) is not worth it until the rail's order actually churns. And focus
+  restore on closing the panel: the cursor *is* that card and `j` picks up from it, so the cost is one
+  Tab in the rare case. `⌥j`/`⌥k` reordering was the third and has landed — the parity sweep found it
+  was the one board gesture with no other door, every other drag writing a facet the panel can also
+  reach.
 
 - **The palette (`.`).** Bound in the grammar, acts on nothing. The shape was never the question — the
-  bulk bar's state machine with `RecordPicker`'s type-to-filter over the front of it — but its job
-  keeps shrinking: `gf` and `g⇧F` reach every axis whether or not it declares a letter, so the honest
-  residual is the commands that are not axes — merge and save-as-view, both two keystrokes away in the
-  rail, and delete, which is deliberately unbound and staying that way. Build it when the vocabulary
-  has more axes worth reaching than there are letters, or when a third command has no rail row and no
-  key — the moment it stops being a nicer way to do what a key already does. Earlier than that it is a
+  bulk bar's state machine with `RecordPicker`'s type-to-filter over the front of it — but its job kept
+  shrinking: `gf` and `g⇧F` reach every axis whether or not it declares a letter, and the parity sweep
+  gave the two floating bars a navlist and an address, which took merge, delete-selection and
+  save-layout off this list by making them walkable rather than by naming them.
+
+  **What is left is its actual job**, and it is now a list rather than a hand-wave. Each of these is a
+  per-note or per-vault act with a real control, reachable by Tab and by nothing else, and each is too
+  rare to be worth a letter of its own:
+
+  - **rename** — the panel's title. `role="button"`, Enter and Space already work on it; what it lacks
+    is an address.
+  - **make / unmake a project** — the `▣` toggle on the panel title and on a card face. Structural, and
+    the one write in the panel with no key. `test/keys.test.ts` lists `CardBody.tsx` as Tab-only with a
+    pointer back here, so this deferral is visible from the guard rather than only from prose.
+  - **refresh enrichment** — the ⟳ on the links block.
+  - **remove one link** — the ✕ on a link row. The row is walkable (`g l`); the remove on it is not,
+    because a walk that could delete on `⏎` is a walk nobody would trust.
+  - **restore a declined candidate** — `,d` opens the pile and the rows are read-only to the keyboard.
+  - **switch vault** — one rail row, and the gate.
+
+  Build it when that list stops being rare things — when a second entry on it turns out to be daily, or
+  when the vocabulary has more axes worth reaching than there are letters. Earlier than that it is a
   second copy of every binding, and the first to drift is the one nobody presses.
 
 - **An open axis still draws its whole vocabulary.** `FacetEditor` renders every declared value with

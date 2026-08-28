@@ -84,12 +84,12 @@ export function RecordPicker({
       />
       <div className="picker-list">
         {clearLabel && (
-          <button className="picker-item is-clear" onClick={() => onPick(null)}>
+          <button className="picker-item is-clear" data-nav="pick" onClick={() => onPick(null)}>
             {clearLabel}
           </button>
         )}
         {matches.map((r) => (
-          <button key={r.id} className="picker-item" onClick={() => onPick(r.id)}>
+          <button key={r.id} className="picker-item" data-nav="pick" onClick={() => onPick(r.id)}>
             {/* The real mark, not a second copy of it. This was a bare span
                 holding `markOf(r).glyph`: the size happened to be right — 10px
                 is exactly the 0.8em of this row's `--text-body` that the shared

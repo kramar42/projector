@@ -220,6 +220,15 @@ export function App() {
    */
   const [newIn, setNewIn] = useState<string | null>(null);
   /**
+   * A pending `⌥j` / `⌥k`, handed to the board and cleared as it is taken.
+   *
+   * Null between presses rather than a running counter: the board clears it the
+   * moment it acts, so the prop goes `null → delta → null` and two presses of one
+   * key are two changes. A counter would be a second thing to keep in step for a
+   * problem the round trip already solves.
+   */
+  const [nudge, setNudge] = useState<number | null>(null);
+  /**
    * The undo stacks. A ref, because nothing renders from them — `u` consults them
    * and they are invisible the rest of the time.
    */
@@ -263,6 +272,7 @@ export function App() {
   // Identity-stable, so the board's effect fires on the request rather than on
   // every render of the shell.
   const clearNewIn = useCallback(() => setNewIn(null), []);
+  const clearNudge = useCallback(() => setNudge(null), []);
 
   const openCard = useCallback(
     (id: string | null) => {
@@ -480,6 +490,7 @@ export function App() {
     notify: setNotice,
     notice,
     newCardIn: setNewIn,
+    nudgeCard: setNudge,
     follow: followCard,
     edit,
     spec: data?.spec ?? null,
@@ -558,6 +569,8 @@ export function App() {
         onCursor={cursor.step}
         newIn={newIn}
         onNewHandled={clearNewIn}
+        nudge={nudge}
+        onNudged={clearNudge}
         reload={reload}
       />
     );
@@ -722,6 +735,8 @@ interface KeyState {
   notice: { tone: 'bad' | 'info'; text: string } | null;
   /** Ask the board to open its inline creator in one column. */
   newCardIn: (column: string) => void;
+  /** Ask the board to move the cursor's card within its column's stored order. */
+  nudgeCard: (delta: number) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
   /** Open or close the declined surface. See `setDeclined` for why it is a URL edit. */
@@ -1170,6 +1185,22 @@ function run(command: Command, s: KeyState): void {
       }
       if (control === 'collapse') return s.toggleRail();
       /**
+       * Write the overrides into the view they override.
+       *
+       * Aimed at the ✓ rather than reimplemented, for the reason `work` and
+       * `judge` are: the button knows whether there is anything to write — it is
+       * drawn only when there is — so the key inherits that rather than
+       * re-deriving it and being able to disagree.
+       */
+      if (control === 'save') {
+        const button = document.querySelector<HTMLButtonElement>('[data-rail="save"]');
+        if (!button) {
+          return s.notify({ tone: 'info', text: 'this view has no unsaved changes' });
+        }
+        button.click();
+        return;
+      }
+      /**
        * The filter rail has no single control to focus — it *is* the list — so
        * the leader steps into it rather than onto it. An axis you have already
        * opened is where you want to be, so focus lands on the first *value* if
@@ -1412,6 +1443,29 @@ function run(command: Command, s: KeyState): void {
     case 'declined':
       return s.setDeclined(true);
 
+    /**
+     * Step into a floating bar.
+     *
+     * Both are drawn only when they apply — the bulk bar with a selection, the
+     * toolbar on a canvas — so an absent list is the answer rather than a
+     * failure, and saying which is missing is more use than saying nothing
+     * happened.
+     */
+    case 'reachList': {
+      const list = document.querySelector(`[data-navlist="${command.list}"]`);
+      const first = list?.querySelector<HTMLElement>('[data-nav]');
+      if (!first) {
+        return s.notify({
+          tone: 'info',
+          text:
+            command.list === 'bulk'
+              ? 'the bulk bar appears once cards are selected — x picks one'
+              : 'the toolbar is a canvas',
+        });
+      }
+      return first.focus();
+    }
+
     case 'work': {
       const on = openNote ?? cursor.id;
       if (!on) return s.notify({ tone: 'info', text: 'no note under the cursor' });
@@ -1626,6 +1680,21 @@ function run(command: Command, s: KeyState): void {
       const column = grid.columns[spot ? spot[1] : 0];
       if (column === undefined) return;
       return s.newCardIn(column);
+    }
+
+    /**
+     * `⌥j` / `⌥k` — the drag within a column, keyed.
+     *
+     * The board owns the act, for the reason `newCard` does: the shell knows a
+     * key was pressed and the board knows what a column is. Refused here only
+     * where the shell can already tell it is meaningless — a shape with no
+     * columns — so the board never has to explain a key that could not apply.
+     */
+    case 'reorder': {
+      if (!grid.columns.length) {
+        return s.notify({ tone: 'info', text: 'card order is a board' });
+      }
+      return s.nudgeCard(command.delta);
     }
 
     /**

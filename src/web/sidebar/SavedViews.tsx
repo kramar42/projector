@@ -118,7 +118,8 @@ export function SavedViews({
           <span className="rail-dirty" title="This saved view has unsaved changes">
             <IconButton
               glyph="check"
-              title="write these changes into the saved view — its layout and card order are kept"
+              data-rail="save"
+              title="write these changes into the saved view — its layout and card order are kept (,V)"
               aria-label="Save changes to this view"
               onClick={() => void save(current!.name!, current!.title)}
             />
