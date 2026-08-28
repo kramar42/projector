@@ -163,6 +163,7 @@ export function BulkBar({
         // are one list, and the keyboard cannot reach the delete without the
         // question. See `remove` in `App.tsx`.
         data-act="delete"
+        data-nav="act"
         onClick={() => {
           if (!confirm(`Delete ${plural(ids.length, 'note')}?\n\nThe files are in git, so this is recoverable.`))
             return;
