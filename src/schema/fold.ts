@@ -1,4 +1,4 @@
-import { isRef } from './facets.ts';
+import { isRef } from './vocabulary.ts';
 import type { Facets, Note } from './types.ts';
 
 /**
