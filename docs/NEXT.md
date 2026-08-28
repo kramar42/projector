@@ -127,23 +127,6 @@ things.
   the `j`/`k` walk, and it is not obvious that it should be) or `open` pressing any focused panel
   button; neither is worth deciding while the buttons are also reachable by `!` and by mouse.
 
-- **C2's summary column still reads as a ban on notifications.** The rule is *nothing is written where
-  somebody else reads*, and a sink only you read is not among the shared ones; the summary column says
-  "everything external is read-only", which reads as forbidding the local notification that shipped and
-  the private push that would be fine. Reword it when something actually pushes — today nothing does,
-  so the wording is misleading rather than wrong.
-
-- **Nothing re-judges a note that was already filed.** The pass writes a card once, on the way in, so a
-  vault holding cards from an earlier, thinner version of it keeps them. `pj intake rejudge` — the pass
-  over notes still carrying `intake: unjudged`, rewriting title, body and facets in place — is the
-  migration path and the way to benefit from a changed `classify.md` without emptying the queue by
-  hand. The rule about what it may touch is already stored, which was not obvious at first: **accepting
-  is what makes a value yours**, and `intake: unjudged` is exactly the note-level record of whether
-  that has happened — so rejudge touches notes still carrying the axis and nothing else, and no new
-  provenance is needed. The residue is worth stating rather than solving: a note you corrected but did
-  not judge is still, by its own flag, a proposal, and a rejudge would overwrite the correction. It is
-  a command you run deliberately, not something that happens to you.
-
 - **A second `pj intake rejudge` rewrites what the first one wrote.** Its facet half is idempotent — the
   same values validate to the same values — but its prose half is not: a model rewords, so a card
   titled *"TOS L3 workflow app: UI builder, not Temporal"* comes back *"TOS L3 workflow orchestration UI
@@ -231,6 +214,13 @@ things it still does better.
   write-path table already gets right. So the pairing is the work: assert that every file under
   `src/sources/` and `src/enrich/` appears in the table, then grep those files for a verb other than
   GET. One test, and C2 is checked rather than trusted.
+
+  **The stakes went up after this was filed.** When it was written, the worst a mistake could do was a
+  `POST` in a fetcher nobody would notice. The agent-fetched channels now hand an agent real tools in
+  Slack and Gmail — the two services C2 names — and the only thing between that and a write is a list in
+  a config file. Nothing checks that the listed tools are reads, nothing checks that the list is a list
+  rather than a wildcard, and nothing fails a build if either changes. A grep over the adapters no
+  longer covers the whole rule; the allowlist wants a check of its own.
 
 - **A verb allow-list checked before the subprocess spawns.** A frozen set of safe git verbs, plus the
   flags that are writes wearing one — `branch -D`, `remote add`, `config --global` — refused before
