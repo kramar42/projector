@@ -316,14 +316,14 @@ export function listNoteFiles(cardsDir: string): string[] {
     // no ignore file is the normal case
   }
   const walk = (dir: string, ignores: { base: string; rules: IgnoreRule[] }[]) => {
-    let entries: string[];
+    let entries: import('node:fs').Dirent[];
     try {
-      entries = readdirSync(dir);
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     let scope = ignores;
-    if (entries.includes('.gitignore')) {
+    if (entries.some((e) => e.name === '.gitignore')) {
       try {
         const rules = compileIgnore(readFileSync(pathJoin(dir, '.gitignore'), 'utf8'));
         if (rules.length) scope = [...ignores, { base: dir, rules }];
@@ -331,13 +331,19 @@ export function listNoteFiles(cardsDir: string): string[] {
         // an unreadable .gitignore ignores nothing
       }
     }
-    for (const name of entries) {
+    for (const e of entries) {
+      const name = e.name;
       if (skipped(name)) continue;
       const full = pathJoin(dir, name);
-      // A dangling symlink stats to nothing; skip it rather than dying on it.
-      const st = statSync(full, { throwIfNoEntry: false });
-      if (!st) continue;
-      const isDir = st.isDirectory();
+      let isDir = e.isDirectory();
+      if (e.isSymbolicLink()) {
+        // Only a symlink needs a stat — a dangling one stats to nothing and is
+        // skipped rather than fatal. Everything else is answered by the dirent,
+        // which is what keeps this walk cheap on a tree full of source files.
+        const st = statSync(full, { throwIfNoEntry: false });
+        if (!st) continue;
+        isDir = st.isDirectory();
+      }
       if (!isDir && !name.endsWith('.md')) continue;
       if (ignoredBy(full, isDir, scope)) continue;
       if (isDir) walk(full, scope);
