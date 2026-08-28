@@ -13,6 +13,7 @@ bun run build       # vite build → dist/
 bun run serve       # 127.0.0.1:8092, serving dist/
 bun run dev:web     # hot-reloading UI on 5176, alongside bun run serve
 bun run pj -- ls    # the CLI, needs nothing running
+bun run build:cli   # bun-only, like `bun test`: compiles the CLI to dist/pj (~60MB, instant startup)
 ```
 
 **Bun is the default, not a requirement.** `.mise.toml` pins both runtimes; every script above spells

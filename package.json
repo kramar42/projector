@@ -20,7 +20,8 @@
     "dev:web": "vite",
     "build": "vite build",
     "serve": "node src/server/serve.ts",
-    "redate": "node src/scripts/redate.mjs"
+    "redate": "node src/scripts/redate.mjs",
+    "build:cli": "bun build --compile ./src/cli/pj.ts --outfile dist/pj"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^3.0.0",
