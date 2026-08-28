@@ -323,7 +323,16 @@ function SearchBox({ spec, edit }: { spec: ViewSpec | undefined; edit: Edit }) {
            * Blur rather than a landing: with focus off the field the shell's chain
            * has the key back, so a second Escape does whatever it would have done
            * anyway.
+           *
+           * **`preventDefault` is the whole of it, and it is not defensive.** This
+           * is `type="search"`, and clearing on Escape is the *browser's* default
+           * action for one — so removing our own clear left the behaviour exactly
+           * as it was, from a second source. DESIGN.md already records the sibling
+           * of this: the UA's cancel button is hidden because it draws the app's
+           * own Escape twice. Same key, same UA affordance, and the half that is
+           * not a button had to be turned off too.
            */
+          e.preventDefault();
           e.currentTarget.blur();
         }}
       />

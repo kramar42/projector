@@ -1005,6 +1005,13 @@ cancel button — the app's own Escape handler drawn twice — is hidden. The da
 indicator stays, because it is the only way to open the calendar; `color-scheme` is what themes it,
 and nothing had declared that either.
 
+**`type="search"` has a second UA affordance and it is not drawn at all.** Escape clears the field,
+which is a *default action* rather than a control, so hiding the cancel button left half the
+behaviour in place — and it survived the app's own clear-on-Escape being removed, because it was
+never the app doing it. `preventDefault` is what turns it off. Worth naming beside its sibling: this
+element ships two ways to do one thing the app has opinions about, and only one of them is visible
+enough to notice.
+
 Two mechanics worth keeping: `box-sizing: border-box` is global, so a `width: 0` box floors at its
 padding plus border — a hidden input needs `padding: 0; border: 0` as well. And the `font:`
 shorthand resets every sub-property it does not name, `font-variant-numeric` included, which is how
