@@ -235,17 +235,101 @@ export function loadNote(file: string, root?: string): ParseResult {
  * a note body and inherited config, which is the one thing C11 forbids.
  */
 const skipped = (name: string): boolean =>
-  name === 'assets' || name === 'AGENTS.md' || name.startsWith('.');
+  name === 'assets' ||
+  name === 'AGENTS.md' ||
+  // CLAUDE.md is AGENTS.md wearing the reader's name — same configuration-not-
+  // content argument, and in practice often a symlink to an AGENTS.md.
+  name === 'CLAUDE.md' ||
+  name === 'CLAUDE.local.md' ||
+  name.startsWith('.');
 
-/** Every `.md` in the vault, at any depth. */
+/**
+ * One `.gitignore`'s rules, compiled — a deliberate subset, not a git
+ * reimplementation. Supported: comments and blanks, `dir/` (directory-only),
+ * a leading `/` or an interior `/` (anchored to the .gitignore's directory),
+ * `*` within a segment, `**` across segments, and a bare name matching at any
+ * depth. `!` negation lines are dropped, so the subset can only ignore *more*
+ * than git would un-ignore — never index something git considers ignored.
+ * The point is that what git would never name, the vault should never index:
+ * node_modules above all.
+ */
+interface IgnoreRule {
+  rx: RegExp;
+  dirOnly: boolean;
+}
+
+function compileIgnore(text: string): IgnoreRule[] {
+  const rules: IgnoreRule[] = [];
+  for (const raw of text.split('\n')) {
+    let line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('!')) continue;
+    const dirOnly = line.endsWith('/');
+    if (dirOnly) line = line.slice(0, -1);
+    let anchored = false;
+    if (line.startsWith('/')) {
+      anchored = true;
+      line = line.slice(1);
+    } else if (line.includes('/')) {
+      anchored = true;
+    }
+    if (!line) continue;
+    const esc = line
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*/g, '\u0000')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\u0000/g, '.*');
+    rules.push({ rx: anchored ? new RegExp(`^${esc}$`) : new RegExp(`(^|/)${esc}$`), dirOnly });
+  }
+  return rules;
+}
+
+/** Whether any `.gitignore` on the path from the vault root down names this entry. */
+function ignoredBy(
+  full: string,
+  isDir: boolean,
+  scopes: { base: string; rules: IgnoreRule[] }[],
+): boolean {
+  for (const { base, rules } of scopes) {
+    const rel = full.slice(base.length + 1);
+    for (const r of rules) {
+      if (r.dirOnly && !isDir) continue;
+      if (r.rx.test(rel)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Every `.md` in the vault, at any depth — minus what git would ignore, and
+ * minus what the vault itself asks to ignore: `.projector/ignore` holds
+ * patterns in the same gitignore subset, matched from the vault root. It is
+ * the escape hatch for conventions that collide with note identity — a Hugo
+ * tree's `_index.md` files would otherwise all be one note called `index`.
+ */
 export function listNoteFiles(cardsDir: string): string[] {
   const out: string[] = [];
-  const walk = (dir: string) => {
+  const rootScopes: { base: string; rules: IgnoreRule[] }[] = [];
+  try {
+    const own = compileIgnore(readFileSync(pathJoin(cardsDir, '.projector', 'ignore'), 'utf8'));
+    if (own.length) rootScopes.push({ base: cardsDir, rules: own });
+  } catch {
+    // no ignore file is the normal case
+  }
+  const walk = (dir: string, ignores: { base: string; rules: IgnoreRule[] }[]) => {
     let entries: string[];
     try {
       entries = readdirSync(dir);
     } catch {
       return;
+    }
+    let scope = ignores;
+    if (entries.includes('.gitignore')) {
+      try {
+        const rules = compileIgnore(readFileSync(pathJoin(dir, '.gitignore'), 'utf8'));
+        if (rules.length) scope = [...ignores, { base: dir, rules }];
+      } catch {
+        // an unreadable .gitignore ignores nothing
+      }
     }
     for (const name of entries) {
       if (skipped(name)) continue;
@@ -253,11 +337,14 @@ export function listNoteFiles(cardsDir: string): string[] {
       // A dangling symlink stats to nothing; skip it rather than dying on it.
       const st = statSync(full, { throwIfNoEntry: false });
       if (!st) continue;
-      if (st.isDirectory()) walk(full);
-      else if (name.endsWith('.md')) out.push(full);
+      const isDir = st.isDirectory();
+      if (!isDir && !name.endsWith('.md')) continue;
+      if (ignoredBy(full, isDir, scope)) continue;
+      if (isDir) walk(full, scope);
+      else out.push(full);
     }
   };
-  walk(cardsDir);
+  walk(cardsDir, rootScopes);
   return out.sort();
 }
 

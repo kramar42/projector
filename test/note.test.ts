@@ -355,6 +355,59 @@ test('AGENTS.md is not a note, anywhere in the vault', () => {
   assert.deepEqual(duplicates, [], 'two folders with a README are not two notes called readme');
 });
 
+/**
+ * The walk honours .gitignore — a subset of it: what git would never name, the
+ * vault never indexes. A repo dropped into a vault (or a vault opened over a
+ * workspace) contributes its documents, not its node_modules.
+ */
+test('CLAUDE.md is configuration, not content — anywhere, symlinked or not', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-claude-'));
+  writeFileSync(pathJoin(root, 'CLAUDE.md'), 'reader-named AGENTS.md', 'utf8');
+  writeFileSync(pathJoin(root, 'CLAUDE.local.md'), 'private half', 'utf8');
+  writeFileSync(pathJoin(root, 'real.md'), '# real\n', 'utf8');
+  assert.deepEqual(
+    listNoteFiles(root).map((f) => f.slice(root.length + 1)),
+    ['real.md'],
+  );
+});
+
+test('.projector/ignore masks notes by pattern, from the vault root', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-mask-'));
+  mkdirSync(pathJoin(root, '.projector'));
+  writeFileSync(pathJoin(root, '.projector', 'ignore'), '_index.md\ndrafts/\n', 'utf8');
+  mkdirSync(pathJoin(root, 'docs', 'deep'), { recursive: true });
+  writeFileSync(pathJoin(root, 'docs', '_index.md'), '# hugo\n', 'utf8');
+  writeFileSync(pathJoin(root, 'docs', 'deep', '_index.md'), '# hugo deep\n', 'utf8');
+  writeFileSync(pathJoin(root, 'docs', 'page.md'), '# page\n', 'utf8');
+  mkdirSync(pathJoin(root, 'drafts'));
+  writeFileSync(pathJoin(root, 'drafts', 'wip.md'), '# wip\n', 'utf8');
+  assert.deepEqual(
+    listNoteFiles(root).map((f) => f.slice(root.length + 1)),
+    ['docs/page.md'],
+  );
+});
+
+test('git-ignored markdown is not a note', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-ignore-'));
+  writeFileSync(pathJoin(root, '.gitignore'), 'node_modules/\n*.draft.md\n/top-only.md\n', 'utf8');
+  writeFileSync(pathJoin(root, 'kept.md'), '# kept\n', 'utf8');
+  writeFileSync(pathJoin(root, 'top-only.md'), '# anchored out\n', 'utf8');
+  writeFileSync(pathJoin(root, 'plan.draft.md'), '# draft\n', 'utf8');
+  mkdirSync(pathJoin(root, 'repo', 'node_modules', 'pkg'), { recursive: true });
+  writeFileSync(pathJoin(root, 'repo', 'node_modules', 'pkg', 'CHANGELOG.md'), '# junk\n', 'utf8');
+  writeFileSync(pathJoin(root, 'repo', 'README.md'), '# repo\n', 'utf8');
+  mkdirSync(pathJoin(root, 'repo', 'dist'));
+  writeFileSync(pathJoin(root, 'repo', 'dist', 'out.md'), '# built\n', 'utf8');
+  writeFileSync(pathJoin(root, 'repo', '.gitignore'), 'dist/\n', 'utf8');
+  // the root's anchored /top-only.md must not reach into subfolders
+  writeFileSync(pathJoin(root, 'repo', 'top-only.md'), '# not anchored here\n', 'utf8');
+
+  assert.deepEqual(
+    listNoteFiles(root).map((f) => f.slice(root.length + 1)).sort(),
+    ['kept.md', 'repo/README.md', 'repo/top-only.md'],
+  );
+});
+
 test('a bare note keeps its identity when it is written down', () => {
   // What `patchAll` materialises has to be what the reader was already using, or
   // the first write renames the note and orphans every reference to it.

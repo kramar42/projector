@@ -318,6 +318,12 @@ or a heuristic, so C1 is intact: if any of those bytes could have changed, the a
 Mutating routes additionally call `invalidate` through `bump`, so our own writes never depend on mtime
 resolution being finer than a burst of them.
 
+The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
+ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —
+the escape hatch for conventions that collide with note identity, such as a Hugo tree where every
+`_index.md` would become one note called `index`. `AGENTS.md`, `CLAUDE.md` and `CLAUDE.local.md` are
+configuration, not content, and are never notes.
+
 The stamp skips dotfiles, because the index is the memo's own output and counting it would make
 every rebuild invalidate itself. That leaves one gap the stamp cannot close by construction: the index
 is *derived and disposable* (C1), so another process is entitled to delete it and write a new one
