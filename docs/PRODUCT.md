@@ -120,12 +120,18 @@ React 19 and Vite for the UI, Hono for the server, hand-written CSS with no fram
 only open a vault listed in `vaults.json`, so a page in the browser cannot point it at an arbitrary
 directory.
 
-**Deliberately undecided** (recorded in `NEXT.md`, deferred rather than missing): an expression
-language for moving the five computed axes into `facets.yaml`, per-column summaries, and keyboard
-operation. The first two wait on a question appearing on screen that cannot currently be answered.
-Keyboard operation waits on something else — a keystroke has no modifier to say replace / add /
-remove, so the gesture semantics are the hard part, and there is no evidence yet about which motions
-are frequent.
+**Keyboard operation shipped.** The grammar is in [MANUAL.md](MANUAL.md) and `?` draws it filled in
+with the vault's own axis letters: a cursor that is the only pointer, `j`/`k`/`h`/`l` following what
+is drawn rather than a per-surface convention, and a digit meaning the Nth declared value of an axis —
+which is how a keystroke says what a drag says. What remains is parked in `NEXT.md` under *the
+keyboard's three leftovers*, and the command palette is bound to nothing on purpose.
+
+**Deliberately undecided** (recorded in `NEXT.md`, deferred rather than missing): per-column
+summaries, which now have one concrete customer — a per-project count of half-filed notes — but would
+sit beside `projectRollups` rather than absorb it, and have nothing numeric to aggregate. **Decided
+against**, rather than deferred: an expression language for moving the five computed axes into
+`facets.yaml`, because `blocked` is an aggregate over every note's blocking references and cannot be a
+per-note expression at all.
 
 **Finished but idle mechanisms** — design must not assume data on these axes: `blocked_by` carries one
 value, `due` is set nowhere, `owner` is set on one note, `energy` is on a handful. `pj check`
