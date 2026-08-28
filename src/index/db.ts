@@ -32,6 +32,13 @@ CREATE TABLE links (
   ref       TEXT NOT NULL,
   raw       TEXT NOT NULL
 );
+-- The persisted index gate: 'payload' holds the stamp reindex was built from
+-- and the parsed notes, so a fresh CLI process can skip re-reading the vault.
+-- A db from before this table simply fails the read and is rebuilt fresh.
+CREATE TABLE meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE TABLE cache (
   kind       TEXT NOT NULL,
   ref        TEXT NOT NULL,

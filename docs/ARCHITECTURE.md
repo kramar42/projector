@@ -318,6 +318,13 @@ or a heuristic, so C1 is intact: if any of those bytes could have changed, the a
 Mutating routes additionally call `invalidate` through `bump`, so our own writes never depend on mtime
 resolution being finer than a burst of them.
 
+The CLI cannot use the memo — every `pj` is a fresh process — so `reindex` carries its own gate with
+the same contract: the built notes are persisted into `index.db` (a `meta` payload) alongside a stamp
+of every note file, the vocabulary, the views and `.projector/ignore`; a later process whose stamp
+matches answers from the payload instead of re-reading the vault. `pj reindex` passes `force`, because
+a command named reindex must actually reindex. A database from before the `meta` table simply fails
+the payload read and is rebuilt fresh.
+
 The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
 ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —
 the escape hatch for conventions that collide with note identity, such as a Hugo tree where every

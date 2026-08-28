@@ -619,7 +619,8 @@ function cmdAudit(argv: string[]): void {
  * this one being the looping one.
  */
 function cmdReindex(): void {
-  const { db, unreadable } = reindex(root);
+  // A command named reindex must actually reindex — never answer from the gate.
+  const { db, unreadable } = reindex(root, { force: true });
   const c = counts(db, loadFacets(p.facets));
   console.log(`indexed ${c.notes} note(s)`);
   for (const [k, v] of Object.entries(c)) {

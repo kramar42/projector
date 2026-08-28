@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { reindex } from '../src/index/indexer.ts';
@@ -1262,3 +1262,36 @@ test('a computed axis has no population, because it cannot be unpopulated', () =
     cleanup();
   }
 });
+
+/**
+ * The CLI is a fresh process per command, so the server memo cannot help it.
+ * The persisted payload in index.db answers instead — gated on the same kind
+ * of exact stamp (C1): reuse only when nothing reindex reads could have
+ * changed, and `force` (pj reindex's contract) always rebuilds.
+ */
+test('the persisted index answers until a note changes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'projector-gate-'));
+  writeFileSync(join(root, 'one.md'), '# One\n\nfirst body\n', 'utf8');
+  const first = reindex(root);
+  assert.equal(first.cached, false, 'a fresh vault has nothing to answer from');
+  first.db.close();
+
+  const second = reindex(root);
+  assert.equal(second.cached, true, 'nothing changed, so nothing is re-read');
+  assert.equal(second.notes.get('one')?.title, 'One');
+  second.db.close();
+
+  const forced = reindex(root, { force: true });
+  assert.equal(forced.cached, false, 'a command named reindex must reindex');
+  forced.db.close();
+
+  // ensure the mtime moves even on coarse filesystems
+  const later = new Date(Date.now() + 2000);
+  writeFileSync(join(root, 'one.md'), '# One renamed\n\nsecond body\n', 'utf8');
+  utimesSync(join(root, 'one.md'), later, later);
+  const third = reindex(root);
+  assert.equal(third.cached, false, 'a changed byte invalidates the gate');
+  assert.equal(third.notes.get('one')?.title, 'One renamed');
+  third.db.close();
+});
+

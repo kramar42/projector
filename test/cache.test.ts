@@ -78,9 +78,11 @@ test('a second process replacing the index does not leave a stale handle', () =>
     const before = statSync(paths(root).db).ino;
     assert.doesNotThrow(() => first.db.prepare('SELECT count(*) AS n FROM notes').get());
 
-    // Exactly what another terminal does. Nothing under the vault changes.
+    // Exactly what `pj reindex` in another terminal does. Nothing under the
+    // vault changes — a plain command would answer from the persisted gate and
+    // leave the file alone, so forcing is what actually replaces it.
     const stamp = stampOf(root);
-    const outside = reindex(root);
+    const outside = reindex(root, { force: true });
     outside.db.close();
     assert.equal(stampOf(root), stamp, 'no source file changed, so the stamp cannot notice');
     assert.notEqual(statSync(paths(root).db).ino, before, 'but the index is a different file');
