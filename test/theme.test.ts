@@ -724,3 +724,146 @@ test('a counter cannot lose its tabular guard by accident', () => {
     `a counter sets the \`font:\` shorthand, which resets its own tabular guard:\n  ${broken.join('\n  ')}`,
   );
 });
+
+// ------------------------------------------------------------------- contrast
+
+/**
+ * The rule prose used to guard alone.
+ *
+ * Everything above refuses a raw step, a stray hue, a class that resolves to no
+ * rule — and none of it can say whether two colours can be read against each
+ * other. The one regression of that kind, a `dt` label receding to 3.16:1, was
+ * found by measuring in a browser. A ratio needs resolved colour, and resolving
+ * it here is the cheap half of that: the tokens are literals in two blocks, and
+ * the one interpolated value that matters is reproduced below.
+ *
+ * The floor is WCAG 2.1 AA for normal text. `PRODUCT.md` names no standard and
+ * declines to invent one, but it does record the usage fact this stands on — read
+ * at second-monitor distance, for hours, in whichever theme the system is set to.
+ * 4.5:1 is the number that fact implies.
+ */
+const AA = 4.5;
+
+/** Tokens are literal hex in both blocks, which is the whole reason this is cheap. */
+function tokensIn(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of text.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})\s*;/g)) out[m[1]!] = m[2]!;
+  return out;
+}
+
+/**
+ * The two themes, as resolved maps.
+ *
+ * Light is `:root` and dark overrides it, which is the cascade the browser
+ * performs — so dark is the spread of one over the other rather than a second
+ * complete table, and a token added to `:root` alone is correctly shared.
+ */
+const THEMES: [string, Record<string, string>][] = (() => {
+  const light = tokensIn(ROOT);
+  const at = CODE.indexOf("[data-theme='light']) {");
+  const dark = { ...light, ...tokensIn(CODE.slice(at, CODE.indexOf('\n  }', at))) };
+  return [
+    ['light', light],
+    ['dark', dark],
+  ];
+})();
+
+const channels = (hex: string): number[] => {
+  const h = hex.slice(1);
+  const full = h.length === 3 ? [...h].map((c) => c + c).join('') : h;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+};
+
+/** WCAG 2.1 relative luminance, and the ratio built from two of them. */
+function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+/** `color-mix(in srgb, a <p>, b)`, which is sRGB and therefore just a lerp. */
+function mix(a: string, b: string, p: number): string {
+  const [x, y] = [channels(a), channels(b)];
+  return (
+    '#' +
+    x.map((v, i) => Math.round(v * p + y[i]! * (1 - p)).toString(16).padStart(2, '0')).join('')
+  );
+}
+
+/**
+ * Every colour that carries text, against every surface it can land on.
+ *
+ * The pairing is a decision and is written out; the *members* are derived, so an
+ * `--ink-4` or a `--surface-4` joins the matrix by being declared rather than by
+ * someone remembering this file. That is the half that would otherwise rot.
+ */
+test('text clears AA against every surface it can sit on, in both themes', () => {
+  const failures: string[] = [];
+  for (const [theme, T] of THEMES) {
+    const surfaces = Object.keys(T).filter((n) => n === 'ground' || /^surface(-\d)?$/.test(n));
+    const inks = Object.keys(T).filter(
+      (n) => /^ink(-\d)?$/.test(n) || ['accent', 'ok', 'warn', 'bad'].includes(n),
+    );
+    assert.ok(surfaces.length >= 4 && inks.length >= 7, `${theme}: the matrix went missing`);
+    for (const ink of inks) {
+      for (const s of surfaces) {
+        const r = contrast(T[ink]!, T[s]!);
+        if (r < AA) failures.push(`${theme}: --${ink} on --${s} is ${r.toFixed(2)}:1`);
+      }
+    }
+  }
+  assert.deepEqual(failures, [], `under ${AA}:1:\n  ${failures.join('\n  ')}`);
+});
+
+/**
+ * A chip's hue against the fill the chip actually gets — not against the raw
+ * `-bg` token, which is what a reader of the stylesheet would assume and is wrong
+ * in light mode. `--chip-tint` dilutes the fill toward the surface, so the light
+ * theme's real backgrounds are 42% of what is declared and every ratio here is
+ * tighter than the token pair suggests.
+ */
+test('a facet chip reads against its own fill, tint included', () => {
+  const failures: string[] = [];
+  for (const [theme, T] of THEMES) {
+    // `--chip-tint` is a percentage, so it is not hex and not in the map above.
+    const where = theme === 'dark' ? CODE.slice(CODE.indexOf("[data-theme='light']) {")) : ROOT;
+    const pct = /--chip-tint:\s*(\d+)%/.exec(where);
+    assert.ok(pct, `${theme}: --chip-tint is not declared, so a chip's real fill is unknown`);
+    const p = Number(pct[1]) / 100;
+    const families = Object.keys(T)
+      .filter((n) => /^hue-[a-z]+$/.test(n))
+      .filter((n) => T[`${n}-bg`]);
+    assert.ok(families.length >= 7, `${theme}: the hue families went missing`);
+    for (const f of families) {
+      const fill = mix(T[`${f}-bg`]!, T['surface']!, p);
+      const r = contrast(T[f]!, fill);
+      if (r < AA) failures.push(`${theme}: --${f} on its chip (${fill}) is ${r.toFixed(2)}:1`);
+    }
+  }
+  assert.deepEqual(failures, [], `under ${AA}:1:\n  ${failures.join('\n  ')}`);
+});
+
+/**
+ * The margin, pinned where it is thinnest.
+ *
+ * `--ink-3` on `--surface-3` in the light theme measures 4.52:1 — one nudge from
+ * failing, and the pair a hover state puts on screen constantly. Asserting the
+ * *floor* alone would let someone spend that margin without noticing they were
+ * the last person who could. This says out loud that there is none left.
+ */
+test('the tightest pair in the palette is known, and is still the tightest', () => {
+  const light = THEMES[0]![1];
+  const r = contrast(light['ink-3']!, light['surface-3']!);
+  assert.ok(r >= AA, `--ink-3 on --surface-3 fell to ${r.toFixed(2)}:1`);
+  assert.ok(
+    r < 5,
+    `--ink-3 on --surface-3 is now ${r.toFixed(2)}:1 — the palette got roomier, so re-measure and move this`,
+  );
+});

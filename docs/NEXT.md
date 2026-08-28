@@ -107,13 +107,6 @@ things.
   because the part that lost work is fixed — Escape stops at the field — and what remains is
   discoverability for a syntax the README also states.
 
-- **Contrast is the rule prose still guards.** `test/theme.test.ts` refuses raw steps, stray hues and
-  classes that resolve to no rule; it says nothing about whether two colours can be read against each
-  other, and the one regression of that kind — a `dt` label receding to 3.16:1, under the floor — was
-  found by measuring, not by testing. A ratio needs resolved colour: a browser, or resolving the custom
-  properties in the test. The second is cheaper and bounded — tokens on `:root` plus one override
-  block — and the next contrast regression is what makes it worth the afternoon.
-
 - **The tier-1 ordering is emergent, and nothing pins it.** `project` and `parent` land first and
   adjacent among the reference facets because of two files' line order, not because any code says so.
   That is the right architecture, and silently undoable by a vocabulary edit. A test asserting what the

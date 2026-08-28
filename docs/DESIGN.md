@@ -1176,6 +1176,14 @@ proposed consolidations were dropped rather than built.
   at worst across the seven families in light and 7.58:1 in dark. `.icon-button.is-on` is not in this list
   and is not an exception: it is an `accent` glyph on an `accent-soft` wash, which is a tint rather
   than a fill.
+- **Do** let the suite hold the ratios. Every measurement on this page used to be a number somebody
+  took once in a browser and then had to remember; `test/theme.test.ts` now resolves both themes'
+  tokens and measures every text colour against every surface it can land on, and every hue against
+  the **tinted** fill a chip actually gets rather than the `-bg` token it is mixed from — which is the
+  pair a reader of the stylesheet gets wrong, since light mode dilutes to 42%. The floor is 4.5:1, and
+  the thinnest margin in the palette is asserted from both sides: `--ink-3` on `--surface-3` in light
+  measures **4.52:1**, so there is none left to spend and the test says so rather than leaving the
+  next person to find out.
 - **Don't** add a breakpoint. There are none, and the surface is a second monitor.
 - **Don't** interpolate a hue. Every hue comes from `xoria256.yml`; the departures — `bad` at
   `#b06060` in light, the `chip-tint` and state-wash mixes, `--flush` at `--ink` 9%, the derived light
