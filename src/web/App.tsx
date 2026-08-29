@@ -1,12 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { ApiError, api, onAttention } from './api.ts';
 import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
 import { CalendarView } from './views/CalendarView.tsx';
-import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
-import { NotePanel, whatIsUnsaved } from './panel/NotePanel.tsx';
+import { whatIsUnsaved } from './panel/unsaved.ts';
+/**
+ * The two chunks worth splitting, and only these: the canvas carries React Flow
+ * and dagre, the panel carries the markdown renderer — together well over half
+ * the bundle, and neither is on screen at first paint unless the URL asks. The
+ * board, table and calendar are this app's own code and stay in the shell;
+ * splitting them would trade a flash of `loading…` for nothing.
+ */
+const CanvasView = lazy(() =>
+  import('./views/CanvasView.tsx').then((m) => ({ default: m.CanvasView })),
+);
+const NotePanel = lazy(() =>
+  import('./panel/NotePanel.tsx').then((m) => ({ default: m.NotePanel })),
+);
 import { DeclinedPanel } from './Declined.tsx';
 import { EnrichmentProvider } from './enrichment.tsx';
 import { VocabularyProvider } from './vocabulary.tsx';
@@ -570,15 +582,19 @@ export function App() {
     if (!data || !meta) return <div className="pane-loading">loading…</div>;
     if (shape === 'canvas')
       return (
-        <CanvasView
-          meta={meta}
-          data={data}
-          onOpen={openCard}
-          selection={selection}
-          reload={reload}
-          wire={wire}
-          onSaved={(name) => patch({ view: name })}
-        />
+        // The canvas is a lazy chunk; the fallback is the same line first paint
+        // shows, so a slow fetch and a slow chunk read as one thing.
+        <Suspense fallback={<div className="pane-loading">loading…</div>}>
+          <CanvasView
+            meta={meta}
+            data={data}
+            onOpen={openCard}
+            selection={selection}
+            reload={reload}
+            wire={wire}
+            onSaved={(name) => patch({ view: name })}
+          />
+        </Suspense>
       );
     if (shape === 'table')
       return (
@@ -733,6 +749,10 @@ export function App() {
           />
         )}
         {openNote && (
+          // A lazy chunk with no visible fallback: the panel slides in beside a
+          // board that is already drawn, and an empty aside for one network
+          // round-trip reads better than a flash of text inside it.
+          <Suspense fallback={null}>
           <NotePanel
             // Not keyed here any more — `NotePanel` keys the frame on the note it
             // is *showing*, one level in, so the fetch outlives the reset and
@@ -757,6 +777,7 @@ export function App() {
               panelUnsaved.current = u;
             }}
           />
+          </Suspense>
         )}
       </div>
       </VocabularyProvider>

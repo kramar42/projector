@@ -27,17 +27,6 @@ import { FLUSH_MS, whatMoved } from '../changed.ts';
  * reflink while the body editor was dirty left the scrim dead and Escape
  * prompting about text that no longer existed).
  */
-/**
- * What the close prompt names, so it says what is actually at risk.
- *
- * Exported because the prompt moved: Escape is answered by the shell's one key
- * chain now, and the chain has to be able to ask this question in the panel's own
- * words rather than inventing a second wording for it.
- */
-export function whatIsUnsaved(u: { body: boolean; frontmatter: boolean }): string {
-  if (u.body && u.frontmatter) return 'The body and the frontmatter have';
-  return u.body ? 'The body has' : 'The frontmatter has';
-}
 
 /**
  * What `ƒ` means on a workshop row. One string, because it is now on five or more
