@@ -115,7 +115,7 @@ disagree with the `blocked` axis.
 either surface and validated by
 `pj check`.
 
-**Technical constraints.** Node 24+ runs the TypeScript directly — no build step for server or CLI.
+**Technical constraints.** Bun 1.4+ (or Node 24+) runs the TypeScript directly — no build step for server or CLI.
 React 19 and Vite for the UI, Hono for the server, hand-written CSS with no framework. The server will
 only open a vault listed in `vaults.json`, so a page in the browser cannot point it at an arbitrary
 directory.

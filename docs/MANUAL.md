@@ -1697,9 +1697,12 @@ setting.
 
 # Toolchain
 
-**Bun, all the way through.** Bun 1.4+ is this project's runtime and package manager. It runs the
-server and CLI TypeScript directly, starts interactive commands quickly, and runs the test suite much
-faster. Scripts name Bun explicitly, so no command quietly falls back to another runtime.
+**Bun by default, Node as the floor.** Bun 1.4+ is this project's default runtime and its only
+package manager: it runs the server and CLI TypeScript directly, starts interactive commands quickly,
+and runs the test suite much faster. Scripts name Bun explicitly, so no command quietly falls back to
+another runtime. The code itself stays runtime-neutral — Node 24+ runs everything by calling the tools
+directly (`node --test`, `node src/server/serve.ts`, `node src/cli/pj.ts`), and CI's node job keeps
+that promise from silently going stale.
 
 ```bash
 bun install

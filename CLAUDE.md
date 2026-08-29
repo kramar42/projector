@@ -7,7 +7,7 @@ the reference and the other four `.claude/skills/` do the work — none of that 
 
 ```bash
 bun install
-bun test            # not `bun run test` — see below
+bun test
 bun run typecheck
 bun run build       # vite build → dist/
 bun run serve       # 127.0.0.1:8092, serving dist/
@@ -16,16 +16,12 @@ bun run pj -- ls    # the CLI, needs nothing running
 bun run build:cli   # bun-only, like `bun test`: compiles the CLI to dist/pj (~60MB, instant startup)
 ```
 
-**Bun is the default, not a requirement.** `.mise.toml` pins both runtimes; every script above spells
-`node`, and `bun run` substitutes itself for it (`bunfig.toml`), so the runtime is whichever launcher
-you type. On a machine without mise or without Bun, `node --run <script>` runs any of these under Node
-— `node --run serve`, `node --run typecheck` — and `npm`, `pnpm` and `yarn` all install. Node is the
-floor `engines` promises and CI tests it; nothing here needs Bun.
-
-**`test` is the one script that does not shim.** Its body is `node --test`, and substituting the
-runtime makes that `bun --test`, which is not a thing — Bun's runner is the subcommand `bun test`. Two
-different programs, so: `bun test` under Bun, `node --run test` under Node. Both run the whole suite
-and both must pass; CI runs each.
+**Bun is the default; Node 24+ is the floor.** Every project script invokes Bun directly, and Bun's
+test runner (~10× faster than `node --test`) and startup time are part of the development loop — use
+`bun test`, not `node --test`, unless Bun is genuinely absent. The code itself stays runtime-neutral:
+`node --test`, `node src/server/serve.ts` and `node src/cli/pj.ts` all work, CI's node job proves it,
+and that fallback is what runs in a shell where mise has not put Bun on PATH. Bun is the only
+supported installer; there is no npm or pnpm lockfile.
 
 **`bun run serve` serves `dist/`, not `src/`.** A UI change is invisible in the browser until
 `bun run build` runs. A "the fix didn't take" reading at 8092 is almost always a stale bundle rather than

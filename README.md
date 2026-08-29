@@ -68,8 +68,8 @@ The rest of the design follows from three promises:
 
 ## Install
 
-[Bun](https://bun.com) or Node 24+. Nothing is compiled ahead of time except the web UI, so there is
-no build step for the server or the CLI.
+[Bun](https://bun.com) 1.4+ (or Node 24+ as the fallback). The runtime executes the server and CLI
+TypeScript directly; only the web UI is compiled ahead of time.
 
 ```bash
 git clone https://github.com/kramar42/projector && cd projector
@@ -88,11 +88,10 @@ alias pj="bun '$PWD/src/cli/pj.ts'"   # from the project root: the outer quotes 
 pj ls --group priority                # now run it from inside any vault
 ```
 
-Any of Bun, Node, npm, pnpm and yarn will run it. The package scripts spell `node`, because Node is
-the floor `engines` promises, and `bun run` substitutes itself for `node`. So the runtime is whichever
-launcher you type: `bun run serve`, `node --run serve` and `pnpm serve` are the same script on three
-runtimes, and `npm`, `pnpm` and `yarn` all install it. CI exercises every combination. See
-[Toolchain](docs/MANUAL.md#toolchain) for the one command that is an exception and why.
+Bun is the default runtime and the only package manager — the scripts invoke it explicitly, so
+`bun install`, `bun run serve` and `bun test` always run under Bun rather than whichever runtime is on
+`PATH`. Node 24+ still runs everything directly (`node --test`, `node src/server/serve.ts`,
+`node src/cli/pj.ts`), and CI keeps that floor honest. See [Toolchain](docs/MANUAL.md#toolchain).
 
 ## The words
 

@@ -1,5 +1,6 @@
-# Two runtimes and three package managers, because the docs promise all of them.
-# A promise nothing exercises is a promise that quietly stops being true.
+# Bun is the default runtime and the only package manager; Node is the floor
+# `engines` still promises, kept honest by one job. Two runtimes, not five
+# toolchains — the pnpm and npm matrix proved a claim nobody was relying on.
 name: CI
 
 on:
@@ -12,79 +13,36 @@ permissions:
 
 jobs:
   bun:
-    name: bun (default)
+    name: bun
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # mise reads mise.toml, so the runtime versions are pinned in exactly one
-      # place. It installs Node here too, which is the point rather than a side
-      # effect: `[run] bun = true` in bunfig.toml only does anything when a Node
-      # is present to be shadowed, so this job runs the setup a person has.
+      # mise reads .mise.toml, which is the single runtime pin.
       - uses: jdx/mise-action@v4
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      # `bun test`, not `bun run test`: the script body is `node --test`, and
-      # substituting the runtime makes that `bun --test`, which is not a flag
-      # Bun has. Its runner is a subcommand. This is the one script that cannot
-      # be shared, and running it here is what proves the rest can be.
-      - run: bun test
-      # No `--bun` flag: bunfig.toml sets `[run] bun = true`, so `bun run`
-      # substitutes itself for the `node` in a script body. Without it this
-      # would silently build under whatever node the image ships.
+      - run: bun run test
       - run: bun run build
       - name: cli runs
         run: bun run pj -- --help
 
   node:
-    name: node ${{ matrix.node }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The floor from `engines`, and whatever is newest. Both ends, and
-        # neither needs bumping: `24` is the version the docs promise, and
-        # `latest` is what development actually happens on. The floor job is the
-        # one that catches an API newer than this repo claims to support.
-        node: ['24', 'latest']
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          # Explicit, because package.json deliberately carries no
-          # `packageManager` field — pinning one there would make Corepack
-          # refuse every other package manager.
-          version: 10
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-          # No `cache:` key. It hashes a lockfile to build one, and the only
-          # committed lockfile is bun's — setup-node would fail looking for a
-          # pnpm one. This job resolves fresh by design, so there is nothing
-          # stable to cache anyway.
-      # `--no-frozen-lockfile` because no pnpm lockfile is committed any more —
-      # bun's is. pnpm defaults to frozen whenever CI is set, so this has to say
-      # so out loud. Resolving fresh is also the point: it is the claim that any
-      # package manager works, being tested.
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      # `node --run`, not `pnpm pj`: this is also the check that a package
-      # manager is not required to run a script.
-      - name: cli runs
-        run: node --run pj -- --help
-
-  npm:
-    name: npm (no lockfile)
+    name: node (the engines floor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 'latest'
-      # No lockfile of npm's is committed, so this resolves fresh. That is the
-      # point: it is the claim "any package manager works" being tested, and it
-      # is also the early warning for a dependency that breaks on a new minor.
+          # The floor from `engines`. This is the job that catches a `Bun.`
+          # API or a bun-only dependency slipping in — the code is
+          # runtime-neutral on purpose, and a promise nothing exercises
+          # quietly stops being true.
+          node-version: '24'
+      # The scripts spell bun now, so this job calls the tools directly —
+      # which is also the proof that no script is load-bearing.
       - run: npm install --no-package-lock
-      - run: npm test
-      - run: npm run build
+      - run: npx tsc --noEmit
+      - run: node --test
+      - run: npx vite build
+      - name: cli runs
+        run: node src/cli/pj.ts --help

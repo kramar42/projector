@@ -1,16 +1,14 @@
-# Optional. mise is one way to get these; nvm, fnm, Homebrew or a system install
-# are all equally fine — `engines` in package.json is the real contract, and the
-# CI matrix is what proves the floor still holds.
+# Optional. mise is one way to install Bun; Homebrew or a system install is
+# equally fine. `engines` in package.json is the runtime contract.
 #
 # Concrete versions, not `latest`. There is no lockfile for a runtime, so this
-# file *is* the pin: `latest` would hand two people on two days two different
-# versions, which is the opposite of what a version manager is for. Newer than
-# the floor, because CI already tests the floor. Bump deliberately.
+# file *is* the pin: `latest` would hand two people on two days different
+# versions, which is the opposite of what a version manager is for. Bump it
+# deliberately.
 #
-# Both runtimes, because both are supported and the choice belongs to whoever is
-# typing. Bun is the default locally and Node is the floor `engines` promises;
-# neither is privileged in the repo. No package manager is pinned, because no
-# particular one is required.
+# Bun is the default runtime and the package manager. Node stays pinned because
+# it is the floor `engines` promises and CI tests — and the fallback that works
+# when Bun is not on a shell's PATH.
 [tools]
-node = "26"
 bun = "1.4.0"
+node = "26"
