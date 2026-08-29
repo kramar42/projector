@@ -10,6 +10,7 @@ import { listNoteFiles } from '../schema/note.ts';
 import { formatIssues, validate } from '../schema/validate.ts';
 import { validateViews, validateVocabulary } from '../view/validate.ts';
 import { readAll, reindex } from '../index/indexer.ts';
+import { delegatedIndex } from './delegate.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
 import { SPEC_PARAMS, parseSpec, specToParams, withSavedOnly, type ViewSpec } from '../view/spec.ts';
@@ -317,12 +318,20 @@ function pad(s: string, n: number): string {
  * No `--limit`: at 191 notes nothing needs truncating, and a cap that has no
  * users is a cap whose interaction with grouping nobody is checking.
  */
-function cmdLs(argv: string[]): void {
+/**
+ * The index a read command works from: a live server's word when one is
+ * watching this vault (see cli/delegate.ts), the exact local walk otherwise.
+ */
+async function currentIndex() {
+  return (await delegatedIndex(root)) ?? reindex(root);
+}
+
+async function cmdLs(argv: string[]): Promise<void> {
   const { flags } = argFlags(argv, [
     ...SPEC_PARAMS, 'filter', 'json',
   ], ['json']);
   const facets = loadFacets(p.facets);
-  const { db, notes } = reindex(root);
+  const { db, notes } = await currentIndex();
 
   const params: Record<string, string> = {};
   const named = flags.get('view')?.[0];
@@ -570,10 +579,10 @@ function cmdCheck(): void {
  * So there is no second place to declare one, and no rule that is checked but
  * cannot be opened and drained.
  */
-function cmdAudit(argv: string[]): void {
+async function cmdAudit(argv: string[]): Promise<void> {
   const { flags } = argFlags(argv, ['json'], ['json']);
   const facets = loadFacets(p.facets);
-  const { db, notes } = reindex(root);
+  const { db, notes } = await currentIndex();
   const views = loadViews(root);
 
   const rules = views.filter((v) => v.expect);
@@ -645,7 +654,7 @@ function cmdReindex(): void {
  * syntax error — and to truncate at `search()`'s default of 25 while printing 25
  * as the total.
  */
-function cmdSearch(argv: string[]): void {
+async function cmdSearch(argv: string[]): Promise<void> {
   const { rest } = argFlags(argv, []);
   const raw = rest.join(' ').trim();
   if (!raw) fail('pj search <query>');
@@ -654,7 +663,7 @@ function cmdSearch(argv: string[]): void {
     console.log(`no searchable words in "${raw}"`);
     return;
   }
-  const { db } = reindex(root);
+  const { db } = await currentIndex();
   const rows = search(db, q);
   for (const r of rows) console.log(`${pad(r.id, 34)} ${r.title}`);
   console.log(`\n${rows.length} match(es), most relevant first`);
@@ -667,7 +676,7 @@ const argv = rawArgv;
 try {
   switch (cmd) {
     case 'ls':
-      cmdLs(argv);
+      await cmdLs(argv);
       break;
     case 'log': {
       const { flags } = argFlags(argv, ['since']);
@@ -692,14 +701,14 @@ try {
       cmdCheck();
       break;
     case 'audit':
-      cmdAudit(argv);
+      await cmdAudit(argv);
       break;
     case 'reindex':
       argFlags(argv, []);
       cmdReindex();
       break;
     case 'search':
-      cmdSearch(argv);
+      await cmdSearch(argv);
       break;
 
     case 'vaults': {

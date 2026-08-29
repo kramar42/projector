@@ -326,9 +326,18 @@ a command named reindex must actually reindex. A database from before the `meta`
 the payload read and is rebuilt fresh. The payload stores records without bodies (vault-relative
 paths, so it survives a moved vault); a body parses back lazily on first access — sound because a
 matching stamp says the file still holds the bytes the record came from. At workspace scale the gate's
-remaining cost is the tree walk itself, which no stamp can avoid from a cold process; the next step
-there is not a daemon but delegation — a CLI that finds a live server for the vault asks it instead
-of walking.
+remaining cost is the tree walk itself, which no stamp can avoid from a cold process — so a read
+command asks a live server first (`/api/cli/stamp`, `cli/delegate.ts`). The server is already
+watching the vault; between watcher events and its own writes (both clear the remembered answer
+through `bump`) it vouches for the persisted index without touching the filesystem. That trust
+window is the watcher's own — the one every open board already lives on — and it is bounded on both
+sides: the CLI verifies the payload was built from the exact stamp the server named, falls back to
+its local walk on any disagreement or silence, and `pj reindex` never delegates.
+`PROJECTOR_NO_DELEGATE=1` turns it off. A vault too big to watch — chokidar
+opens a descriptor per directory, and macOS's default soft limit is 256 — flips to `unwatchable` on
+the watcher's EMFILE: any vouch already given is revoked and the endpoint answers 503, so the CLI
+walks. Watching a workspace-sized vault for real means an FSEvents-based watcher (one stream, any
+tree); that is the stated next step, not this one.
 
 The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
 ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —
@@ -1081,6 +1090,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
 | `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, why a screen is empty — which of the filter, the search or an axis nobody has ever set is to blame, including the one hop from a computed blocking value to the axis underneath it — the task list a body checkbox writes back to — the ordinal a click carries must name the same line the renderer drew a box for, fenced look-alikes included — edge collapse and direction, clearing a URL-only override |
+| `delegate.test.ts` | the CLI asking a live server instead of walking: a vouched stamp hydrates the persisted payload with lazy bodies intact, a stamp the payload was not built from is a fallback rather than an answer, and silence — no server, or `PROJECTOR_NO_DELEGATE` — is a quiet null that never even asks |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |

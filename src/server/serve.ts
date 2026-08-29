@@ -272,6 +272,42 @@ function resolveSpec(
  * engine behind both — P1's two endpoints had drifted into two, which is how
  * four of the eight board keys came to be declared and never read.
  */
+/**
+ * The CLI's delegation handshake: the stamp the persisted index was built
+ * from, vouched for by a server that is watching the vault. Between watcher
+ * events (and our own writes, which clear it through `bump`) the remembered
+ * answer is returned without touching the filesystem — that trust window is
+ * the watcher's own, the one every open board already lives on. The CLI
+ * verifies the payload against this stamp before using it, and falls back to
+ * its exact local walk on any disagreement.
+ */
+app.get('/api/cli/stamp', (c) => {
+  const root = vaultOf(c);
+  // A vault whose watcher died (EMFILE on a workspace-sized tree) has nobody
+  // to clear cliFresh, so its word would go stale silently. Refuse instead:
+  // the CLI's fallback is exact.
+  if (unwatchable.has(root)) return c.json({ error: 'vault is not watchable' }, 503);
+  let stamp = cliFresh.get(root);
+  if (!stamp) {
+    const { db } = load(root);
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'stamp'").get() as
+      | { value: string }
+      | undefined;
+    if (row) {
+      stamp = row.value;
+    } else {
+      // A database from before the stamp row: the payload still carries it.
+      const payload = db.prepare("SELECT value FROM meta WHERE key = 'payload'").get() as
+        | { value: string }
+        | undefined;
+      if (!payload) return c.json({ error: 'no persisted index' }, 503);
+      stamp = (JSON.parse(payload.value) as { stamp: string }).stamp;
+    }
+    cliFresh.set(root, stamp);
+  }
+  return c.json({ stamp });
+});
+
 app.get('/api/query', (c) => {
   const root = vaultOf(c);
   const { facets, db, notes, views } = load(root);
@@ -689,6 +725,12 @@ type Send = (
 ) => void;
 const listeners = new Set<Send>();
 
+/** Per-vault stamp the CLI may trust until the watcher (or a write) says otherwise. */
+const cliFresh = new Map<string, string>();
+
+/** Vaults whose watcher died — their word cannot be trusted, so it is not given. */
+const unwatchable = new Set<string>();
+
 /**
  * `ids` is which notes moved, when we know — and we only know from the watcher.
  *
@@ -706,6 +748,7 @@ const listeners = new Set<Send>();
 function bump(vault: string, ids?: string[]) {
   // Our own writes do not wait to be noticed: a rename inside the same
   // millisecond as the previous one would leave the stamp unchanged.
+  cliFresh.delete(vault);
   invalidate(vault);
   revision++;
   for (const fn of [...listeners]) fn('change', revision, vault, ids);
@@ -803,8 +846,23 @@ function ensureWatched(root: string): void {
   const roots = [p.notes, p.views, p.facets];
   const w = watch(roots, {
     ignoreInitial: true,
-    ignored: (path: string) => path.includes('.tmp-') || derived(path, roots),
+    // Dot-segments (.git above all) and node_modules are never note sources,
+    // and watching them is what turns a workspace-sized vault into EMFILE.
+    ignored: (path: string) =>
+      path.includes('.tmp-') ||
+      derived(path, roots) ||
+      path
+        .slice(root.length)
+        .split('/')
+        .some((seg) => (seg.startsWith('.') && seg !== '.') || seg === 'node_modules'),
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
+  }).on('error', (err: unknown) => {
+    // A tree too big to watch (EMFILE) is a fact about the vault, not a crash.
+    // Close, remember, and let /api/cli/stamp refuse to vouch for it.
+    unwatchable.add(root);
+    cliFresh.delete(root); // a vouch already given must not outlive the watcher
+    watched.get(root)?.close();
+    info('watch', `${basename(root)} unwatchable: ${(err as Error).message ?? err}`);
   }).on('all', (event: string, changed?: string) => {
     /**
      * Arrivals only, and that is the whole editorial decision.

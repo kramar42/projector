@@ -83,6 +83,59 @@ export function indexStamp(notesDir: string): { stamp: string; files: string[] }
 }
 
 /**
+ * Hydrate an IndexResult from the payload persisted in `index.db`, if and only
+ * if it was built from exactly `expectStamp`. This is the shared half of two
+ * gates: `reindex` computes the stamp itself by walking; the CLI's delegation
+ * path is handed one by a live server that is already watching the vault.
+ * Anything at all wrong — no db, pre-`meta` schema, unreadable payload, a
+ * different stamp — answers `null`, and the caller rebuilds.
+ */
+export function fromPayload(dataRoot: string, expectStamp: string): IndexResult | null {
+  const p = paths(dataRoot);
+  try {
+    const db = openDb(p.db);
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'payload'").get() as
+      | { value: string }
+      | undefined;
+    if (row) {
+      const payload = JSON.parse(row.value) as {
+        stamp: string;
+        notes: Omit<Note, 'body'>[];
+        unreadable: IndexResult['unreadable'];
+        duplicates: IndexResult['duplicates'];
+      };
+      if (payload.stamp === expectStamp) {
+        const notes = new Map<string, Note>();
+        for (const rec of payload.notes) {
+          if (!rec.file.startsWith('/')) rec.file = join(p.notes, rec.file);
+          let body: string | undefined;
+          Object.defineProperty(rec, 'body', {
+            enumerable: true,
+            configurable: true,
+            get(): string {
+              if (body === undefined) {
+                const res = loadNote(rec.file, p.notes);
+                body = res.ok ? res.rec.body : '';
+              }
+              return body;
+            },
+            set(v: string) {
+              body = v;
+            },
+          });
+          notes.set(rec.id, rec as Note);
+        }
+        return { db, cached: true, notes, unreadable: payload.unreadable, duplicates: payload.duplicates };
+      }
+    }
+    db.close();
+  } catch {
+    // absent, pre-meta schema, or unreadable payload — the caller rebuilds
+  }
+  return null;
+}
+
+/**
  * Rebuild the whole index from the note files — unless the persisted one was
  * built from exactly these bytes. The server's memo cannot help the CLI, which
  * is a fresh process per command; the gate makes the second `pj` of the day
@@ -94,46 +147,8 @@ export function reindex(dataRoot: string, { force = false } = {}): IndexResult {
   const { stamp, files } = indexStamp(p.notes);
 
   if (!force) {
-    try {
-      const db = openDb(p.db);
-      const row = db.prepare("SELECT value FROM meta WHERE key = 'payload'").get() as
-        | { value: string }
-        | undefined;
-      if (row) {
-        const payload = JSON.parse(row.value) as {
-          stamp: string;
-          notes: Omit<Note, 'body'>[];
-          unreadable: IndexResult['unreadable'];
-          duplicates: IndexResult['duplicates'];
-        };
-        if (payload.stamp === stamp) {
-          const notes = new Map<string, Note>();
-          for (const rec of payload.notes) {
-            if (!rec.file.startsWith('/')) rec.file = join(p.notes, rec.file);
-            let body: string | undefined;
-            Object.defineProperty(rec, 'body', {
-              enumerable: true,
-              configurable: true,
-              get(): string {
-                if (body === undefined) {
-                  const res = loadNote(rec.file, p.notes);
-                  body = res.ok ? res.rec.body : '';
-                }
-                return body;
-              },
-              set(v: string) {
-                body = v;
-              },
-            });
-            notes.set(rec.id, rec as Note);
-          }
-          return { db, cached: true, notes, unreadable: payload.unreadable, duplicates: payload.duplicates };
-        }
-      }
-      db.close();
-    } catch {
-      // absent, pre-meta schema, or unreadable payload — rebuild below
-    }
+    const hit = fromPayload(dataRoot, stamp);
+    if (hit) return hit;
   }
 
   const { notes, unreadable, duplicates } = readAll(p.notes, files);
@@ -165,6 +180,7 @@ export function reindex(dataRoot: string, { force = false } = {}): IndexResult {
     for (const l of rec.links) insLink.run(rec.id, l.kind, l.ref, l.raw);
     insFts.run(rec.id, rec.title, rec.body);
   }
+  db.prepare("INSERT INTO meta (key, value) VALUES ('stamp', ?)").run(stamp);
   db.prepare("INSERT INTO meta (key, value) VALUES ('payload', ?)").run(
     JSON.stringify({
       stamp,
