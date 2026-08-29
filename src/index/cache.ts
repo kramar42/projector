@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { statSync } from 'node:fs';
+import { basename } from 'node:path';
 import { paths } from '../config.ts';
+import { indexStamp } from './indexer.ts';
 import { info } from '../server/log.ts';
 
 /**
@@ -33,42 +34,18 @@ interface Entry<T> {
 
 const entries = new Map<string, Entry<unknown>>();
 
-/** mtimes, and how many files there are, for everything `load` reads. */
+/**
+ * mtimes, and how many files there are, for everything `load` reads.
+ *
+ * This is the index's own stamp (`indexStamp`), shared rather than shadowed:
+ * it already covers every note file, the vocabulary, the views and the walk's
+ * ignore file, and it honours the same `.gitignore`/`.projector/ignore` rules
+ * the walk does — which is what keeps it linear in *notes*, not in whatever
+ * else a workspace-sized vault happens to contain. Assets are deliberately
+ * outside it: they are served straight from disk and never shape the index.
+ */
 export function stampOf(root: string): string {
-  const p = paths(root);
-  let count = 0;
-  let newest = 0;
-  let sum = 0;
-
-  const visit = (path: string) => {
-    let st;
-    try {
-      st = statSync(path);
-    } catch {
-      return; // absent counts as absent; its disappearance changes `count`
-    }
-    if (st.isDirectory()) {
-      for (const e of readdirSync(path, { withFileTypes: true })) {
-        // Dotfiles are the derived index and the enrichment cache, which are
-        // outputs of this function's consumers — including them would make
-        // every rebuild invalidate itself.
-        if (e.name.startsWith('.')) continue;
-        visit(join(path, e.name));
-      }
-      return;
-    }
-    count++;
-    sum += st.mtimeMs;
-    if (st.mtimeMs > newest) newest = st.mtimeMs;
-  };
-
-  visit(p.notes);
-  visit(p.views);
-  if (existsSync(p.facets)) visit(p.facets);
-
-  // `newest` alone misses a file replaced by an older copy; `sum` catches two
-  // files touched inside one millisecond; `count` catches adds and removes.
-  return `${count}:${newest}:${sum}`;
+  return indexStamp(paths(root).notes).stamp;
 }
 
 /**
