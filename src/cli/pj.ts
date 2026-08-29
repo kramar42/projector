@@ -712,19 +712,32 @@ try {
       break;
 
     case 'vaults': {
-      const { flags, rest } = argFlags(argv, ['name', 'create'], ['create']);
+      const { flags, rest } = argFlags(argv, ['name', 'create', 'exact'], ['create', 'exact']);
       const [sub, given] = rest;
       if (!sub || sub === 'list') {
         // Counted: this is the command whose whole output is the counts.
-        const vaults = listVaults(true);
+        //
+        // Cached by default and walked on `--exact`, which is the way round the
+        // measurement argues for: the walk was 1.5s for four registered vaults
+        // and the read is 13ms, so paying it every time — including on the `pj`
+        // startup paths that print this list to say a vault is ambiguous — buys a
+        // freshness nobody asked for. The flag is there because the tilde would
+        // otherwise be a mark with no way to answer it.
+        const vaults = listVaults(flags.has('exact') ? 'walk' : true);
+        // A `~` on a count nobody re-walked — see `countedNotes`. The legend is
+        // printed only when a tilde actually appears, so a listing of vaults that
+        // were all counted just now carries no explanation of a mark it does not
+        // show.
+        const anyCached = vaults.some((v) => v.exists && v.notesExact === false);
         if (!vaults.length) {
           console.log('no vaults yet — `pj vaults add <path>`, or open one in the app');
           break;
         }
         for (const v of vaults) {
-          const state = v.exists ? `${v.notes} note(s)` : 'MISSING';
-          console.log(`${pad(v.name, 20)} ${pad(state, 14)} ${v.path}`);
+          const count = `${v.notesExact === false ? '~' : ''}${v.notes} note(s)`;
+          console.log(`${pad(v.name, 20)} ${pad(v.exists ? count : 'MISSING', 14)} ${v.path}`);
         }
+        if (anyCached) console.log('\n~ as of that vault\'s last index — open it to be sure');
         break;
       }
       if (sub === 'add') {

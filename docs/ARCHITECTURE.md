@@ -323,6 +323,17 @@ or a heuristic, so C1 is intact: if any of those bytes could have changed, the a
 Mutating routes additionally call `invalidate` through `bump`, so our own writes never depend on mtime
 resolution being finer than a burst of them.
 
+**The stamp has a second reader: how many notes a vault holds.** `pj vaults` and both vault pickers
+list every *registered* vault, and counting them meant walking each one — 1.5 seconds for four, almost
+all of it the vault with two thousand notes, for a listing. The stamp already records the length of
+that walk, so the count is read from `meta.stamp` (one row, 2–5ms) and the listing costs 13ms.
+Deliberately not `SELECT count(*) FROM notes`, which is a *different* number: the index collapses
+duplicate ids and drops unreadable files, and read 1700 against the walk's 2179 on a real vault. What
+the read cannot say is whether the vault has changed since it was indexed, so it does not pretend to:
+`countedNotes` returns `exact: false`, `pj vaults` prints `~2179`, both pickers draw the same tilde,
+and `pj vaults --exact` walks. A vault that has never been indexed has no stamp and is walked, which is
+also the case where walking is cheap.
+
 The CLI cannot use the memo — every `pj` is a fresh process — so `reindex` carries its own gate with
 the same contract: the built notes are persisted into `index.db` (a `meta` payload) alongside a stamp
 of every note file, the vocabulary, the views and `.projector/ignore`; a later process whose stamp
@@ -1158,7 +1169,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, and this table naming the tests that exist — plus **contrast**, which was the last rule prose guarded alone: both themes' tokens are resolved and every text colour is measured against every surface it can land on, and every hue against the tinted fill a chip actually gets rather than the `-bg` token it is mixed from |
-| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, seeding a fresh vault not being the same act as adopting one, and the shipped tutorial passing `pj check` with no warnings — every shape in it is a recommendation whether it was meant as one or not |
+| `vault.test.ts` | vault detection and path normalisation, `doc:` resolution, every seeded file parsing as what it claims to be, the seeded view set pinned by name because the manual counts it in prose, an existing `.gitignore` appended to rather than skipped or clobbered, seeding a fresh vault not being the same act as adopting one, the listing's note count coming off the index stamp — the same number the walk gives, reported as not re-verified, and going stale exactly where the tilde says it does — and the shipped tutorial passing `pj check` with no warnings — every shape in it is a recommendation whether it was meant as one or not |
 | `view.test.ts` | a view file patched in place, an unknown axis refused in every position, an unknown *key* refused too, the empty-group policy, and composition — a `lists:` view drawing its children as columns named by their titles, `unlisted` keeping them out of the picker, shape/sort/filter/lanes all live over those columns, a URL losing the *column* axis alone, and the checks that a child exists, stays flat, does not nest, does not collide and owns every `order` key it declares |
 | `vocabulary.test.ts` | the constraint the model rests on, from both ends: no facet a vault declares is named anywhere in `src/`, and a vault with notes, views and an empty `facets.yaml` loads, validates and answers a query; plus the one asymmetry it allows — the built-in relation carries its own `inverse`, a vault may rename it, and declaring the axis for any other reason does not erase it |
 

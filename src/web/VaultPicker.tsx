@@ -104,8 +104,19 @@ export function VaultPicker({
                   onClick={() => void open(v.path)}
                 >
                   <span className="vaultrow-name">{v.name}</span>
-                  <span className="vaultrow-meta">
-                    {v.exists ? `${v.notes ?? 0} notes` : 'folder is gone'}
+                  {/* The tilde is `countedNotes`: a count read from that vault's
+                      last index rather than walked now. The title says so, because
+                      a mark with no explanation is worse than a number that is
+                      quietly a day old. */}
+                  <span
+                    className="vaultrow-meta"
+                    {...(v.exists && v.notesExact === false
+                      ? { title: 'as of this vault’s last index' }
+                      : {})}
+                  >
+                    {v.exists
+                      ? `${v.notesExact === false ? '~' : ''}${v.notes ?? 0} notes`
+                      : 'folder is gone'}
                   </span>
                   <span className="vaultrow-path">{v.path}</span>
                 </button>

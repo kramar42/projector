@@ -31,6 +31,12 @@ export interface VaultInfo {
   lastOpenedAt?: number;
   exists: boolean;
   notes: number | null;
+  /**
+   * False when `notes` came from that vault's last index rather than a walk done
+   * now — see `countedNotes` on the server. The list is drawn before anything is
+   * open, so every vault but the one you are in is routinely this.
+   */
+  notesExact: boolean | null;
 }
 
 export interface BrowseEntry {

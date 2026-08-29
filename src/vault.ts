@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { appRoot, isConfigured, looksLikeVault, paths, resolvePath } from './config.ts';
 import { listNoteFiles } from './schema/note.ts';
 
@@ -39,6 +40,21 @@ export interface VaultInfo extends VaultEntry {
   exists: boolean;
   /** Note count, or null when the vault is missing. */
   notes: number | null;
+  /**
+   * Whether `notes` was counted just now, or read from that vault's last index.
+   *
+   * The list is drawn from four registered vaults and only one of them is open,
+   * so counting them all is a walk of every vault on every listing — 1.5 seconds
+   * for four, and essentially all of it the one with two thousand notes. The
+   * cached number is the same number (`indexStamp` records the file count it
+   * walked, so this is not the index's own row count, which excludes duplicates
+   * and unreadable files) but as of whenever that vault was last indexed.
+   *
+   * So it is reported rather than hidden: a count nobody has verified draws as
+   * `~2179`, and the surfaces say what the tilde means. Null when there is no
+   * count at all.
+   */
+  notesExact: boolean | null;
 }
 
 /**
@@ -108,20 +124,86 @@ export function countNotes(path: string): number {
 }
 
 /**
+ * The same count, from the vault's own index when it has one.
+ *
+ * `indexStamp` already writes the number: `meta.stamp` is
+ * `v2:<files>:<stat count>:<mtime sum>:<max mtime>`, and the second field is the
+ * length of exactly the walk `countNotes` does. Reading one small row is 2–5ms
+ * against 822ms for the walk that produced it, so the listing costs a read per
+ * vault instead of a filesystem traversal per vault.
+ *
+ * **Not `SELECT count(*) FROM notes`,** which is the tempting one and is a
+ * different number: the index collapses duplicate ids and drops unreadable
+ * files, so on a real vault it read 1700 where the walk reads 2179. The stamp is
+ * the walk's own answer, written down.
+ *
+ * `exact: false` is the whole of the honesty: nothing here re-verifies that the
+ * vault has not changed since, and for a vault no server is watching it can be
+ * arbitrarily old. A vault that has never been indexed has no stamp, so it is
+ * walked — which is exact, and is also the case where the walk is cheap.
+ */
+export function countedNotes(path: string): { notes: number; exact: boolean } {
+  if (!existsSync(path)) return { notes: 0, exact: true };
+  const stamped = stampCount(path);
+  if (stamped !== null) return { notes: stamped, exact: false };
+  return { notes: countNotes(path), exact: true };
+}
+
+/**
+ * The file count out of `index.db`'s stamp, or null.
+ *
+ * Opened read-only and directly rather than through `openDb`, which creates and
+ * migrates: asking how many notes a vault has must not bring a database into
+ * existence. Every failure is a null — a listing must not break because one
+ * registered vault holds a db from an older schema, a half-written file, or a
+ * directory somebody has since made unreadable.
+ */
+function stampCount(path: string): number | null {
+  try {
+    const file = paths(path).db;
+    if (!existsSync(file)) return null;
+    const db = new DatabaseSync(file, { readOnly: true });
+    try {
+      const row = db.prepare("SELECT value FROM meta WHERE key = 'stamp'").get() as
+        | { value: string }
+        | undefined;
+      const n = Number(row?.value.split(':')[1]);
+      return Number.isSafeInteger(n) && n >= 0 ? n : null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Counting is opt-in, because a count is a walk of the vault and most callers
  * never show one. The registry is read to *resolve* a vault far more often
  * than to *display* the list — every `pj` startup, `--help` included, and every
  * `/api/meta` — and each of those was paying a full walk of every registered
  * vault for a number it threw away, which at workspace scale was most of a
  * second per command. `pj vaults` and the pickers ask; nothing else should.
+ *
+ * `true` takes the index's word for the number where there is one; `'walk'` is
+ * `pj vaults --exact` and nothing else, for when the tilde needs an answer.
  */
-export function listVaults(counted = false): VaultInfo[] {
+export function listVaults(counted: boolean | 'walk' = false): VaultInfo[] {
   return readRegistry()
-    .map((v) => ({
-      ...v,
-      exists: existsSync(v.path),
-      notes: counted && existsSync(v.path) ? countNotes(v.path) : null,
-    }))
+    .map((v) => {
+      const exists = existsSync(v.path);
+      const count = !counted || !exists
+        ? null
+        : counted === 'walk'
+          ? { notes: countNotes(v.path), exact: true }
+          : countedNotes(v.path);
+      return {
+        ...v,
+        exists,
+        notes: count?.notes ?? null,
+        notesExact: count?.exact ?? null,
+      };
+    })
     .sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt));
 }
 

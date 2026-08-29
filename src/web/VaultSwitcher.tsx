@@ -100,7 +100,15 @@ function VaultMenu({
             title={v.path}
           >
             <span className="truncate pop-pick-name">{v.name}</span>
-            <span className="pop-annotation">{v.exists ? `${v.notes ?? 0}` : 'missing'}</span>
+            {/* Same tilde as the gate and `pj vaults`, one mark for one fact. */}
+            <span
+              className="pop-annotation"
+              {...(v.exists && v.notesExact === false
+                ? { title: 'as of this vault’s last index' }
+                : {})}
+            >
+              {v.exists ? `${v.notesExact === false ? '~' : ''}${v.notes ?? 0}` : 'missing'}
+            </span>
           </button>
           {v.path !== meta.vault && (
             <IconButton

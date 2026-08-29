@@ -5,6 +5,7 @@ import { SEED_FACETS, SEED_VIEWS } from '../src/server/seed.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import {
   countNotes,
+  countedNotes,
   initVault,
   looksLikeVault,
   normalise,
@@ -12,7 +13,7 @@ import {
   shippedVaults,
   suggestName,
 } from '../src/vault.ts';
-import { readAll } from '../src/index/indexer.ts';
+import { readAll, reindex } from '../src/index/indexer.ts';
 import { listNoteFiles } from '../src/schema/note.ts';
 import { split } from '../src/schema/frontmatter.ts';
 import { loadFacets, orderValues } from '../src/schema/facets.ts';
@@ -460,6 +461,51 @@ test('a vault that already ignores one of the lines gets only the rest', () => {
     const out = readFileSync(pathJoin(root, '.gitignore'), 'utf8');
     assert.equal(out.match(/\.DS_Store/g)?.length, 1, 'not repeated');
     assert.ok(out.includes('.projector/*.db*'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+/**
+ * The listing's count comes off the index, and says when it did.
+ *
+ * The walk it replaces was the whole cost of `pj vaults` and of the picker —
+ * 1.5s for four registered vaults, essentially all of it the one with two
+ * thousand notes, against 13ms for the same four read. The property that makes
+ * the swap safe is that it is the *same number*: `indexStamp` records the length
+ * of the walk it did, so this is not `count(*)` over the index's rows, which
+ * excludes duplicate ids and unreadable files and read 1700 where the walk read
+ * 2179 on a real vault.
+ */
+test('a vault with an index reports its count from the stamp, and marks it', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-count-'));
+  try {
+    initVault(root, SEED_FACETS, SEED_VIEWS);
+    const notes = paths(root).notes;
+    for (const id of ['one', 'two', 'three']) {
+      writeFileSync(pathJoin(notes, `${id}.md`), `---\nid: ${id}\ntitle: ${id}\n---\n`, 'utf8');
+    }
+
+    // No index yet: walked, and exact — which is also the case where a walk is
+    // cheap, because nothing has ever been read here.
+    assert.deepEqual(countedNotes(root), { notes: 3, exact: true });
+
+    reindex(root).db.close();
+    assert.deepEqual(
+      countedNotes(root),
+      { notes: 3, exact: false },
+      'the same count the walk gives, and reported as not re-verified',
+    );
+
+    // Written behind the index's back: the number is the stamp's until something
+    // reindexes, which is exactly what the tilde on the two surfaces claims.
+    writeFileSync(pathJoin(notes, 'four.md'), '---\nid: four\ntitle: four\n---\n', 'utf8');
+    assert.equal(countNotes(root), 4, 'the walk sees it');
+    assert.deepEqual(countedNotes(root), { notes: 3, exact: false }, 'the stamp does not, yet');
+
+    reindex(root).db.close();
+    assert.deepEqual(countedNotes(root), { notes: 4, exact: false });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

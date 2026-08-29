@@ -1106,7 +1106,10 @@ one that is on that list — so a page in your browser cannot point it at an arb
 the only thing written outside a vault; delete it and you lose the list, nothing else.
 
 ```bash
-pj vaults                                  # list
+pj vaults                                  # list. A `~` on a count means "as of that
+                                           #   vault's last index" — reading it is instant
+                                           #   where walking every registered vault is not
+pj vaults --exact                          # walk them and count for certain
 pj vaults add <path> [--name n] [--create] # open a folder as a vault
 pj vaults forget <path>                    # stop tracking it; the folder is untouched
 pj --vault <name|path> <command>           # act on a specific one, or -v <name|path>
