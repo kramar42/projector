@@ -1,5 +1,8 @@
 import { groupsFor } from './groups.ts';
-import type { QueryResponse } from '../types.ts';
+import { NONE } from '../../schema/vocabulary.ts';
+import { calendarPage, dateAxis, placements } from '../../view/calendar.ts';
+import { paramsOf } from '../query.ts';
+import type { Facets, QueryResponse } from '../types.ts';
 
 /**
  * Where the cursor can go, per shape.
@@ -61,14 +64,48 @@ const EMPTY: Grid = { cells: [], columns: [], continuous: false };
  * plane, so "the next one down" has no answer that is not invented — React Flow
  * owns selection there, and the commands act on that.
  */
-export function gridOf(data: QueryResponse | null): Grid {
+export function gridOf(
+  data: QueryResponse | null,
+  /**
+   * What a calendar's grid is built from, because its cells are not in the
+   * payload: the page comes off the URL and the axis off the vocabulary. The
+   * other shapes ignore it, and a calendar handed nothing walks nowhere rather
+   * than walking columns the screen is not drawing.
+   */
+  calendar?: { search: string; facets: Facets; today?: string },
+): Grid {
   if (!data) return EMPTY;
   if (data.spec.shape === 'canvas') return EMPTY;
-  // A calendar's cells are days from the URL's page, not the payload's groups,
-  // so a grid built here would walk columns the screen is not drawing. Nothing
-  // yet supplies the page at this altitude; until it does, the honest answer is
-  // the canvas's.
-  if (data.spec.shape === 'calendar') return EMPTY;
+
+  /**
+   * A calendar is a one-lane board whose columns are the page's days, in
+   * reading order, with the unscheduled rail as the last column. The same two
+   * pure calls the view makes (`calendarPage`, `placements`) over the same
+   * inputs, so the walk and the drawing cannot disagree — the promise this
+   * module already makes about `groupsFor`.
+   *
+   * The drawn rows are a *layout* of one run of days, not lanes: a lane would
+   * put a different date at every (lane, column) and leave `columns` — which is
+   * what `n` reads to know where a card is created — unable to name one. So
+   * `l` reads across the page the way the dates do, and — since the walk steps
+   * over empty cells exactly as it steps over an empty board column — it lands
+   * on the next day that has a card, which on a mostly-empty month is the walk
+   * you want.
+   */
+  if (data.spec.shape === 'calendar') {
+    if (!calendar) return EMPTY;
+    const axis = dateAxis(calendar.facets, data.spec.show);
+    if (!axis) return EMPTY;
+    const today = calendar.today ?? new Date().toISOString().slice(0, 10);
+    const page = calendarPage(Object.fromEntries(paramsOf(calendar.search)), today);
+    const placed = placements(data.ids, (id) => data.notes[id]?.facets[axis] ?? [], page);
+    const days = page.days.flat();
+    return {
+      cells: [[...days.map((d) => placed.byDay.get(d) ?? []), placed.unscheduled]],
+      columns: [...days, NONE],
+      continuous: false,
+    };
+  }
 
   if (data.spec.shape === 'table') {
     // One lane. A table's sections are its columns, and it drops the empty ones

@@ -411,7 +411,12 @@ export function App() {
    * and `gridOf` is pure — so a view's only job is to *draw* the cursor it is
    * given, and neither of them has to hand an ordering back up the tree.
    */
-  const grid = useMemo(() => gridOf(data), [data]);
+  // The calendar's cells come from the URL's page and the vocabulary's date
+  // axis, which is why this alone of the shapes needs more than the payload.
+  const grid = useMemo(
+    () => gridOf(data, { search, facets: meta?.facets ?? {} }),
+    [data, search, meta],
+  );
   /**
    * Which *placement* the cursor is at, for the views to draw.
    *
@@ -595,6 +600,11 @@ export function App() {
           data={data}
           onOpen={openCard}
           selection={selection}
+          cursor={cursor.id}
+          cursorSpot={cursorSpot}
+          onCursor={cursor.step}
+          newIn={newIn}
+          onNewHandled={clearNewIn}
           // The page lives in `cal`/`cal.*`, outside the wire — so the search
           // string is a dependency here where the other shapes need only `wire`:
           // turning a page re-renders without refetching.
@@ -1779,13 +1789,18 @@ function run(command: Command, s: KeyState): void {
      * grouped axis — which is the board's own rule, and the one write outside the
      * panel that is not a gesture.
      *
-     * A board only. A table and a canvas draw no inline creator, and inventing a
-     * prompt for them would be a second way to make a card that looks nothing like
-     * the first.
+     * A board or a calendar — the two shapes with an inline creator, and the
+     * grid already says which by having columns. On a calendar the column is a
+     * day, so the card is born with that date. A table and a canvas draw no
+     * inline creator, and inventing a prompt for them would be a second way to
+     * make a card that looks nothing like the first.
      */
     case 'newCard': {
-      if (!grid.columns.length) {
-        return s.notify({ tone: 'info', text: 'new cards are made on a board' });
+      // The shape, not the grid: a table has columns to walk and no creator to
+      // open, so `n` there used to park a request nothing would ever consume.
+      const shape = s.spec?.shape;
+      if ((shape !== 'board' && shape !== 'calendar') || !grid.columns.length) {
+        return s.notify({ tone: 'info', text: 'new cards are made on a board or a calendar' });
       }
       const spot = locate(grid, cursor.id);
       const column = grid.columns[spot ? spot[1] : 0];

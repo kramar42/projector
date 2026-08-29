@@ -654,6 +654,11 @@ exactly as before; the calendar is just the one surface that draws the day itsel
 | drag onto **unscheduled** | clear the date it was dragged from |
 | drag out of **unscheduled** | schedule a note that had no date |
 | ⌘/⇧-click | build a selection; a drag then moves all of it |
+| `+` on a cell, or `n` | create a note inline — born due that day, or unscheduled from the rail |
+
+The keyboard walks it like a board: a day is a column, so `j`/`k` move within a day's pile and
+`h`/`l` step across days — skipping empty ones, so on a sparse month `l` lands on the next day that
+has a card. The unscheduled rail is the last column.
 
 **Unscheduled** is the `(none)` column, standing to the side: every note the filter admits that
 carries no value on the axis. Dated notes that fall outside the visible page are counted in the
@@ -690,7 +695,7 @@ is a body write like any other, so a note an agent changed underneath you is ref
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
 | Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, click a line to spotlight it, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
-| Calendar | drag a card onto a day to set its date facet, onto **unscheduled** to clear it, ⌘/⇧-click to select, bulk bar |
+| Calendar | drag a card onto a day to set its date facet, onto **unscheduled** to clear it, `+` to create in a day, ⌘/⇧-click to select, bulk bar |
 | Keyboard | the cursor, the digits, the trail, and the rail leader |
 
 See [Keyboard](#keyboard) for the whole map.

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
-import { Button } from '../components/Button.tsx';
+import { Button, IconButton } from '../components/Button.tsx';
 import { emptyReason } from '../../view/empty.ts';
 import { NONE } from '../../schema/vocabulary.ts';
 import { dropOutcome, modeFor, type FacetIntent } from '../../view/dropOutcome.ts';
@@ -24,6 +24,8 @@ import {
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
+import { useCursorFocus } from '../cursor.ts';
+import { isCursorAt, type Spot } from './motion.ts';
 import { paramsOf, type Patch } from '../query.ts';
 import type { Meta, NoteDTO, QueryResponse } from '../types.ts';
 
@@ -53,6 +55,11 @@ export function CalendarView({
   data,
   onOpen,
   selection,
+  cursor,
+  cursorSpot,
+  onCursor,
+  newIn,
+  onNewHandled,
   search,
   patch,
   reload,
@@ -62,6 +69,22 @@ export function CalendarView({
   onOpen: (id: string) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
+  /** Where the keyboard is — drawn here, stepped by `motion.ts` (the board's split). */
+  cursor: string | null;
+  /**
+   * Which *placement* the cursor is at. A note due twice on one page is two
+   * tiles and one cursor, and this is which of the two.
+   */
+  cursorSpot: Spot | null;
+  /** A pointer landing somewhere is the keyboard landing there too. */
+  onCursor: (id: string) => void;
+  /**
+   * The day `n` asked to create in — an ISO date, or `(none)` for the rail.
+   * A value rather than a boolean, the board's reasoning: the shell knows the
+   * cursor's column and this shape knows which cell that is on screen.
+   */
+  newIn: string | null;
+  onNewHandled: () => void;
   /** The page's own query string — the page and grid params are read off it. */
   search: string;
   /** Write URL params. The calendar owns `cal`/`cal.*` the way `?sel=` is owned. */
@@ -89,6 +112,8 @@ export function CalendarView({
     ...new Set(Object.values(cards).flatMap((c) => c.links.map((l) => l.raw))),
   ]);
 
+  // The same two pure calls `gridOf` makes over the same inputs, which is what
+  // keeps the cursor's walk and this drawing pointed at one screen.
   const placed = useMemo(
     () => placements(data.ids, (id) => (axis ? cards[id]?.facets[axis] ?? [] : []), page),
     [data.ids, cards, axis, page],
@@ -161,6 +186,23 @@ export function CalendarView({
       </div>
     );
   }
+
+  const days = page.days.flat();
+  const shared = {
+    axis,
+    cards,
+    chips: data.spec.show,
+    selected,
+    dragging,
+    cursor,
+    cursorSpot,
+    onCursor,
+    onNewHandled,
+    onSelect: selection.toggle,
+    onOpen,
+    onCreated: reload,
+    onProblem: setProblem,
+  };
 
   return (
     <div className="calendar-wrap">
@@ -246,19 +288,19 @@ export function CalendarView({
                 {d}
               </div>
             ))}
-          {page.days.flat().map((day, i) => (
-            <DayCell
+          {days.map((day, i) => (
+            <DayColumn
               key={day}
               day={day}
               label={dayLabel(day, i === 0)}
               isToday={day === today}
+              // Where this cell sits in the grid `motion.ts` walks: one lane,
+              // the page's days in reading order, the rail last. The indices
+              // line up because `gridOf` builds them from the same calls.
+              columnIndex={i}
               ids={placed.byDay.get(day) ?? []}
-              cards={cards}
-              chips={data.spec.show}
-              selected={selected}
-              dragging={dragging}
-              onSelect={selection.toggle}
-              onOpen={onOpen}
+              startAdding={newIn === day}
+              {...shared}
             />
           ))}
         </div>
@@ -266,16 +308,17 @@ export function CalendarView({
         {/*
           * The side list: the filter's notes with no value on the axis. A drop
           * target like any day — landing here is `(none)`, which clears the
-          * value the card was dragged from, the board's own `(none)` rule.
+          * value the card was dragged from, the board's own `(none)` rule —
+          * and creating here is a card born unscheduled.
           */}
-        <Rail
+        <DayColumn
+          day={NONE}
+          label="unscheduled"
+          isToday={false}
+          columnIndex={days.length}
           ids={placed.unscheduled}
-          cards={cards}
-          chips={data.spec.show}
-          selected={selected}
-          dragging={dragging}
-          onSelect={selection.toggle}
-          onOpen={onOpen}
+          startAdding={newIn === NONE}
+          {...shared}
         />
       </div>
 
@@ -296,31 +339,61 @@ export function CalendarView({
   );
 }
 
-function DayCell({
+/**
+ * One column of the calendar: a day cell, or — as the `(none)` value — the
+ * unscheduled rail. One component because they differ only in dress and in
+ * whether a created card carries a date; the drop target, the creator, the
+ * cursor arithmetic and the tiles are the same thing in both.
+ */
+function DayColumn({
   day,
   label,
   isToday,
+  columnIndex,
   ids,
+  axis,
   cards,
   chips,
   selected,
   dragging,
+  cursor,
+  cursorSpot,
+  onCursor,
+  startAdding,
+  onNewHandled,
   onSelect,
   onOpen,
+  onCreated,
+  onProblem,
 }: {
+  /** The ISO day this column is, or `(none)` for the rail. */
   day: string;
   label: string;
   isToday: boolean;
+  /** This column's position in the one-lane grid `gridOf` builds. */
+  columnIndex: number;
   ids: string[];
+  axis: string;
   cards: Record<string, NoteDTO>;
   chips: string[];
   selected: ReadonlySet<string>;
   dragging: string | null;
+  cursor: string | null;
+  cursorSpot: Spot | null;
+  onCursor: (id: string) => void;
+  /** `n` named this column. */
+  startAdding: boolean;
+  onNewHandled: () => void;
   onSelect: (id: string, additive: boolean) => void;
   onOpen: (id: string) => void;
+  onCreated: () => void;
+  onProblem: (msg: string) => void;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [over, setOver] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState('');
+  const rail = day === NONE;
 
   useEffect(() => {
     const el = ref.current;
@@ -334,17 +407,66 @@ function DayCell({
     });
   }, [day]);
 
+  // `n` reached this column. Cleared immediately, the board's one-shot rule.
+  useEffect(() => {
+    if (!startAdding) return;
+    setAdding(true);
+    onNewHandled();
+  }, [startAdding, onNewHandled]);
+
+  const create = () => {
+    const t = title.trim();
+    setAdding(false);
+    if (!t) return;
+    setTitle('');
+    // A card created in a day is born due that day — the board's rule, with the
+    // date facet as the axis. The rail's card is born unscheduled (C10: creating
+    // is the one write outside the panel that is not a gesture).
+    api
+      .createNote({ title: t, facets: rail ? {} : { [axis]: [day] } })
+      .then(onCreated)
+      .catch((e: ApiError) => onProblem(e.message));
+  };
+
+  const Tag = rail ? 'aside' : 'section';
   return (
-    <section
+    <Tag
       ref={ref as React.Ref<HTMLElement>}
-      className={`calendar-day ${isToday ? 'is-today' : ''} ${over ? 'is-over' : ''}`}
+      className={
+        rail
+          ? `calendar-unscheduled ${over ? 'is-over' : ''}`
+          : `calendar-day ${isToday ? 'is-today' : ''} ${over ? 'is-over' : ''}`
+      }
     >
       <header className="calendar-day-head">
         <span className="calendar-day-date">{label}</span>
         {ids.length > 0 && <span className="column-count">{ids.length}</span>}
+        <IconButton glyph="add" title="new card here" onClick={() => setAdding(true)} />
       </header>
       <div className="calendar-day-body">
-        {ids.map((id) => {
+        {adding && (
+          <div className="newcard">
+            <textarea
+              autoFocus
+              rows={2}
+              value={title}
+              placeholder="title, ⏎ to create"
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setAdding(false);
+                  setTitle('');
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  create();
+                }
+              }}
+              onBlur={create}
+            />
+          </div>
+        )}
+        {ids.map((id, i) => {
           const card = cards[id];
           if (!card) return null;
           return (
@@ -355,83 +477,27 @@ function DayCell({
               chips={chips}
               isSelected={selected.has(id)}
               isDragging={dragging === id}
+              /* The placement the cursor is *at* — `locate`'s answer, so the
+                 walk and the ring cannot disagree. One lane, so lane is 0. */
+              isCursor={isCursorAt(cursorSpot, 0, columnIndex, i)}
+              /* Another placement of the cursor's note — due twice, drawn twice. */
+              isEcho={cursor === id && !isCursorAt(cursorSpot, 0, columnIndex, i)}
+              onCursor={onCursor}
               onSelect={onSelect}
               onOpen={onOpen}
             />
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function Rail({
-  ids,
-  cards,
-  chips,
-  selected,
-  dragging,
-  onSelect,
-  onOpen,
-}: {
-  ids: string[];
-  cards: Record<string, NoteDTO>;
-  chips: string[];
-  selected: ReadonlySet<string>;
-  dragging: string | null;
-  onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string) => void;
-}) {
-  const ref = useRef<HTMLElement>(null);
-  const [over, setOver] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    return dropTargetForElements({
-      element: el,
-      getData: () => ({ column: NONE }),
-      onDragEnter: () => setOver(true),
-      onDragLeave: () => setOver(false),
-      onDrop: () => setOver(false),
-    });
-  }, []);
-
-  return (
-    <aside
-      ref={ref as React.Ref<HTMLElement>}
-      className={`calendar-unscheduled ${over ? 'is-over' : ''}`}
-    >
-      <header className="calendar-day-head">
-        <span className="calendar-day-date">unscheduled</span>
-        <span className="column-count">{ids.length}</span>
-      </header>
-      <div className="calendar-day-body">
-        {ids.map((id) => {
-          const card = cards[id];
-          if (!card) return null;
-          return (
-            <CalCard
-              key={id}
-              card={card}
-              column={NONE}
-              chips={chips}
-              isSelected={selected.has(id)}
-              isDragging={dragging === id}
-              onSelect={onSelect}
-              onOpen={onOpen}
-            />
-          );
-        })}
-      </div>
-    </aside>
+    </Tag>
   );
 }
 
 /**
- * The board's tile, minus what a calendar has no answer for: no stored order, so
- * no card-edge drop target, and no cursor yet (`gridOf` says why). The click
- * grammar is the board's exactly, so a pointer means the same thing per shape.
+ * The board's tile, minus what a calendar has no answer for: no stored order,
+ * so no card-edge drop target. The click grammar and the roving tabindex are
+ * the board's exactly, so a pointer and the keyboard mean the same thing per
+ * shape.
  */
 function CalCard({
   card,
@@ -439,6 +505,9 @@ function CalCard({
   chips,
   isSelected,
   isDragging,
+  isCursor,
+  isEcho,
+  onCursor,
   onSelect,
   onOpen,
 }: {
@@ -447,6 +516,9 @@ function CalCard({
   chips: string[];
   isSelected: boolean;
   isDragging: boolean;
+  isCursor: boolean;
+  isEcho: boolean;
+  onCursor: (id: string) => void;
   onSelect: (id: string, additive: boolean) => void;
   onOpen: (id: string) => void;
 }) {
@@ -458,12 +530,21 @@ function CalCard({
     return draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) });
   }, [card.id, column]);
 
+  const pointed = useCursorFocus(ref, isCursor);
+
   return (
     <div
       ref={ref}
+      // Only the cursor's tile is tabbable — the board's roving tabindex.
+      tabIndex={isCursor ? 0 : -1}
       data-card={card.id}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${
+        isEcho ? 'is-echo' : ''
+      } ${isDragging ? 'is-dragging' : ''}`}
       onClick={(e) => {
+        // Wherever a pointer lands, the keyboard picks up — the board's rule.
+        pointed();
+        onCursor(card.id);
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
           e.preventDefault();
           onSelect(card.id, true);

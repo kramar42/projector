@@ -12,6 +12,9 @@ import {
   weekdayLabels,
 } from '../src/view/calendar.ts';
 import { parseSpec, specToParams, SPEC_PARAMS } from '../src/view/spec.ts';
+import { NONE } from '../src/schema/vocabulary.ts';
+import { gridOf } from '../src/web/views/motion.ts';
+import type { QueryResponse } from '../src/web/types.ts';
 import type { Facets } from '../src/schema/types.ts';
 
 // 2026-08-29 is a Saturday; the ISO week around it starts Monday the 24th.
@@ -149,6 +152,36 @@ test('placement splits the filter’s notes into days, the side list, and off-pa
   // Counted per note: where did my cards go, not how many values are elsewhere.
   assert.equal(placed.earlier, 1, 'last-month');
   assert.equal(placed.later, 2, 'next-month, and split-off-page counts once');
+});
+
+test('the cursor grid is one lane of the page’s days, the rail last, from the same arithmetic', () => {
+  const facets = { due: def('date') } as unknown as Facets;
+  const note = (due: string[]) => ({ facets: due.length ? { due } : {} });
+  const data = {
+    spec: { shape: 'calendar', show: [], query: { filter: {} } },
+    ids: ['a', 'b', 'loose'],
+    notes: { a: note(['2026-08-24']), b: note(['2026-08-24', '2026-08-26']), loose: note([]) },
+  } as unknown as QueryResponse;
+
+  const grid = gridOf(data, { search: '?shape=calendar', facets, today: TODAY });
+  assert.equal(grid.cells.length, 1, 'one lane — the drawn rows are layout, not lanes');
+  assert.equal(grid.columns.length, 8, 'seven days and the unscheduled rail');
+  assert.equal(grid.columns[0], '2026-08-24');
+  assert.equal(grid.columns[7], NONE, 'the rail is the last column, so `l` reaches it');
+  // A note due twice on the page is two placements, exactly as the view draws it.
+  assert.deepEqual(grid.cells[0]![0], ['a', 'b']);
+  assert.deepEqual(grid.cells[0]![2], ['b']);
+  assert.deepEqual(grid.cells[0]![7], ['loose']);
+  assert.equal(grid.continuous, false, 'a day is a column with a visible end, the board’s rule');
+
+  // The page param moves the grid with the screen — same URL the view reads.
+  const paged = gridOf(data, { search: '?cal=2026-08-31', facets, today: TODAY });
+  assert.equal(paged.columns[0], '2026-08-31');
+  assert.deepEqual(paged.cells[0]!.slice(0, 7).flat(), [], 'the dated notes are off this page');
+
+  // No date facet, no grid: the walk must not cross a screen that draws no cells.
+  const bare = gridOf(data, { search: '', facets: {} as Facets, today: TODAY });
+  assert.equal(bare.columns.length, 0);
 });
 
 test('calendar is a shape the wire carries, and its page params are not query params', () => {
