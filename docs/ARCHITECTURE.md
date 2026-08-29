@@ -669,6 +669,17 @@ agent already has both through MCP. So those channels shell out to the same `cla
 uses, with MCP left on, and return candidates in the shape every other channel returns. Fetch stays
 separate from judgement, so one policy still covers every channel.
 
+**The agent is asked for an id and a permalink, and they are two fields because they answer two
+questions.** A fingerprint is a dedup key — never resolved, never drawn — and a link is a place a
+person clicks, so it has to be one. Asking for a single "stable id" got whichever the MCP tool
+volunteered, which for Slack is a channel and a timestamp; writing that into `links` produced rows
+`fallbackHref` could only answer `null` for, so the panel drew the id as dead text and the widget took
+the blame for rendering exactly what it was given. `git` is the channel that never had the bug: it
+builds a `gh:branch:` ref and lets the fingerprint be a fingerprint. An item with no usable URL now
+gets no link rather than a broken one — the `source` facet already records provenance, and
+`source_fingerprint` still dedups it. `gmail` deliberately stays out of `LINK_KINDS` for the reason
+that list gives: nothing fetches a thread, so the URL travels as a plain `url`.
+
 These are exactly the shared channels C2 names, and an agent holding Slack tools could post. Nothing
 here can tell a read tool from a write one by its name, so nothing tries: **the vault lists the tools
 the channel may call** (`mcp.slack`, `mcp.gmail`) and `--allowedTools` makes Claude Code refuse the

@@ -12,7 +12,8 @@ import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts'
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
 import { rejudge } from '../src/intake/rejudge.ts';
-import { instructions } from '../src/intake/mcp.ts';
+import { instructions, linkFor } from '../src/intake/mcp.ts';
+import { parseLink } from '../src/schema/links.ts';
 import { deleteNote } from '../src/server/mutate.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
 import { classify, type Ask, type Verdict } from '../src/intake/classify.ts';
@@ -1279,6 +1280,40 @@ test('both prompts that reach a model carry the secrets rule', async () => {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * The two channels an agent fetches are the two that had no ref of their own, so
+ * they wrote the dedup key into `links` and the panel drew a Slack channel/ts
+ * pair as dead text under a `slack` chip. A fingerprint is not a link; `git` is
+ * the channel that always knew that.
+ */
+test('a fetched message links its permalink, never its fingerprint', () => {
+  const permalink = 'https://acme.slack.com/archives/C01234567/p1700000000000100';
+  assert.deepEqual(linkFor('slack', permalink), [`slack:${permalink}`]);
+  // Every one of these reaches `fallbackHref` as `null` — an unclickable link is
+  // worse than none, because it looks like the app failed rather than like the
+  // channel having nothing to point at.
+  for (const notAUrl of ['C01234567/1700000000.000100', '1700000000.000100', '', 'slack:x']) {
+    assert.deepEqual(linkFor('slack', notAUrl), [], notAUrl || '(empty)');
+  }
+
+  // Gmail stays out of the kind vocabulary: nothing fetches a thread, so a
+  // `gmail:` prefix would be a `url` with extra words — and `parseLink` would
+  // read it as no kind at all, which is how those rows drew an empty chip.
+  const thread = 'https://mail.google.com/mail/u/0/#inbox/18f2c0a1b2c3d4e5';
+  assert.deepEqual(linkFor('gmail', thread), [thread]);
+  assert.equal(parseLink(linkFor('gmail', thread)[0]!).kind, 'url');
+  assert.deepEqual(linkFor('gmail', '18f2c0a1b2c3d4e5'), []);
+});
+
+test('the fetching agent is asked for an id and a permalink as two fields', () => {
+  // One field got whichever the tool volunteered, which for Slack is a channel
+  // and a timestamp. Pinned as wording for the same reason the secrets rule is.
+  const text = instructions('slack', null, 7);
+  assert.match(text, /"url":"<permalink>"/, 'the schema asks for it');
+  assert.match(text, /never the id in another costume/, 'and says it is not the id');
+  assert.match(instructions('gmail', null, 14), /mail\.google\.com/);
 });
 
 test('deleting a captured note is a decline, so the sweep stops offering it', () => {

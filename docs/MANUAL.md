@@ -597,6 +597,7 @@ bar.
 | ⇧ + drag out | **remove** just that value |
 | drop into `(none)` | remove the value dragged from — so a note with one value on that axis lands in `(none)`, and a note with several stays in its other columns |
 | drag within a column | **reorder** — needs a saved view, since order is arrangement |
+| drag the background | **pan** — press anywhere that is not a card or a control and drag horizontally, and the board scrolls with the hand |
 
 So "note in two columns" is always a gesture, never an accident.
 
@@ -802,13 +803,20 @@ Enrichment's mirror image. Enrichment is handed a ref and answers *how to show i
 channel and a cursor and answers *which refs nobody has filed*. Same Jira token, same
 `~/.claude/projects`, opposite question — so the two share `src/sources/` and nothing else.
 
-| Channel | Source | Unit | Fingerprint |
-|---|---|---|---|
-| `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` |
-| `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` |
-| `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` |
-| `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` |
-| `gmail` | **not fetched here** — an agent, through MCP | a thread | `gmail:<message-id>` |
+| Channel | Source | Unit | Fingerprint | Link it writes |
+|---|---|---|---|---|
+| `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` | the same |
+| `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` | `gh:branch:<slug>@<branch>` / `gh:commit:` — none without a GitHub remote |
+| `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` | the same |
+| `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` | `slack:<permalink>` |
+| `gmail` | **not fetched here** — an agent, through MCP | a thread | `gmail:<message-id>` | the thread URL, as a plain `url` |
+
+**A fingerprint is not a link**, and the last two columns differ for three of the five channels. A
+fingerprint is a dedup key: it never has to resolve, it is never drawn, and `<channel>/<ts>` is a
+perfectly good one. A link is a place a person clicks, so it has to be somewhere to go. Writing the
+first into the second is how a captured Slack card came to show its channel-and-timestamp as dead
+text — the row was correct, the ref was never a link. A channel with no URL to offer writes no link:
+the `source` facet already records where the note came from.
 
 ```bash
 pj intake                    # every channel, each from where it last got to

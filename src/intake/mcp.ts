@@ -26,7 +26,7 @@ import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.t
  */
 
 /** What the agent is told to produce. Deliberately the smallest useful shape. */
-const SCHEMA = `[{"id":"<stable id>","when":"<ISO 8601>","title":"<one line, the sender's words>","detail":"<one line of context: who, where>"}]`;
+const SCHEMA = `[{"id":"<stable id>","url":"<permalink>","when":"<ISO 8601>","title":"<one line, the sender's words>","detail":"<one line of context: who, where>"}]`;
 
 /** Exported for the test that pins the secrets rule; nothing else calls it. */
 export function instructions(kind: 'slack' | 'gmail', cursor: string | null, days: number): string {
@@ -35,12 +35,22 @@ export function instructions(kind: 'slack' | 'gmail', cursor: string | null, day
     kind === 'slack'
       ? 'messages addressed to the user, mentions, and threads they are part of'
       : 'threads where a person is asking the user something, or waiting on them';
+  // Two fields because they answer two questions, which `linkFor` sets out.
+  const permalink =
+    kind === 'slack'
+      ? 'the message permalink, the https://…slack.com/archives/… form'
+      : 'the thread URL, the https://mail.google.com/… form';
   return [
     `Search ${kind} for ${what}, ${window}.`,
     '',
     'READ ONLY. Do not post, reply, send, draft, archive, label, or modify anything.',
     'You are gathering, not answering, and not deciding what matters — something',
     'else does that. Return everything you find that a person might want to act on.',
+    '',
+    '`id` is a stable identifier, used only to recognise this item again — a',
+    `channel and timestamp is a fine one. \`url\` is ${permalink}, and it is what a`,
+    'person opens, so it must be a real URL and never the id in another costume.',
+    'Omit `url` when you genuinely cannot get one; never invent or assemble one.',
     '',
     'Never reproduce a secret. When a message contains a token, an API key or a',
     'password, say that it does — "contains an API token" — and leave the value out',
@@ -54,6 +64,7 @@ export function instructions(kind: 'slack' | 'gmail', cursor: string | null, day
 
 interface Item {
   id?: unknown;
+  url?: unknown;
   when?: unknown;
   title?: unknown;
   detail?: unknown;
@@ -75,6 +86,33 @@ function parseItems(text: string): Item[] | null {
 
 const str = (v: unknown, max: number): string =>
   (typeof v === 'string' ? v.trim() : '').slice(0, max);
+
+/**
+ * The link a captured message carries, which is not its fingerprint.
+ *
+ * These two channels used to write `links: [fingerprint]`, and `git` is the one
+ * that never did — it builds a `gh:branch:` ref and lets the fingerprint be a
+ * fingerprint. The difference showed: a fingerprint is a dedup key, so the id a
+ * Slack tool volunteers is a channel and a timestamp, and `fallbackHref` answers
+ * `null` for it because there is nowhere to go. The panel then drew the row it
+ * draws for any unclickable link — the opaque id as dead text under a `slack`
+ * chip. Nothing was wrong with the widget; it was rendering a link that was
+ * never one.
+ *
+ * A url that is not a url buys nothing, so it is dropped rather than written: a
+ * note with no link and a `source` facet is honest, and `source_fingerprint`
+ * still dedups it.
+ *
+ * `slack` is a declared kind and keeps its prefix. `gmail` is not one and must
+ * not become one — a kind earns its place by being resolvable (see
+ * `src/schema/links.ts`), nothing fetches a Gmail thread, and import provenance
+ * is the `source` facet's job. So a thread travels as the plain URL it is, which
+ * `parseLink` reads as `url` and the panel opens.
+ */
+export function linkFor(kind: 'slack' | 'gmail', url: string): string[] {
+  if (!/^https?:\/\//.test(url)) return [];
+  return [kind === 'slack' ? `slack:${url}` : url];
+}
 
 function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: string): Channel {
   return {
@@ -138,9 +176,13 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
         const id = str(item.id, 200);
         if (!id) continue;
         const fingerprint = `${kind}:${id}`;
-        // The same convergence every other channel has: a fingerprint the vault
-        // already answers for is not new, whatever the agent thinks.
-        if (ctx.fingerprints.has(fingerprint) || ctx.links.has(fingerprint)) continue;
+        const links = linkFor(kind, str(item.url, 500));
+        // The same convergence every other channel has: something the vault
+        // already answers for is not new, whatever the agent thinks. Two ways in
+        // now that the two are different strings — the fingerprint of a card this
+        // sweep wrote before, and the permalink of one somebody linked by hand,
+        // which used to be the same check by accident and is now the point of it.
+        if (ctx.fingerprints.has(fingerprint) || links.some((l) => ctx.links.has(l))) continue;
         const when = str(item.when, 40);
         if (when && (!newest || when > newest)) newest = when;
         const title = str(item.title, 300) || id;
@@ -149,7 +191,7 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
           channel: kind,
           fingerprint,
           title,
-          links: [fingerprint],
+          links,
           ...(when ? { when } : {}),
           ...(detail ? { detail } : {}),
           /**
@@ -166,7 +208,7 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
            */
           evidence: evidenceFor(ctx, {
             fingerprint,
-            links: [fingerprint],
+            links,
             text: [title, detail].filter(Boolean).join(' — '),
           }),
         });
