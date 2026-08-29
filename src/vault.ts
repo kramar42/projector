@@ -107,12 +107,20 @@ export function countNotes(path: string): number {
   }
 }
 
-export function listVaults(): VaultInfo[] {
+/**
+ * Counting is opt-in, because a count is a walk of the vault and most callers
+ * never show one. The registry is read to *resolve* a vault far more often
+ * than to *display* the list — every `pj` startup, `--help` included, and every
+ * `/api/meta` — and each of those was paying a full walk of every registered
+ * vault for a number it threw away, which at workspace scale was most of a
+ * second per command. `pj vaults` and the pickers ask; nothing else should.
+ */
+export function listVaults(counted = false): VaultInfo[] {
   return readRegistry()
     .map((v) => ({
       ...v,
       exists: existsSync(v.path),
-      notes: existsSync(v.path) ? countNotes(v.path) : null,
+      notes: counted && existsSync(v.path) ? countNotes(v.path) : null,
     }))
     .sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt));
 }

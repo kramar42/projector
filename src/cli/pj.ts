@@ -715,7 +715,8 @@ try {
       const { flags, rest } = argFlags(argv, ['name', 'create'], ['create']);
       const [sub, given] = rest;
       if (!sub || sub === 'list') {
-        const vaults = listVaults();
+        // Counted: this is the command whose whole output is the counts.
+        const vaults = listVaults(true);
         if (!vaults.length) {
           console.log('no vaults yet — `pj vaults add <path>`, or open one in the app');
           break;

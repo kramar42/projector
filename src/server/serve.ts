@@ -156,7 +156,8 @@ app.onError((err, c) => {
 // A vault is a folder of notes, opened the way Obsidian opens one. Nothing here
 // assumes a location or a directory name.
 
-app.get('/api/vaults', (c) => c.json({ vaults: listVaults() }));
+// The one route that shows counts, so the one that pays for them.
+app.get('/api/vaults', (c) => c.json({ vaults: listVaults(true) }));
 
 app.get('/api/vaults/browse', (c) => {
   try {
