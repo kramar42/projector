@@ -3586,6 +3586,13 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   padding: 12px;
 }
 
+/* Panning (`pan.ts`): the hand closes for exactly as long as the board is being
+   dragged, and selection is off so the sweep does not paint text blue. */
+.board-scroll.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
 .lane {
   display: flex;
   flex-direction: column;

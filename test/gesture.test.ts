@@ -422,3 +422,30 @@ test('on a composition a drag down a lane writes, and a drag across a column doe
   assert.ok(diagonal.kind === 'facet');
   assert.deepEqual(diagonal.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
 });
+
+// ---------------------------------------------------------------- board pan
+
+/**
+ * The pan's two decisions, tested where they are decided (`pan.ts`); the
+ * pointer wiring around them needs a browser and stays thin for that reason —
+ * the same trade `changed.ts` makes.
+ */
+test('a pan engages on real horizontal travel, so a click stays a click', async () => {
+  const { panEngages, PAN_THRESHOLD, PAN_EXEMPT } = await import('../src/web/views/pan.ts');
+
+  assert.equal(panEngages(0), false, 'a press is not a pan');
+  assert.equal(panEngages(PAN_THRESHOLD - 1), false, 'a tremble is not a pan');
+  assert.equal(panEngages(PAN_THRESHOLD), true);
+  assert.equal(panEngages(-PAN_THRESHOLD), true, 'both directions pan');
+
+  // The exemptions are the things a press already means something on: the card
+  // owns drag, the controls own click. The board's own surfaces must NOT be
+  // exempt, or there is nothing left to grab.
+  const exempt = PAN_EXEMPT.split(',').map((s: string) => s.trim());
+  for (const sel of ['.column-card', 'button', 'a', 'input', 'textarea', '[contenteditable="true"]']) {
+    assert.ok(exempt.includes(sel), `${sel} must not pan`);
+  }
+  for (const sel of ['.board', '.column', '.column-body', '.lane-head']) {
+    assert.ok(!exempt.includes(sel), `${sel} is the pannable background`);
+  }
+});

@@ -5,6 +5,7 @@ import { ApiError, api } from '../api.ts';
 import { CardBody } from '../components/CardBody.tsx';
 import { emptyReason, unusedGrouping } from '../../view/empty.ts';
 import { isCursorAt, type Spot } from './motion.ts';
+import { attachPan } from './pan.ts';
 import type { Meta, NoteDTO, Group, QueryResponse } from '../types.ts';
 
 import { NONE } from '../../schema/vocabulary.ts';
@@ -295,7 +296,12 @@ export function BoardView({
       {problem && <div className="banner is-bad">{problem}</div>}
       {unused && <div className="board-unused">{unused.text}</div>}
 
-      <div className="board-scroll">
+      <div
+        className="board-scroll"
+        // The Trello pan: press the background, drag, the board follows. Cards
+        // and controls are exempt — see `pan.ts` for the whole gesture.
+        ref={useCallback((el: HTMLDivElement | null) => (el ? attachPan(el) : undefined), [])}
+      >
         {lanes.map((lane, laneIndex) => (
           <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>
             {lane !== undefined && (
