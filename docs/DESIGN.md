@@ -1133,6 +1133,34 @@ The corollary is that a merge which needs a variant per site has not found a com
 the two disclosure heads stayed apart — and, in the second verification pass, why three of the six
 proposed consolidations were dropped rather than built.
 
+### The Opened-Over Rule
+
+**A surface opened over the view borrows the cheatsheet's frame, claims the keyboard on arrival, and
+spends no accent on a standing fact.**
+
+Three of these exist — the cheatsheet, the palette and the declined pile — and each was built at a
+different time, which is how the family came to disagree with itself. Naming the rule is what stops
+the fourth one relitigating it:
+
+- **The frame is the cheatsheet's.** Same scrim, same depth, same surface. `.declined` and `.fold-in`
+  add a head row and a width and nothing else; a surface with a box of its own would be a second answer
+  to a question already settled.
+- **The keyboard is claimed on arrival, by the surface.** Not by whatever opened it. The declined pile
+  had its landing in the key dispatcher, so `,d` put the cursor in the table and the footer's count
+  did not: the same surface had a keyboard or no keyboard depending on how you got there, and with no
+  keyboard `j` and `k` reached the board behind the scrim instead.
+- **Escape is two steps when a field is on it.** A field owns every key it is given, so the surface's
+  own Escape has to be answered by the field first — leave the field, then leave the surface. The
+  palette had the opposite bug and it is the sharper illustration: it opens *with focus in its input*,
+  so its Escape reached nothing at all and the key was dead.
+- **No accent on standing state.** This is the App Voice Rule applied to a surface that is a *list of
+  facts*. `.rail-declined` argues it in its own comment — a count that is nonzero most of the time
+  would wear the accent permanently, which is how an accent stops meaning anything — and `.chip.is-model`
+  broke it forty lines away, wearing the accent on every classifier row. Where a row must read louder
+  than its neighbour, that is the ink ladder's job.
+- **A chip is a facet value.** A property of the *record* — who decided, when — is meta register, not a
+  chip. `By` was a chip because a chip was the nearest thing to hand.
+
 ### The Calendar Borrows Rule
 
 **A day cell is a column at cell scale; the calendar declares no register of its own.**

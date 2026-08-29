@@ -600,7 +600,9 @@ captured — and the separation is worth keeping: one file decides what is *true
 nothing for the query compiler to answer about it and no shape to draw it in — C9 is about views over
 notes, and this was never going to be one. It is reached with `?declined=1` over the single route, the
 way `?note=` reaches the panel: no second route, still deep-linkable, back button still closes it.
-`GET /api/intake/declined` reads it and `meta.declined` carries the count, which the sidebar draws
+`GET /api/intake/declined` reads it — with both counts, the pile's and the classifier's share, from one
+scan, so the head can say them in one sentence without them being two populations — and `meta.declined`
+carries the count, which the sidebar draws
 with the vault stats rather than in the footer: the footer answers *what is on screen, and why it is
 not more* about the current query, and a pile a sweep turned down does not move when you filter. `,d` opens it from the keyboard.
 

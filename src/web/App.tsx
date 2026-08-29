@@ -1528,15 +1528,16 @@ function run(command: Command, s: KeyState): void {
     }
 
     case 'declined':
-      s.setDeclined(true);
       /*
-       * And step into it. Opening a surface without putting the keyboard in it is
-       * how `,d` came to be a key that showed you something you then had to reach
-       * for with a mouse — the same landing `,F` makes into the filter rail.
+       * Opened, and that is all this does.
+       *
+       * The landing used to be here — `,d` opened the surface and then aimed focus
+       * at its first row — which quietly made the keyboard a property of the key
+       * you arrived by: opened from the footer's count instead, the pile had no
+       * keyboard at all. `DeclinedPanel` claims focus on arrival for every entry
+       * path, so the dispatcher no longer has an opinion about where it goes.
        */
-      return focusSoon(() =>
-        document.querySelector<HTMLElement>('[data-navlist="declined"] [data-nav]'),
-      );
+      return s.setDeclined(true);
 
     /**
      * The four acts the palette exists for.

@@ -144,4 +144,6 @@ export interface DeclinedPage {
   rows: Declined[];
   more: boolean;
   total: number;
+  /** Of `total`, how many the classifier decided — the same population, so the two can be said together. */
+  byModel: number;
 }

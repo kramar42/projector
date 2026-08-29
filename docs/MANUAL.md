@@ -979,11 +979,12 @@ knowing: the channel falls back to its default window, so something declined lon
 not return on its own — `pj intake --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
 the search reaches the reason as well as the title, because someone hunting for a card they
 half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI, a box and a
-`more` button in the panel. Both
+`more` row in the panel — which is the table's last row, so `j` walks onto it and carries the walk onto
+the page it fetches. Both
 matter more than they look: getting the order wrong costs you some scrolling, and hiding the wrong
 thing costs you the item — so a no is always reversible and the pile is always readable. Each row says
-whether the model or you decided, because a model's no is a guess you may want to check and yours is
-not.
+when it was declined and whether the model or you decided, because a model's no is a guess you may want
+to check and yours is not; the head counts both the whole pile and the classifier's share of it.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
@@ -1387,7 +1388,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,w` | focus — walk from a note |
 | `,c` | clear the filters |
 | `,\` | collapse the rail |
-| `,d` | what a sweep declined, and why — paged and searchable |
+| `,d` | what a sweep declined, and why — paged and searchable. `j` `k` walk it, `⏎` brings a row back, `more` is the last row rather than a control beside the table, so the walk pages the pile itself. `Esc` leaves the search box, then the pile |
 | `,b` | the bulk bar, once cards are selected. `h` `l` walk it, `⏎` takes what is under the cursor |
 | `,t` | the canvas toolbar — what drags create, `+ note`, Save layout |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |

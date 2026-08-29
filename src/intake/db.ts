@@ -532,6 +532,16 @@ export interface SuppressionPage {
   more: boolean;
   /** Every suppression, ignoring `q` and the page — what the footer counts. */
   total: number;
+  /**
+   * How many of `total` the classifier decided, on the same terms.
+   *
+   * Counted here rather than off the rows in hand, because the surface says the
+   * two numbers in one breath and they have to be one population. It used to
+   * count `decidedBy === 'model'` over the *loaded page*, so "21 — 12 by the
+   * classifier" was 12-of-50 against 21-of-everything: two denominators, one
+   * sentence, and a second `more` moved one number and not the other.
+   */
+  byModel: number;
 }
 
 const DEFAULT_PAGE = 50;
@@ -581,12 +591,18 @@ export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): Sup
     was_judged: number;
   })[];
 
-  const total = (conn.prepare('SELECT count(*) AS n FROM suppressed').get() as { n: number }).n;
+  // Both counts in one statement: they are the same scan, and two statements is
+  // how they could ever disagree.
+  const counts = conn
+    .prepare(
+      `SELECT count(*) AS n, count(*) FILTER (WHERE decided_by = 'model') AS m FROM suppressed`,
+    )
+    .get() as { n: number; m: number };
   const page = rows.slice(0, limit).map(({ was_judged, ...r }) => ({
     ...r,
     wasJudged: Boolean(was_judged),
   }));
-  return { rows: page, more: rows.length > limit, total };
+  return { rows: page, more: rows.length > limit, total: counts.n, byModel: counts.m };
 }
 
 /**

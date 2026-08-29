@@ -4866,14 +4866,25 @@ input[data-nav]:focus + .checkbox {
   font-size: var(--text-sm);
 }
 /*
- * A classifier's decline reads differently from your own, and the chip is where
- * that shows. Not a hue family — those belong to a vault's axes (C4) — so it takes
- * the app's own accent, the same register `builtin` uses on a facet.
+ * The sort key and the decider: two facts about the record, both in the meta
+ * register.
+ *
+ * `By` was a chip in the accent, which broke two rules at once — a chip is a facet
+ * value everywhere else (C4), and the accent is the app speaking, not a standing
+ * property of a row. The distinction it was drawing is real and is kept: a
+ * classifier's decline is a guess you may want to check and yours is not, so that
+ * one is a step up the ink ladder and yours sits back. One rule for both cells,
+ * because they are the same kind of thing.
  */
-.chip.is-model {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent);
+.declined-when,
+.declined-by {
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.declined-by.is-model {
+  color: var(--ink-2);
 }
 
 /*
@@ -4907,25 +4918,27 @@ input[data-nav]:focus + .checkbox {
 .rail-declined:hover { color: var(--ink); }
 .rail-declined:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* The declined pile's own two controls: a search over a list that only grows,
-   and the page it stops at. */
+/*
+ * The search over a pile that only grows.
+ *
+ * `.field-recessed` and a width, and nothing else. It used to restate the whole
+ * control — its own border, radius, background and focus ring — beside a rail
+ * search box that is the same field doing the same job, which is how the two
+ * drifted a step apart in size and fill. One field, said in one place.
+ */
 .declined-search {
-  font-family: var(--sans);
-  font-size: var(--text-sm);
-  padding: 3px 8px;
-  border: 1px solid var(--rule-2);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink);
   min-width: 200px;
 }
-.declined-search:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* The one act each row has, on the edge it is reached from: a ragged column of
+   buttons in the middle of the table read as five controls rather than one. */
+.declined-act {
+  text-align: right;
+  white-space: nowrap;
 }
-.declined-more {
-  display: flex;
-  justify-content: center;
+/* The fold is the table's last row, so it is centred in its cell rather than in a
+   box of its own — see `Declined`'s note on why it lives inside the navlist. */
+.declined-more td {
+  text-align: center;
   padding: 8px 0 4px;
 }
 
