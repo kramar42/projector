@@ -44,7 +44,7 @@ export function BoardView({
   /** For the vocabulary and the vault-wide axis population an empty board explains itself with. */
   meta: Meta;
   data: QueryResponse;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
   /**
@@ -59,7 +59,7 @@ export function BoardView({
    */
   cursorSpot: Spot | null;
   /** A pointer landing somewhere is the keyboard landing there too. */
-  onCursor: (id: string) => void;
+  onCursor: (id: string, at?: Spot | null) => void;
   /**
    * The column `n` asked to create in, or `null`.
    *
@@ -428,7 +428,7 @@ function Column({
   chips: string[];
   selected: ReadonlySet<string>;
   cursor: string | null;
-  onCursor: (id: string) => void;
+  onCursor: (id: string, at?: Spot | null) => void;
   /** `n` named this column. */
   startAdding: boolean;
   onNewHandled: () => void;
@@ -437,7 +437,7 @@ function Column({
   droppable: boolean;
   orderable: boolean;
   onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   onProblem: (msg: string) => void;
   onCreated: () => void;
 }) {
@@ -553,6 +553,9 @@ function Column({
               isCursor={isCursorAt(cursorSpot, laneIndex, columnIndex, i)}
               /* The others still say "this note is also here", quietly. */
               isEcho={cursor === id && !isCursorAt(cursorSpot, laneIndex, columnIndex, i)}
+              /* Where this tile *is*, so a click on an echo puts the cursor on
+                 the copy under the pointer rather than on the note's first one. */
+              spot={[laneIndex, columnIndex, i]}
               onCursor={onCursor}
               isDragging={dragging === id}
               onSelect={onSelect}
@@ -576,6 +579,7 @@ function CardTile({
   isSelected,
   isCursor,
   isEcho,
+  spot,
   onCursor,
   isDragging,
   onSelect,
@@ -592,10 +596,11 @@ function CardTile({
   isCursor: boolean;
   /** Another placement of the cursor's note: marked, but not the cursor. */
   isEcho: boolean;
-  onCursor: (id: string) => void;
+  spot: Spot;
+  onCursor: (id: string, at?: Spot | null) => void;
   isDragging: boolean;
   onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edge, setEdge] = useState<'top' | 'bottom' | null>(null);
@@ -653,13 +658,13 @@ function CardTile({
         // panel over the board, and a cursor that scrolled itself clear of it
         // would take the board out from under the pointer that opened it.
         pointed();
-        onCursor(card.id);
+        onCursor(card.id, spot);
         // Cmd/Ctrl or Shift builds a selection for a bulk action; a plain click opens.
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
           e.preventDefault();
           onSelect(card.id, true);
         } else if (isSelected) onSelect(card.id, true);
-        else onOpen(card.id);
+        else onOpen(card.id, spot);
       }}
     >
       <CardBody card={card} showFacets={chips} />

@@ -4,6 +4,7 @@ import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { useCursorFocus, useEdgeInset } from '../cursor.ts';
+import { useIsPinned } from '../pinned.tsx';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import { isCursorAt, type Spot } from './motion.ts';
@@ -36,7 +37,7 @@ export function TableView({
   /** For the vocabulary and the vault-wide axis population an empty table explains itself with. */
   meta: Meta;
   data: QueryResponse;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
   /** Where the keyboard is; the table only draws it. See `motion.ts`. */
@@ -44,7 +45,7 @@ export function TableView({
   /** Which *placement* of it — a note can be drawn in several sections. */
   cursorSpot: Spot | null;
   /** A pointer landing on a row is the keyboard landing there too. */
-  onCursor: (id: string) => void;
+  onCursor: (id: string, at?: Spot | null) => void;
   reload: () => void;
 }) {
   const chips = data.spec.show;
@@ -152,6 +153,8 @@ export function TableView({
                    */
                   isCursor={isCursorAt(cursorSpot, 0, sectionIndex, i)}
                   isEcho={cursor === id && !isCursorAt(cursorSpot, 0, sectionIndex, i)}
+                  /* The row's own placement — see the board's `spot`. */
+                  spot={[0, sectionIndex, i]}
                   onCursor={onCursor}
                   onOpen={onOpen}
                   onSelect={(additive) => selection.toggle(id, additive, index)}
@@ -191,6 +194,7 @@ function Row({
   isSelected,
   isCursor,
   isEcho,
+  spot,
   onCursor,
   onOpen,
   onSelect,
@@ -206,14 +210,16 @@ function Row({
   isCursor: boolean;
   /** Another placement of the cursor's note: marked, but not the cursor. */
   isEcho: boolean;
-  onCursor: (id: string) => void;
-  onOpen: (id: string) => void;
+  spot: Spot;
+  onCursor: (id: string, at?: Spot | null) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   onSelect: (additive: boolean) => void;
   onExtend: () => void;
 }) {
   const { touched } = useTouched();
   const ref = useRef<HTMLTableRowElement>(null);
   const pointed = useCursorFocus(ref, isCursor);
+  const isPinned = useIsPinned();
   return (
     <tr
       ref={ref}
@@ -237,7 +243,7 @@ function Row({
         // Wherever a pointer lands, the keyboard picks up — and, as on a board,
         // without scrolling: a clicked row is a row that was on screen.
         pointed();
-        onCursor(card.id);
+        onCursor(card.id, spot);
         // cmd/ctrl toggles, the one gesture every shape agrees on. Shift extends a
         // run, which only a shape with an order can offer — a board has columns
         // rather than rows, and shift is already its drag modifier there.
@@ -250,7 +256,7 @@ function Row({
           window.getSelection()?.removeAllRanges();
           onExtend();
         } else if (isSelected) onSelect(true);
-        else onOpen(card.id);
+        else onOpen(card.id, spot);
       }}
     >
       <td className="col-title">
@@ -258,7 +264,7 @@ function Row({
             a table cell, and the anonymous cell the table wraps around it is not
             the box the border is drawn on — see the rule in `style.css`. */}
         <span className="titlerow">
-          <RecordMark card={card} />
+          <RecordMark card={card} pinned={isPinned(card.id)} />
           {card.title}
           {card.refCount > 0 && <span className="count">{card.refCount}</span>}
         </span>

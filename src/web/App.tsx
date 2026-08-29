@@ -40,7 +40,17 @@ import {
 } from './query.ts';
 import { useSelection, type Selection } from './selection.ts';
 import { focusSoon, useCursor, type Cursor } from './cursor.ts';
-import { drawn, first, gridOf, last, locate, stepped, type Grid, type Spot } from './views/motion.ts';
+import {
+  drawn,
+  firstSpot,
+  gridOf,
+  idAt,
+  lastSpot,
+  locate,
+  steppedTo,
+  type Grid,
+  type Spot,
+} from './views/motion.ts';
 import {
   changeView,
   clearFilters,
@@ -301,8 +311,8 @@ export function App() {
   const clearNudge = useCallback(() => setNudge(null), []);
 
   const openCard = useCallback(
-    (id: string | null) => {
-      if (id) cursor.step(id);
+    (id: string | null, at?: Spot | null) => {
+      if (id) cursor.step(id, at);
       setOpenNote(id);
     },
     [cursor.step, setOpenNote],
@@ -437,7 +447,13 @@ export function App() {
    * always answered that for stepping; this hands the same answer to the drawing
    * so the two cannot disagree.
    */
-  const cursorSpot: Spot | null = useMemo(() => locate(grid, cursor.id), [grid, cursor.id]);
+  const cursorSpot: Spot | null = useMemo(
+    // With the copy the cursor was last put on as a hint — see `locate`. It is
+    // re-resolved here every render, so a hint the grid has outgrown costs
+    // nothing but a fall back to the first placement.
+    () => locate(grid, cursor.id, cursor.at),
+    [grid, cursor.id, cursor.at],
+  );
 
   // Remember every note the query has shown. Cheap — one entry per note in the
   // vault at worst — and it is the only record of what a note held once the query
@@ -520,6 +536,7 @@ export function App() {
   keys.current = {
     grid,
     cursor,
+    cursorSpot,
     selection,
     openNote,
     setOpenNote,
@@ -795,6 +812,8 @@ export function App() {
 interface KeyState {
   grid: Grid;
   cursor: Cursor;
+  /** Which copy the cursor is on, resolved — what a step is measured from. */
+  cursorSpot: Spot | null;
   selection: Selection;
   openNote: string | null;
   setOpenNote: (id: string | null) => void;
@@ -999,10 +1018,15 @@ function run(command: Command, s: KeyState): void {
    * without anything having to be kept in step. `useLive` holds the outgoing
    * payload until the next one lands, so it reads as a page turn rather than a
    * blink.
+   *
+   * It moves in **placements** rather than ids, because a step has to say *which
+   * copy* it reached: a note drawn twice would otherwise resolve back to its
+   * first copy on the next render, so walking into the second one undid itself.
    */
-  const goTo = (next: string | null) => {
+  const goToSpot = (spot: Spot | null) => {
+    const next = idAt(grid, spot);
     if (!next) return;
-    cursor.step(next);
+    cursor.step(next, spot);
     if (openNote) setOpenNote(next);
   };
 
@@ -1055,7 +1079,7 @@ function run(command: Command, s: KeyState): void {
       if (command.along === 'row' && at instanceof HTMLSelectElement && at.dataset.rail) {
         return stepSelect(at, command.delta);
       }
-      return goTo(stepped(grid, cursor.id, command.along, command.delta));
+      return goToSpot(steppedTo(grid, s.cursorSpot, command.along, command.delta));
     }
 
     /**
@@ -1621,8 +1645,9 @@ function run(command: Command, s: KeyState): void {
       );
     }
 
-    case 'moveTo':
-      return goTo(command.end === 'first' ? first(grid) : last(grid));
+    case 'moveTo': {
+      return goToSpot(command.end === 'first' ? firstSpot(grid) : lastSpot(grid));
+    }
 
     case 'trail': {
       // `travel` reports where it landed rather than whether it moved, because
@@ -1652,9 +1677,10 @@ function run(command: Command, s: KeyState): void {
         }
         return;
       }
-      const id = cursor.id ?? first(grid);
+      const spot = s.cursorSpot ?? firstSpot(grid);
+      const id = cursor.id ?? idAt(grid, spot);
       if (!id) return;
-      cursor.step(id);
+      cursor.step(id, spot);
       setOpenNote(id);
       return;
     }
@@ -1748,10 +1774,11 @@ function run(command: Command, s: KeyState): void {
        * `x J J J` read as one gesture. The anchor is whatever `x` last set, so a
        * run grows from where you started rather than from where you are.
        */
-      const next = stepped(grid, id, 'row', command.delta);
+      const spot = steppedTo(grid, s.cursorSpot, 'row', command.delta);
+      const next = idAt(grid, spot);
       if (!next) return;
       selection.extend(rows, rows.indexOf(next));
-      return goTo(next);
+      return goToSpot(spot);
     }
 
     /**

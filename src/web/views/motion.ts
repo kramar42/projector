@@ -138,8 +138,35 @@ export function gridOf(
 /** Lane, column and position — where one card sits, or `null` if it is not drawn. */
 export type Spot = [lane: number, column: number, row: number];
 
-export function locate(grid: Grid, id: string | null): Spot | null {
+/**
+ * Which drawn copy of a note the keyboard is on.
+ *
+ * A note can be drawn several times — a facet with two values puts it in two
+ * columns — so an id alone does not name a placement. `near` is the copy the
+ * cursor was last put on, and it is a **hint, never an authority**: it is
+ * honoured only while the cell it names still holds that id, and anything that
+ * moves the note — a filter, a regroup, an agent's write — silently falls back
+ * to the first placement rather than leaving the cursor pointing at a copy that
+ * is no longer drawn.
+ *
+ * That division is what keeps the cursor an *id* (see `cursor.ts`) while making
+ * the second copy reachable at all. Answering "the first placement"
+ * unconditionally is what made it unreachable: clicking an echo set the cursor
+ * to an id whose resolved placement was, by definition, the other one — so the
+ * ring jumped back across the board and `j` then walked the column you had just
+ * clicked away from.
+ */
+export function locate(grid: Grid, id: string | null, near?: Spot | null): Spot | null {
   if (!id) return null;
+  if (near) {
+    const cell = grid.cells[near[0]]?.[near[1]];
+    if (cell) {
+      // The same row when it still holds the note, so a re-sort within one
+      // column does not throw the hint away; otherwise wherever it sits now.
+      const row = cell[near[2]] === id ? near[2] : cell.indexOf(id);
+      if (row !== -1) return [near[0], near[1], row];
+    }
+  }
   for (let lane = 0; lane < grid.cells.length; lane++) {
     const columns = grid.cells[lane]!;
     for (let column = 0; column < columns.length; column++) {
@@ -148,6 +175,12 @@ export function locate(grid: Grid, id: string | null): Spot | null {
     }
   }
   return null;
+}
+
+/** The note at one placement, or `null` where nothing is drawn. */
+export function idAt(grid: Grid, spot: Spot | null): string | null {
+  if (!spot) return null;
+  return grid.cells[spot[0]]?.[spot[1]]?.[spot[2]] ?? null;
 }
 
 /**
@@ -179,37 +212,57 @@ export function drawn(grid: Grid): string[] {
   return grid.cells.flat(2);
 }
 
+/** The first drawn placement, in the order the shape draws them. */
+export function firstSpot(grid: Grid): Spot | null {
+  for (let lane = 0; lane < grid.cells.length; lane++) {
+    const columns = grid.cells[lane]!;
+    for (let column = 0; column < columns.length; column++) {
+      if (columns[column]!.length) return [lane, column, 0];
+    }
+  }
+  return null;
+}
+
+/** The last drawn placement. */
+export function lastSpot(grid: Grid): Spot | null {
+  for (let lane = grid.cells.length - 1; lane >= 0; lane--) {
+    const columns = grid.cells[lane]!;
+    for (let column = columns.length - 1; column >= 0; column--) {
+      const cell = columns[column]!;
+      if (cell.length) return [lane, column, cell.length - 1];
+    }
+  }
+  return null;
+}
+
 export function first(grid: Grid): string | null {
-  return drawn(grid)[0] ?? null;
+  return idAt(grid, firstSpot(grid));
 }
 
 export function last(grid: Grid): string | null {
-  const all = drawn(grid);
-  return all[all.length - 1] ?? null;
+  return idAt(grid, lastSpot(grid));
 }
 
 /**
- * One step from where the cursor is.
+ * One step from where the cursor is, in placements.
+ *
+ * The spot-shaped half of `stepped`, and the one the dispatcher uses: a step has
+ * to answer *which copy* it landed on, or walking into a column that draws the
+ * same note twice would resolve back to the first copy on the next render and
+ * undo itself.
  *
  * `null` in means the cursor has not landed yet, and every direction answers with
- * the first drawn card — so the first keystroke of a session puts the cursor
+ * the first drawn placement — so the first keystroke of a session puts the cursor
  * somewhere sensible rather than requiring a click first.
- *
- * A cursor sitting on a card the current query does not draw — which is what
- * following a reference out of the view leaves behind — is the same case: it has
- * no spot, so a motion key re-enters the view at the top rather than doing
- * nothing. That is the honest answer to "move down from somewhere that is not
- * here", and it is what makes a detour recoverable without reaching for `H`.
  */
-export function stepped(
+export function steppedTo(
   grid: Grid,
-  from: string | null,
+  from: Spot | null,
   along: 'row' | 'column' | 'lane',
   delta: number,
-): string | null {
-  const spot = locate(grid, from);
-  if (!spot) return first(grid);
-  const [lane, column, row] = spot;
+): Spot | null {
+  if (!from) return firstSpot(grid);
+  const [lane, column, row] = from;
 
   if (along === 'row') return alongRow(grid, lane, column, row, delta);
 
@@ -231,8 +284,27 @@ export function stepped(
     else l += step;
     const cell = grid.cells[l]?.[c];
     if (!cell) return null;
-    if (cell.length) return cell[Math.min(row, cell.length - 1)]!;
+    if (cell.length) return [l, c, Math.min(row, cell.length - 1)];
   }
+}
+
+/**
+ * One step, by id — `steppedTo` for the callers that have no placement to offer.
+ *
+ * A cursor sitting on a card the current query does not draw — which is what
+ * following a reference out of the view leaves behind — has no spot, so a motion
+ * key re-enters the view at the top rather than doing nothing. That is the honest
+ * answer to "move down from somewhere that is not here", and it is what makes a
+ * detour recoverable without reaching for `H`.
+ */
+export function stepped(
+  grid: Grid,
+  from: string | null,
+  along: 'row' | 'column' | 'lane',
+  delta: number,
+  near?: Spot | null,
+): string | null {
+  return idAt(grid, steppedTo(grid, locate(grid, from, near), along, delta));
 }
 
 /**
@@ -248,10 +320,10 @@ function alongRow(
   column: number,
   row: number,
   delta: number,
-): string | null {
+): Spot | null {
   const cell = grid.cells[lane]![column]!;
   const next = row + delta;
-  if (next >= 0 && next < cell.length) return cell[next]!;
+  if (next >= 0 && next < cell.length) return [lane, column, next];
   if (!grid.continuous) return null;
 
   const columns = grid.cells[lane]!;
@@ -260,6 +332,6 @@ function alongRow(
     c += delta > 0 ? 1 : -1;
     const into = columns[c];
     if (!into) return null;
-    if (into.length) return delta > 0 ? into[0]! : into[into.length - 1]!;
+    if (into.length) return delta > 0 ? [lane, c, 0] : [lane, c, into.length - 1];
   }
 }

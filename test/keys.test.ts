@@ -20,7 +20,18 @@ import {
   type Pending,
 } from '../src/view/keys.ts';
 import { DEPTH, emptyHistory, inverseOf, recorded, redone, undone, type Step } from '../src/view/undo.ts';
-import { drawn, first, isCursorAt, last, locate, stepped, type Grid } from '../src/web/views/motion.ts';
+import {
+  drawn,
+  first,
+  idAt,
+  isCursorAt,
+  last,
+  locate,
+  stepped,
+  steppedTo,
+  type Grid,
+  type Spot,
+} from '../src/web/views/motion.ts';
 
 /**
  * The keyboard grammar.
@@ -474,6 +485,41 @@ test('exactly one placement of a repeated note is the cursor', () => {
   assert.equal(cursors, 1);
 
   assert.equal(isCursorAt(null, 0, 0, 0), false, 'no cursor is no placement');
+});
+
+/**
+ * And the second placement is reachable, which for a while it was not.
+ *
+ * `locate` answering "the first" unconditionally made the echo a place the
+ * cursor could be *put* but never *be*: a click set the id, the next render
+ * resolved it back to the first copy, and the ring jumped across the board —
+ * so `j` then walked the column you had just clicked away from.
+ *
+ * The hint is deliberately weak. It holds only while the cell it names still
+ * carries the note, so everything the cursor's own comment claims about an id
+ * surviving a regroup survives with it.
+ */
+test('the copy the cursor was put on is the copy it stays on', () => {
+  const twice: Grid = {
+    cells: [[['a', 'b'], ['a', 'c']]],
+    columns: ['now', 'month'],
+    continuous: false,
+  };
+
+  const echo: Spot = [0, 1, 0];
+  assert.deepEqual(locate(twice, 'a', echo), echo, 'the hinted copy wins');
+  assert.equal(isCursorAt(locate(twice, 'a', echo), 0, 0, 0), false, 'the first one is the echo now');
+
+  // And stepping from it stays in that column rather than in the other copy's.
+  assert.deepEqual(steppedTo(twice, echo, 'row', 1), [0, 1, 1], 'j walks the column you are in');
+  assert.equal(idAt(twice, steppedTo(twice, echo, 'row', 1)), 'c');
+  assert.equal(stepped(twice, 'a', 'row', 1), 'b', 'and without a hint, the first copy as before');
+
+  // A hint the grid has outgrown is dropped rather than honoured.
+  const moved: Grid = { ...twice, cells: [[['a', 'b'], ['c']]] };
+  assert.deepEqual(locate(moved, 'a', echo), [0, 0, 0], 'the cell no longer holds it');
+  const gone: Grid = { ...twice, cells: [[['b'], ['a']]] };
+  assert.deepEqual(locate(gone, 'a', echo), [0, 1, 0], 'it moved within the hinted cell');
 });
 
 test('j and k walk a column and stop at its ends on a board', () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Spot } from './views/motion.ts';
 
 /**
  * Where the keyboard is.
@@ -30,6 +31,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * note genuinely leaves the view, `stepped` answers with the first drawn row
  * rather than nothing, so the failure mode is "the cursor goes home" instead of
  * "the arrow keys stopped working".
+ *
+ * ## And why it carries a placement anyway
+ *
+ * One note can be drawn several times, so the id names *which note* and not
+ * *which copy*. `at` is that second half — and it is subordinate rather than
+ * equal: `locate` honours it only while the cell it names still holds the id,
+ * and falls back to the first placement otherwise. So everything the paragraph
+ * above claims still holds — the id is what survives a regroup — and the copy
+ * you clicked is reachable, which it was not while `locate` always answered
+ * with the first one.
  */
 
 /**
@@ -46,8 +57,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  */
 export interface Cursor {
   id: string | null;
+  /**
+   * Which drawn copy the keyboard is on, when something knew — a click, or a
+   * step that computed one. A hint for `locate`, re-checked every render.
+   */
+  at: Spot | null;
   /** Move without recording — motion keys, and a click. */
-  step: (id: string | null) => void;
+  step: (id: string | null, at?: Spot | null) => void;
   /** Move and record where we were: following a reference. */
   jump: (id: string) => void;
   /** Walk the trail. `-1` is back. Returns where it landed, or `null` for nowhere. */
@@ -55,7 +71,13 @@ export interface Cursor {
 }
 
 export function useCursor(): Cursor {
-  const [id, setId] = useState<string | null>(null);
+  /**
+   * The note and the copy of it, in one state — they change together on every
+   * move, and two `useState`s would render the cursor at a placement belonging
+   * to the note it was on a moment ago.
+   */
+  const [pos, setPos] = useState<{ id: string | null; at: Spot | null }>({ id: null, at: null });
+  const id = pos.id;
   /**
    * Behind and ahead, as two stacks — the shape a back/forward pair always is.
    *
@@ -66,13 +88,16 @@ export function useCursor(): Cursor {
    */
   const behind = useRef<string[]>([]);
   const ahead = useRef<string[]>([]);
-  const at = useRef<string | null>(null);
-  at.current = id;
+  const on = useRef<string | null>(null);
+  on.current = id;
 
-  const step = useCallback((next: string | null) => setId(next), []);
+  const step = useCallback(
+    (next: string | null, spot: Spot | null = null) => setPos({ id: next, at: spot }),
+    [],
+  );
 
   const jump = useCallback((next: string) => {
-    const from = at.current;
+    const from = on.current;
     if (from === next) return;
     if (from) behind.current.push(from);
     // A new jump abandons the forward stack, exactly as a browser's does — the
@@ -82,7 +107,9 @@ export function useCursor(): Cursor {
     // what anyone walks back through and far short of what would be worth
     // worrying about holding.
     if (behind.current.length > 50) behind.current.shift();
-    setId(next);
+    // No placement: a followed reference may not be drawn at all, and guessing
+    // one would be a hint `locate` has to throw away on arrival.
+    setPos({ id: next, at: null });
   }, []);
 
   const travel = useCallback((delta: 1 | -1) => {
@@ -90,14 +117,14 @@ export function useCursor(): Cursor {
     const to = delta === -1 ? ahead.current : behind.current;
     const next = from.pop();
     if (next === undefined) return null;
-    if (at.current) to.push(at.current);
-    setId(next);
+    if (on.current) to.push(on.current);
+    setPos({ id: next, at: null });
     // The id rather than a flag, because the caller has to mirror it into the
     // open panel and cannot read `id` back until the next render.
     return next;
   }, []);
 
-  return { id, step, jump, travel };
+  return { id, at: pos.at, step, jump, travel };
 }
 
 /**

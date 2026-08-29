@@ -1277,10 +1277,16 @@ next card. It is not stored in the URL and starts unset — the first motion key
 drawn card.
 
 **A note drawn in several columns has one cursor and the rest are echoes.** A facet with two values
-puts its note in two columns, and only one of them is where the keyboard is — the first, which is the
-one every step is measured from. It takes the ring; the others take a dashed outline saying *this note
-is also here*. So the board never scrolls to a copy you were not on, and the cursor is somewhere you
-can only be once.
+puts its note in two columns, and only one of them is where the keyboard is. It takes the ring; the
+others take a dashed outline saying *this note is also here*. So the board never scrolls to a copy you
+were not on, and the cursor is somewhere you can only be once.
+
+**Which copy is the one you last landed on.** Click an echo and it becomes the cursor — the copy you
+clicked keeps the ring, and `j` walks *that* column. Walking onto a repeated note with `l` works the
+same way: you arrive at the copy in the column you stepped into, not at the note's first copy
+somewhere else on the board. The note is still what the cursor *is*, so anything that moves it — a
+filter, a regroup, an agent's write — drops back to the first copy rather than pointing at one that is
+no longer drawn.
 
 **A canvas has no cursor**: its nodes sit on a plane, so "the next one down" has no answer. It is
 worked with Tab instead — `space` selects the node you are on, the arrow keys move a selected one, and

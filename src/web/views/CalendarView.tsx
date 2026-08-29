@@ -66,7 +66,7 @@ export function CalendarView({
 }: {
   meta: Meta;
   data: QueryResponse;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   /** Owned by `App` and carried in `?sel=`, so it survives a change of shape. */
   selection: Selection;
   /** Where the keyboard is — drawn here, stepped by `motion.ts` (the board's split). */
@@ -77,7 +77,7 @@ export function CalendarView({
    */
   cursorSpot: Spot | null;
   /** A pointer landing somewhere is the keyboard landing there too. */
-  onCursor: (id: string) => void;
+  onCursor: (id: string, at?: Spot | null) => void;
   /**
    * The day `n` asked to create in — an ISO date, or `(none)` for the rail.
    * A value rather than a boolean, the board's reasoning: the shell knows the
@@ -380,12 +380,12 @@ function DayColumn({
   dragging: string | null;
   cursor: string | null;
   cursorSpot: Spot | null;
-  onCursor: (id: string) => void;
+  onCursor: (id: string, at?: Spot | null) => void;
   /** `n` named this column. */
   startAdding: boolean;
   onNewHandled: () => void;
   onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
   onCreated: () => void;
   onProblem: (msg: string) => void;
 }) {
@@ -482,6 +482,8 @@ function DayColumn({
               isCursor={isCursorAt(cursorSpot, 0, columnIndex, i)}
               /* Another placement of the cursor's note — due twice, drawn twice. */
               isEcho={cursor === id && !isCursorAt(cursorSpot, 0, columnIndex, i)}
+              /* The cell's own placement — see the board's `spot`. */
+              spot={[0, columnIndex, i]}
               onCursor={onCursor}
               onSelect={onSelect}
               onOpen={onOpen}
@@ -507,6 +509,7 @@ function CalCard({
   isDragging,
   isCursor,
   isEcho,
+  spot,
   onCursor,
   onSelect,
   onOpen,
@@ -518,9 +521,10 @@ function CalCard({
   isDragging: boolean;
   isCursor: boolean;
   isEcho: boolean;
-  onCursor: (id: string) => void;
+  spot: Spot;
+  onCursor: (id: string, at?: Spot | null) => void;
   onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at?: Spot | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -544,12 +548,12 @@ function CalCard({
       onClick={(e) => {
         // Wherever a pointer lands, the keyboard picks up — the board's rule.
         pointed();
-        onCursor(card.id);
+        onCursor(card.id, spot);
         if (e.metaKey || e.ctrlKey || e.shiftKey) {
           e.preventDefault();
           onSelect(card.id, true);
         } else if (isSelected) onSelect(card.id, true);
-        else onOpen(card.id);
+        else onOpen(card.id, spot);
       }}
     >
       <CardBody card={card} showFacets={chips} />
