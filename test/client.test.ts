@@ -21,6 +21,8 @@ import {
   selectionPatch,
   strippedOfStrays,
 } from '../src/web/query.ts';
+import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
+import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -326,6 +328,38 @@ test('a parameter the app does not own is dropped from the URL', () => {
   // And so is what you have picked out. Left off the owned list it would be
   // deleted from the address bar on load, exactly as `filterstyle` now is.
   assert.equal(strippedOfStrays('?sel=a,b&view=home'), null, 'sel is owned, not a stray');
+});
+
+test('the vault is URL-owned context, not a query parameter', () => {
+  const search = '?vault=%2FUsers%2Fme%2Fnotes&view=home&filterstyle=chip';
+
+  assert.equal(vaultOf(search), '/Users/me/notes');
+  assert.equal(
+    strippedOfStrays(search),
+    '?vault=%2FUsers%2Fme%2Fnotes&view=home',
+    'normalising a URL must preserve its selected vault',
+  );
+  assert.equal(apiSearch(search), '?view=home', 'the vault names the request header, never the view');
+  assert.equal(
+    patchSearch('?vault=%2FUsers%2Fme%2Fnotes&view=home', { shape: 'table' }),
+    '?vault=%2FUsers%2Fme%2Fnotes&view=home&shape=table',
+    'editing a view cannot lose which vault it belongs to',
+  );
+  assert.equal(VAULT_PARAM, 'vault');
+});
+
+test('a practice key lights every cheatsheet pattern it can complete', () => {
+  const axes = ['p', 'b'];
+
+  assert.ok(matchesCheatsheetRow('j k h l', { key: 'j', altKey: false }, axes));
+  assert.ok(matchesCheatsheetRow('g ⟨axis⟩', { key: 'p', altKey: false }, axes));
+  assert.ok(matchesCheatsheetRow('g ⇧⟨axis⟩', { key: 'P', altKey: false }, axes));
+  assert.ok(matchesCheatsheetRow('⌥j ⌥k', { key: 'j', altKey: true }, axes));
+  assert.ok(matchesCheatsheetRow('gg G', { key: 'g', altKey: false }, axes), 'a prefix teaches its completion');
+  assert.ok(matchesCheatsheetRow('⏎', { key: 'Enter', altKey: false }, axes));
+
+  assert.ok(!matchesCheatsheetRow('j k h l', { key: 'j', altKey: true }, axes));
+  assert.ok(!matchesCheatsheetRow('g ⟨axis⟩', { key: 'z', altKey: false }, axes));
 });
 
 /**

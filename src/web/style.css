@@ -4444,6 +4444,15 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   padding: 1px 0;
 }
 
+/* A training key brightens every route it could take, without moving the table. */
+.cheatsheet-row.is-match {
+  margin: 0 -4px;
+  padding: 2px 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: var(--radius-base);
+}
+.cheatsheet-row.is-match dd { color: var(--ink); }
+
 .cheatsheet-row dt {
   display: flex;
   gap: 3px;
@@ -4470,6 +4479,11 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   border: 1px solid var(--rule-2);
   border-bottom-width: 2px;
   border-radius: var(--radius-base);
+}
+.cheatsheet kbd.is-match {
+  color: var(--ground);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* "then", between a prefix and what completes it. Not a `kbd`: it is not a key. */

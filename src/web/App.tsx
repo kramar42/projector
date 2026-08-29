@@ -14,7 +14,7 @@ import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { Cheatsheet } from './Cheatsheet.tsx';
 import { Palette } from './Palette.tsx';
-import { currentVault, setCurrentVault } from './vault.ts';
+import { VAULT_PARAM, vaultOf } from './vault.ts';
 import {
   NOTE_PARAM,
   DECLINED_PARAM,
@@ -63,6 +63,13 @@ import type { Meta, NoteDTO, QueryResponse } from './types.ts';
 const NOTICE_MS = 4000;
 
 /**
+ * Hooks must still be called while the picker is open, but an unselected vault
+ * must not let the server's single-vault fallback start reading one. The promise
+ * is superseded as soon as `vault` changes and its result is never observed.
+ */
+const NO_VAULT_QUERY = new Promise<QueryResponse>(() => {});
+
+/**
  * One route.
  *
  * P1 routed `/board/:name` and `/canvas/:name`, because a view was a place you
@@ -74,13 +81,17 @@ export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // No vault chosen, or the server rejected the one we named: ask.
-  const [gate, setGate] = useState<{ reason?: string } | null>(
-    currentVault() ? null : { reason: undefined },
-  );
-  const [addingVault, setAddingVault] = useState(false);
   const [location, navigate] = useLocation();
   const search = useSearch();
+  const vault = vaultOf(search);
+  // No vault chosen, or the server rejected the one we named: ask.
+  const [gate, setGate] = useState<{ reason?: string } | null>(
+    vault ? null : { reason: undefined },
+  );
+  const [addingVault, setAddingVault] = useState(false);
+  // A slow response for the vault we just left must not re-install its metadata.
+  const activeVault = useRef(vault);
+  activeVault.current = vault;
 
   const openNote = new URLSearchParams(search).get(NOTE_PARAM);
   /**
@@ -328,36 +339,39 @@ export function App() {
   }, [setOpenNote]);
 
   const loadMeta = useCallback(() => {
+    if (!vault) return;
+    const requested = vault;
     api.meta().then(
       (m) => {
+        if (activeVault.current !== requested) return;
         setMeta(m);
         setError(null);
         setGate(null);
-        // Adopt whatever the server actually served, so a fallback to the single
-        // registered vault is remembered rather than re-derived every load.
-        if (m.vault !== currentVault()) setCurrentVault(m.vault);
       },
       (e: ApiError) => {
+        if (activeVault.current !== requested) return;
         if (e.needsVault || e.status === 428) setGate({ reason: e.message });
         else setError(e.message);
       },
     );
-  }, []);
+  }, [vault]);
 
   useEffect(() => {
-    if (!gate) loadMeta();
-  }, [gate, loadMeta]);
+    setMeta(null);
+    if (!vault) {
+      setGate({ reason: undefined });
+      return;
+    }
+    setGate(null);
+    loadMeta();
+  }, [vault, loadMeta]);
 
   const switchVault = useCallback(
     (path: string) => {
-      setCurrentVault(path);
-      setMeta(null);
-      setGate(null);
       // The query may name a view or a focus note from the *old* vault.
-      navigate('/', { replace: true });
-      loadMeta();
+      navigate(`/${patchSearch('', { [VAULT_PARAM]: path })}`, { replace: true });
     },
-    [loadMeta, navigate],
+    [navigate],
   );
 
   // Nothing asked for: open `home` if the vault has one, else the first saved
@@ -379,9 +393,9 @@ export function App() {
    * board up for even a frame would be showing cards that are not there.
    */
   const { data, error: queryError, reload } = useLive<QueryResponse>(
-    () => api.query(wire),
+    () => (vault ? api.query(wire) : NO_VAULT_QUERY),
     [wire],
-    [meta?.vault],
+    [vault],
   );
 
   const shape = data?.spec.shape ?? 'board';
@@ -591,10 +605,10 @@ export function App() {
     );
   }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire]);
 
-  if (gate) {
+  if (gate || !vault) {
     return (
       <VaultPicker
-        reason={gate.reason}
+        reason={gate?.reason}
         onOpened={switchVault}
         onCancel={meta ? () => setGate(null) : undefined}
       />
@@ -612,7 +626,7 @@ export function App() {
     );
   }
   if (error) return <div className="boot-error">Cannot reach the projector server: {error}</div>;
-  if (!meta) return <div className="boot">starting…</div>;
+  if (!meta || meta.vault !== vault) return <div className="boot">starting…</div>;
 
   return (
     <EnrichmentProvider>

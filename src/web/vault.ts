@@ -1,28 +1,27 @@
 /**
  * Which vault this browser is looking at.
  *
- * Held in localStorage, sent as a header on every request, and chosen by the user
- * the way an Obsidian vault is: point at a folder. There is no default and no
- * assumed directory name — with nothing chosen, the app asks.
+ * It lives in the page URL, is sent as a header on every request, and is chosen
+ * by the user the way an Obsidian vault is: point at a folder. There is no
+ * default and no assumed directory name — with nothing chosen, the app asks.
+ *
+ * This is deliberately not browser storage. A URL with a bad path must still be
+ * recoverable by deleting `vault=`, and a link must say which library it opens.
  */
 
-const KEY = 'projector.vault';
+export const VAULT_PARAM = 'vault';
 
-export function currentVault(): string | null {
-  try {
-    return localStorage.getItem(KEY);
-  } catch {
-    return null;
-  }
+/** The vault named by a page search string, if any. */
+export function vaultOf(search: string): string | null {
+  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get(VAULT_PARAM) || null;
 }
 
-export function setCurrentVault(path: string | null): void {
-  try {
-    if (path) localStorage.setItem(KEY, path);
-    else localStorage.removeItem(KEY);
-  } catch {
-    /* private browsing; the app still works for this session */
-  }
+/**
+ * The URL is the current page's source of truth. Request helpers are kept free
+ * of React, so they read it here rather than carrying a second vault state.
+ */
+export function currentVault(): string | null {
+  return typeof window === 'undefined' ? null : vaultOf(window.location.search);
 }
 
 export interface VaultInfo {

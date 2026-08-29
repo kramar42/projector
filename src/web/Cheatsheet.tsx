@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { KEYMAP } from '../view/keys.ts';
+import { cheatsheetStrokeLabel, matchesCheatsheetRow, type CheatsheetStroke } from './cheatsheetKeys.ts';
 import type { Meta } from './types.ts';
 
 /**
@@ -20,6 +22,25 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
   const axes = Object.entries(meta.facets)
     .filter(([, def]) => def.key)
     .map(([, def]) => ({ key: def.key!, label: def.label, single: def.single }));
+  const axisKeys = axes.map((axis) => axis.key);
+  const [stroke, setStroke] = useState<CheatsheetStroke | null>(null);
+
+  /**
+   * The sheet is a practice surface, not a pass-through overlay. Capture at the
+   * window so the application's dispatcher never sees a training key, while
+   * leaving Escape alone for its existing topmost-surface close chain.
+   */
+  useEffect(() => {
+    const capture = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') return;
+      if (/^(Shift|Control|Alt|Meta|CapsLock|AltGraph)$/.test(event.key)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setStroke({ key: event.key, altKey: event.altKey });
+    };
+    window.addEventListener('keydown', capture, true);
+    return () => window.removeEventListener('keydown', capture, true);
+  }, []);
 
   return (
     <>
@@ -33,16 +54,24 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
             <section key={section.section} className="cheatsheet-block">
               <h3>{section.section}</h3>
               <dl>
-                {section.rows.map((row) => (
-                  <div key={row.keys} className="cheatsheet-row">
-                    <dt>
-                      {row.keys.split(' ').map((k) => (
-                        <kbd key={k}>{k}</kbd>
-                      ))}
-                    </dt>
-                    <dd>{row.does}</dd>
-                  </div>
-                ))}
+                {section.rows.map((row) => {
+                  const matching = matchesCheatsheetRow(row.keys, stroke, axisKeys);
+                  return (
+                    <div key={row.keys} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
+                      <dt>
+                        {row.keys.split(' ').map((k) => (
+                          <kbd
+                            key={k}
+                            className={matchesCheatsheetRow(k, stroke, axisKeys) ? 'is-match' : ''}
+                          >
+                            {k}
+                          </kbd>
+                        ))}
+                      </dt>
+                      <dd>{row.does}</dd>
+                    </div>
+                  );
+                })}
               </dl>
             </section>
           ))}
@@ -56,21 +85,24 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
             <h3>This vault</h3>
             {axes.length ? (
               <dl>
-                {axes.map((axis) => (
-                  <div key={axis.key} className="cheatsheet-row">
-                    <dt>
-                      <kbd>{axis.key}</kbd>
-                      <span className="cheatsheet-then">1–9</span>
-                    </dt>
-                    <dd>
-                      {axis.label}
-                      {/* Cardinality decides the verb, so it is the one thing
-                          about an axis a reader has to know before pressing a
-                          digit. `set` replaces; `add` never destroys. */}
-                      <span className="cheatsheet-mode">{axis.single ? 'set' : 'add'}</span>
-                    </dd>
-                  </div>
-                ))}
+                {axes.map((axis) => {
+                  const matching = matchesCheatsheetRow('⟨axis⟩', stroke, [axis.key]);
+                  return (
+                    <div key={axis.key} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
+                      <dt>
+                        <kbd className={matching ? 'is-match' : ''}>{axis.key}</kbd>
+                        <span className="cheatsheet-then">1–9</span>
+                      </dt>
+                      <dd>
+                        {axis.label}
+                        {/* Cardinality decides the verb, so it is the one thing
+                            about an axis a reader has to know before pressing a
+                            digit. `set` replaces; `add` never destroys. */}
+                        <span className="cheatsheet-mode">{axis.single ? 'set' : 'add'}</span>
+                      </dd>
+                    </div>
+                  );
+                })}
               </dl>
             ) : (
               <div className="emptystate">
@@ -81,7 +113,12 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
           </section>
         </div>
         <div className="cheatsheet-foot">
-          esc or ? to close · a key is one letter in <code>facets.yaml</code>
+          {stroke ? (
+            <span aria-live="polite">{cheatsheetStrokeLabel(stroke)} lights every matching pattern · </span>
+          ) : (
+            <span>press a key to trace its pattern · </span>
+          )}
+          esc to close · a key is one letter in <code>facets.yaml</code>
         </div>
       </div>
     </>

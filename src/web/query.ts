@@ -1,5 +1,6 @@
 import { SHAPES as ALL_SHAPES, SPEC_PARAMS } from '../view/spec.ts';
 import type { Meta, Shape, ViewSpec } from './types.ts';
+import { VAULT_PARAM } from './vault.ts';
 
 /**
  * The URL is the view (C9).
@@ -55,13 +56,14 @@ function isQueryParam(key: string): boolean {
  * so this list is what keeps `?sel=` alive rather than treating it as the fossil
  * `?filterstyle=` became.
  *
- * The vault is not here and is not missing — it lives in `localStorage`, because
- * it is which library you opened rather than what you are looking at.
+ * The vault is context rather than part of a view, but it is still URL-owned:
+ * controls must preserve it and a bad path must be removable from the bar.
  */
 function isOwnParam(key: string): boolean {
-  return (
-    key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || isQueryParam(key)
-  );
+  // Context belongs in the URL but never in a view. Keep it isolated here so a
+  // feature that adds a view-adjacent key cannot accidentally discard it.
+  if (key === VAULT_PARAM) return true;
+  return key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || isQueryParam(key);
 }
 
 /**
@@ -197,4 +199,3 @@ export function describe(spec: ViewSpec, total: number): string {
   if (q.groupBy?.length) bits.push(`by ${q.groupBy.join(' × ')}`);
   return bits.join(' · ');
 }
-
