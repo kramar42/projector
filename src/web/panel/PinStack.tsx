@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { IconButton } from '../components/Button.tsx';
@@ -6,19 +6,20 @@ import { KeyHints } from '../components/KeyHint.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { NO_WRITES, usePanelWriter } from './usePanelWriter.ts';
 import { NoteTiers } from './tiers.tsx';
-import { SPINE_W } from './pins.ts';
+import { revealScroll, SPINE_W } from './pins.ts';
 import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
 
 /**
- * The pinned notes, in their two states.
+ * The pinned notes, in their two drawn states.
  *
- * `PinDock` is the collapsed one: a row of vertical title spines glued to the
- * right edge — left of the panel when one is open — that costs `SPINE_W` per
- * pin and leaves the view usable. `PinStack` is the spread: the same pins as
- * full-height pages laid side by side over the view, each page carrying its
- * spine as its own left edge, sticking at either viewport edge instead of
- * scrolling away — so a spread wider than the window folds its ends down to
- * titles rather than losing them.
+ * `PinDock` is the folded navigation beside an open panel: a row of vertical
+ * title spines, each jumping to that pinned note. It is absent while the view
+ * stands alone, where record marks already identify pins and the spines would
+ * only cover the work. `PinStack` is the spread: the same pins as full-height
+ * pages laid side by side over the view, each page carrying its spine as its
+ * own left edge, sticking at either viewport edge instead of scrolling away —
+ * so a spread wider than the window folds its ends down to titles rather than
+ * losing them.
  *
  * **A page draws the note the way the panel does** — the same `NoteTiers`, so
  * the facet chips, the link kinds, the derived rows and the workshop cannot
@@ -125,13 +126,11 @@ export function PinStack({
   /**
    * Bring page i into view — and **only** as far as it takes.
    *
-   * A page is fully in view when neither edge is under a stuck neighbour: with
-   * `S` the scroll offset, `L` the page's layout position and `C` the viewport,
-   * its left edge clears the `i` spines before it while `S ≤ L − i·SPINE_W`, and
-   * its right edge clears the `n−1−i` spines after it while
-   * `S ≥ L + w + (n−1−i)·SPINE_W − C`. Any `S` between those two shows the whole
-   * page, so a scroll is needed only when the current one is outside, and then
-   * only to the nearer end of the range.
+   * A page is fully in view when neither edge is under a stuck neighbour. The
+   * elders at the left have folded to spines, but the first younger page at the
+   * right has not: until normal flow reaches the focused page's edge it is a
+   * whole sticky page, with only the younger pages behind *it* reduced to
+   * spines. `revealScroll` keeps that painted geometry in one tested equation.
    *
    * Seating every focused page at the left edge instead — which is what this did
    * — meant `h` and `l` dragged the whole spread sideways on every step even when
@@ -140,11 +139,10 @@ export function PinStack({
    * than the room between the stuck spines, the left edge wins: a title and the
    * start of the prose beat the end of it.
    */
-  const reveal = useCallback((i: number) => {
+  const reveal = useCallback((i: number, behavior: ScrollBehavior = 'auto') => {
     const el = strip.current;
     const page = el?.children[i] as HTMLElement | undefined;
     if (!el || !page) return;
-    const n = el.children.length;
     const w = page.offsetWidth;
     /*
      * `i × w`, not `offsetLeft`.
@@ -156,19 +154,24 @@ export function PinStack({
      * same width by rule, so the layout position is the index times that width,
      * which is a fact the render already guarantees.
      */
-    const layout = i * w;
-    const most = layout - i * SPINE_W;
-    const least = layout + w + (n - 1 - i) * SPINE_W - el.clientWidth;
     const at = el.scrollLeft;
-    const to = at > most ? most : at < least ? Math.min(least, most) : at;
+    const to = revealScroll(
+      i,
+      el.children.length,
+      w,
+      el.clientWidth,
+      at,
+      el.scrollWidth - el.clientWidth,
+    );
     if (to === at) return;
-    el.scrollTo({ left: Math.max(0, Math.min(to, el.scrollWidth - el.clientWidth)), behavior: 'smooth' });
+    el.scrollTo({ left: to, behavior });
   }, []);
 
-  // The focused page comes into view when it is not — `h`/`l` land somewhere
-  // readable, and a page already on screen stays exactly where it is.
+  // The focused page comes into view before it is painted — `h`/`l` can repeat
+  // faster than a smooth scroll, and the cursor must never outrun the note it
+  // identifies. A spine click below keeps the glide because it is the motion.
   const focused = cursor && pages.includes(cursor) ? cursor : openNote;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focused) reveal(pages.indexOf(focused));
     // `pages` is derived from the same URL state a focus change re-renders on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,7 +232,7 @@ export function PinStack({
           isFocus={id === focused}
           isPinned={pins.includes(id)}
           onFocus={() => onCursor(id)}
-          onSpine={() => reveal(i)}
+          onSpine={() => reveal(i, 'smooth')}
           onOpen={onOpen}
           onUnpin={() => onUnpin(id)}
           onFocusRow={onFocus}

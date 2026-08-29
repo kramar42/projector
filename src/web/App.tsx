@@ -776,9 +776,11 @@ export function App() {
       <div
         className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${
           openNote && !stackOpen ? 'panel-is-open' : ''
-        } ${pins.length && !stackOpen ? 'pins-are-docked' : ''}`}
+        } ${openNote && pins.length && !stackOpen ? 'pins-are-docked' : ''}`}
         // The dock's reach, for `--covered-right`: `SPINE_W` per pin, measured
         // nowhere because it is a token — the same argument `.panel` makes.
+        // It matters only beside an open panel; compact views carry their pins
+        // on the notes' record marks and give none of the view to duplicate UI.
         style={{ ['--pins-w' as string]: `${pins.length * SPINE_W}px` }}
       >
         <Sidebar
@@ -787,6 +789,16 @@ export function App() {
           search={search}
           wire={wire}
           onShowDeclined={() => setDeclined(true)}
+          pins={pins.length}
+          onShowPins={() => {
+            // Pins are a reading set, not a computed property of the notes. The
+            // spread is their honest "only these" surface: no saved query or CLI
+            // invocation acquires session state it cannot reproduce.
+            const first = cursor.id && pins.includes(cursor.id) ? cursor.id : pins[0];
+            if (!first) return;
+            cursor.step(first);
+            setStack(true, first);
+          }}
           patch={patch}
           edit={edit}
           onSwitchVault={switchVault}
@@ -841,9 +853,9 @@ export function App() {
             onRestored={loadMeta}
           />
         )}
-        {pins.length > 0 && !stackOpen && (
-          // The collapsed pins: title spines at the right edge, left of the
-          // panel when one is open. Same no-fallback reasoning as the panel.
+        {openNote && pins.length > 0 && !stackOpen && (
+          // Folded pins become navigation only while a note is open: title
+          // spines at the panel's left edge, each opening that pinned note.
           <Suspense fallback={null}>
             <PinDock pins={pins} notes={data?.notes ?? {}} onOpen={openCard} />
           </Suspense>

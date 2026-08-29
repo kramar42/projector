@@ -312,8 +312,9 @@ where things sit (C8).
 
 ### Pins are a reading surface, and the cursor stays the only pointer
 
-`'` pins the cursor's note; the pins stand as title spines at the right edge, and `"` spreads them
-side by side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
+`'` pins the cursor's note; its record mark shows the pin without covering the compact view. While a
+note panel is open the pins stand beside it as title-spine navigation, and `"` spreads them side by
+side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
 
 - **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=` and the
   spread in `?stack=`, beside `?sel=` and `?note=` and outside `SPEC_PARAMS` for their reasons: a pin
@@ -321,6 +322,8 @@ side by side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry
   one — a view is a query, and a reading stack is a moment. `?sel=` is what a bulk write lands on;
   `?pins=` is what stays in sight; the two never touch. A list rather than a set, because the spread
   draws pins oldest-left and order is the one thing `?sel=`'s shape cannot carry.
+  The footer count opens the spread as the pinned-only surface; it does not manufacture a `pinned`
+  computed axis, because the engine and CLI have no session reading set from which to compute one.
 - **A page is the panel's own rendering.** Both draw `panel/tiers.tsx`, extracted when the spread
   arrived: a second rendering built to look like the panel is a second rendering that drifts from it,
   and the facet hues, link kinds and derived rows are exactly what a reader compares across four notes
@@ -340,11 +343,16 @@ side by side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry
 - **The fold is geometry, not measurement.** A spread page is `position: sticky` with per-index
   offsets — no further left than its elders' spines, no further right than its juniors' — so pages
   fold to their own spines at either viewport edge instead of scrolling away, and there is no
-  overflow bookkeeping to drift. The offsets and the dock's `--covered-right` reach are all multiples
-  of one constant (`src/web/panel/pins.ts`), written inline rather than restated in the stylesheet.
-  The same two offsets give `reveal` its answer: page `i` is whole on screen for any scroll between
-  `L + w + (n−1−i)·SPINE_W − C` and `L − i·SPINE_W`, so walking the spread scrolls **only** when the
-  page landed on is outside that range, and then only to its nearer end. `L` is `i × w` and not
+  overflow bookkeeping to drift. The offsets and the open panel-side dock's `--covered-right` reach
+  are all multiples of one constant (`src/web/panel/pins.ts`), written inline rather than restated in
+  the stylesheet.
+  The same two offsets give `reveal` its answer, with one sticky subtlety: the first page to the right
+  is still a **whole page** until normal flow reaches the focused page's edge; only the pages behind
+  it have folded to spines. Thus the lower bound reserves `w + (n−2−i)·SPINE_W` when a younger page
+  exists, not `(n−1−i)·SPINE_W`. Walking the spread scrolls **only** when the page landed on is outside
+  that range, and then only to its nearer end. Keyboard focus seats that offset in a layout effect,
+  without smooth scrolling, so repeated `h`/`l` cannot leave the cursor painted on a page that is
+  still behind its neighbours; a direct spine click keeps the glide. `L` is `i × w` and not
   `offsetLeft`, because Chrome reports a stuck element's `offsetLeft` at the position it is stuck to —
   read from there, every page measured as already seated and nothing ever scrolled.
 

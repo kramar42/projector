@@ -312,13 +312,12 @@ export function RecordMark({ card, pinned = false }: { card: Marked; pinned?: bo
   const { glyph, role, means } = markOf(card);
   return (
     /*
-     * Pinned changes the mark's *colour*, never its glyph.
+     * Pinned frames the mark, but changes neither its glyph nor its colour.
      *
      * The glyph says what the note is — `markOf` derives it from what names the
      * record — and a pin says nothing about that; it says you are holding this
-     * one in sight. Two facts, one mark, and the only way to carry both without
-     * a second glyph competing with the first is to spend the one channel the
-     * mark was not already using. See `--pinned` in the stylesheet.
+     * one in sight. The accent glyph keeps its one meaning while a key-like
+     * `--pinned` surround carries the second fact without competing with it.
      */
     <span
       className={`recordmark is-${role} ${pinned ? 'is-pinned' : ''}`}

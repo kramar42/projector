@@ -692,6 +692,7 @@ test('a counter cannot lose its tabular guard by accident', () => {
     'progress-num',
     'quietcount',
     'rail-active',
+    'rail-pins',
     'rail-stats',
     'section-count',
     'sidebar-ribbon-info',

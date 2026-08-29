@@ -27,7 +27,7 @@ export function PinnedProvider({ pins, children }: { pins: string[]; children: R
   return <PinnedContext.Provider value={has}>{children}</PinnedContext.Provider>;
 }
 
-/** Is this note pinned? What a mark asks to know which colour it is. */
+/** Is this note pinned? What a mark asks to know whether it needs its surround. */
 export function useIsPinned(): (id: string) => boolean {
   return useContext(PinnedContext);
 }

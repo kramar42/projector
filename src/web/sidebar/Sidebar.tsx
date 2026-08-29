@@ -34,6 +34,8 @@ export function Sidebar({
   edit,
   onSwitchVault,
   onShowDeclined,
+  pins,
+  onShowPins,
   onAddVault,
   onOpenNote,
   collapsed,
@@ -56,6 +58,10 @@ export function Sidebar({
   onSwitchVault: (path: string) => void;
   /** Open the declined pile — a surface over the view, not a query. */
   onShowDeclined: () => void;
+  /** The session's reading set, reported with the current-query counts. */
+  pins: number;
+  /** Show that reading set on its own spread, without turning it into a query. */
+  onShowPins: () => void;
   onAddVault: () => void;
   onOpenNote: (id: string) => void;
   collapsed: boolean;
@@ -185,7 +191,7 @@ export function Sidebar({
       </div>
 
       <div className="rail-foot">
-        <ActiveStats data={data} edit={edit} />
+        <ActiveStats data={data} edit={edit} pins={pins} onShowPins={onShowPins} />
         <SearchBox spec={data?.spec} edit={edit} />
       </div>
     </nav>
@@ -206,7 +212,17 @@ export function Sidebar({
  * changes every time the filter does; it sits with the vault stats at the top of
  * the rail now.
  */
-function ActiveStats({ data, edit }: { data: QueryResponse | null; edit: Edit }) {
+function ActiveStats({
+  data,
+  edit,
+  pins,
+  onShowPins,
+}: {
+  data: QueryResponse | null;
+  edit: Edit;
+  pins: number;
+  onShowPins: () => void;
+}) {
   if (!data) return <div className="rail-active">…</div>;
   const hidden = Math.max(0, data.universe - data.total);
   const active = Object.values(data.spec.query.filter ?? {}).filter((v) => v.length).length;
@@ -239,6 +255,19 @@ function ActiveStats({ data, edit }: { data: QueryResponse | null; edit: Edit })
   return (
     <div className="rail-active">
       <b>{data.total}</b> shown
+      {' · '}
+      {pins > 0 ? (
+        <button
+          type="button"
+          className="rail-pins"
+          onClick={onShowPins}
+          title="Show only the pinned notes"
+        >
+          <b>{pins}</b> pinned
+        </button>
+      ) : (
+        <>0 pinned</>
+      )}
       {hidden > 0 && (
         <>
           {' '}

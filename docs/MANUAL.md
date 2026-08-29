@@ -352,7 +352,7 @@ That is also the sidebar, top to bottom. No top bar, and only the filter panel s
 [ focus ]    note · via · direction · depth
 [ filter ]   the facet panel
 ──────────────────────────────────────────
-( 121 shown · 38 filtered out ✕ · 6 for context )
+( 121 shown · 4 pinned · 38 filtered out ✕ · 6 for context )
 [ search ]
 ```
 
@@ -368,10 +368,12 @@ float over the calendar by the same rule: only a calendar can honour them.
 
 The bulk-selection bar floats over whichever shape has a selection, for the same reason: it exists
 only while one does.
-The footer always says how many notes are shown, how many the filter is hiding and how many are
-context — so a note that is missing is never a mystery. The **✕** that clears the filter and the
-search sits against *filtered out*, because that is the count it undoes. What a sweep declined is not
-a fact about the current query, so it reads with the vault stats at the top of the rail instead,
+The footer always says how many notes are shown, how many are pinned, how many the filter is hiding
+and how many are context — so a note that is missing is never a mystery. Press the pinned count to
+show only that reading set in the spread; it is deliberately not a computed axis, because pins belong
+to this session rather than to the notes, a saved view or the CLI. The **✕** that clears the filter
+and the search sits against *filtered out*, because that is the count it undoes. What a sweep declined
+is not a fact about the current query, so it reads with the vault stats at the top of the rail instead,
 beside the size of the unjudged queue.
 
 ## filter
@@ -1369,7 +1371,7 @@ sight — the reading set beside the writing set, and the two never touch.
 
 | Keys | What |
 |---|---|
-| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A pin keeps a full-height **title spine** at the right edge — a browser's vertical tabs, for notes. Its **record mark turns yellow** wherever the note is drawn, so you can see what you are holding without leaving the board |
+| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. Its accent record mark gains a **yellow key-like surround** wherever the note is drawn, so you can see what you are holding without leaving the board. Open a note and the pins appear beside its panel as navigable title spines |
 | `"` | **spread** the pins side by side over the view, or fold them back |
 | `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
 | `j` `k` | scroll the focused page |
@@ -1388,11 +1390,13 @@ screen. Editing the note in front of you is `⏎`, which folds the spread onto i
 that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there.
 
 **The spread only moves when it has to.** Walking with `h` and `l` scrolls nothing while the page you
-land on is already whole on screen, and when it is not, it scrolls just far enough to show it — so a
-spread that fits sits perfectly still while you read across it.
+land on is already whole on screen, and when it is not, seats it immediately and only as far as needed
+— so the cursor never outruns a glide and a spread that fits sits perfectly still while you read
+across it. Clicking a spine keeps the deliberate glide.
 
-Collapsed, a spine costs about as much width as a scrollbar and the view stays usable; clicking one opens that note, the
-same act as clicking its card. Spread, the pages glue edge to edge and scroll sideways — drag a
+Folded with no note open, the marked notes carry the whole signal and no spine covers the view. Open a
+note and the pinned spines appear at the panel's left edge; clicking one jumps to that note, the same
+act as clicking its card. Spread, the pages glue edge to edge and scroll sideways — drag a
 spine, a header or a margin to pan (prose stays selectable), click a spine to glide that page fully
 into view, and a spread wider than the window folds its far pages down to their spines instead of
 scrolling them away.
@@ -1405,7 +1409,8 @@ up as spines instead of hiding in the jumplist.
 
 Pins live in the URL (`?pins=`, spread state in `?stack=`) like the selection does: they survive a
 reload and a change of shape, and they are never part of a saved view — a view is a query, and a
-reading stack is a moment.
+reading stack is a moment. The footer's pinned count opens that stack directly: it is the pinned-only
+surface without pretending that a momentary reading set is a computed axis on every note.
 
 ## Writing
 

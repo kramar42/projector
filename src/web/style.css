@@ -58,8 +58,9 @@
    *
    * A record mark draws in `--accent`, which is the app speaking about the note
    * — see `.recordmark`. A pin is the app speaking about *you*, so it needs a
-   * value of its own rather than a louder accent, which would put two different
-   * meanings on one colour at the exact repetition where that stops working.
+   * value of its own around that mark rather than replacing the accent, which
+   * would put two different meanings on one colour at the exact repetition
+   * where that stops working.
    *
    * The same naming decision `--accent` itself makes over `--hue-purple`: this
    * holds the yellow family's value in both themes and is not that family. A pin
@@ -247,6 +248,7 @@
  */
 .rail-stats,
 .rail-active,
+.rail-pins,
 .sidebar-ribbon-info,
 .facet-badge,
 .quietcount,
@@ -724,6 +726,29 @@ body {
 .rail-active b {
   color: var(--ink);
 }
+
+/*
+ * A clause in the footer sentence, not a button beside it.
+ *
+ * It opens the reading set's spread; keeping the button visually identical to
+ * the count says that pins are another answer to "what is here", while the
+ * dashed underline is the quiet affordance already used by the declined count.
+ */
+.rail-pins {
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.rail-pins:hover { color: var(--ink-2); }
+.rail-pins:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /*
  * The clear, sized to the line it interrupts.
@@ -1451,18 +1476,31 @@ input:focus-visible + .checkbox {
 }
 
 /*
- * Pinned, and so drawn in the one colour that means only that.
+ * Pinned, and so framed in the one colour that means only that.
  *
- * After the role rules rather than before, because it overrides the shared
- * `color` and the three role rules below set metrics rather than colour — so
- * this is the whole of the override and there is no ordering to get wrong.
- *
- * It is the *mark* that changes and not the face: a pin is a fact about a note
- * you can see at a glance across a board, and tinting a whole card would make
- * the reading set look like a facet value — which is the one thing it is not.
+ * The glyph stays `accent`: its colour already says that this is the app's
+ * derived note vocabulary, and spending it again on pinned-ness made the mark
+ * lose contrast and change meaning. The surround borrows the cheatsheet key's
+ * compact raised shape, using a low pinned wash so the accent still reads on
+ * effectively the same surface and a full-strength edge so the pin reads at a
+ * glance. A pseudo-element keeps the measured glyph box and every title's
+ * baseline untouched; the face itself is never tinted like a facet value.
  */
 .recordmark.is-pinned {
-  color: var(--pinned);
+  position: relative;
+  isolation: isolate;
+}
+
+.recordmark.is-pinned::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -2px -3px -3px;
+  background: color-mix(in srgb, var(--pinned) 12%, var(--surface));
+  border: 1px solid var(--pinned);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
 }
 
 /* `•` centres at 0.3716em of its own size (measured; the middle dot it replaced
@@ -1922,7 +1960,7 @@ input:focus-visible + .checkbox {
 /* ---------------------------------------------------------------- pins */
 
 /*
- * The pinned notes, in their two states. `PinStack.tsx` holds the argument;
+ * The pinned notes, in their two drawn states. `PinStack.tsx` holds the argument;
  * what is stated here is only how they are drawn.
  *
  * Widths are deliberately absent: a spine is `SPINE_W` wide and the sticky
@@ -1941,7 +1979,7 @@ input:focus-visible + .checkbox {
   z-index: 21;
 }
 
-/* Left of the open panel, which is fixed, flush right and exactly --panel-w. */
+/* Left of the open panel, the only state in which this navigation is drawn. */
 .shell.panel-is-open .pindock {
   right: var(--panel-w);
 }
@@ -5118,17 +5156,17 @@ input[data-nav]:focus + .checkbox {
   background: none;
   border: none;
   padding: 0;
-  /* Brighter than the line it sits in, and no hue.
-     The accent is this app's one pointing finger and it is spent on selection
-     and focus; a standing count that is nonzero most of the time would wear it
-     permanently, which is how an accent stops meaning anything. One step up the
-     ink ladder plus the underline is enough to read as pressable. */
-  color: var(--ink-2);
-  text-decoration: underline;
+  /* The line's own ink and a broken underline: present enough to remain a link,
+     quiet enough that a standing nonzero count does not become the vault block's
+     headline. Accent is reserved for focus and selection. */
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--rule-2);
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.rail-declined:hover { color: var(--ink); }
+.rail-declined:hover { color: var(--ink-2); }
 .rail-declined:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /*

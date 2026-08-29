@@ -1158,7 +1158,9 @@ the fourth one relitigating it:
   facts*. `.rail-declined` argues it in its own comment — a count that is nonzero most of the time
   would wear the accent permanently, which is how an accent stops meaning anything — and `.chip.is-model`
   broke it forty lines away, wearing the accent on every classifier row. Where a row must read louder
-  than its neighbour, that is the ink ladder's job.
+  than its neighbour, that is the ink ladder's job. The declined count keeps the stats line's quiet
+  ink and only a dashed underline; a permanent full underline was still enough to make it the block's
+  loudest clause.
 - **A chip is a facet value.** A property of the *record* — who decided, when — is meta register, not a
   chip. `By` was a chip because a chip was the nearest thing to hand.
 
@@ -1178,16 +1180,18 @@ which is a layout, not a register.
 
 ### The Spine Rule
 
-**A pinned note borrows the panel's register at every scale, and its spine is part of the page, not
-chrome beside it.**
+**A pinned note borrows the panel's register at every scale. In the spread its spine is part of the
+page; folded spines are panel-side navigation, never standalone view chrome.**
 
 The pins arrived long after the panel settled, so like the calendar they are a stated borrowing. A
 spread page (`.pinpage`) is the panel's surface, hairline and shadow at panel width; its head is the
 panel's head — headline-step title behind a hairline, mark first; its body is `.md` and its facts are
 `.kv`, unchanged, because a read-only rendering of a note must read as *the note*, not as a summary
-of one. The dock and the spread cover the view the way the panel does (**a view does not move when a
-note opens** — the reach is declared through `--covered-right`, never reserved as a track), and the
-spread takes the panel's own layer because the two never coexist.
+of one. The dock appears only beside an open panel, where its spines are navigation between pinned
+notes; a compact view draws no duplicate spines over its content because its record marks already
+show the pins. The open dock and the spread cover the view the way the panel does (**a view does not
+move when a note opens** — the reach is declared through `--covered-right`, never reserved as a
+track), and the spread takes the panel's own layer because the two never coexist.
 
 The borrowing is now literal: a page renders `NoteTiers`, which is the panel's own tier stack, so
 there is no second rendering of a note to keep in step with the first. What a page adds is a spine and
@@ -1204,13 +1208,14 @@ from its neighbours (`ink` against `ink-2`), which is how a reading copy recedes
 fade taking the hairlines and chip fills down with it. Nothing else on the surface spends accent, per
 the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
 
-**A pinned note's record mark draws in `--pinned`, not the accent.** The mark is `accent` everywhere
-because it is the app speaking about the note (see `.recordmark`); a pin is the app speaking about
-*you*, and that is a second thing to say with the one channel the glyph was not already using — the
-glyph itself keeps meaning what `markOf` derives, so the colour carries the pin and nothing competes.
-`--pinned` holds the yellow family's value in both themes and is deliberately not named for it: the
-same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not a
-facet value, so it may not wear an axis's hue under an axis's name.
+**A pinned note's record mark keeps its accent glyph inside a `--pinned` surround.** The mark is
+`accent` everywhere because it is the app speaking about the note (see `.recordmark`); replacing that
+colour made the same glyph change meaning and left too little contrast at its smallest sizes. A
+compact, key-like surround now carries the pin as the app speaking about *you*: a low yellow wash
+behind the accent glyph and a full yellow edge around it, without tinting the note face like a facet
+value. `--pinned` holds the yellow family's value in both themes and is deliberately not named for it:
+the same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not
+a facet value, so it may not wear an axis's hue under an axis's name.
 
 ## Do's and Don'ts
 

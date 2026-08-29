@@ -27,6 +27,7 @@ import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
 import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
+import { revealScroll } from '../src/web/panel/pins.ts';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -348,6 +349,19 @@ test('pins round-trip the URL in order, and an empty set leaves no key', () => {
   assert.deepEqual(pinsPatch(['b', 'a']), { pins: 'b,a' });
   assert.deepEqual(pinsPatch([]), { pins: null }, 'empty removes the key');
   assert.equal(patchSearch('?view=home&pins=a', pinsPatch([])), '?view=home');
+});
+
+/**
+ * A right-stuck page paints its full width over the page before it until the
+ * strip has moved far enough for that page to return to normal flow. Counting
+ * it as a 34px spine says page two is visible at scroll zero, while its title is
+ * actually behind page three.
+ */
+test('revealing a spread page clears the full sticky page on its right', () => {
+  assert.equal(revealScroll(0, 8, 460, 1280, 0, 2400), 0, 'the first page is already whole');
+  assert.equal(revealScroll(1, 8, 460, 1280, 0, 2400), 270);
+  assert.equal(revealScroll(1, 8, 460, 1280, 2400, 2400), 426, 'walking left clears elder spines');
+  assert.equal(revealScroll(7, 8, 460, 1280, 0, 2400), 2400, 'the final page reaches the scroll end');
 });
 
 test('the vault is URL-owned context, not a query parameter', () => {
