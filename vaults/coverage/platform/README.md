@@ -12,8 +12,8 @@ project:
     - { path: "~/code/infra", base: "dev" }
   jira: PROJ
   branch: "plat/{note}"
-created: 2025-07-22  # older
-updated: 2026-08-25  # fresh
+created: 2025-07-25  # older
+updated: 2026-08-28  # fresh
 ---
 
 Renders: the `▣` project mark, a member count, a `project:` block in the panel,

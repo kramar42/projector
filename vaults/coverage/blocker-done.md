@@ -4,8 +4,8 @@ title: "A blocker that is finished"
 facets:
   status: ["done"]
   priority: ["month"]
-created: 2025-07-22  # older
-updated: 2026-08-06  # month
+created: 2025-07-25  # older
+updated: 2026-08-09  # month
 ---
 
 Renders: `status: done`, and the *absence* of an effect. A finished blocker blocks

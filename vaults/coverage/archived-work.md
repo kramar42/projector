@@ -6,8 +6,8 @@ facets:
   priority: ["someday"]
   source: ["claude"]
 source_fingerprint: "claude:00000000-0000-4000-8000-000000000000"
-created: 2025-07-22  # older
-updated: 2025-07-22  # older
+created: 2025-07-25  # older
+updated: 2025-07-25  # older
 ---
 
 Renders: `status: archived`, the fifth lifecycle value, and a note carrying a

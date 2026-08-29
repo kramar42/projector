@@ -6,8 +6,8 @@ facets:
   priority: ["now"]
   tech: ["kafka"]
   blocked_by: ["blocker-done"]
-created: 2025-07-22  # older
-updated: 2026-08-25  # fresh
+created: 2025-07-25  # older
+updated: 2026-08-28  # fresh
 ---
 
 Renders: no left border and `blocked: clear`, despite naming a blocker. If this

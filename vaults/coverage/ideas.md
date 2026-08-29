@@ -1,8 +1,8 @@
 ---
 id: ideas
 title: "Ideas worth keeping"
-created: 2025-07-22  # older
-updated: 2026-08-22  # week
+created: 2025-07-25  # older
+updated: 2026-08-25  # week
 ---
 
 Renders: the `○` node mark and a child count. No `status`, so it is not work and

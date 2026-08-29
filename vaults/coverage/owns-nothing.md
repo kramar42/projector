@@ -6,8 +6,8 @@ facets:
   priority: ["someday"]
 project:
   jira: EMPTY
-created: 2025-07-22  # older
-updated: 2026-08-06  # month
+created: 2025-07-25  # older
+updated: 2026-08-09  # month
 ---
 
 Renders: the empty roll-up. A table row should read `0 / 0` and the progress bar

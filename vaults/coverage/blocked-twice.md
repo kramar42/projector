@@ -6,8 +6,8 @@ facets:
   priority: ["month"]
   project: ["platform"]
   blocked_by: ["blocked-once"]
-created: 2025-07-22  # older
-updated: 2026-08-22  # week
+created: 2025-07-25  # older
+updated: 2026-08-25  # week
 ---
 
 Renders: the far end of a chain. Directly blocked by one note, transitively by two.

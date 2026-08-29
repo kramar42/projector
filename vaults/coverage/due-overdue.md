@@ -4,10 +4,10 @@ title: "A deadline that has passed"
 facets:
   status: ["active"]
   priority: ["now"]
-  due: ["2026-08-17"]  # overdue
+  due: ["2026-08-20"]  # overdue
   project: ["platform"]
-created: 2025-07-22  # older
-updated: 2026-08-25  # fresh
+created: 2025-07-25  # older
+updated: 2026-08-28  # fresh
 ---
 
 Renders: the filled overdue chip — the bucket's own `hue: red` drawn

@@ -6,8 +6,8 @@ facets:
   priority: ["now"]
   project: ["identity"]
   parent: ["ideas"]
-created: 2025-07-22  # older
-updated: 2026-08-25  # fresh
+created: 2025-07-25  # older
+updated: 2026-08-28  # fresh
 ---
 
 Renders: the progress bar — 44px track, `--ok` fill, tabular number. The app counts

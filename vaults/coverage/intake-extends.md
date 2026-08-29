@@ -8,8 +8,8 @@ facets:
   status: ["on-hold"]
   priority: ["month"]
   tech: ["kafka"]
-created: 2025-07-22  # older
-updated: 2025-07-22  # older
+created: 2025-07-25  # older
+updated: 2025-07-25  # older
 ---
 
 Renders a candidate that wants **folding into** another note rather than standing

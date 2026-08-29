@@ -6,8 +6,8 @@ facets:
   priority: ["now"]
   waiting_on: ["person-a", "person-b"]
   domain: ["workflow"]
-created: 2025-07-22  # older
-updated: 2026-08-22  # week
+created: 2025-07-25  # older
+updated: 2026-08-25  # week
 ---
 
 Renders: red `waiting_on` chips and `blocked: waiting_on` — the axis names the

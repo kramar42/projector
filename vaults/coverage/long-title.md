@@ -6,8 +6,8 @@ facets:
   priority: ["backlog"]
   tech: ["devops"]
   project: ["platform"]
-created: 2025-07-22  # older
-updated: 2026-08-22  # week
+created: 2025-07-25  # older
+updated: 2026-08-25  # week
 ---
 
 Renders: `overflow-wrap: anywhere` on the title, and the two-line clamp on the

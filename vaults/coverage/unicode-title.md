@@ -6,8 +6,8 @@ facets:
   priority: ["someday"]
   domain: ["master-data"]
   parent: ["ideas"]
-created: 2025-07-22  # older
-updated: 2026-08-06  # month
+created: 2025-07-25  # older
+updated: 2026-08-09  # month
 ---
 
 Renders: the note mark next to text whose ink sits nowhere near where lowercase

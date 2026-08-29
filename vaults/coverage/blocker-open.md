@@ -5,8 +5,8 @@ facets:
   status: ["active"]
   priority: ["now"]
   energy: ["deep"]
-created: 2025-07-22  # older
-updated: 2026-08-25  # fresh
+created: 2025-07-25  # older
+updated: 2026-08-28  # fresh
 ---
 
 Renders: the `unblocks` glyph in the accent, and a transitive count — finishing this

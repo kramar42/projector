@@ -1,7 +1,7 @@
 ---
 id: bare
 title: "Nothing but the two required fields"
-created: 2025-07-22  # older
+created: 2025-07-25  # older
 ---
 
 Renders: the minimal face — `·`, a title, no chips, no meta line, no excerpt beyond
