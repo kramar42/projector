@@ -1362,6 +1362,51 @@ observed, and the traversal is the only way to see the other end.
 | `*` | select everything on screen |
 | `Esc` | clear the selection |
 
+## Pins
+
+Seeing several notes at once. A selection is what a bulk write lands on; a **pin** is what stays in
+sight — the reading set beside the writing set, and the two never touch.
+
+| Keys | What |
+|---|---|
+| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A pin keeps a full-height **title spine** at the right edge — a browser's vertical tabs, for notes. Its **record mark turns yellow** wherever the note is drawn, so you can see what you are holding without leaving the board |
+| `"` | **spread** the pins side by side over the view, or fold them back |
+| `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
+| `j` `k` | scroll the focused page |
+| `⏎` `o` | fold the spread onto the focused note's panel |
+| `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a page's `✕` do, so no chain of Escapes can cost you the set |
+
+**A page draws the note exactly as the panel does** — the same facet rows, the same links, the same
+`Children`-style derived rows, the same workshop — because it is the same component. What a page
+leaves out is the **key hints**: the little mono letters beside a row appear on the focused page and
+nowhere else, since a key acts on that page and a hint anywhere else would be naming a stroke that
+lands somewhere you are not.
+
+**Exactly one page is actionable, and it is the focused one.** The others cannot be clicked, cannot be
+tabbed into and cannot write — so there is still one place a keystroke can land with four notes on
+screen. Editing the note in front of you is `⏎`, which folds the spread onto its panel; any command
+that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there.
+
+**The spread only moves when it has to.** Walking with `h` and `l` scrolls nothing while the page you
+land on is already whole on screen, and when it is not, it scrolls just far enough to show it — so a
+spread that fits sits perfectly still while you read across it.
+
+Collapsed, a spine costs about as much width as a scrollbar and the view stays usable; clicking one opens that note, the
+same act as clicking its card. Spread, the pages glue edge to edge and scroll sideways — drag a
+spine, a header or a margin to pan (prose stays selectable), click a spine to glide that page fully
+into view, and a spread wider than the window folds its far pages down to their spines instead of
+scrolling them away.
+
+**Three ways out of a note you are reading.** In the panel and on a spread page alike, a reference
+chip follows on click and the modifiers say how: plain click **replaces** what you are reading and
+records the trail (`H` comes back); `⌥`-click sends the reference **to a new pin** and stays put;
+`⇧`-click pins **the note you are on** and follows — Andy-Matuschak-style reading, the trail piling
+up as spines instead of hiding in the jumplist.
+
+Pins live in the URL (`?pins=`, spread state in `?stack=`) like the selection does: they survive a
+reload and a change of shape, and they are never part of a saved view — a view is a query, and a
+reading stack is a moment.
+
 ## Writing
 
 A write lands on the **selection if there is one, and the cursor's card otherwise** — the rule a drag

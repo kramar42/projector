@@ -53,6 +53,20 @@
   --hue-red: #623737;
   --hue-orange: #624a37;
   --hue-yellow: #626237;
+  /*
+   * The app's second voice: "you are holding this one in sight."
+   *
+   * A record mark draws in `--accent`, which is the app speaking about the note
+   * — see `.recordmark`. A pin is the app speaking about *you*, so it needs a
+   * value of its own rather than a louder accent, which would put two different
+   * meanings on one colour at the exact repetition where that stops working.
+   *
+   * The same naming decision `--accent` itself makes over `--hue-purple`: this
+   * holds the yellow family's value in both themes and is not that family. A pin
+   * is not a facet value — nothing on the note stores it, and it lives in the URL
+   * — so it may not wear an axis's hue under an axis's name.
+   */
+  --pinned: #626237;
   --hue-green: #4a6237;
   --hue-blue: #375362;
   --hue-purple: #373762;
@@ -139,6 +153,7 @@
     --hue-red: #df8787;
     --hue-orange: #dfaf87;
     --hue-yellow: #dfdf87;
+    --pinned: #dfdf87;
     --hue-green: #afdf87;
     --hue-blue: #87afdf;
     --hue-purple: #a6a6e7;
@@ -389,6 +404,20 @@ body {
  */
 .shell.panel-is-open {
   --covered-right: var(--panel-w);
+}
+
+/*
+ * The pin dock covers too, and its reach is also a token rather than a
+ * measurement: `SPINE_W` per pin, written onto the shell as `--pins-w` by the
+ * one component that knows the count. Beside an open panel the two reaches
+ * simply add — the dock sits at the panel's left edge.
+ */
+.shell.pins-are-docked {
+  --covered-right: var(--pins-w, 0px);
+}
+
+.shell.pins-are-docked.panel-is-open {
+  --covered-right: calc(var(--panel-w) + var(--pins-w, 0px));
 }
 
 /* The sidebar *is* the view: sections grouped by purpose, and exactly one of
@@ -1421,6 +1450,21 @@ input:focus-visible + .checkbox {
   align-self: baseline;
 }
 
+/*
+ * Pinned, and so drawn in the one colour that means only that.
+ *
+ * After the role rules rather than before, because it overrides the shared
+ * `color` and the three role rules below set metrics rather than colour — so
+ * this is the whole of the override and there is no ordering to get wrong.
+ *
+ * It is the *mark* that changes and not the face: a pin is a fact about a note
+ * you can see at a glance across a board, and tinting a whole card would make
+ * the reading set look like a facet value — which is the one thing it is not.
+ */
+.recordmark.is-pinned {
+  color: var(--pinned);
+}
+
 /* `•` centres at 0.3716em of its own size (measured; the middle dot it replaced
    was 0.3474em, which is where the old 0.03em came from). At mark = 0.8 × text:
    0.3716×0.8 − 0.254 = 0.0433 of text size = 0.054em of the mark's own. */
@@ -1873,6 +1917,175 @@ input:focus-visible + .checkbox {
   padding: 0 0 30px;
   display: flex;
   flex-direction: column;
+}
+
+/* ---------------------------------------------------------------- pins */
+
+/*
+ * The pinned notes, in their two states. `PinStack.tsx` holds the argument;
+ * what is stated here is only how they are drawn.
+ *
+ * Widths are deliberately absent: a spine is `SPINE_W` wide and the sticky
+ * offsets that make pages fold at the edges are `SPINE_W` multiples, and all of
+ * them arrive as inline styles from the one constant. Written here as well,
+ * they would drift — the same argument `--panel-w` makes, resolved the other
+ * way because these are per-element numbers a selector cannot compute.
+ */
+.pindock {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  /* The panel's own layer: the two share the right edge, never a pixel. */
+  z-index: 21;
+}
+
+/* Left of the open panel, which is fixed, flush right and exactly --panel-w. */
+.shell.panel-is-open .pindock {
+  right: var(--panel-w);
+}
+
+.pindock-spine {
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink-2);
+  border: none;
+  border-left: 1px solid var(--rule);
+  padding: 14px 0 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.pindock-spine:hover {
+  background: var(--surface-2);
+}
+
+/* A pinned title, turned on its side. Shared by the dock and a spread page. */
+.spinelabel {
+  writing-mode: vertical-rl;
+  font-size: var(--text-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 85vh;
+}
+
+/*
+ * The spread: one horizontal scroller over everything, pages sticky inside it.
+ * It replaces the panel rather than joining it — the panel is unmounted while
+ * this is up — so it takes the panel's layer.
+ */
+.pinstack {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  background: var(--ground);
+}
+
+/* Mid-drag, the hand owns the surface: no selection grows under it. */
+.pinstack.is-panning,
+.pinstack.is-panning * {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.pinpage {
+  position: sticky;
+  flex: none;
+  width: min(460px, 92vw);
+  height: 100%;
+  display: flex;
+  background: var(--surface);
+  border-left: 1px solid var(--rule);
+  box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18);
+}
+
+/*
+ * The focused page is the cursor, so it takes the cursor's colour — an inset
+ * top edge rather than an outline, because neighbouring pages overlap outlines
+ * as they fold and a page's top edge is the one strip nothing ever covers.
+ */
+.pinpage.is-focus {
+  box-shadow:
+    inset 0 2px 0 0 var(--accent),
+    -12px 0 40px rgba(8, 6, 12, 0.18);
+}
+
+/* The page's own left edge — the part that stays when the page folds away. */
+.pinpage-spine {
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink-2);
+  border: none;
+  border-right: 1px solid var(--rule);
+  padding: 14px 0 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.pinpage-spine:hover {
+  background: var(--surface-2);
+}
+
+.pinpage-content {
+  flex: 1;
+  min-width: 0;
+  /* Without this the scroll region below sizes to its content instead of the
+     page — a flex child's min-height is its content unless told otherwise. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pinpage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+
+.pinpage-title {
+  font-size: var(--text-headline);
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * No padding of its own: it holds `.panel-body`, which is the panel's own tier
+ * stack and owns the interval on all four sides. A page that padded as well
+ * would draw the note at a different rhythm from the panel one keystroke away,
+ * which is the whole thing `NoteTiers` exists to prevent.
+ */
+.pinpage-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * A page you are not on is a reading copy, and says so by receding.
+ *
+ * `inert` already makes it unreachable; this is the visible half of the same
+ * fact. Ink rather than opacity, so the surface underneath keeps its own
+ * contrast and the text lands on the annotation step it would take anywhere
+ * else — an opacity fade would wash the hairlines and the chip fills with it.
+ */
+.pinpage:not(.is-focus) .pinpage-content {
+  color: var(--ink-2);
 }
 
 /*

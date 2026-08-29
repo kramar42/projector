@@ -189,7 +189,7 @@ function InboundRow({
   label: string;
   means: string;
   notes: { id: string; title: string; done?: boolean; isProject: boolean; refCount: number }[];
-  onOpen: (id: string) => void;
+  onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   /** Reshape the view around this list — see the bullseye below. */
   onFocus: () => void;
 }) {
@@ -264,7 +264,10 @@ function InboundRow({
             className={`reflink ${r.done ? 'is-done' : ''}`}
             data-nav="ref"
             key={r.id}
-            onClick={() => onOpen(r.id)}
+            // ⇧ means "pin this note and follow" — swallowed at mousedown so
+            // the click does not also grow a text selection across the panel.
+            onMouseDown={(e) => e.shiftKey && e.preventDefault()}
+            onClick={(e) => onOpen(r.id, { altKey: e.altKey, shiftKey: e.shiftKey })}
           >
             {/* A note carries its mark wherever you meet it. The `' ✓'` that
                 used to sit here is gone: `.reflink.is-done` already draws that
@@ -365,7 +368,7 @@ export function Refs({
   card: NoteDTO;
   data: NoteDetail;
   write: Pick<NoteWriter, 'facet'>;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   /** Which relation to walk inward from this note. The shell owns the query. */
   onFocus: (via: string) => void;
   lit?: Lit;

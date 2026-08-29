@@ -118,6 +118,37 @@ export interface NoteWriter {
   dismiss(): void;
 }
 
+/**
+ * A writer that writes nothing, for a surface that may not.
+ *
+ * The spread draws every pinned note with the panel's own blocks, and those
+ * blocks are editing controls — so a page that is not the focused one needs a
+ * writer of the right shape that reaches no route. `inert` already makes the
+ * subtree unclickable, and that is the *visible* half of the rule; this is the
+ * half that holds when something reaches a control anyway, which a synthetic
+ * click demonstrably does. Two guards for one invariant, because the invariant
+ * is that exactly one surface can write (C10) and a UI-level guard is not one
+ * a reader can check.
+ *
+ * Frozen, and shared: it holds no state, so one instance serves every page and
+ * a new object per render would re-run the effects the blocks hang off it.
+ */
+export const NO_WRITES: NoteWriter = Object.freeze({
+  facet: () => {},
+  accept: () => {},
+  title: () => {},
+  links: () => {},
+  projectBlock: () => {},
+  remove: () => {},
+  body: async () => {},
+  frontmatter: async () => ({ warnings: [] }),
+  task: () => {},
+  status: idleStatus(),
+  busy: null,
+  banner: null,
+  dismiss: () => {},
+});
+
 export function usePanelWriter(o: {
   id: string;
   /** The freshest completed read's mtime; null until the first load lands. */

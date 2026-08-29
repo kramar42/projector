@@ -45,6 +45,30 @@ export const SEL_PARAM = 'sel';
  */
 export const DECLINED_PARAM = 'declined';
 
+/**
+ * The pinned notes, oldest first.
+ *
+ * `?sel=` with a different job: a selection is what a bulk write lands on, a pin
+ * is what stays in sight — reading marks, drawn as title spines at the right
+ * edge and spread side by side by `?stack=`. Out of the query for `?sel=`'s
+ * reasons (a saved view must not note them, a pin must not refetch), and in the
+ * URL for its reasons too: the same notes are the same notes across a change of
+ * shape, and a reading workspace should survive a reload.
+ *
+ * A **list**, not a set, where the selection is a set: the spread draws pins in
+ * the order they were made, oldest at the left, and that order is the one thing
+ * a `Set` cannot carry.
+ */
+export const PINS_PARAM = 'pins';
+
+/**
+ * Whether the pins are spread side by side over the view.
+ *
+ * `?declined=`'s shape exactly: a surface over whatever you were looking at,
+ * URL-owned so the back button folds it.
+ */
+export const STACK_PARAM = 'stack';
+
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
   return key.startsWith('f.') || (SPEC_PARAMS as readonly string[]).includes(key);
@@ -66,6 +90,7 @@ function isOwnParam(key: string): boolean {
   if (key === VAULT_PARAM) return true;
   return (
     key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM ||
+    key === PINS_PARAM || key === STACK_PARAM ||
     // The calendar's page and grid — where you are looking, like `?note=`, so
     // they ride beside the query rather than in it: turning a page must not
     // refetch, and a saved view must not store a date that decays (C9).
@@ -129,6 +154,17 @@ export function selectionOf(search: string): Set<string> {
  */
 export function selectionPatch(ids: ReadonlySet<string>): Patch {
   return { [SEL_PARAM]: ids.size ? [...ids].join(',') : null };
+}
+
+/** The pinned ids, in pin order. See `PINS_PARAM` for why order is kept. */
+export function pinsOf(search: string): string[] {
+  const raw = paramsOf(search).get(PINS_PARAM);
+  return raw ? raw.split(',').filter(Boolean) : [];
+}
+
+/** The patch that writes the pins — empty removes the key, as `selectionPatch` does. */
+export function pinsPatch(ids: readonly string[]): Patch {
+  return { [PINS_PARAM]: ids.length ? ids.join(',') : null };
 }
 
 /**

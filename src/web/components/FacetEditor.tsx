@@ -77,7 +77,8 @@ export function FacetEditor({
   /** The note being edited, so it cannot be made its own reference. */
   selfId?: string;
   onChange: (next: string[], mode: FacetMode) => void;
-  onOpen?: (id: string) => void;
+  /** Modifiers ride along: ⌥ pins the target, ⇧ pins this note and follows. */
+  onOpen?: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
 }) {
   const [adding, setAdding] = useState('');
 
@@ -131,7 +132,15 @@ export function FacetEditor({
                   note's identity rather than a control beside it — the same
                   order a card face and the panel title lead with, and the
                   arrangement the per-glyph optical nudges were measured for. */}
-              <button className="refchip-go" data-nav="ref" onClick={() => onOpen?.(v)} title={v}>
+              <button
+                className="refchip-go"
+                data-nav="ref"
+                // ⇧ means "pin this note and follow" — swallowed at mousedown
+                // so the click does not also grow a text selection.
+                onMouseDown={(e) => e.shiftKey && e.preventDefault()}
+                onClick={(e) => onOpen?.(v, { altKey: e.altKey, shiftKey: e.shiftKey })}
+                title={v}
+              >
                 <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
                 <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
               </button>

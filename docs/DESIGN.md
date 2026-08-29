@@ -14,6 +14,7 @@ colors:
   dot: "#323232"
   accent: "#a6a6e7"
   accent-soft: "#2a2a3c"
+  pinned: "#dfdf87"
   ok: "#afdf87"
   warn: "#dfdf87"
   bad: "#df8787"
@@ -1174,6 +1175,42 @@ inside are `.column-card` unchanged. The weekday row and the days/rows/starts la
 Label-step group selector, and each cell's count is `.column-count` itself, not a lookalike. The one
 thing the calendar owns is geometry — a CSS grid sized by `--cal-cols`/`--cal-rows` from the URL —
 which is a layout, not a register.
+
+### The Spine Rule
+
+**A pinned note borrows the panel's register at every scale, and its spine is part of the page, not
+chrome beside it.**
+
+The pins arrived long after the panel settled, so like the calendar they are a stated borrowing. A
+spread page (`.pinpage`) is the panel's surface, hairline and shadow at panel width; its head is the
+panel's head — headline-step title behind a hairline, mark first; its body is `.md` and its facts are
+`.kv`, unchanged, because a read-only rendering of a note must read as *the note*, not as a summary
+of one. The dock and the spread cover the view the way the panel does (**a view does not move when a
+note opens** — the reach is declared through `--covered-right`, never reserved as a track), and the
+spread takes the panel's own layer because the two never coexist.
+
+The borrowing is now literal: a page renders `NoteTiers`, which is the panel's own tier stack, so
+there is no second rendering of a note to keep in step with the first. What a page adds is a spine and
+what it takes away is the **key hints** — `KeyHints` switches them off on every page but the focused
+one, which is the same sentence as "only the focused page is actionable" said in the vocabulary
+`KeyHint` already has, where absence means *no key reaches this*.
+
+The spine is the one thing the pins own: a title turned on its side (`.spinelabel`, Title step —
+it names a note, so it takes the step a note's title takes on a face), drawn as the page's own left
+edge rather than a separate strip, so that a page folding away at the viewport edge *becomes* its
+spine instead of vanishing behind one. The focused page carries the cursor's accent as an inset top
+edge — the one strip of a page its overlapping neighbours never cover — and steps up the ink ladder
+from its neighbours (`ink` against `ink-2`), which is how a reading copy recedes without an opacity
+fade taking the hairlines and chip fills down with it. Nothing else on the surface spends accent, per
+the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
+
+**A pinned note's record mark draws in `--pinned`, not the accent.** The mark is `accent` everywhere
+because it is the app speaking about the note (see `.recordmark`); a pin is the app speaking about
+*you*, and that is a second thing to say with the one channel the glyph was not already using — the
+glyph itself keeps meaning what `markOf` derives, so the colour carries the pin and nothing competes.
+`--pinned` holds the yellow family's value in both themes and is deliberately not named for it: the
+same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not a
+facet value, so it may not wear an axis's hue under an axis's name.
 
 ## Do's and Don'ts
 

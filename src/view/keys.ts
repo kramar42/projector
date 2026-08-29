@@ -320,6 +320,23 @@ export type Command =
   | { kind: 'view'; ordinal: number }
   | { kind: 'undo' }
   | { kind: 'redo' }
+  /**
+   * Pin the cursor's note, or unpin it — the note keeps a vertical title spine
+   * at the right edge while you work, panel open or not.
+   *
+   * A pin is a *reading* mark, not a selection: `?sel=` is what a bulk write
+   * lands on, `?pins=` is what stays in sight. Keeping them apart is what lets
+   * you hold four notes on screen while writing to a fifth.
+   */
+  | { kind: 'pin' }
+  /**
+   * Spread the pinned notes side by side over the view, or fold them back.
+   *
+   * The spread is read-only (C10 — content is edited in the panel, and the
+   * panel is not mounted under it), so `escape` closes the open note first and
+   * folds the spread second; neither touches the pins themselves.
+   */
+  | { kind: 'stack' }
   | { kind: 'search' }
   | { kind: 'help' }
   | { kind: 'palette' }
@@ -800,6 +817,16 @@ export const BINDINGS: readonly Binding[] = [
   { id: 'undo', stroke: 'u', palette: 'Undo', command: { kind: 'undo' } },
   { id: 'redo', stroke: 'U', palette: 'Redo', command: { kind: 'redo' } },
 
+  /**
+   * The pin pair. Punctuation for the reason `!` and `+` are — no vocabulary can
+   * claim a mark (`isKeyShaped`), so neither stroke can shadow an axis — and `'`
+   * on vim's reading of it: the key that names a place you mean to come back to.
+   * Its shifted form acts on the set the bare form builds, which is the idiom
+   * `u`/`U`, `H`/`L` and `,g`/`,G` already established.
+   */
+  { id: 'pin.toggle', stroke: "'", palette: 'Pin / unpin this note', command: { kind: 'pin' } },
+  { id: 'stack.toggle', stroke: '"', palette: 'Spread the pinned notes side by side', command: { kind: 'stack' } },
+
   { id: 'palette', stroke: '.', palette: undefined, command: { kind: 'palette' } },
   { id: 'search', stroke: '/', palette: 'Search notes', command: { kind: 'search' } },
   { id: 'help', stroke: '?', palette: 'Show the keyboard map', command: { kind: 'help' } },
@@ -994,6 +1021,20 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { ids: ['select.toggle'], does: 'add this card to the selection' },
       { ids: ['select.down', 'select.up'], does: 'extend the selection' },
       { ids: ['select.all'], does: 'everything on screen' },
+    ],
+  },
+  {
+    // The reading set, beside the writing set above: a selection is what a bulk
+    // write lands on, a pin is what stays in sight.
+    section: 'Pins',
+    rows: [
+      { ids: ['pin.toggle'], does: 'pin / unpin — the note keeps a title spine at the right edge' },
+      { ids: ['stack.toggle'], does: 'spread the pins side by side / fold them back' },
+      // Sequences of keys the cursor rows already account for, re-read by the
+      // spread the way a navlist re-reads them — so keys are written, not ids.
+      { keys: 'h l', does: 'across the spread pages — writes land on the focused one' },
+      { keys: 'j k', does: 'scroll the focused page' },
+      { keys: '⏎', does: 'fold the spread onto the focused note' },
     ],
   },
   {

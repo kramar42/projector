@@ -310,6 +310,60 @@ score. The absence of the score is the design — a ranked list reorders itself 
 you type and takes away the one thing a reader learns from using a list, which is
 where things sit (C8).
 
+### Pins are a reading surface, and the cursor stays the only pointer
+
+`'` pins the cursor's note; the pins stand as title spines at the right edge, and `"` spreads them
+side by side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
+
+- **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=` and the
+  spread in `?stack=`, beside `?sel=` and `?note=` and outside `SPEC_PARAMS` for their reasons: a pin
+  must not refetch, a reload must not lose a reading workspace, and a saved view must not remember
+  one — a view is a query, and a reading stack is a moment. `?sel=` is what a bulk write lands on;
+  `?pins=` is what stays in sight; the two never touch. A list rather than a set, because the spread
+  draws pins oldest-left and order is the one thing `?sel=`'s shape cannot carry.
+- **A page is the panel's own rendering.** Both draw `panel/tiers.tsx`, extracted when the spread
+  arrived: a second rendering built to look like the panel is a second rendering that drifts from it,
+  and the facet hues, link kinds and derived rows are exactly what a reader compares across four notes
+  at once. What the two surfaces disagree about is the frame and who may write — neither is a fact
+  about the note. The **key hints go with the writing**: `KeyHints` switches them off everywhere but
+  the focused page, because absence is already `KeyHint`'s word for "no key reaches this", which is
+  what is true there.
+- **Exactly one page is writable, and that is what preserves the single pointer (C10).** On the spread
+  `h`/`l` move the cursor across pages and `?note=` rides with it, so `cursor ≡ ?note=` holds there
+  exactly as it does over a board and a facet write needs no new rule to find its target. The other
+  pages are guarded **twice**: `inert` for the pointer, and `NO_WRITES` — a frozen writer that reaches
+  no route — for everything else. Two guards because one of them is a UI-level claim: `inert` blocks
+  hit-testing and focus, and a synthetic `click()` walks straight past it, which is exactly how much
+  the invariant is worth. A command that needs the panel folds the spread on its way, in **one URL
+  write** — `nav.current` is render-captured, so the second of two navigations in one handler reads a
+  search string the first has already replaced (`setStack` carries the landing note for exactly this).
+- **The fold is geometry, not measurement.** A spread page is `position: sticky` with per-index
+  offsets — no further left than its elders' spines, no further right than its juniors' — so pages
+  fold to their own spines at either viewport edge instead of scrolling away, and there is no
+  overflow bookkeeping to drift. The offsets and the dock's `--covered-right` reach are all multiples
+  of one constant (`src/web/panel/pins.ts`), written inline rather than restated in the stylesheet.
+  The same two offsets give `reveal` its answer: page `i` is whole on screen for any scroll between
+  `L + w + (n−1−i)·SPINE_W − C` and `L − i·SPINE_W`, so walking the spread scrolls **only** when the
+  page landed on is outside that range, and then only to its nearer end. `L` is `i × w` and not
+  `offsetLeft`, because Chrome reports a stuck element's `offsetLeft` at the position it is stuck to —
+  read from there, every page measured as already seated and nothing ever scrolled.
+
+One more mechanism moved to make this work, and it is not about pins. **The cursor now carries a
+placement as well as an id.** A note drawn in two columns has two placements, so `locate` answering
+"the first" unconditionally made the second unreachable: a click on an echo set an id whose resolved
+placement was, by definition, the other copy, so the ring jumped back across the board and `j` walked
+the column you had just clicked away from. `cursor.at` is that second half and is deliberately
+*subordinate* — `locate` honours it only while the cell it names still holds the id, and falls back to
+the first placement otherwise, so everything `cursor.ts` claims about an id surviving a filter, a
+regroup or an agent's write survives with it. Motion is computed in placements (`steppedTo`), because
+a step that answered with an id alone would resolve back to the first copy on the next render and undo
+itself.
+
+Escape's order is a decision: the open note closes first, the spread folds second, and neither unpins
+— only `'` and a page's `✕` do, so no chain of Escapes can cost the set. Following a reference out of
+a note has three gestures, in the panel and on a page alike: plain click replaces and records the
+trail, `⌥` sends the target to a new pin, `⇧` pins the note being read and follows.
+
 ## The index memo
 
 `load()` is memoised on an exact stamp of every file it reads — each mtime, plus how many files there

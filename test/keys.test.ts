@@ -418,7 +418,7 @@ test('every plain key the cheatsheet lists actually does something', () => {
 test('the cheatsheet has a row for every section a reader would look under', () => {
   assert.deepEqual(
     KEYMAP.map((s) => s.section),
-    ['The cursor', 'Into a note', 'In a list', 'Choosing', 'Writing', 'The view'],
+    ['The cursor', 'Into a note', 'In a list', 'Choosing', 'Pins', 'Writing', 'The view'],
   );
   for (const section of KEYMAP) assert.ok(section.rows.length > 0, section.section);
 });

@@ -17,6 +17,8 @@ import {
   apiSearch,
   paramsOf,
   patchSearch,
+  pinsOf,
+  pinsPatch,
   selectionOf,
   selectionPatch,
   strippedOfStrays,
@@ -330,6 +332,22 @@ test('a parameter the app does not own is dropped from the URL', () => {
   // And so is what you have picked out. Left off the owned list it would be
   // deleted from the address bar on load, exactly as `filterstyle` now is.
   assert.equal(strippedOfStrays('?sel=a,b&view=home'), null, 'sel is owned, not a stray');
+  // The reading set rides beside the selection, for the same reason.
+  assert.equal(strippedOfStrays('?pins=a,b&stack=1&view=home'), null, 'pins and stack are owned');
+});
+
+/**
+ * Pins are a list where the selection is a set: the spread draws them in pin
+ * order, oldest at the left, and order is the one thing `?sel=`'s shape cannot
+ * carry. The patch shape matches `selectionPatch` — empty removes the key, so
+ * unpinning the last note leaves no trace in a shared URL.
+ */
+test('pins round-trip the URL in order, and an empty set leaves no key', () => {
+  assert.deepEqual(pinsOf('?pins=b,a,c'), ['b', 'a', 'c'], 'pin order is kept, not sorted');
+  assert.deepEqual(pinsOf('?view=home'), [], 'no key is no pins');
+  assert.deepEqual(pinsPatch(['b', 'a']), { pins: 'b,a' });
+  assert.deepEqual(pinsPatch([]), { pins: null }, 'empty removes the key');
+  assert.equal(patchSearch('?view=home&pins=a', pinsPatch([])), '?view=home');
 });
 
 test('the vault is URL-owned context, not a query parameter', () => {

@@ -1,6 +1,7 @@
 import { useEnrichment } from '../enrichment.tsx';
 import { useTouched } from '../touched.tsx';
 import { plural } from '../plural.ts';
+import { useIsPinned } from '../pinned.tsx';
 import { useHue } from '../vocabulary.tsx';
 import { LINK_KINDS, linkHue } from '../links.ts';
 import type { NoteDTO } from '../types.ts';
@@ -130,6 +131,7 @@ export function CardBody({
   onOpen?: (id: string) => void;
 }) {
   const { touched } = useTouched();
+  const isPinned = useIsPinned();
   const blocked = card.blockedBy.filter((b) => !b.done);
   const facetKeys = showFacets.filter((f) => axisValues(card, f).length);
 
@@ -142,7 +144,7 @@ export function CardBody({
       onDoubleClick={() => onOpen?.(card.id)}
     >
       <div className="cardface-head">
-        <RecordMark card={card} />
+        <RecordMark card={card} pinned={isPinned(card.id)} />
         <span className="cardface-title">{card.title}</span>
       </div>
 
@@ -304,12 +306,24 @@ export interface Marked {
   refCount: number;
 }
 
-export function RecordMark({ card }: { card: Marked }) {
+export function RecordMark({ card, pinned = false }: { card: Marked; pinned?: boolean }) {
   // The role is also a class, because each glyph needs its own optical nudge —
   // see `.recordmark` in style.css.
   const { glyph, role, means } = markOf(card);
   return (
-    <span className={`recordmark is-${role}`} title={means}>
+    /*
+     * Pinned changes the mark's *colour*, never its glyph.
+     *
+     * The glyph says what the note is — `markOf` derives it from what names the
+     * record — and a pin says nothing about that; it says you are holding this
+     * one in sight. Two facts, one mark, and the only way to carry both without
+     * a second glyph competing with the first is to spend the one channel the
+     * mark was not already using. See `--pinned` in the stylesheet.
+     */
+    <span
+      className={`recordmark is-${role} ${pinned ? 'is-pinned' : ''}`}
+      title={pinned ? `${means} Pinned.` : means}
+    >
       {glyph}
     </span>
   );
