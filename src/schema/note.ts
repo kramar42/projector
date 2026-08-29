@@ -355,6 +355,65 @@ export function listNoteFiles(cardsDir: string): string[] {
 }
 
 /**
+ * The walk's rules as a predicate, for the server's file watcher.
+ *
+ * The walk and the watcher have to agree about what the vault is, or a vault
+ * that is also a working tree watches every `dist/` and build directory its
+ * repos ignore — tens of thousands of file handles spent on paths the index
+ * would never read, and EMFILE on a big one. The rules are read the same way
+ * the walk reads them: `.projector/ignore` at the root, plus each directory's
+ * `.gitignore` on the way down, discovered lazily and memoised per directory.
+ * The memo lives for the predicate's lifetime — a `.gitignore` edited while the
+ * watcher runs is picked up when the vault is next opened, which is the same
+ * bargain the watcher itself already makes about its own options.
+ *
+ * `isDir` is the caller's if it knows; unknown falls back on the one fact the
+ * vault guarantees: only an `.md` can be a note, so any other path may take the
+ * directory reading and be pruned by a `dir/` rule without costing a note.
+ */
+export function walkIgnores(cardsDir: string): (path: string, isDir?: boolean) => boolean {
+  const scopeCache = new Map<string, { base: string; rules: IgnoreRule[] }[]>();
+
+  const scopesFor = (dir: string): { base: string; rules: IgnoreRule[] }[] => {
+    const hit = scopeCache.get(dir);
+    if (hit) return hit;
+    const parent = dir === cardsDir ? [] : scopesFor(pathJoin(dir, '..'));
+    let scope = parent;
+    const source = dir === cardsDir ? pathJoin(dir, '.projector', 'ignore') : pathJoin(dir, '.gitignore');
+    try {
+      const rules = compileIgnore(readFileSync(source, 'utf8'));
+      if (rules.length) scope = [...parent, { base: dir, rules }];
+    } catch {
+      // no ignore file here is the normal case
+    }
+    // The root reads both: its own escape hatch above, and its .gitignore like
+    // any other directory's.
+    if (dir === cardsDir) {
+      try {
+        const rules = compileIgnore(readFileSync(pathJoin(dir, '.gitignore'), 'utf8'));
+        if (rules.length) scope = [...scope, { base: dir, rules }];
+      } catch {
+        // and no .gitignore at the root is just as normal
+      }
+    }
+    scopeCache.set(dir, scope);
+    return scope;
+  };
+
+  return (path: string, isDir?: boolean): boolean => {
+    if (path === cardsDir || !path.startsWith(cardsDir + '/')) return false;
+    const rel = path.slice(cardsDir.length + 1);
+    const segments = rel.split('/');
+    if (segments.some(skipped)) return true;
+    const asDir = isDir ?? !path.endsWith('.md');
+    // Each ancestor's scopes judge the path, exactly as the walk would have on
+    // its way down to it.
+    const parentDir = pathJoin(path, '..');
+    return ignoredBy(path, asDir, scopesFor(parentDir));
+  };
+}
+
+/**
  * Whether a vault-relative path is a note, without a filesystem to walk.
  *
  * `pj log` needs this: it reads paths out of `git log`, where the vault is the

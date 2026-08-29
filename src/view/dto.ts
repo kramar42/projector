@@ -20,8 +20,6 @@ export interface NoteDTO {
   progress: { done: number; total: number } | null;
   /** First prose paragraph, for the card face. */
   excerpt: string;
-  /** Rendered lazily by the client; the raw body travels as-is. */
-  body: string;
   /**
    * The bucket each ordered facet's values fall in, keyed by facet.
    *
@@ -58,6 +56,15 @@ export interface NoteDTO {
   blockedBy: { id: string; title: string; via: string; done: boolean; isProject: boolean; refCount: number }[];
   unblocks: string[];
 }
+
+/**
+ * A note DTO carries no `body`: on a real vault the bodies are ~90% of a query
+ * payload, and no card face draws one — `excerpt` and `progress` are the two
+ * derivations a face needs, computed here so they cannot drift from the body
+ * they came from (C8). The one surface that renders a body is the panel, and it
+ * asks `GET /api/note/:id`, whose answer is this plus the body.
+ */
+export type NoteDetailDTO = NoteDTO & { body: string };
 
 /** Bucketed values for every facet that declares buckets. */
 function bucketsOf(rec: Note, facets: Facets, today: string): Record<string, string[]> {
@@ -130,7 +137,6 @@ export function toDTO(
     })),
     progress: progressOf(rec.body),
     excerpt: excerptOf(rec.body),
-    body: rec.body,
     buckets: bucketsOf(rec, extra.facets ?? {}, extra.today ?? new Date().toISOString().slice(0, 10)),
     computed: extra.computed ?? {},
     updated: rec.updated ?? null,

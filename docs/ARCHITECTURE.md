@@ -132,6 +132,11 @@ not drift while the response half was assembled inside a hono handler the CLI co
 `pj ls --view unblocked` and opening that view in the browser go through the same code, and now return
 the same thing.
 
+**The payload carries no bodies.** On a real vault they are ~90% of it, and no card face draws one —
+what a face needs is derived beside the body (`excerpt`, `progress`) so it cannot drift from it (C8).
+The one surface that renders a body is the panel, and `GET /api/note/:id` is the one answer that
+still carries it.
+
 **A composition is answered here too.** `lists:` names other views as this one's columns. It exists
 because grouping cannot *derive* the question: a grouped board reads its columns off one axis over one
 result set, and "carries a priority but no status" and its mirror are conditions on two different axes
@@ -336,8 +341,11 @@ its local walk on any disagreement or silence, and `pj reindex` never delegates.
 `PROJECTOR_NO_DELEGATE=1` turns it off. A vault too big to watch — chokidar
 opens a descriptor per directory, and macOS's default soft limit is 256 — flips to `unwatchable` on
 the watcher's EMFILE: any vouch already given is revoked and the endpoint answers 503, so the CLI
-walks. Watching a workspace-sized vault for real means an FSEvents-based watcher (one stream, any
-tree); that is the stated next step, not this one.
+walks. Before it comes to that, the watcher prunes with the walk's own rules (`walkIgnores` in
+`schema/note.ts`): the same `.gitignore` subset, `.projector/ignore` and skip list, judged at the
+directory so an ignored tree costs nothing below it — a vault that is also a working tree watches
+its documents, not its build output. Watching a workspace-sized vault for real means an
+FSEvents-based watcher (one stream, any tree); that is the stated next step, not this one.
 
 The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
 ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —

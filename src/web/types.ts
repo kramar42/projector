@@ -14,7 +14,7 @@
  * worth keeping — it just re-exports instead of transcribing.
  */
 
-export type { NoteDTO } from '../view/dto.ts';
+export type { NoteDTO, NoteDetailDTO } from '../view/dto.ts';
 export type { QueryPayload } from '../view/payload.ts';
 export type { ViewSpec } from '../view/spec.ts';
 export type { Dir, Shape } from '../schema/vocabulary.ts';
@@ -24,7 +24,7 @@ export type { AxisCount, Focus, Group, Query, Rollup, ValueCount } from '../inde
 export type { Enrichment, Tone } from '../enrich/types.ts';
 export type { Resolved } from '../server/enrich.ts';
 
-import type { NoteDTO } from '../view/dto.ts';
+import type { NoteDetailDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
 import type { QueryPayload } from '../view/payload.ts';
 import type { ViewSpec as Spec } from '../view/spec.ts';
@@ -46,7 +46,7 @@ export type Edit = (fn: (spec: Spec) => Spec, replace?: boolean) => void;
 
 /** One note and everything the panel needs around it — `GET /api/note/:id`. */
 export interface NoteDetail {
-  note: NoteDTO;
+  note: NoteDetailDTO;
   file: string;
   /** File mtime at read time; sent back on a write so a concurrent edit 409s. */
   mtime: number;

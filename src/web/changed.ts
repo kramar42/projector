@@ -1,4 +1,4 @@
-import type { NoteDTO } from './types.ts';
+import type { NoteDetailDTO } from './types.ts';
 
 /**
  * The two decisions behind "something changed and it was not you".
@@ -82,7 +82,7 @@ export function foreignOf(
  *
  * `null` before means the first read of a note, which is not a change.
  */
-export function whatMoved(before: NoteDTO | null, after: NoteDTO): string[] {
+export function whatMoved(before: NoteDetailDTO | null, after: NoteDetailDTO): string[] {
   if (!before) return [];
   const moved: string[] = [];
   if (before.title !== after.title) moved.push('title');

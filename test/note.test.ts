@@ -11,7 +11,7 @@ import type { Facets, Note } from '../src/schema/types.ts';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
-import { listNoteFiles } from '../src/schema/note.ts';
+import { listNoteFiles, walkIgnores } from '../src/schema/note.ts';
 import { readAll } from '../src/index/indexer.ts';
 
 
@@ -406,6 +406,38 @@ test('git-ignored markdown is not a note', () => {
     listNoteFiles(root).map((f) => f.slice(root.length + 1)).sort(),
     ['kept.md', 'repo/README.md', 'repo/top-only.md'],
   );
+});
+
+test('the watcher predicate agrees with the walk about what the vault is', () => {
+  // `walkIgnores` exists for the server's file watcher: a vault that is also a
+  // working tree must not watch what the walk would never index, or a big one
+  // spends a file handle per built artefact and dies of EMFILE.
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-wignore-'));
+  writeFileSync(pathJoin(root, '.gitignore'), 'node_modules/\n*.draft.md\n', 'utf8');
+  mkdirSync(pathJoin(root, '.projector'));
+  writeFileSync(pathJoin(root, '.projector', 'ignore'), 'drafts/\n', 'utf8');
+  mkdirSync(pathJoin(root, 'repo'), { recursive: true });
+  writeFileSync(pathJoin(root, 'repo', '.gitignore'), 'dist/\n', 'utf8');
+
+  const ignored = walkIgnores(root);
+
+  // What the walk keeps, the watcher watches…
+  assert.equal(ignored(pathJoin(root, 'kept.md'), false), false);
+  assert.equal(ignored(pathJoin(root, 'repo'), true), false);
+  assert.equal(ignored(pathJoin(root, 'repo', 'README.md'), false), false);
+  // …and what it masks, the watcher prunes: the root's rules, a subfolder's, and
+  // the vault's own escape hatch, judged at the directory so nothing below costs.
+  assert.equal(ignored(pathJoin(root, 'node_modules'), true), true);
+  assert.equal(ignored(pathJoin(root, 'plan.draft.md'), false), true);
+  assert.equal(ignored(pathJoin(root, 'repo', 'dist'), true), true);
+  assert.equal(ignored(pathJoin(root, 'drafts'), true), true);
+  // The skip list is the walk's too — configuration and dot-state are not notes.
+  assert.equal(ignored(pathJoin(root, 'CLAUDE.md'), false), true);
+  assert.equal(ignored(pathJoin(root, '.git'), true), true);
+  // Unknown kind: a non-.md may take the directory reading and be pruned by a
+  // `dir/` rule without ever costing a note; an .md never is.
+  assert.equal(ignored(pathJoin(root, 'repo', 'dist')), true);
+  assert.equal(ignored(pathJoin(root, 'dist.md')), false);
 });
 
 test('a bare note keeps its identity when it is written down', () => {

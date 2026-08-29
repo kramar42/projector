@@ -8,7 +8,7 @@ import { useWorkStarter } from './useWorkStarter.ts';
 import { FoldDialog } from '../FoldDialog.tsx';
 import { Body, Facets, Frontmatter, Links, Refs } from './blocks.tsx';
 import { plural } from '../plural.ts';
-import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
+import type { NoteDetailDTO, NoteDetail, Meta } from '../types.ts';
 import { useTouched } from '../touched.tsx';
 import { FLUSH_MS, whatMoved } from '../changed.ts';
 
@@ -265,7 +265,7 @@ function NoteCard({
    * the time a new `card` arrives. Deps are `[card]` alone for that reason — this
    * asks its question at the moment the payload swaps, and nothing else.
    */
-  const seen = useRef<NoteDTO | null>(null);
+  const seen = useRef<NoteDetailDTO | null>(null);
   const [moved, setMoved] = useState<string[]>([]);
   useEffect(() => {
     if (!card) return;

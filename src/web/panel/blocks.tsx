@@ -11,7 +11,7 @@ import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { focusSoon } from '../cursor.ts';
 import { renderBody, toggleTask } from '../../view/markdown.ts';
 import type { NoteWriter } from './usePanelWriter.ts';
-import type { NoteDTO, NoteDetail, Meta } from '../types.ts';
+import type { NoteDTO, NoteDetailDTO, NoteDetail, Meta } from '../types.ts';
 
 /**
  * The panel's blocks.
@@ -529,7 +529,8 @@ export function Body({
   onDirtyChange,
   lit = false,
 }: {
-  card: NoteDTO;
+  // The detail DTO, because the body only travels on the panel's own route.
+  card: NoteDetailDTO;
   write: Pick<NoteWriter, 'body' | 'task'>;
   onDirtyChange: (dirty: boolean) => void;
   lit?: boolean;

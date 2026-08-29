@@ -17,7 +17,7 @@ import {
 import { jiraConfig } from '../sources/jira.ts';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
-import { idFromFile, loadNote } from '../schema/note.ts';
+import { idFromFile, loadNote, walkIgnores } from '../schema/note.ts';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isConfigured, paths } from '../config.ts';
@@ -334,17 +334,24 @@ app.get('/api/note/:id', (c) => {
   // One walk, shared by this note's own mark and by every reference it names.
   const inbound = inboundCounts(notes, facets);
   return c.json({
-    note: toDTO(rec, {
-      facets,
-      jiraBase: jiraConfig(root)?.url ?? null,
-      // The panel edits `facets` and never `computed`, but a DTO that reports no
-      // computed values at all is a DTO that lies about this card — and it is the
-      // same card the board just drew.
-      computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10))(rec),
-      refCount: inbound.get(rec.id) ?? 0,
-      blockedBy: blockedBy(rec.id, notes, facets),
-      unblocks: unblocks(rec.id, notes, facets),
-    }),
+    note: {
+      ...toDTO(rec, {
+        facets,
+        jiraBase: jiraConfig(root)?.url ?? null,
+        // The panel edits `facets` and never `computed`, but a DTO that reports no
+        // computed values at all is a DTO that lies about this card — and it is the
+        // same card the board just drew.
+        computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10))(rec),
+        refCount: inbound.get(rec.id) ?? 0,
+        blockedBy: blockedBy(rec.id, notes, facets),
+        unblocks: unblocks(rec.id, notes, facets),
+      }),
+      // The body travels only here. A query payload ships every note a view
+      // shows and no face draws a body, so carrying them made the payload ~10×
+      // its useful size on a real vault; the panel is the one reader, and this
+      // is the one route it asks.
+      body: rec.body,
+    },
     file: relative(root, rec.file),
     // The client sends this back on a write; a mismatch means an agent or an
     // editor changed the file meanwhile, and the write is refused (409).
@@ -844,17 +851,21 @@ function ensureWatched(root: string): void {
   if (watched.has(root)) return;
   const p = paths(root);
   const roots = [p.notes, p.views, p.facets];
+  // The walk's own rules (C3: the watcher and the index must agree about what
+  // the vault is). Without them a vault that is also a working tree watches
+  // every build directory its repos gitignore — `node_modules` was special-cased
+  // here once, and `dist/` alone still cost ~20k file handles on a real one.
+  const ignores = walkIgnores(p.notes);
+  // The two `.projector/` roots are watched *because* they are named: measured
+  // from the vault root they sit below a dot-folder, so the walk's rules (and
+  // the old inline dot-check before them) would ignore them on the spot.
+  const named = (path: string) =>
+    path === p.facets || path === p.views || path.startsWith(p.views + '/');
   const w = watch(roots, {
     ignoreInitial: true,
-    // Dot-segments (.git above all) and node_modules are never note sources,
-    // and watching them is what turns a workspace-sized vault into EMFILE.
-    ignored: (path: string) =>
+    ignored: (path: string, stats?: { isDirectory(): boolean }) =>
       path.includes('.tmp-') ||
-      derived(path, roots) ||
-      path
-        .slice(root.length)
-        .split('/')
-        .some((seg) => (seg.startsWith('.') && seg !== '.') || seg === 'node_modules'),
+      (!named(path) && (derived(path, roots) || ignores(path, stats?.isDirectory()))),
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
   }).on('error', (err: unknown) => {
     // A tree too big to watch (EMFILE) is a fact about the vault, not a crash.

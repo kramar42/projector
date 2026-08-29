@@ -375,6 +375,31 @@ test('every axis `show` accepts arrives on the note, computed or stored', () => 
   }
 });
 
+test('a query payload carries derivations of the body, never the body', () => {
+  // On a real vault the bodies are ~90% of the payload and no card face draws
+  // one — the panel is the single reader, and it has its own route. What a face
+  // does need is derived server-side so it cannot drift from the body (C8).
+  const root = mkdtempSync(join(tmpdir(), 'projector-nobody-'));
+  try {
+    mkdirSync(paths(root).config, { recursive: true });
+    writeFileSync(
+      join(paths(root).notes, 'a.md'),
+      '---\nid: a\ntitle: A\n---\n\nFirst prose paragraph.\n\n- [x] done\n- [ ] not\n',
+      'utf8',
+    );
+    writeFileSync(paths(root).facets, 'status:\n  values: [active]\n', 'utf8');
+    const facets = loadFacets(paths(root).facets);
+    const { db, notes } = reindex(root);
+    const card = queryPayload({ facets, db, notes, views: [] }, parseSpec({})).notes.a!;
+
+    assert.equal('body' in card, false, 'the body travels only on the note route');
+    assert.equal(card.excerpt, 'First prose paragraph.');
+    assert.deepEqual(card.progress, { done: 1, total: 2 });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------- composition
 
 /**

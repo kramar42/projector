@@ -11,7 +11,7 @@ import { NONE } from '../src/schema/vocabulary.ts';
 import { BUILTIN_FACETS } from '../src/schema/facets.ts';
 import { chipClass, edgeColour, registerOf } from '../src/web/hue.ts';
 import type { FacetDef } from '../src/schema/types.ts';
-import type { NoteDTO } from '../src/web/types.ts';
+import type { NoteDTO, NoteDetailDTO } from '../src/web/types.ts';
 import { SELF_WRITE_TTL_MS, foreignOf, whatMoved } from '../src/web/changed.ts';
 import {
   apiSearch,
@@ -462,7 +462,9 @@ test("a reference draws as a note, and the app's own axis in the app's colour", 
  * the wiring stayed thin — which is the same trade the rest of this file makes.
  */
 
-const note = (over: Partial<NoteDTO> = {}): NoteDTO =>
+// The detail DTO, because `whatMoved` compares two reads of the panel's route —
+// the only DTO that still carries a body.
+const note = (over: Partial<NoteDetailDTO> = {}): NoteDetailDTO =>
   ({
     id: 'n',
     title: 'A note',
@@ -474,7 +476,7 @@ const note = (over: Partial<NoteDTO> = {}): NoteDTO =>
     isProject: false,
     refCount: 0,
     ...over,
-  }) as NoteDTO;
+  }) as NoteDetailDTO;
 
 /**
  * The property the whole feature rests on: **your own edit never flashes at you.**
