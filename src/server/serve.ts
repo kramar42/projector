@@ -15,7 +15,7 @@ import {
   touchVault,
 } from '../vault.ts';
 import { jiraConfig } from '../sources/jira.ts';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, watch as fsWatch } from 'node:fs';
 import { split } from '../schema/frontmatter.ts';
 import { idFromFile, loadNote, walkIgnores } from '../schema/note.ts';
 import { basename, join, relative } from 'node:path';
@@ -57,7 +57,6 @@ import {
 } from './mutate.ts';
 import { noteContext } from '../agent/context.ts';
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
-import { watch } from 'chokidar';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { info, logTo } from './log.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
@@ -121,7 +120,12 @@ function build(root: string) {
  * Callers must not `await` between this and their last read of what it returns.
  */
 function load(root: string) {
-  return cached(root, build, ({ db }) => db.close());
+  // The watcher's word replaces the per-request stamp once it is ready: every
+  // event and every write clears the memo through `bump`, so an entry that
+  // still exists is current — the same trust window `/api/cli/stamp` extends
+  // to the CLI, and it saves a stat-walk of the vault per request, which on a
+  // workspace-sized one is the whole of the request's latency.
+  return cached(root, build, ({ db }) => db.close(), watchReady.has(root) && !unwatchable.has(root));
 }
 
 const app = new Hono();
@@ -738,6 +742,9 @@ const cliFresh = new Map<string, string>();
 /** Vaults whose watcher died — their word cannot be trusted, so it is not given. */
 const unwatchable = new Set<string>();
 
+/** Vaults whose watcher finished its initial scan and can vouch for the memo. */
+const watchReady = new Set<string>();
+
 /**
  * `ids` is which notes moved, when we know — and we only know from the watcher.
  *
@@ -795,7 +802,7 @@ function bumpEnriched(vault: string) {
  * that is merely known should not cost an open file handle. The event carries
  * which vault changed so a client looking at another one ignores it.
  */
-const watched = new Map<string, ReturnType<typeof watch>>();
+const watched = new Map<string, ReturnType<typeof fsWatch>>();
 
 /**
  * Which note a changed path is, when the path is a note at all.
@@ -827,81 +834,91 @@ function notesTouched(root: string, changed?: string): string[] | undefined {
 }
 
 /**
- * Anything dotted, below one of the roots being watched.
+ * One recursive native watcher per vault — an FSEvents stream on macOS, not a
+ * descriptor per directory.
  *
- * The notes are the vault now, so the watched tree *is* the vault — which is the
- * whole of it, `.git/` and `.projector/` included. Watching those is not merely
- * wasteful: the index writes `.projector/index.db-wal` continuously, so a watcher
- * that sees it reports a change caused by reading, and every client refetches
- * forever. The two paths under `.projector/` that must be watched are named
- * explicitly below, and reach the watcher as roots rather than as children.
+ * It was chokidar over three roots, and chokidar (v4+) opens a watch per
+ * directory: a vault that is also a working tree holds thousands of source
+ * directories even after the walk's rules prune its build output, so opening it
+ * meant minutes of setup and EMFILE at workspace scale — the "stated next step"
+ * in ARCHITECTURE, now taken. `fs.watch(root, { recursive: true })` is one
+ * stream under both runtimes this repo runs on, so *filtering* moves from what
+ * is watched to which events are kept:
+ *
+ * - the walk's own rules (C3: the watcher and the index must agree about what
+ *   the vault is) — `walkIgnores` drops everything the index would never read,
+ *   `.git/` and the index's own `-wal` churn included, since anything dotted is
+ *   in its skip list;
+ * - except the two `.projector/` paths that must stay audible — `facets.yaml`
+ *   and `views/` — which the old shape reached by naming them as extra roots
+ *   and this one reaches by exempting them from the rules;
+ * - a 120ms per-path settle stands in for chokidar's `awaitWriteFinish`, so a
+ *   burst of writes to one file is one event, arriving when the file is whole.
  */
-const derived = (path: string, roots: string[]): boolean => {
-  // The *longest* matching root, because the vault root contains the other two:
-  // measured against it, every watched view is below a dot-folder and would be
-  // ignored on the spot.
-  const below = roots
-    .filter((r) => path === r || path.startsWith(r + '/'))
-    .sort((a, b) => b.length - a.length)[0];
-  if (below === undefined) return false;
-  return path.slice(below.length + 1).split('/').some((seg) => seg.startsWith('.'));
-};
-
 function ensureWatched(root: string): void {
   if (watched.has(root)) return;
   const p = paths(root);
-  const roots = [p.notes, p.views, p.facets];
-  // The walk's own rules (C3: the watcher and the index must agree about what
-  // the vault is). Without them a vault that is also a working tree watches
-  // every build directory its repos gitignore — `node_modules` was special-cased
-  // here once, and `dist/` alone still cost ~20k file handles on a real one.
   const ignores = walkIgnores(p.notes);
-  // The two `.projector/` roots are watched *because* they are named: measured
-  // from the vault root they sit below a dot-folder, so the walk's rules (and
-  // the old inline dot-check before them) would ignore them on the spot.
   const named = (path: string) =>
     path === p.facets || path === p.views || path.startsWith(p.views + '/');
-  const w = watch(roots, {
-    ignoreInitial: true,
-    ignored: (path: string, stats?: { isDirectory(): boolean }) =>
-      path.includes('.tmp-') ||
-      (!named(path) && (derived(path, roots) || ignores(path, stats?.isDirectory()))),
-    awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 30 },
-  }).on('error', (err: unknown) => {
-    // A tree too big to watch (EMFILE) is a fact about the vault, not a crash.
-    // Close, remember, and let /api/cli/stamp refuse to vouch for it.
-    unwatchable.add(root);
-    cliFresh.delete(root); // a vouch already given must not outlive the watcher
-    watched.get(root)?.close();
-    info('watch', `${basename(root)} unwatchable: ${(err as Error).message ?? err}`);
-  }).on('all', (event: string, changed?: string) => {
-    /**
-     * Arrivals only, and that is the whole editorial decision.
-     *
-     * A vault under an editor changes on every keystroke that reaches disk, and
-     * an agent rewriting frontmatter touches a dozen files in a second — a log
-     * that reported those would be one nobody reads, which is the same as no log.
-     * A file *appearing* is an event: a sweep materialised a candidate, an agent
-     * wrote a note, or somebody dropped one in by hand. Those are worth a line
-     * each, and there are few enough of them that each one stays readable.
-     *
-     * Deletions are not logged either, for a weaker reason than edits: they are
-     * rare but they are also how a decline is applied, so they would mostly
-     * duplicate a line `intake` has already written.
-     */
-    if (event === 'add' && changed) {
-      const p2 = paths(root);
-      const where = changed.startsWith(p2.views)
-        ? 'view'
-        : changed.startsWith(p2.notes)
-          ? 'note'
-          : 'vocabulary';
-      info('watch', `${basename(root)} new ${where}  ${basename(changed)}`);
-    }
-    bump(root, notesTouched(root, changed));
-  });
-  watched.set(root, w);
 
+  const pending = new Map<string, { t: ReturnType<typeof setTimeout>; first: string }>();
+  const settled = (full: string, first: string) => {
+    pending.delete(full);
+    /**
+     * Arrivals only, and that is the whole editorial decision: a vault under an
+     * editor changes on every keystroke that reaches disk, and a log that
+     * reported those would be one nobody reads. A file *appearing* is an event
+     * — a sweep materialised a candidate, an agent wrote a note — and there are
+     * few enough of those that each stays readable. "New" is read off the burst
+     * that settled: it *opened* with a `rename` (creations do, edits open with
+     * a `change`) and the file exists now that it is over. Deletions are not
+     * logged; they are how a decline is applied, so they would mostly duplicate
+     * a line `intake` has already written.
+     */
+    if (first === 'rename' && existsSync(full)) {
+      const where = full.startsWith(p.views) ? 'view' : full === p.facets ? 'vocabulary' : 'note';
+      info('watch', `${basename(root)} new ${where}  ${basename(full)}`);
+    }
+    bump(root, notesTouched(root, full));
+  };
+
+  try {
+    const w = fsWatch(root, { recursive: true }, (event, filename) => {
+      // No filename means the platform lost track of what moved; the honest
+      // answer is "something did", which is a plain bump with nothing to name.
+      if (!filename) {
+        bump(root);
+        return;
+      }
+      const full = join(root, filename.toString());
+      if (full.includes('.tmp-')) return;
+      if (!named(full) && ignores(full)) return;
+      const held = pending.get(full);
+      if (held) clearTimeout(held.t);
+      const first = held?.first ?? event;
+      const t = setTimeout(() => settled(full, first), 120);
+      t.unref?.();
+      pending.set(full, { t, first });
+    });
+    w.on('error', (err: unknown) => {
+      // A tree the platform cannot watch is a fact about the vault, not a
+      // crash. Close, remember, and let /api/cli/stamp refuse to vouch for it.
+      unwatchable.add(root);
+      cliFresh.delete(root); // a vouch already given must not outlive the watcher
+      watchReady.delete(root); // nor may the memo keep trusting it
+      invalidate(root);
+      watched.get(root)?.close();
+      info('watch', `${basename(root)} unwatchable: ${(err as Error).message ?? err}`);
+    });
+    watched.set(root, w);
+    // A native recursive watcher has no initial scan: it reports from the
+    // moment it returns, so `load` may trust the memo from here on.
+    watchReady.add(root);
+  } catch (err) {
+    unwatchable.add(root);
+    info('watch', `${basename(root)} unwatchable: ${(err as Error).message ?? err}`);
+  }
 }
 
 /**

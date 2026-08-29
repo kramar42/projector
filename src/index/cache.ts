@@ -84,9 +84,25 @@ function handleOf(root: string): string {
  * without suspending; a future one that needs to await should copy out what it
  * needs first.
  */
-export function cached<T>(root: string, build: (root: string) => T, dispose?: (value: T) => void): T {
-  const stamp = stampOf(root);
+export function cached<T>(
+  root: string,
+  build: (root: string) => T,
+  dispose?: (value: T) => void,
+  /**
+   * The caller's word that nothing has changed since the entry was made — the
+   * server passes this for a vault its watcher holds, because every watcher
+   * event and every write clears the entry through `bump`, so an entry that
+   * still exists was vouched for by the same trust window `/api/cli/stamp`
+   * already extends to the CLI. What it buys is skipping the stamp: an exact
+   * stamp is a stat-walk of the vault, which is the whole per-request cost on
+   * a workspace-sized one. The db handle is still checked — the watcher skips
+   * dotfiles, so another process replacing `index.db` is invisible to it.
+   */
+  vouched = false,
+): T {
   const hit = entries.get(root) as Entry<T> | undefined;
+  if (hit && vouched && hit.handle === handleOf(root)) return hit.value;
+  const stamp = stampOf(root);
   if (hit && hit.stamp === stamp && hit.handle === handleOf(root)) return hit.value;
 
   const started = Date.now();

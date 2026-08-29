@@ -338,14 +338,22 @@ through `bump`) it vouches for the persisted index without touching the filesyst
 window is the watcher's own — the one every open board already lives on — and it is bounded on both
 sides: the CLI verifies the payload was built from the exact stamp the server named, falls back to
 its local walk on any disagreement or silence, and `pj reindex` never delegates.
-`PROJECTOR_NO_DELEGATE=1` turns it off. A vault too big to watch — chokidar
-opens a descriptor per directory, and macOS's default soft limit is 256 — flips to `unwatchable` on
-the watcher's EMFILE: any vouch already given is revoked and the endpoint answers 503, so the CLI
-walks. Before it comes to that, the watcher prunes with the walk's own rules (`walkIgnores` in
-`schema/note.ts`): the same `.gitignore` subset, `.projector/ignore` and skip list, judged at the
-directory so an ignored tree costs nothing below it — a vault that is also a working tree watches
-its documents, not its build output. Watching a workspace-sized vault for real means an
-FSEvents-based watcher (one stream, any tree); that is the stated next step, not this one.
+`PROJECTOR_NO_DELEGATE=1` turns it off. The watcher is `fs.watch(root, { recursive: true })` — one
+native stream per vault (FSEvents on macOS), a handful of descriptors regardless of tree size. It
+was chokidar, which opens a watch per directory: even after pruning, a vault that is also a working
+tree holds thousands of source directories, and opening one meant minutes of setup and EMFILE. So
+filtering happens on *events* rather than on what is watched, with the walk's own rules
+(`walkIgnores` in `schema/note.ts`): the same `.gitignore` subset, `.projector/ignore` and skip list
+— the watcher and the index agree about what the vault is, and the index's own `-wal` churn is
+inaudible because anything dotted is skipped, `facets.yaml` and `views/` excepted by name. A watcher
+that still fails flips the vault to `unwatchable`: any vouch already given is revoked and the
+endpoint answers 503, so the CLI walks.
+
+The same vouch serves the server's own memo: once the watcher is live (`watchReady`), `load` trusts
+an existing entry without recomputing the stamp — every event and every write clears it through
+`bump`, so an entry that survives is current. What that skips is a stat-walk of the vault per
+request, which at workspace scale was the whole of a warm request's latency; the `index.db` inode is
+still checked, because the watcher cannot see another process replacing a dotfile.
 
 The walk that feeds all of this honours `.gitignore` (a subset — negations are dropped, so it can only
 ignore more than git would) and `.projector/ignore`, gitignore syntax matched from the vault root —

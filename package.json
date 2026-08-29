@@ -5,22 +5,23 @@
   "license": "0BSD",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "bun": ">=1.4.0"
   },
+  "packageManager": "bun@1.4.0",
   "bin": {
     "pj": "./src/cli/pj.ts"
   },
   "scripts": {
-    "pj": "node src/cli/pj.ts",
-    "test": "node --test",
-    "typecheck": "tsc --noEmit",
-    "deps:check": "ncu",
-    "deps:update": "ncu -u",
-    "dev": "node --watch src/server/serve.ts",
-    "dev:web": "vite",
-    "build": "vite build",
-    "serve": "node src/server/serve.ts",
-    "redate": "node src/scripts/redate.mjs",
+    "pj": "bun src/cli/pj.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "deps:check": "bunx npm-check-updates",
+    "deps:update": "bunx npm-check-updates -u",
+    "dev": "bun --watch src/server/serve.ts",
+    "dev:web": "bunx vite",
+    "build": "bunx vite build",
+    "serve": "bun src/server/serve.ts",
+    "redate": "bun src/scripts/redate.mjs",
     "build:cli": "bun build --compile ./src/cli/pj.ts --outfile dist/pj"
   },
   "dependencies": {
@@ -35,7 +36,6 @@
     "@dagrejs/dagre": "^3.1.1",
     "@hono/node-server": "^2.1.1",
     "@xyflow/react": "^12.11.5",
-    "chokidar": "^5.0.0",
     "hono": "^4.13.5",
     "marked": "^18.0.11",
     "react": "^19.2.8",
