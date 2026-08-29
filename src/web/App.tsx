@@ -3,6 +3,7 @@ import { useLocation, useSearch } from 'wouter';
 import { ApiError, api, onAttention } from './api.ts';
 import { useLive } from './useLive.ts';
 import { BoardView } from './views/BoardView.tsx';
+import { CalendarView } from './views/CalendarView.tsx';
 import { CanvasView } from './views/CanvasView.tsx';
 import { TableView } from './views/TableView.tsx';
 import { NotePanel, whatIsUnsaved } from './panel/NotePanel.tsx';
@@ -587,6 +588,21 @@ export function App() {
           reload={reload}
         />
       );
+    if (shape === 'calendar')
+      return (
+        <CalendarView
+          meta={meta}
+          data={data}
+          onOpen={openCard}
+          selection={selection}
+          // The page lives in `cal`/`cal.*`, outside the wire — so the search
+          // string is a dependency here where the other shapes need only `wire`:
+          // turning a page re-renders without refetching.
+          search={search}
+          patch={patch}
+          reload={reload}
+        />
+      );
     return (
       <BoardView
         meta={meta}
@@ -603,7 +619,7 @@ export function App() {
         reload={reload}
       />
     );
-  }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire]);
+  }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire, search]);
 
   if (gate || !vault) {
     return (

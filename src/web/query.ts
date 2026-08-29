@@ -1,4 +1,5 @@
 import { SHAPES as ALL_SHAPES, SPEC_PARAMS } from '../view/spec.ts';
+import { CAL_PARAMS } from '../view/calendar.ts';
 import type { Meta, Shape, ViewSpec } from './types.ts';
 import { VAULT_PARAM } from './vault.ts';
 
@@ -63,7 +64,14 @@ function isOwnParam(key: string): boolean {
   // Context belongs in the URL but never in a view. Keep it isolated here so a
   // feature that adds a view-adjacent key cannot accidentally discard it.
   if (key === VAULT_PARAM) return true;
-  return key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || isQueryParam(key);
+  return (
+    key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM ||
+    // The calendar's page and grid — where you are looking, like `?note=`, so
+    // they ride beside the query rather than in it: turning a page must not
+    // refetch, and a saved view must not store a date that decays (C9).
+    CAL_PARAMS.includes(key) ||
+    isQueryParam(key)
+  );
 }
 
 /**
@@ -159,14 +167,15 @@ export function patchSearch(search: string, patch: Patch): string {
  * against three options that did not include it, so one nudge of the control
  * changed the view to something nobody asked for.
  *
- * There is no exclusion left to make. `lists` was a fourth entry here and then
- * a filtered-out one; it is not a shape at all now but a grouping axis, so a
- * composition switches between these three like anything else.
+ * There is no exclusion left to make. `lists` was an entry here and then a
+ * filtered-out one; it is not a shape at all now but a grouping axis, so a
+ * composition switches between these four like anything else.
  */
 const LABELS: Record<Shape, string> = {
   board: 'Board',
   canvas: 'Canvas',
   table: 'Table',
+  calendar: 'Calendar',
 };
 
 export const SHAPES: { value: Shape; label: string }[] = ALL_SHAPES.map((value) => ({

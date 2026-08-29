@@ -166,18 +166,19 @@ export function splitSelection(selection: readonly string[]): {
 }
 
 /**
- * The projections of one note database. All three project one query, and every
- * one of them is editable rather than merely viewable (C5).
+ * The projections of one note database. All four project one query, and every
+ * one of them is editable rather than merely viewable (C5) — a calendar drop
+ * writes its date facet the way a board drop writes its grouped one.
  *
- * `lists` used to be a fourth. It never was one: a composition does not *draw*
- * differently, it decides where the columns come from — so it belongs beside
- * `groupBy`, not beside `board`. As a shape it had to forbid the other three,
+ * `lists` used to be a shape here too. It never was one: a composition does not
+ * *draw* differently, it decides where the columns come from — so it belongs
+ * beside `groupBy`, not beside `board`. As a shape it had to forbid the others,
  * which cost a triage board its table and its canvas for no reason anyone could
  * state. It is `LISTS_AXIS` now.
  */
-export type Shape = 'board' | 'canvas' | 'table';
+export type Shape = 'board' | 'canvas' | 'table' | 'calendar';
 
-export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table'];
+export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table', 'calendar'];
 
 /**
  * The grouping axis whose values are other views.

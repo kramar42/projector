@@ -14,7 +14,7 @@ number.
 | C2 | Nothing is written where somebody else reads | no code path writes to Jira, GitHub, Trello or Slack. A sink only you read — a notification to yourself — is not one of those |
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
-| C5 | Every shape a query projects into is equally first-class | board, canvas and table are editable, not just viewable — and there are exactly three. A composition is not a fourth: it decides where the columns come from, not how they are drawn, so it is the `lists` grouping axis and every shape draws it |
+| C5 | Every shape a query projects into is equally first-class | board, canvas, table and calendar are editable, not just viewable — and there are exactly four. A composition is not a fifth: it decides where the columns come from, not how they are drawn, so it is the `lists` grouping axis and every shape draws it |
 | C6 | The note body is free-form | description, links, files, images — no template |
 | C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
@@ -775,7 +775,7 @@ instead is **narrowness**: a write that names one axis cannot revert another, wh
 |---|---|
 | panel facet `add` / `remove` | **merges** — the axis is re-read after the guard and the delta folded in |
 | panel `set`, title, links, project block, body, frontmatter | **refuses**, outside the self-write window |
-| board drag, canvas connect, bulk facet / parent | **narrows** — only the named axes travel; a concurrent edit to the same axis is lost silently |
+| board / calendar drag, canvas connect, bulk facet / parent | **narrows** — only the named axes travel; a concurrent edit to the same axis is lost silently |
 | every `pj` write, the delete cascade, saved views, `vaults.json` | **replaces** the keys it touches, with no base and no report |
 | an agent's `Write` / `Edit` | **cannot be guarded** — there is nowhere to put a base, and this is the primary writer |
 
@@ -820,6 +820,23 @@ than React Flow parents — a parent makes member positions relative, and a save
 absolute ones. Boxes are measured from where members finally are, so a dragged note grows its band and
 clustering needs no agreement with the arrangement.
 
+**A calendar's columns are days, and its page is not part of the query.** The fourth shape
+(`src/view/calendar.ts`, `src/web/views/CalendarView.tsx`) draws the same payload as the other three:
+the query decides which notes exist, and the raw values of one `type: date` facet decide where each
+lands — raw, because *show raw, filter bucketed* is the ordered-facet rule, and a calendar is the one
+surface that wants the day itself. Which facet is `dateAxis`: the first date facet in `show`, else the
+vault's first — `layoutRelation`'s rule with a vocabulary fallback, because a canvas without a
+reference still reads as a canvas while a calendar without an axis draws nothing at all. The visible
+page, grid and week start travel as app-owned URL params (`cal`, `cal.cols`, `cal.rows`, `cal.start`)
+beside `?sel=` and `?note=`, deliberately outside `SPEC_PARAMS`: turning a page must not refetch a
+result that cannot have changed, and *save current as…* must not store a date that decays by the time
+the view is reopened (C9 — everything derivable is a live control, and a page is neither derivable nor
+worth curating). A drop is a board drop with the day as the value: `dropOutcome` with the date facet as
+the axis, the unscheduled rail as the `(none)` column, and `bulkMove` at the end — so the write path
+table below gains no row, and validation (`checkFacets` refusing a non-date) is the same gate every
+write passes. It has no cursor grid yet: its cells come from the URL's page, not the payload's groups,
+so `gridOf` answers for it as it does for the canvas.
+
 ## What it writes
 
 C2 says everything external is read-only. Concretely, every operation that writes anything:
@@ -859,7 +876,7 @@ under an editor produces continuously.
 Its sink is `null` until `serve.ts` sets it, and that is the load-bearing part rather than a
 convenience. `cache.ts` and `enrich.ts` are imported by `pj` and by the test suite as readily as by the
 server, so a module-level `console.log` would put a server's health log into `pj ls --json` and into
-`node --test`. Opting in at one place means library code can say what it did without first working out
+`bun test`. Opting in at one place means library code can say what it did without first working out
 who is listening.
 
 **What goes out, and what it is allowed to do.** Enrichment and the fetching channels are reads: `gh pr
@@ -1077,7 +1094,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 - **`yaml`** for writes. Its Document API patches surgically, preserving comments, key order and
   formatting, so a file the app wrote is indistinguishable from a hand-edited one. `gray-matter`
   re-serialises the whole block.
-- **`node:sqlite`**, built in. FTS5 verified and in use; recursive CTEs are headroom nothing currently
+- **Bun's built-in SQLite binding (`node:sqlite`)**. FTS5 is verified and in use; recursive CTEs are headroom nothing currently
   needs. No native rebuild, nothing to install.
 - **`hono`** for the server — typed routing, a first-class SSE helper, static files: the three things
   this server does.
@@ -1087,13 +1104,14 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 
 ## Tests
 
-`node --test test/*.test.ts`
+`bun test test/*.test.ts`
 
 | | |
 |---|---|
 | `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — the desktop deep link and the one shell string left beside it, base-branch fallback, worktree preparation, both of `planWork`'s refusals, a dry run naming worktrees rather than checkouts, the briefing asking the session to register nothing; plus the workspace as the thing a note records — the sessions under a directory including its worktrees and excluding a slug collision the transcript's own `cwd` settles, the three ways a workspace can be opened, and the record being written once however often work is started; and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
 | `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
+| `calendar.test.ts` | the calendar's page arithmetic: the default page being the week around today, the anchor snapping to the declared week start only at week width, paging by a whole page and coming back to the same start, bad parameters degrading to defaults with hostile counts capped, UTC day arithmetic across month, year and leap boundaries, page and cell labels where the month turns, the date axis read from `show` first and the vocabulary second, placement splitting the filter's notes into days / the unscheduled rail / per-note off-page counts — and the page params pinned *outside* `SPEC_PARAMS`, so a saved view cannot store a date that decays |
 | `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
 | `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |

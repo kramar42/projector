@@ -511,6 +511,8 @@ body {
 .panel-section h3,
 .vaultgate-section h2,
 .lane-head,
+.calendar-dow,
+.calendar-config-item,
 .table thead th,
 .table tr.section th {
   font-family: var(--mono);
@@ -3722,6 +3724,162 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   color: var(--ink-3);
   border-top: 1px solid var(--rule);
   padding: 8px 12px;
+}
+
+/* ---------------------------------------------------------------- calendar */
+
+/* The board's shell, with the header the board does not need: a board's columns
+   name themselves off the payload, a calendar's days come from the URL's page,
+   so the page controls live with the shape (the canvas's rule for controls only
+   one shape can honour). */
+.calendar-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 10px;
+  padding: 12px;
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-range {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  margin-left: 6px;
+}
+
+/* An annotation, not a control: where the filter's dated notes went when they
+   are not on this page. `.board-nudge`'s register at chip scale. */
+.calendar-offpage {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  margin-left: 8px;
+}
+
+.calendar-config {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Register from the Label-step group; only geometry lives here. The select
+   inside is a `.rail-select`, so the control reads as the rail's. */
+.calendar-config-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-main {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Rows share the height evenly, so a 5-row page is five equal weeks. The
+   weekday header row is content-sized and only exists at week width. */
+.calendar-grid {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cal-cols, 7), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--cal-rows, 1), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calendar-grid.has-dow {
+  grid-template-rows: auto repeat(var(--cal-rows, 1), minmax(0, 1fr));
+}
+
+.calendar-dow {
+  align-self: end;
+  padding: 0 2px 2px;
+}
+
+/* A day is a column at cell scale: same surface, same hairline, one radius step
+   down because the box is smaller. */
+.calendar-day {
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.calendar-day.is-today {
+  border-color: var(--accent);
+}
+
+.calendar-day.is-today .calendar-day-date {
+  color: var(--accent);
+}
+
+/* `.column.is-over`, verbatim: a drop target lights the same way everywhere. */
+.calendar-day.is-over,
+.calendar-unscheduled.is-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.calendar-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  flex: none;
+}
+
+.calendar-day-date {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+}
+
+.calendar-day-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+/* The `(none)` column, standing to the side: dashed like `.column.is-none`,
+   and a column's width and radius because it is one. */
+.calendar-unscheduled {
+  flex: 0 0 272px;
+  background: var(--surface-2);
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.calendar-empty {
+  padding: 12px;
 }
 
 /* ---------------------------------------------------------------- table */

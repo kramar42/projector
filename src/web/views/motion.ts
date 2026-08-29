@@ -64,6 +64,11 @@ const EMPTY: Grid = { cells: [], columns: [], continuous: false };
 export function gridOf(data: QueryResponse | null): Grid {
   if (!data) return EMPTY;
   if (data.spec.shape === 'canvas') return EMPTY;
+  // A calendar's cells are days from the URL's page, not the payload's groups,
+  // so a grid built here would walk columns the screen is not drawing. Nothing
+  // yet supplies the page at this altitude; until it does, the honest answer is
+  // the canvas's.
+  if (data.spec.shape === 'calendar') return EMPTY;
 
   if (data.spec.shape === 'table') {
     // One lane. A table's sections are its columns, and it drops the empty ones

@@ -1133,6 +1133,20 @@ The corollary is that a merge which needs a variant per site has not found a com
 the two disclosure heads stayed apart — and, in the second verification pass, why three of the six
 proposed consolidations were dropped rather than built.
 
+### The Calendar Borrows Rule
+
+**A day cell is a column at cell scale; the calendar declares no register of its own.**
+
+The fourth shape arrived after the vocabulary was settled, so everything on it is a stated borrowing
+rather than a new voice. `.calendar-day` takes a column's surface and hairline (`surface-2` on
+`rule`) one radius step down (`--radius-lg`, being a smaller box); its `is-over` is `.column.is-over`
+verbatim, because a drop target lights the same way everywhere; the unscheduled rail is dashed
+because it *is* the `(none)` column (`.column.is-none`'s register) standing to the side; the cards
+inside are `.column-card` unchanged. The weekday row and the days/rows/starts labels sit in the
+Label-step group selector, and each cell's count is `.column-count` itself, not a lookalike. The one
+thing the calendar owns is geometry — a CSS grid sized by `--cal-cols`/`--cal-rows` from the URL —
+which is a layout, not a register.
+
 ## Do's and Don'ts
 
 ### Do:

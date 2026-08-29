@@ -592,8 +592,8 @@ test('a composition pins its columns and nothing else', () => {
   assert.deepEqual(url({ group: 'lists,priority' }).query.groupBy, [LISTS_AXIS, 'priority']);
   assert.deepEqual(url({}).query.groupBy, [LISTS_AXIS]);
 
-  // Everything else the three shapes share is live, shape included.
-  for (const shape of ['board', 'canvas', 'table'] as const) {
+  // Everything else the shapes share is live, shape included.
+  for (const shape of ['board', 'canvas', 'table', 'calendar'] as const) {
     assert.equal(url({ shape }).shape, shape);
   }
   assert.deepEqual(url({ sort: 'title:desc' }).query.sort, ['title:desc']);
@@ -609,11 +609,11 @@ test('a composition pins its columns and nothing else', () => {
     ['priority'],
   );
 
-  // Three shapes, and `lists` is not one of them — it never drew differently,
+  // Four shapes, and `lists` is not one of them — it never drew differently,
   // it decided where the columns came from.
   assert.deepEqual(
     SHAPES.map((s) => s.value),
-    ['board', 'canvas', 'table'],
+    ['board', 'canvas', 'table', 'calendar'],
   );
 });
 

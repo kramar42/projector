@@ -1,6 +1,6 @@
 # Manual
 
-Everything projector can do, in one place: the words it uses, the query model, the three shapes, the
+Everything projector can do, in one place: the words it uses, the query model, the four shapes, the
 CLI, the keymap, and the format of the files it reads and writes.
 
 [README.md](../README.md) is the short version — what this is and how to start it. This is the long
@@ -28,7 +28,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
 | **project folder** | a folder whose `README.md` carries a `project:` block. The folder name is the note's id; `AGENTS.md` beside it is what members inherit. Nothing else about the folder means anything — what is *in* it is not what belongs to it |
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
-| **shape** | how a query is drawn: `board`, `canvas` or `table` |
+| **shape** | how a query is drawn: `board`, `canvas`, `table` or `calendar` |
 | **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a canvas a **band**; a second grouping axis gives a board **lanes** |
 | **mark** | the glyph before a note's title: `▣` a project, `○` something references it, `•` neither |
 
@@ -363,6 +363,9 @@ canvas is what only a canvas can do *and* only while one is open:
 [ drag creates: parent ▾ ] [ + note ] [ Save layout ]
 ```
 
+The calendar's page controls — `‹ today ›`, the range, and the grid's days / rows / week-start —
+float over the calendar by the same rule: only a calendar can honour them.
+
 The bulk-selection bar floats over whichever shape has a selection, for the same reason: it exists
 only while one does.
 The footer always says how many notes are shown, how many the filter is hiding and how many are
@@ -411,14 +414,14 @@ It applies to every shape: `via=blocked_by dir=in` is "what does finishing this 
 
 ## shape and show
 
-`shape` is `board`, `canvas` or `table` — explicit, never inferred.
+`shape` is `board`, `canvas`, `table` or `calendar` — explicit, never inferred.
 
 `show` is which axes this view surfaces, and there is one list rather than two because how each is
 drawn follows from what it is:
 
 | | label facet | reference facet | computed axis |
 |---|---|---|---|
-| board / canvas face | a chip | a chip that opens the target | a chip |
+| board / canvas / calendar face | a chip | a chip that opens the target | a chip |
 | canvas | — | a line between notes, and the **first** one lays the graph out | — |
 | table | a column | a column of links | a column |
 
@@ -635,10 +638,36 @@ This reaches the derived axes too: `blocked` takes one value per blocking axis, 
 filtered to `blocked: [waiting_on]` that comes back empty tells you nobody is waiting on anyone,
 rather than that nothing matched.
 
-**Table.** The one thing neither other shape gives: columns of numbers. Its columns are the same facet
+**Table.** The one thing the other shapes do not give: columns of numbers. Its columns are the same facet
 list a board draws as chips. A project row adds roll-ups — **direct / total** note counts, blocked,
 last activity — where total follows the `project` chain, so a project with one direct member and six
 nested ones reads `1 / 7`.
+
+**Calendar.** Days as cells, from the same query: the filter, search and focus decide which notes
+exist, and each lands on the days its **date facet** holds — the first date facet in `show`, or the
+vault's first when `show` names none. Storage stays a raw date, so the board's `due` buckets group
+exactly as before; the calendar is just the one surface that draws the day itself.
+
+| Gesture | Effect |
+|---|---|
+| drag onto a day | set that date — **replace**, like a board column drop |
+| drag onto **unscheduled** | clear the date it was dragged from |
+| drag out of **unscheduled** | schedule a note that had no date |
+| ⌘/⇧-click | build a selection; a drag then moves all of it |
+
+**Unscheduled** is the `(none)` column, standing to the side: every note the filter admits that
+carries no value on the axis. Dated notes that fall outside the visible page are counted in the
+header — `3 earlier · 5 later` — rather than silently missing.
+
+The page is part of the URL, not of the query, so it is shareable and back-buttonable and a saved
+view never stores it:
+
+| Param | Meaning |
+|---|---|
+| `cal` | the anchor day, `YYYY-MM-DD`. Absent means the page with today on it; `‹` and `›` move it a page at a time |
+| `cal.cols` | days per row, default 7. At 7 the rows are weeks, aligned to `cal.start` |
+| `cal.rows` | rows per page, default 1 — so `7 × 1` is a week and `7 × 5` is a month's worth |
+| `cal.start` | which weekday starts a row: `mon` (default) … `sun` |
 
 ## Editing
 
@@ -661,6 +690,7 @@ is a body write like any other, so a note an agent changed underneath you is ref
 | Board | drag between columns and within them, `+` to create, ⌘/⇧-click to select, bulk bar |
 | Canvas | drag notes and **Save layout**, handle-to-handle to add a reference, `+ note`, ⌘-click or marquee to select, click a line to spotlight it, bulk bar |
 | Table | click a row to open the panel, ⌘/⇧-click to select, bulk bar |
+| Calendar | drag a card onto a day to set its date facet, onto **unscheduled** to clear it, ⌘/⇧-click to select, bulk bar |
 | Keyboard | the cursor, the digits, the trail, and the rail leader |
 
 See [Keyboard](#keyboard) for the whole map.
@@ -1662,35 +1692,21 @@ setting.
 
 # Toolchain
 
-Nothing here locks you to the tools it was written with, and CI proves that rather than promising it.
-
-**Either runtime, chosen by the launcher.** The server and the CLI have no build step, so the runtime
-is a property of the command you type rather than a setting in the repo. Every script that runs this
-repo's own TypeScript spells `node`, because Node is the floor `engines` promises — and `bun run`
-prepends a `node` symlink pointing at itself, so the same script runs under Bun. One set of scripts,
-three ways in:
+**Bun, all the way through.** Bun 1.4+ is this project's runtime and package manager. It runs the
+server and CLI TypeScript directly, starts interactive commands quickly, and runs the test suite much
+faster. Scripts name Bun explicitly, so no command quietly falls back to another runtime.
 
 ```bash
-bun run serve                     # Bun
-node --run serve                  # Node, no package manager needed
-pnpm serve                        # Node, via a package manager
+bun install
+bun run serve
+bun run dev
+bun run build
+bun test
+bun run pj -- ls
 ```
 
-`bunfig.toml` is what makes the first line honest. Bun only substitutes itself when asked, and its
-default is to do so *only if `node` is absent from `$PATH`* — so with a Node installed, `bun run serve`
-would quietly execute under Node. `[run] bun = true` settles it, and is exactly what `--bun` does per
-invocation. It also means `bun run build` needs no flag, though `vite`'s `#!/usr/bin/env node` shebang
-is the reason the flag exists.
-
-**One script cannot play, and the reason is a rule.** A script that hands the runtime a *file* is
-substitutable. A script that hands it a *runtime flag* is not, because the flag belongs to one runtime
-only. `test` is `node --test`; substituted, that reads `bun --test`, and Bun's runner is the subcommand
-`bun test`, never a flag. They are two different programs:
-
-```bash
-bun test                          # under Bun
-node --run test                   # under Node
-```
+`.mise.toml` and `package.json` pin Bun 1.4.0. `bun.lock` is the only lockfile, and reproducible
+environments install it with `bun install --frozen-lockfile`.
 
 ## What the server says while it runs
 
@@ -1726,37 +1742,15 @@ Requests are **not** logged. They have a caller, a status code and a client that
 adding them would bury the four lines above that nothing else reports. Times are local, not UTC — this
 is read next to the clock in the corner of your screen.
 
-Both run the whole suite, CI runs each, and both must pass. Everything else — `serve`, `dev`, `pj`,
-`redate`, and the scripts that call a binary rather than a runtime — substitutes cleanly.
+**One installer, one lockfile.** `bun install` owns `bun.lock`; CI installs it frozen. `bunfig.toml`
+uses Bun's isolated layout: each package lives in the store under `node_modules/.bun` and is linked
+into place rather than hoisted flat. That makes undeclared dependencies fail instead of becoming
+accidentally available.
 
-**Any package manager, one lockfile.** No native builds, no workspace, no `.npmrc` — `npm`, `pnpm`,
-`yarn` and `bun install` all resolve the same tree, and Bun's runtime reads a `node_modules` any of
-them produced. The committed lockfile is Bun's, which is what CI installs frozen; every other manager
-resolves fresh, which CI also exercises, and their lockfiles are gitignored so two of them can never
-disagree about the tree. There is deliberately no `packageManager` field, since that would make
-Corepack refuse every manager but one.
-
-`bunfig.toml` asks Bun for pnpm's layout with `[install] linker = "isolated"`: one copy of each package
-in a store under `node_modules/.bun`, symlinked into place rather than hoisted flat. That buys strict
-resolution — a dependency this repo does not declare stops working by accident instead of silently
-inheriting someone else's — and on APFS the store is filled by `clonefile`, so it shares blocks with
-Bun's global cache instead of copying. It governs `bun install` only.
-
-Bun starts faster, which is worth something for a CLI you run by hand and nothing for a server that
-starts once, and it runs the suite in a fraction of the time. One thing has actually bitten: Bun ships
-its own SQLite build, which has trailed Node's, and a version-sensitive `ALTER TABLE … DROP COLUMN` in
-the test suite is where that showed up.
-
-**Pins where a pin is the only thing there is.** Dependencies carry `^` ranges because the lockfile
-is already the pin: the range says what is acceptable, the lockfile says what you got. A runtime has
-no lockfile, so `.mise.toml` *is* the pin: it names both runtimes at concrete versions rather than
-`latest`, otherwise two people on two days get two of each. It tracks newer than the floor, because CI
-tests the floor. Nothing pins a package manager, because no particular one is required.
-
-`bun run deps:check` lists what has moved; `bun run deps:update` writes the new ranges, after which any
-install refreshes the lockfile. `@types/node` is deliberately held at the floor rather than the
-newest — see `.ncurc.yml` — because types for a Node this repo does not claim to support would let a
-26-only API typecheck clean and then fail on the `node 24` job.
+**One runtime pin.** Dependencies keep `^` ranges because `bun.lock` pins the exact tree; the range
+states what is acceptable. `.mise.toml` and `package.json` pin Bun itself. `bun run deps:check` lists
+available updates, and `bun run deps:update` writes the new dependency ranges before refreshing the
+lockfile with `bun install`.
 
 ---
 

@@ -20,7 +20,7 @@ import type { ViewSpec } from './spec.ts';
  * a board grouped by an unused axis draws its declared columns and every one of
  * them is blank, which looks exactly like a query that excluded everything.
  *
- * Here rather than in a view because all three shapes ask it and the answer must
+ * Here rather than in a view because every shape asks it and the answer must
  * not depend on which one asked, and because a sentence chosen in a component is
  * a sentence no test can reach.
  *
