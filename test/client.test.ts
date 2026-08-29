@@ -23,6 +23,8 @@ import {
 } from '../src/web/query.ts';
 import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
 import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
+import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
+import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -354,12 +356,60 @@ test('a practice key lights every cheatsheet pattern it can complete', () => {
   assert.ok(matchesCheatsheetRow('j k h l', { key: 'j', altKey: false }, axes));
   assert.ok(matchesCheatsheetRow('g ⟨axis⟩', { key: 'p', altKey: false }, axes));
   assert.ok(matchesCheatsheetRow('g ⇧⟨axis⟩', { key: 'P', altKey: false }, axes));
+  assert.ok(matchesCheatsheetRow('g ⟨axis⟩', { key: 'P', altKey: false }, axes), 'Shift still reaches this axis');
+  assert.ok(matchesCheatsheetRow('g ⇧⟨axis⟩', { key: 'p', altKey: false }, axes), 'the axis row trains either direction');
+  assert.ok(matchesCheatsheetRow('⟨axis⟩', { key: 'P', altKey: false }, axes), 'the vault axis itself is case-insensitive');
   assert.ok(matchesCheatsheetRow('⌥j ⌥k', { key: 'j', altKey: true }, axes));
   assert.ok(matchesCheatsheetRow('gg G', { key: 'g', altKey: false }, axes), 'a prefix teaches its completion');
   assert.ok(matchesCheatsheetRow('⏎', { key: 'Enter', altKey: false }, axes));
 
   assert.ok(!matchesCheatsheetRow('j k h l', { key: 'j', altKey: true }, axes));
   assert.ok(!matchesCheatsheetRow('g ⟨axis⟩', { key: 'z', altKey: false }, axes));
+});
+
+test('practice mode recognises the physical option keys a Mac actually sends', () => {
+  const axes = ['p'];
+  // macOS turns ⌥J into ∆ and ⌥1 into ¡. `code`, not those layout glyphs, is
+  // the grammar's stable name — the dispatcher already depends on that fact.
+  const optionJ = cheatsheetStrokeOf({ key: '∆', code: 'KeyJ', altKey: true, shiftKey: false });
+  const optionOne = cheatsheetStrokeOf({ key: '¡', code: 'Digit1', altKey: true, shiftKey: false });
+
+  assert.deepEqual(optionJ, { key: 'j', altKey: true });
+  assert.ok(matchesCheatsheetRow('⌥j ⌥k', optionJ, axes));
+  assert.ok(!matchesCheatsheetRow('j k', optionJ, axes), '⌥J is never bare J');
+  assert.deepEqual(optionOne, { key: '1', altKey: true });
+  assert.ok(matchesCheatsheetRow('⌥1–9', optionOne, axes));
+  assert.ok(!matchesCheatsheetRow('1–9', optionOne, axes), '⌥1 is never bare 1');
+
+  assert.ok(
+    matchesCheatsheetRow('⟨axis⟩ 1–9', cheatsheetStrokeOf({ key: '2', code: 'Digit2', altKey: false, shiftKey: false }), axes),
+    'a completion is useful to learn even when it is the second stroke',
+  );
+  assert.equal(cheatsheetStrokeLabel({ key: 'P', altKey: false }), '⇧P');
+});
+
+test('practice mode keeps unmodified keys in the active keyboard layout', () => {
+  // On Dvorak the physical QWERTY J key produces `h`. Only Option commands
+  // belong to a physical key: ordinary navigation must practice what the layout
+  // actually sends, exactly as the dispatcher does.
+  const dvorakH = cheatsheetStrokeOf({ key: 'h', code: 'KeyJ', altKey: false, shiftKey: false });
+  const dvorakHShifted = cheatsheetStrokeOf({ key: 'H', code: 'KeyJ', altKey: false, shiftKey: true });
+
+  assert.deepEqual(dvorakH, { key: 'h', altKey: false });
+  assert.deepEqual(dvorakHShifted, { key: 'H', altKey: false });
+  assert.ok(matchesCheatsheetRow('h l', dvorakH, []));
+  assert.ok(!matchesCheatsheetRow('j k', dvorakH, []));
+});
+
+test('a keyed rail control has one phrase in its tooltip, palette and cheatsheet', () => {
+  const rows = KEYMAP.flatMap((section) => section.rows);
+  for (const act of ACTS) {
+    if (act.command.kind !== 'rail' || !act.keys) continue;
+    const phrase = railControlDescription(act.command.control);
+    assert.equal(act.palette, phrase, `${act.id} palette`);
+    assert.equal(rows.find((row) => row.keys === act.keys)?.does, phrase, `${act.id} cheatsheet`);
+  }
+  assert.equal(railControlDescription('collapse'), 'collapse sidebar');
 });
 
 /**

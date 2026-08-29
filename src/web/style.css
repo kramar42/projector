@@ -4437,6 +4437,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
  * number: `.rail-label` is the sidebar's label gutter and answers to nothing here.
  */
 .cheatsheet-row {
+  position: relative;
   display: grid;
   grid-template-columns: 84px 1fr;
   gap: 7px;
@@ -4446,11 +4447,17 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 
 /* A training key brightens every route it could take, without moving the table. */
 .cheatsheet-row.is-match {
-  margin: 0 -4px;
-  padding: 2px 4px;
+  background: none;
+}
+.cheatsheet-row.is-match::before {
+  content: '';
+  position: absolute;
+  inset: -1px -4px;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-radius: var(--radius-base);
+  pointer-events: none;
 }
+.cheatsheet-row > * { position: relative; }
 .cheatsheet-row.is-match dd { color: var(--ink); }
 
 .cheatsheet-row dt {
@@ -4504,11 +4511,24 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 }
 
 .cheatsheet-foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   margin-top: 10px;
   padding-top: 7px;
   border-top: 1px solid var(--rule);
   font-size: var(--text-sm);
   color: var(--ink-3);
+}
+.cheatsheet-last-key {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+}
+.cheatsheet-close {
+  grid-column: 3;
+  justify-self: end;
 }
 
 /*

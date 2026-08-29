@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { KEYMAP } from '../view/keys.ts';
-import { cheatsheetStrokeLabel, matchesCheatsheetRow, type CheatsheetStroke } from './cheatsheetKeys.ts';
+import {
+  cheatsheetKeyLabel,
+  cheatsheetStrokeLabel,
+  cheatsheetStrokeOf,
+  matchesCheatsheetRow,
+  type CheatsheetStroke,
+} from './cheatsheetKeys.ts';
 import type { Meta } from './types.ts';
 
 /**
@@ -36,7 +42,7 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
       if (/^(Shift|Control|Alt|Meta|CapsLock|AltGraph)$/.test(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      setStroke({ key: event.key, altKey: event.altKey });
+      setStroke(cheatsheetStrokeOf(event));
     };
     window.addEventListener('keydown', capture, true);
     return () => window.removeEventListener('keydown', capture, true);
@@ -64,7 +70,7 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
                             key={k}
                             className={matchesCheatsheetRow(k, stroke, axisKeys) ? 'is-match' : ''}
                           >
-                            {k}
+                            {cheatsheetKeyLabel(k)}
                           </kbd>
                         ))}
                       </dt>
@@ -113,12 +119,10 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
           </section>
         </div>
         <div className="cheatsheet-foot">
-          {stroke ? (
-            <span aria-live="polite">{cheatsheetStrokeLabel(stroke)} lights every matching pattern · </span>
-          ) : (
-            <span>press a key to trace its pattern · </span>
-          )}
-          esc to close · a key is one letter in <code>facets.yaml</code>
+          <span className="cheatsheet-last-key" aria-live="polite">
+            {stroke && <kbd className="is-match">{cheatsheetStrokeLabel(stroke)}</kbd>}
+          </span>
+          <span className="cheatsheet-close">esc to close</span>
         </div>
       </div>
     </>

@@ -4,10 +4,43 @@ export interface CheatsheetStroke {
   altKey: boolean;
 }
 
+/** The event facts practice mode needs, deliberately narrower than the DOM type. */
+export interface CheatsheetKeyEvent {
+  key: string;
+  code: string;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
+ * Translate a browser event into the keyboard grammar's stable spelling.
+ *
+ * `event.key` is the character a keyboard layout produced and is therefore the
+ * right answer for ordinary and Shift strokes — Dvorak's physical J key is `h`,
+ * not `j`. macOS is the deliberate exception for Option: it turns ⌥J into `∆`
+ * and ⌥1 into `¡`, while the dispatcher reads `code` for its two physical Option
+ * commands. Practice mode follows that same narrow exception.
+ */
+export function cheatsheetStrokeOf(event: CheatsheetKeyEvent): CheatsheetStroke {
+  if (!event.altKey) return { key: event.key, altKey: false };
+  const letter = /^Key([A-Z])$/.exec(event.code);
+  if (letter) {
+    return { key: letter[1]!.toLowerCase(), altKey: true };
+  }
+  const digit = /^Digit([0-9])$/.exec(event.code);
+  if (digit) return { key: digit[1]!, altKey: true };
+  return { key: event.key, altKey: true };
+}
+
+/** Render one key consistently: shifted letter bindings always show their modifier. */
+export function cheatsheetKeyLabel(key: string): string {
+  const glyph = { Enter: '⏎', Backspace: '⌫', Escape: 'esc' }[key] ?? key;
+  return /^[A-Z]$/.test(glyph) ? `⇧${glyph}` : glyph;
+}
+
 /** The reader-facing name of the last key pressed in the practice sheet. */
 export function cheatsheetStrokeLabel({ key, altKey }: CheatsheetStroke): string {
-  const glyph = { Enter: '⏎', Backspace: '⌫', Escape: 'esc' }[key] ?? key;
-  return `${altKey ? '⌥' : ''}${glyph}`;
+  return `${altKey ? '⌥' : ''}${cheatsheetKeyLabel(key)}`;
 }
 
 /**
@@ -27,9 +60,12 @@ function matchesToken(token: string, stroke: CheatsheetStroke, axisKeys: readonl
   const lower = stroke.key.toLowerCase();
   const isAxis = axisKeys.includes(lower);
   if (token === '⟨axis⟩' || token === '⟨axis⟩⟨axis⟩') {
-    return isAxis && stroke.key === lower;
+    return isAxis;
   }
-  if (token === '⇧⟨axis⟩') return isAxis && stroke.key !== lower;
+  // Shift changes which end of an axis command the dispatcher reaches, not the
+  // axis itself. In practice mode either case should therefore light every
+  // pattern for that facet and train the same physical key.
+  if (token === '⇧⟨axis⟩') return isAxis;
   if (token === '1–9') return /^[1-9]$/.test(stroke.key);
   if (token === '⏎') return stroke.key === 'Enter';
   if (token === '⌫') return stroke.key === 'Backspace';

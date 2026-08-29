@@ -122,6 +122,32 @@ export type RailControl =
   | 'save';
 
 /**
+ * Reader-facing names for rail acts.
+ *
+ * An act can appear in the sidebar, command palette and cheatsheet. This is
+ * its single phrase in all of those places, so a key never promises a subtly
+ * different operation from the control it reaches.
+ */
+const RAIL_CONTROL_DESCRIPTIONS: Record<RailControl, string> = {
+  view: 'saved views',
+  shape: 'change the shape',
+  group: 'group by',
+  thenBy: 'then by',
+  sort: 'sort',
+  sortDir: 'flip the sort direction',
+  show: 'which facets show',
+  focus: 'focus: walk from a note',
+  filter: 'the filter rail',
+  clear: 'clear the filters',
+  collapse: 'collapse sidebar',
+  save: 'save changes into this view',
+};
+
+export function railControlDescription(control: RailControl): string {
+  return RAIL_CONTROL_DESCRIPTIONS[control];
+}
+
+/**
  * Everything a keystroke can mean.
  *
  * Named for the *intent* rather than for the key, so the cheatsheet and the
@@ -825,14 +851,14 @@ export const ACTS: readonly Act[] = [
   { id: 'act.enrich', palette: 'Re-fetch this note’s links', command: { kind: 'enrich' } },
   { id: 'act.vault', palette: 'Switch vault', command: { kind: 'switchVault' } },
 
-  { id: 'act.view', palette: 'Saved views', keys: ', v', command: { kind: 'rail', control: 'view' } },
-  { id: 'act.save', palette: 'Save changes into this view', keys: ', V', command: { kind: 'rail', control: 'save' } },
-  { id: 'act.shape', palette: 'Change the shape', keys: ', s', command: { kind: 'rail', control: 'shape' } },
-  { id: 'act.sortDir', palette: 'Flip the sort direction', keys: ', O', command: { kind: 'rail', control: 'sortDir' } },
-  { id: 'act.filter', palette: 'The filter rail', keys: ', F', command: { kind: 'rail', control: 'filter' } },
-  { id: 'act.focus', palette: 'Focus: walk from a note', keys: ', w', command: { kind: 'rail', control: 'focus' } },
-  { id: 'act.clear', palette: 'Clear the filters', keys: ', c', command: { kind: 'rail', control: 'clear' } },
-  { id: 'act.collapse', palette: 'Collapse the rail', keys: ', \\', command: { kind: 'rail', control: 'collapse' } },
+  { id: 'act.view', palette: railControlDescription('view'), keys: ', v', command: { kind: 'rail', control: 'view' } },
+  { id: 'act.save', palette: railControlDescription('save'), keys: ', V', command: { kind: 'rail', control: 'save' } },
+  { id: 'act.shape', palette: railControlDescription('shape'), keys: ', s', command: { kind: 'rail', control: 'shape' } },
+  { id: 'act.sortDir', palette: railControlDescription('sortDir'), keys: ', O', command: { kind: 'rail', control: 'sortDir' } },
+  { id: 'act.filter', palette: railControlDescription('filter'), keys: ', F', command: { kind: 'rail', control: 'filter' } },
+  { id: 'act.focus', palette: railControlDescription('focus'), keys: ', w', command: { kind: 'rail', control: 'focus' } },
+  { id: 'act.clear', palette: railControlDescription('clear'), keys: ', c', command: { kind: 'rail', control: 'clear' } },
+  { id: 'act.collapse', palette: railControlDescription('collapse'), keys: ', \\', command: { kind: 'rail', control: 'collapse' } },
   { id: 'act.declined', palette: 'What a sweep declined, and why', keys: ', d', command: { kind: 'declined' } },
   { id: 'act.bulk', palette: 'The bulk bar', keys: ', b', command: { kind: 'reachList', list: 'bulk' } },
   { id: 'act.toolbar', palette: 'The canvas toolbar', keys: ', t', command: { kind: 'reachList', list: 'toolbar' } },
@@ -986,18 +1012,18 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
   {
     section: 'The view',
     rows: [
-      { keys: ', v', does: 'saved view' },
-      { keys: ', V', does: 'save changes into this view' },
-      { keys: ', s', does: 'shape' },
+      { keys: ', v', does: railControlDescription('view') },
+      { keys: ', V', does: railControlDescription('save') },
+      { keys: ', s', does: railControlDescription('shape') },
       { keys: ', g', does: 'group by (+ axis key sets it)' },
       { keys: ', G', does: 'then by' },
       { keys: ', o', does: 'sort' },
-      { keys: ', O', does: 'flip the direction' },
+      { keys: ', O', does: railControlDescription('sortDir') },
       { keys: ', f', does: 'which facets show' },
-      { keys: ', F', does: 'the filter rail' },
-      { keys: ', w', does: 'focus: walk from a note' },
-      { keys: ', c', does: 'clear the filters' },
-      { keys: ', \\', does: 'collapse the rail' },
+      { keys: ', F', does: railControlDescription('filter') },
+      { keys: ', w', does: railControlDescription('focus') },
+      { keys: ', c', does: railControlDescription('clear') },
+      { keys: ', \\', does: railControlDescription('collapse') },
       { keys: ', d', does: 'what a sweep declined, and why' },
       { keys: ', b', does: 'the bulk bar, when something is selected' },
       { keys: ', t', does: 'the canvas toolbar' },

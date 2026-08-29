@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { VaultSwitcher } from '../VaultSwitcher.tsx';
+import { railControlDescription } from '../../view/keys.ts';
 import { FilterPanel } from './FilterPanel.tsx';
 import { SavedViews } from './SavedViews.tsx';
 import { FacetsSection, ShapeSection } from './QueryControls.tsx';
@@ -120,8 +121,8 @@ export function Sidebar({
           <button
             className="sidebar-toggle"
             type="button"
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
+            title={railControlDescription('collapse')}
+            aria-label={railControlDescription('collapse')}
             onClick={onToggleCollapsed}
           >
             «
