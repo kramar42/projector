@@ -351,6 +351,12 @@ export function App() {
     go(`${loc}${patchSearch(s, pinsPatch(ids))}`, { replace: true });
   }, []);
 
+  /** Release one pin through the same URL writer, wherever its pin control lives. */
+  const unpin = useCallback(
+    (id: string) => setPins(pinsOf(nav.current.search).filter((p) => p !== id)),
+    [setPins],
+  );
+
   /**
    * Spread or fold the pins — and, folding, optionally land on a note.
    *
@@ -772,10 +778,9 @@ export function App() {
       {/* Every surface that *draws* a facet value reads its hue from here, so a
           chip on a card face, a table cell, a canvas node and the bulk bar
           cannot disagree about what colour an axis is. */}
-      {/* Every surface that draws a record mark reads its pinned-ness from
-          here, so a board tile, a table row, a calendar cell and a canvas node
-          cannot disagree about what is being held in sight. */}
-      <PinnedProvider pins={pins}>
+      {/* Every shape gets the same pin indicator and the same App-owned unpin
+          route, without each view learning how `?pins=` is stored. */}
+      <PinnedProvider pins={pins} onUnpin={unpin}>
       <VocabularyProvider facets={meta.facets}>
       {/*
         `panel-is-open` no longer reserves a track — the panel covers the view and
@@ -868,7 +873,7 @@ export function App() {
           // Folded pins become navigation only while a note is open: title
           // spines at the panel's left edge, each opening that pinned note.
           <Suspense fallback={null}>
-            <PinDock pins={pins} notes={data?.notes ?? {}} onOpen={openCard} />
+            <PinDock pins={pins} openNote={openNote} notes={data?.notes ?? {}} onOpen={openCard} />
           </Suspense>
         )}
         {stackOpen && (pins.length > 0 || openNote) && (
@@ -888,6 +893,19 @@ export function App() {
                   cursor.step(afterRemovingPage(stackPages(pins, openNote), id));
                 }
                 setPins(pins.filter((p) => p !== id));
+              }}
+              onDelete={(id) => {
+                const pages = stackPages(pins, openNote);
+                const remaining = pins.filter((p) => p !== id);
+                if (cursor.id === id) cursor.step(afterRemovingPage(pages, id));
+                if (!remaining.length) setStackOpen(false);
+                // One URL write: deleting an opened pin removes both its
+                // membership and its trailing slot without either update racing
+                // the other through a stale search string.
+                const { search: s, location: loc, navigate: go } = nav.current;
+                go(`${loc}${patchSearch(s, { ...pinsPatch(remaining), [NOTE_PARAM]: null })}`, {
+                  replace: true,
+                });
               }}
               onMakeOpen={(id) => {
                 cursor.step(id);
@@ -2014,6 +2032,36 @@ function run(command: Command, s: KeyState): void {
         tone: 'info',
         text: held ? `unpinned ${title}` : `pinned ${title} — " spreads the pins`,
       });
+    }
+
+    /**
+     * The previous / next pinned note, opened — the folded dock's one keyboard
+     * address, and the reason it exists: a spine could be clicked and nothing
+     * reached one without a mouse.
+     *
+     * It does exactly what a spine click does (`openCard`), because it is the
+     * same act. In the spread it is `h`/`l`: the pages there *are* the pins,
+     * already walked by the motion keys, and a second walker over one row would
+     * be two names for one motion rather than a second way in.
+     */
+    case 'pinStep': {
+      if (s.stackOpen) return run({ kind: 'move', along: 'column', delta: command.delta }, s);
+      if (!s.pins.length) {
+        return s.notify({ tone: 'info', text: "nothing is pinned — ' pins the note under the cursor" });
+      }
+      const at = s.pins.indexOf(openNote ?? '');
+      // Off the ring — no panel open, or reading something unpinned — so a step
+      // enters from the end it came from rather than resuming where it left off.
+      const to =
+        at === -1
+          ? command.delta > 0
+            ? 0
+            : s.pins.length - 1
+          : (at + command.delta + s.pins.length) % s.pins.length;
+      const next = s.pins[to]!;
+      cursor.step(next);
+      setOpenNote(next);
+      return;
     }
 
     /**

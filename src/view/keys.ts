@@ -324,14 +324,31 @@ export type Command =
   | { kind: 'undo' }
   | { kind: 'redo' }
   /**
-   * Pin the cursor's note, or unpin it. Compact views show the pin on the note's
-   * record mark; title spines appear beside an open panel and within the spread.
+   * Pin the cursor's note, or unpin it. A pinned note carries a filled pin at the
+   * trailing edge of its title, wherever it is drawn; title spines appear beside
+   * an open panel and within the spread.
    *
    * A pin is a *reading* mark, not a selection: `?sel=` is what a bulk write
    * lands on, `?pins=` is what stays in sight. Keeping them apart is what lets
    * you hold four notes on screen while writing to a fifth.
    */
   | { kind: 'pin' }
+  /**
+   * The previous or next pinned note, opened.
+   *
+   * The folded dock's keyboard address, and it exists because it was missing: a
+   * spine could be clicked and nothing on the keyboard reached one, which is the
+   * contract this app does not get to break. `g` because it is a goto — the same
+   * prefix `gl` and `gf` use to reach somewhere from where you are — and the
+   * brackets because they are already the "along the other axis" pair (`[`/`]`
+   * walk lanes) and, being marks rather than letters, cost a vault nothing
+   * (`isKeyShaped`).
+   *
+   * It wraps. The pins are a short ring you assembled by hand, and stopping at
+   * the end of one would make the shorter of the two directions the wrong guess
+   * half the time.
+   */
+  | { kind: 'pinStep'; delta: 1 | -1 }
   /**
    * Spread the pinned notes side by side over the view, or fold them back.
    *
@@ -580,6 +597,11 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
      */
     case 'goto': {
       if (stroke.key === 'g') return emit({ kind: 'moveTo', end: 'first' });
+      // The pin ring, before anything a vault can reach: `[` and `]` are marks,
+      // so `isKeyShaped` already guarantees no axis can be spelled with one and
+      // this needs no entry in `RESERVED`.
+      if (stroke.key === '[') return emit({ kind: 'pinStep', delta: -1 });
+      if (stroke.key === ']') return emit({ kind: 'pinStep', delta: 1 });
       // Regions before axes, which is only safe because their letters are
       // reserved — see `RESERVED`. Reading them second would let a vault shadow
       // one silently, and reading them first without reserving would shadow the
@@ -881,6 +903,11 @@ export const ACTS: readonly Act[] = [
   { id: 'act.enrich', palette: 'Re-fetch this note’s links', command: { kind: 'enrich' } },
   { id: 'act.vault', palette: 'Switch vault', command: { kind: 'switchVault' } },
 
+  /* A sequence rather than a binding, so the keys are written out here — the
+     same shape the `,` rows below take, and for the same reason. */
+  { id: 'act.pinPrev', palette: 'Previous pinned note', keys: 'g [', command: { kind: 'pinStep', delta: -1 } },
+  { id: 'act.pinNext', palette: 'Next pinned note', keys: 'g ]', command: { kind: 'pinStep', delta: 1 } },
+
   { id: 'act.view', palette: railControlDescription('view'), keys: ', v', command: { kind: 'rail', control: 'view' } },
   { id: 'act.save', palette: railControlDescription('save'), keys: ', V', command: { kind: 'rail', control: 'save' } },
   { id: 'act.shape', palette: railControlDescription('shape'), keys: ', s', command: { kind: 'rail', control: 'shape' } },
@@ -1033,6 +1060,9 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     rows: [
       { ids: ['pin.toggle'], does: 'pin / unpin the focused note' },
       { ids: ['stack.toggle'], does: 'spread the pins side by side / fold them back' },
+      // A sequence, so its keys are written out; `ACTS` carries it into the
+      // palette, which is the only other place it can be found.
+      { keys: 'g [ g ]', does: 'previous / next pinned note — the folded spines, from the keyboard' },
       // Sequences of keys the cursor rows already account for, re-read by the
       // spread the way a navlist re-reads them — so keys are written, not ids.
       { keys: 'h l', does: 'across the spread pages — writes land on the focused one' },

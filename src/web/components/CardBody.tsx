@@ -1,9 +1,10 @@
 import { useEnrichment } from '../enrichment.tsx';
 import { useTouched } from '../touched.tsx';
 import { plural } from '../plural.ts';
-import { useIsPinned } from '../pinned.tsx';
+import { useIsPinned, useUnpin } from '../pinned.tsx';
 import { useHue } from '../vocabulary.tsx';
 import { LINK_KINDS, linkHue } from '../links.ts';
+import { PinButton } from './Button.tsx';
 import type { NoteDTO } from '../types.ts';
 
 /**
@@ -132,6 +133,8 @@ export function CardBody({
 }) {
   const { touched } = useTouched();
   const isPinned = useIsPinned();
+  const unpin = useUnpin();
+  const pinned = isPinned(card.id);
   const blocked = card.blockedBy.filter((b) => !b.done);
   const facetKeys = showFacets.filter((f) => axisValues(card, f).length);
 
@@ -144,8 +147,21 @@ export function CardBody({
       onDoubleClick={() => onOpen?.(card.id)}
     >
       <div className="cardface-head">
-        <RecordMark card={card} pinned={isPinned(card.id)} />
+        <RecordMark card={card} />
         <span className="cardface-title">{card.title}</span>
+        {pinned && (
+          <PinButton
+            extra="cardface-pin"
+            aria-label={`Unpin ${card.title}`}
+            title={`Unpin "${card.title}" (')`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              unpin(card.id);
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+          />
+        )}
       </div>
 
       {facetKeys.length > 0 && (
@@ -306,26 +322,11 @@ export interface Marked {
   refCount: number;
 }
 
-export function RecordMark({ card, pinned = false }: { card: Marked; pinned?: boolean }) {
+export function RecordMark({ card }: { card: Marked }) {
   // The role is also a class, because each glyph needs its own optical nudge —
   // see `.recordmark` in style.css.
   const { glyph, role, means } = markOf(card);
-  return (
-    /*
-     * Pinned frames the mark, but changes neither its glyph nor its colour.
-     *
-     * The glyph says what the note is — `markOf` derives it from what names the
-     * record — and a pin says nothing about that; it says you are holding this
-     * one in sight. The accent glyph keeps its one meaning while a key-like
-     * `--pinned` surround carries the second fact without competing with it.
-     */
-    <span
-      className={`recordmark is-${role} ${pinned ? 'is-pinned' : ''}`}
-      title={pinned ? `${means} Pinned.` : means}
-    >
-      {glyph}
-    </span>
-  );
+  return <span className={`recordmark is-${role}`} title={means}>{glyph}</span>;
 }
 
 /**

@@ -1208,24 +1208,54 @@ from its neighbours (`ink` against `ink-2`), which is how a reading copy recedes
 fade taking the hairlines and chip fills down with it. Nothing else on the surface spends accent, per
 the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
 
-The rightmost page may carry a second role: the **open slot**. Its tiny `open` label is meta register,
-not accent, because it names standing placement rather than focus. Every other page answers with an
-equally quiet text action that sends it there; text is used instead of inventing an arrow glyph for a
-state transition the word names exactly. An opened pin temporarily leaves the drawn pin run but keeps
-its membership and order, so replacement restores it without a second animation or a second state
-token. Entering the spread is instantaneous under the Stillness Rule; only a direct spine click glides.
+The rightmost page may carry a second role: the **open slot**, and the two roles are told apart by
+which pair of controls the head carries rather than by a label. A pinned page carries `→` — send me to
+the slot — and the filled pin that lets it go. The open slot carries the panel's own corner instead:
+start, then delete, in `.panel-acts`, at `normal` size, with the destructive control last so a reach
+for the corner that overshoots lands on nothing. It is the same component treatment `NotePanel` uses
+because it is the same note in the same role, and a head that answered differently on this surface
+would be the app disagreeing with itself about what you can do to what you are reading.
+
+The arrow is the one glyph added for this. It replaced the word `open` and a `role` label saying
+`open` back — two words spending head width to name a placement the drawing shows — and it earns its
+place because the act is directional and the destination is literally to its right. An opened pin
+temporarily leaves the drawn pin run but keeps its membership and order, so replacement restores it
+without a second animation or a second state token. Entering the spread is instantaneous under the Stillness Rule; only a direct spine click glides.
 The covered rail and view are `inert`, matching the visual layer in the accessibility tree.
 Unfocused pages keep key-hint boxes at `visibility: hidden`; focus changes their ink, never the geometry
 of the label rows they annotate.
 
-**A pinned note's record mark keeps its accent glyph inside a `--pinned` surround.** The mark is
-`accent` everywhere because it is the app speaking about the note (see `.recordmark`); replacing that
-colour made the same glyph change meaning and left too little contrast at its smallest sizes. A
-compact, key-like surround now carries the pin as the app speaking about *you*: a low yellow wash
-behind the accent glyph and a full yellow edge around it, without tinting the note face like a facet
-value. `--pinned` holds the yellow family's value in both themes and is deliberately not named for it:
-the same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not
-a facet value, so it may not wear an axis's hue under an axis's name.
+### The Pin Rule
+
+**A pin is a filled control at the trailing edge of a title, never a treatment of the record mark.**
+
+The record mark says what a note *is* — `markOf` derives its glyph from what names the record — and the
+app speaks it in `accent` everywhere (see `.recordmark`). Two earlier attempts made that one mark carry
+a second fact: recolouring it to `--pinned` left too little contrast at its smallest sizes and made the
+same glyph change meaning, and framing it in a key-like `--pinned` surround kept the contrast but put a
+box around a glyph whose optical centre is not its box's centre, so the pin sat visibly off-centre on
+every face it was drawn on. Both were the same mistake — one symbol answering two questions.
+
+So pinned-ness is its own symbol and its own control. `.pin-button` is an `.icon-button` drawing a
+filled thumbtack, `--ground` on a solid `--pinned` field: the **filled** key treatment, which is what
+the cheatsheet already spends on a key that is currently matched, and the register that says *held, and
+you may release it* rather than *the app is telling you something*. It is drawn last on the title line
+— `.cardface-pin` on a face, `.table-pin` in a row, `.panel-acts` on a spread page — so the two facts
+read left to right in the order you ask them: what is this, what is it called, what am I doing with it.
+Because it is a real button, clicking it unpins, which is the whole reason a decoration was the wrong
+shape: the mark you look at to find a pin should be the thing you press to lose it.
+
+`--pinned` holds the yellow family's value in both themes and is deliberately not named for it: the
+same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not a
+facet value, so it may not wear an axis's hue under an axis's name. It is the only token that reverses
+against `--ground`, and that is the point: nothing else on a reading surface is filled, so the one
+filled thing is the one thing you put there by hand.
+
+**The dock spine whose note is in the panel takes the focused page's accent top edge.** It is not a
+cursor — the cursor is on the board behind it — it is *correspondence*, the answer to which of these
+four am I reading, and it borrows the spread's mark because the folded dock and the spread are the same
+reading set at two scales. Like the spread's, it is an inset top edge: the one strip a spine's
+neighbours never cover.
 
 ## Do's and Don'ts
 

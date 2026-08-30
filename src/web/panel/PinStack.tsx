@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { Button, IconButton } from '../components/Button.tsx';
+import { IconButton, PinButton } from '../components/Button.tsx';
 import { KeyHints } from '../components/KeyHint.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { NO_WRITES, usePanelWriter } from './usePanelWriter.ts';
+import { useWorkStarter } from './useWorkStarter.ts';
 import { NoteTiers } from './tiers.tsx';
 import { exposedPageWidths, isCompactPage, revealScroll, SPINE_W, stackPages } from './pins.ts';
 import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
@@ -61,10 +62,12 @@ function useTitle(id: string, known: string | undefined): string {
 
 export function PinDock({
   pins,
+  openNote,
   notes,
   onOpen,
 }: {
   pins: string[];
+  openNote: string;
   notes: QueryResponse['notes'];
   /** A spine click opens that note — the same act as clicking its card. */
   onOpen: (id: string) => void;
@@ -72,21 +75,38 @@ export function PinDock({
   return (
     <div className="pindock" aria-label="Pinned notes">
       {pins.map((id) => (
-        <DockSpine key={id} id={id} known={notes[id]?.title} onOpen={() => onOpen(id)} />
+        <DockSpine
+          key={id}
+          id={id}
+          known={notes[id]?.title}
+          isOpen={id === openNote}
+          onOpen={() => onOpen(id)}
+        />
       ))}
     </div>
   );
 }
 
-function DockSpine({ id, known, onOpen }: { id: string; known: string | undefined; onOpen: () => void }) {
+function DockSpine({
+  id,
+  known,
+  isOpen,
+  onOpen,
+}: {
+  id: string;
+  known: string | undefined;
+  isOpen: boolean;
+  onOpen: () => void;
+}) {
   const title = useTitle(id, known);
   return (
     <button
-      className="pindock-spine"
+      className={`pindock-spine ${isOpen ? 'is-open' : ''}`}
       data-act="spine"
       style={{ width: SPINE_W }}
       title={`${title} — open it. " spreads every pin`}
       onClick={onOpen}
+      aria-current={isOpen ? 'page' : undefined}
     >
       <span className="spinelabel">{title}</span>
     </button>
@@ -101,6 +121,7 @@ export function PinStack({
   onCursor,
   onOpen,
   onUnpin,
+  onDelete,
   onMakeOpen,
   onFocus,
   onUnsaved,
@@ -114,6 +135,8 @@ export function PinStack({
   /** Follow a reference out of a page. Modifiers decide how — see `followCard`. */
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onUnpin: (id: string) => void;
+  /** The trailing open note was deleted: remove its slot and any pin together. */
+  onDelete: (id: string) => void;
   /** Promote a pin into the trailing open slot without folding the spread. */
   onMakeOpen: (id: string) => void;
   /** Reshape the view around a derived row — the shell owns the query. */
@@ -286,6 +309,7 @@ export function PinStack({
           onMakeOpen={() => onMakeOpen(id)}
           onOpen={onOpen}
           onUnpin={() => onUnpin(id)}
+          onDelete={() => onDelete(id)}
           onFocusRow={onFocus}
           onUnsaved={onUnsaved}
         />
@@ -308,6 +332,7 @@ function PinPage({
   onMakeOpen,
   onOpen,
   onUnpin,
+  onDelete,
   onFocusRow,
   onUnsaved,
 }: {
@@ -324,6 +349,7 @@ function PinPage({
   onMakeOpen: () => void;
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onUnpin: () => void;
+  onDelete: () => void;
   onFocusRow: (id: string, via: string) => void;
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
 }) {
@@ -353,8 +379,9 @@ function PinPage({
     held: unsaved,
     // The note went: let the pin go with it rather than leaving a spine that
     // opens nothing. An unpinned live page simply stops being drawn.
-    onGone: onUnpin,
+    onGone: isOpen ? onDelete : onUnpin,
   });
+  const work = useWorkStarter({ id, title });
   /**
    * Only the focused page is handed the real one — see `NO_WRITES`. The hook is
    * called either way because it is a hook, and because the page it belongs to
@@ -382,37 +409,84 @@ function PinPage({
       >
         <span className="spinelabel">{title}</span>
       </button>
-      <div className="pinpage-content" aria-hidden={isCompact}>
+      {/*
+        `inert` rather than `aria-hidden`, which is what this was: a folded page
+        is a spine, and its head kept a Delete button that a Tab could still
+        reach and press on a note nobody could see. `inert` says the one thing
+        meant by both — not here — and says it to the pointer, the tab order and
+        the accessibility tree at once.
+      */}
+      <div className="pinpage-content" inert={isCompact}>
         <header className="pinpage-head">
-          {card && <RecordMark card={card} pinned={isPinned} />}
+          {card && <RecordMark card={card} />}
           <h2 className="pinpage-title">{title}</h2>
-          {write.busy && <span className="panel-busy">{write.busy}…</span>}
-          {isOpen ? (
-            <span className="pinpage-role">open</span>
-          ) : (
-            <Button
-              tone="ghost"
-              size="tiny"
-              extra="pinpage-open"
-              data-act="open"
-              title={`Open "${title}" at the right (o)`}
-              onClick={onMakeOpen}
-            >
-              open
-            </Button>
-          )}
-          {isPinned && (
-            <IconButton
-              glyph="close"
-              size="small"
-              data-act="unpin"
-              aria-label={`Unpin ${title}`}
-              title={`Unpin "${title}" (')`}
-              onClick={onUnpin}
-            />
-          )}
+          {(writer.busy ?? work.busy) && <span className="panel-busy">{writer.busy ?? work.busy}…</span>}
+          {/*
+            The same corner the panel draws, in the same order and the same
+            group — see `.panel-acts` in `NotePanel`. The open slot *is* the
+            panel's note by another name, so the two heads answering differently
+            was the inconsistency this pass exists to remove: what you can do to
+            the note you are reading may not depend on which surface is drawing
+            it. Every other page gets the pair that acts on its *pinned-ness*
+            instead: send it to the slot, or let it go.
+          */}
+          <div className="panel-acts">
+            {isOpen ? (
+              <>
+                <IconButton
+                  glyph="start"
+                  size="normal"
+                  extra="panel-x"
+                  data-act="work"
+                  disabled={!!work.busy}
+                  aria-label={`Start work on ${title}`}
+                  title={`Start work on "${title}" — a worktree workspace and a Claude session (!)`}
+                  onClick={work.start}
+                />
+                <IconButton
+                  glyph="trash"
+                  tone="danger"
+                  size="normal"
+                  extra="panel-x"
+                  data-act="delete"
+                  aria-label={`Delete ${title}`}
+                  title={`Delete "${title}" — the file is in git, so it can be recovered (⌫)`}
+                  onClick={() => {
+                    if (!confirm(`Delete "${title}"?\n\nThe file is in git, so this is recoverable.`)) return;
+                    writer.remove();
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <IconButton
+                  glyph="open"
+                  size="normal"
+                  extra="panel-x"
+                  data-act="open"
+                  title={`Open "${title}" at the right (o)`}
+                  aria-label={`Open ${title} at the right`}
+                  onClick={onMakeOpen}
+                />
+                {isPinned && (
+                  <PinButton
+                    size="normal"
+                    extra="panel-x"
+                    data-act="unpin"
+                    aria-label={`Unpin ${title}`}
+                    title={`Unpin "${title}" (')`}
+                    onClick={onUnpin}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </header>
-        {write.banner && <div className={`banner is-${write.banner.tone}`}>{write.banner.message}</div>}
+        {(writer.banner ?? work.banner) && (
+          <div className={`banner is-${(writer.banner ?? work.banner)!.tone}`}>
+            {(writer.banner ?? work.banner)!.message}
+          </div>
+        )}
         {/*
           Only the focused page is actionable, and `inert` is the whole of it:
           nothing inside takes focus, a click reaches nothing, and the subtree

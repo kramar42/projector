@@ -1475,34 +1475,6 @@ input:focus-visible + .checkbox {
   align-self: baseline;
 }
 
-/*
- * Pinned, and so framed in the one colour that means only that.
- *
- * The glyph stays `accent`: its colour already says that this is the app's
- * derived note vocabulary, and spending it again on pinned-ness made the mark
- * lose contrast and change meaning. The surround borrows the cheatsheet key's
- * compact raised shape, using a low pinned wash so the accent still reads on
- * effectively the same surface and a full-strength edge so the pin reads at a
- * glance. A pseudo-element keeps the measured glyph box and every title's
- * baseline untouched; the face itself is never tinted like a facet value.
- */
-.recordmark.is-pinned {
-  position: relative;
-  isolation: isolate;
-}
-
-.recordmark.is-pinned::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: -2px -3px -3px;
-  background: color-mix(in srgb, var(--pinned) 12%, var(--surface));
-  border: 1px solid var(--pinned);
-  border-bottom-width: 2px;
-  border-radius: var(--radius-sm);
-  pointer-events: none;
-}
-
 /* `•` centres at 0.3716em of its own size (measured; the middle dot it replaced
    was 0.3474em, which is where the old 0.03em came from). At mark = 0.8 × text:
    0.3716×0.8 − 0.254 = 0.0433 of text size = 0.054em of the mark's own. */
@@ -1520,6 +1492,15 @@ input:focus-visible + .checkbox {
   font-weight: 500;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 0;
+}
+
+/* A pin is its own fact, at the trailing title edge rather than around the
+   record-type mark. The slight lift optically aligns its 20px box to the title. */
+.cardface-pin {
+  align-self: flex-start;
+  margin: -2px -2px 0 auto;
 }
 
 .cardface-excerpt {
@@ -2001,6 +1982,13 @@ input:focus-visible + .checkbox {
   background: var(--surface-2);
 }
 
+/* The pin whose note occupies the panel. This is correspondence, not cursor
+   focus, but it borrows the spread cursor's one unoccluded accent edge. */
+.pindock-spine.is-open {
+  color: var(--ink);
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
 /* A pinned title, turned on its side. Shared by the dock and a spread page. */
 .spinelabel {
   writing-mode: vertical-rl;
@@ -2141,25 +2129,6 @@ input:focus-visible + .checkbox {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/*
- * The two roles at the trailing edge of a page head.
- *
- * A text action rather than a new arrow glyph: it names the state transition
- * without extending the icon alphabet, and the open page answers with the same
- * word in the meta register so the right-hand slot is explicit. Neither spends
- * accent on standing state.
- */
-.pinpage-open {
-  flex: none;
-}
-
-.pinpage-role {
-  flex: none;
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  color: var(--ink-3);
 }
 
 /*
@@ -3206,6 +3175,28 @@ textarea { resize: vertical; font-family: inherit; }
 .icon-button.is-on {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/*
+ * Pinned is a held state and an available reversal, so it earns the filled key
+ * treatment the cheatsheet uses for a matched key. Yellow is the pin's own
+ * semantic token; ground ink keeps the small filled thumbtack legible in both
+ * themes. This deliberately overrides the generic pressed toggle above.
+ */
+.icon-button.pin-button {
+  color: var(--ground);
+  background: var(--pinned);
+  border-color: var(--pinned);
+}
+
+.icon-button.pin-button:hover {
+  color: var(--ground);
+  background: color-mix(in srgb, var(--pinned) 86%, var(--ink));
+  border-color: color-mix(in srgb, var(--pinned) 86%, var(--ink));
+}
+
+.table-pin {
+  margin-left: auto;
 }
 
 /*

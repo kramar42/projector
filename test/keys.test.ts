@@ -665,6 +665,27 @@ test('g plus an axis key follows that axis, and shifted follows it back', () => 
 });
 
 /**
+ * The folded dock's keyboard address.
+ *
+ * Reachable behind `g` and costing the vocabulary nothing, which is the whole
+ * argument for spending brackets on it: `isKeyShaped` refuses any `key:` that is
+ * not a bare letter, so no vault can declare `[`, and unlike the region letters
+ * these need no line in `RESERVED` to be safe. Asserted from both sides — the
+ * pair reaches the command, and the bare strokes still mean what they meant.
+ */
+test('g bracket steps the pin ring, and costs the vocabulary nothing', () => {
+  assert.deepEqual(commandOf(['g', '[']), { kind: 'pinStep', delta: -1 });
+  assert.deepEqual(commandOf(['g', ']']), { kind: 'pinStep', delta: 1 });
+
+  // Unprefixed they are still lane motion, on every vault: a mark cannot be an
+  // axis key, so this cannot be shadowed and cannot shadow.
+  assert.deepEqual(commandOf(['[']), { kind: 'move', along: 'lane', delta: -1 });
+  assert.deepEqual(commandOf([']']), { kind: 'move', along: 'lane', delta: 1 });
+  assert.ok(!RESERVED.includes('['), 'a mark never needs reserving; `isKeyShaped` already refuses it');
+  assert.ok(!isKeyShaped('['), 'and this is why');
+});
+
+/**
  * The shifted axis letter, without the prefix.
  *
  * This line used to assert `null` — "only behind the prefix" — and it was pinning
@@ -941,6 +962,7 @@ test('every command is reachable, and how is written down', () => {
     gotoInverse: 'g + a shifted axis letter',
     focusInverse: 'a shifted axis letter',
     gotoRegion: 'g + a region letter — REGIONS',
+    pinStep: 'g [ and g ] — the folded dock, from the keyboard',
     openAxisControl: 'an axis letter, then anything that is not a digit',
     setAxisValue: 'a digit, or an axis letter then a digit',
     rail: 'the , leader — RAIL_LETTERS',

@@ -4,7 +4,8 @@ import { BulkBar } from '../components/BulkBar.tsx';
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
 import { useCursorFocus, useEdgeInset } from '../cursor.ts';
-import { useIsPinned } from '../pinned.tsx';
+import { useIsPinned, useUnpin } from '../pinned.tsx';
+import { PinButton } from '../components/Button.tsx';
 import { earnsRollups } from './columns.ts';
 import { groupsFor, labelFor } from './groups.ts';
 import { isCursorAt, type Spot } from './motion.ts';
@@ -220,6 +221,8 @@ function Row({
   const ref = useRef<HTMLTableRowElement>(null);
   const pointed = useCursorFocus(ref, isCursor);
   const isPinned = useIsPinned();
+  const unpin = useUnpin();
+  const pinned = isPinned(card.id);
   return (
     <tr
       ref={ref}
@@ -264,9 +267,21 @@ function Row({
             a table cell, and the anonymous cell the table wraps around it is not
             the box the border is drawn on — see the rule in `style.css`. */}
         <span className="titlerow">
-          <RecordMark card={card} pinned={isPinned(card.id)} />
+          <RecordMark card={card} />
           {card.title}
           {card.refCount > 0 && <span className="count">{card.refCount}</span>}
+          {pinned && (
+            <PinButton
+              extra="table-pin"
+              aria-label={`Unpin ${card.title}`}
+              title={`Unpin "${card.title}" (')`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                unpin(card.id);
+              }}
+            />
+          )}
         </span>
       </td>
       {chips.map((facet) => (

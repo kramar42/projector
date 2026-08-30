@@ -1375,13 +1375,20 @@ sight — the reading set beside the writing set, and the two never touch.
 
 | Keys | What |
 |---|---|
-| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. Its accent record mark gains a **yellow key-like surround** wherever the note is drawn, so you can see what you are holding without leaving the board. Open a note and the pins appear beside its panel as navigable title spines |
+| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A **filled yellow pin** appears at the trailing edge of its title wherever the note is drawn, so you can see what you are holding without leaving the board — and clicking that pin lets it go. Open a note and the pins appear beside its panel as navigable title spines |
+| `g [` `g ]` | previous / next pinned note, opened in the panel — the keyboard's way to the folded spines. It wraps, and from a note that is not pinned it enters at the near end. In the spread it is `h` / `l`, which already walk the pages |
 | `"` | **spread** the pins side by side over the view, or fold them back |
 | `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
 | `j` `k` | scroll the focused page |
 | `o` | move the focused pin into the **open slot** at the right, without leaving the spread |
 | `⏎` | fold the spread onto the focused note's panel |
-| `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a page's `✕` do, so no chain of Escapes can cost you the set |
+| `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a pin control do, so no chain of Escapes can cost you the set |
+
+**One pin, one drawing, one meaning.** The filled yellow pin is the whole vocabulary: it says the note
+is held, and pressing it lets it go. It is a control rather than a decoration of the record mark, so
+what the note *is* (`·`, `▪`, `○`) and what *you* are doing with it stay two separate marks that cannot
+crowd or recolour one another. It sits at the end of the title on a card face, a table row, a calendar
+cell, a canvas node and a spread page alike.
 
 **A page draws the note exactly as the panel does** — the same facet rows, the same links, the same
 `Children`-style derived rows, the same workshop — because it is the same component. What a page
@@ -1393,13 +1400,19 @@ moving the labels or content they annotate.
 **Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
 and cannot write — so there is still one place a keystroke can land with four notes on screen. Their
 header controls remain available to open or unpin the page, because those arrange the reading set and
-do not edit the note. Editing the note in front of you is `⏎`, which folds the spread onto its panel;
+do not edit the note. A page folded down to its spine is inert altogether: there is nothing to press
+on a note you cannot see, by pointer or by Tab. Editing the note in front of you is `⏎`, which folds the spread onto its panel;
 any command that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there. The covered board and
 sidebar are inert: they cannot receive a stray click, Tab or screen-reader cursor through the spread.
 
 **Pins and an open note are two roles, not two copies.** With only pins, the pages keep pin order. If a
 note is open, it is the full page at the far right while `h` and `l` move focus independently across
-the pages to its left. Press `o`—or use a page header's **open** control—to send a pin into that slot.
+the pages to its left. Press `o`—or use a page header's **`→`** control—to send a pin into that slot.
+
+**A page's two controls say which role it has.** Every pinned page carries `→` (send to the open slot)
+and the filled pin (let it go). The open slot at the right carries the corner the *panel* carries
+instead — start work, and delete — because it is the same note in the same role, and what you can do
+to the note you are reading may not depend on which surface happens to be drawing it.
 If the outgoing open note was unpinned it is replaced; if it was pinned, it returns to its original
 place in the pin run. A pin opened at the right stays a pin, so closing the open slot restores it rather
 than losing it.
@@ -1414,7 +1427,9 @@ its final offset on the first paint; only clicking a spine asks the surface to s
 
 Folded with no note open, the marked notes carry the whole signal and no spine covers the view. Open a
 note and the pinned spines appear at the panel's left edge; clicking one jumps to that note, the same
-act as clicking its card. Spread, the pages glue edge to edge and scroll sideways — drag a
+act as clicking its card, and `g [` / `g ]` do it from the keyboard. The spine whose note is in the
+panel carries the accent top edge the focused spread page carries — it is not a cursor, it is the
+answer to *which of these am I reading*. Spread, the pages glue edge to edge and scroll sideways — drag a
 spine, a header or a margin to pan (prose stays selectable), click a spine to glide that page fully
 into view, and a spread wider than the window folds its far pages down to their spines instead of
 scrolling them away. A page never changes width while it folds, and its body owns the full card — no

@@ -312,9 +312,9 @@ where things sit (C8).
 
 ### Pins are a reading surface, and the cursor stays the only pointer
 
-`'` pins the cursor's note; its record mark shows the pin without covering the compact view. While a
-note panel is open the pins stand beside it as title-spine navigation, and `"` spreads them side by
-side over the view (`src/web/panel/PinStack.tsx`). Five decisions carry it:
+`'` pins the cursor's note; a filled pin at the trailing edge of its title shows that without covering
+the compact view. While a note panel is open the pins stand beside it as title-spine navigation, and
+`"` spreads them side by side over the view (`src/web/panel/PinStack.tsx`). Six decisions carry it:
 
 - **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=`, beside
   `?sel=` and `?note=` and outside `SPEC_PARAMS`: a pin must not refetch, a reload must not lose a
@@ -348,6 +348,17 @@ side over the view (`src/web/panel/PinStack.tsx`). Five decisions carry it:
   replacing the open note therefore restores it in place. `o` promotes the focused pin into that slot,
   so an unpinned open note is replaced and a pinned one swaps back into the run. `Enter` still folds
   the spread onto the focused note's ordinary panel. `gg`, `G`, `h` and `l` move focus only.
+- **A pin is drawn by one control, which can also release it, and `App` still owns the URL.** The pin
+  is a button rather than a treatment of the record mark — one symbol may not answer both *what is
+  this note* and *am I holding it* — so it is drawn wherever a title is, on all four shapes and on a
+  spread page. That makes a pin a control on surfaces that have never written anything, and threading
+  the URL setter through four view components to reach it would widen five signatures. `PinnedProvider`
+  therefore carries `App`'s own `unpin` beside the membership test it already carried. It stays a
+  single route to `?pins=` — the provider holds the callback, it does not construct one — which is the
+  property `query.ts` is careful to keep and the reason the context could not simply be given a setter
+  of its own. The folded dock is addressed from the keyboard by `g [` / `g ]` (`pinStep`), because a
+  spine could be clicked and nothing reached one otherwise; in the spread the pages *are* the pins and
+  the command defers to `h`/`l` rather than becoming a second walker over one row.
 - **The fold keeps geometry fixed; presentation follows exposure.** A spread page is `position: sticky` with per-index
   offsets — no further left than its elders' spines, no further right than its juniors' — so pages
   fold to their own spines at either viewport edge instead of scrolling away, and there is no
@@ -1242,7 +1253,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
-| `keys.test.ts` | the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
+| `keys.test.ts` | the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
