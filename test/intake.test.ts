@@ -1330,6 +1330,17 @@ test('deleting a captured note is a decline, so the sweep stops offering it', ()
     assert.equal(rows[0]!.fingerprint, 'git:1');
     assert.equal(rows[0]!.decidedBy, 'person', 'deleting a file is a person deciding');
 
+    /*
+     * The reason names the act; the title names the note. They used to say the
+     * same thing — the reason appended `(was "A thing")` beside a `title` column
+     * already holding it — and a reason that restates its neighbour is a column
+     * of the declined pile, and a line of the classifier's calibration block,
+     * spent saying nothing.
+     */
+    assert.equal(rows[0]!.title, 'A thing');
+    assert.equal(rows[0]!.reason, 'declined from the queue');
+    assert.ok(!rows[0]!.reason.includes('A thing'), 'the reason does not restate the title');
+
     // And it holds: materialising the same candidate again writes nothing,
     // because the sweep would never hand it over in the first place.
     assert.ok(suppressedFingerprints(root).has('git:1'));

@@ -644,6 +644,11 @@ on the offer that produced it; taught as a decline it reads as *you should not h
 what a model learns from it is to withhold the kind of thing you keep for a month and then let go. Both
 suppress, because both have to stop a later sweep re-proposing the thing. `was_judged` on the row is
 which, `deleteNote` reads it off the `intake` axis, and `calibrationFor` learns from the offers alone.
+The two sentences it writes — `declined from the queue` and `deleted from the vault` — are the whole
+reason, and deliberately name **the act and not the note**: the title is the column beside it in the
+pile and the line before it in the calibration block, so a reason that quotes it back is a column and a
+prompt line spent saying nothing. It used to append `(was "⟨title⟩")`, which in a clipped cell pushed
+out the one word that distinguished the two.
 
 Only *judgements* are stored. A channel declining a merge commit or a session with no prompt re-derives
 that answer identically on every run, so keeping it would be storing something derivable (C11). A

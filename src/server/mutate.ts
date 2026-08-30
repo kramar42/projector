@@ -743,12 +743,25 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
   const wasJudged = !doomed?.facets.intake?.length;
   for (const fp of [doomed?.source_fingerprint, ...(doomed?.absorbed_fingerprints ?? [])]) {
     if (!fp) continue;
+    /*
+     * The reason says what the act was, and nothing about *which* note it was.
+     *
+     * It used to append `(was "⟨the title⟩")` — and the title is already the row
+     * beside it in the pile and the line before it in the classifier's
+     * calibration block, so the clause restated its neighbour in both places
+     * a reason is ever read. In the pile that cost the reader the useful half:
+     * the two cases below are the whole content of a decline you made yourself,
+     * and the clipped cell was spending its width on the title one column over.
+     *
+     * The fallback moved to the `title` field for the same reason. A note with no
+     * heading has an id worth showing, and putting it here left the pile's *what
+     * it was* column falling back to an opaque fingerprint while the id sat in
+     * the prose beside it.
+     */
     suppress(root, {
       fingerprint: fp,
-      reason: wasJudged
-        ? `deleted from the vault (was "${(doomed?.title ?? id).slice(0, 80)}")`
-        : `declined from the queue (was "${(doomed?.title ?? id).slice(0, 80)}")`,
-      ...(doomed?.title ? { title: doomed.title } : {}),
+      reason: wasJudged ? 'deleted from the vault' : 'declined from the queue',
+      title: doomed?.title || id,
       wasJudged,
     });
   }
