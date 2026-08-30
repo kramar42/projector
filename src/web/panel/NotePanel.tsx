@@ -54,6 +54,10 @@ const HOLD_MS = FLUSH_MS;
 export function NotePanel(props: {
   id: string;
   meta: Meta;
+  /** Kept as the spread's right-hand anchor: visible, but not interactive. */
+  static?: boolean;
+  /** The spread cursor may be on this trailing page too. */
+  focused?: boolean;
   onClose: () => void;
   /** Modifiers ride along: ⌥ pins the target, ⇧ pins this note and follows. */
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
@@ -82,6 +86,8 @@ function NoteCard({
   id,
   meta,
   onClose,
+  static: isStatic = false,
+  focused = false,
   onOpen,
   onFocus,
   onUnsaved,
@@ -91,6 +97,7 @@ function NoteCard({
 }: {
   id: string;
   meta: Meta;
+  static?: boolean;
   onClose: () => void;
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onFocus: (id: string, via: string) => void;
@@ -293,7 +300,11 @@ function NoteCard({
 
   return (
     <>
-      <div className="scrim" onClick={() => (held ? undefined : onClose())} />
+      <div
+        className={`scrim ${isStatic ? 'is-stack-anchor' : ''}`}
+        onClick={isStatic ? undefined : () => (held ? undefined : onClose())}
+        aria-hidden={isStatic}
+      />
       {/*
         No `role="dialog"`, and that is the decision rather than an omission.
         A dialog is a thing you answer and dismiss; this is a reading surface you
@@ -301,7 +312,11 @@ function NoteCard({
         announcing it as a dialog would promise a focus trap that would break
         exactly that. It is an `<aside>`, which is what it is.
       */}
-      <aside className="panel" aria-label={card ? card.title : 'Note'}>
+      <aside
+        className={`panel ${isStatic ? 'is-stack-anchor' : ''} ${focused ? 'is-focus' : ''}`}
+        aria-label={card ? card.title : 'Note'}
+        inert={isStatic}
+      >
         {/*
           The one part of the panel that does not scroll, so it carries what a
           card face and a table row carry: the mark, then the title. Same glyph,

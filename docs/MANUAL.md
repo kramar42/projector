@@ -1313,6 +1313,9 @@ Three rules carry most of it:
   per surface. `⏎` takes what is under the cursor, `Esc` steps back out. Walking forward into an
   `n more` **opens it** and carries on into what appears — the panel caps a link list at three and
   the rail caps a facet at eight, and a walk should not stop at a rendering decision.
+- **Brackets turn the third dimension.** `[` and `]` cross a board's lanes; on a calendar they turn
+  its previous and next time pages. The keys retain the relationship even where the visible third
+  dimension changes from space to time.
 - **A prefix never leaves you with nothing.** `,g` reaches Group by immediately and *then* accepts an
   axis letter; a key that is not one falls through to meaning what it normally means.
 
@@ -1322,7 +1325,7 @@ Three rules carry most of it:
 |---|---|
 | `j` `k` | next / previous card. A board stops at a column's end; a table runs on through its section headings |
 | `h` `l` | previous / next column (board) or section (table). Empty columns are stepped over |
-| `[` `]` | previous / next swimlane, on a board with a second grouping axis |
+| `[` `]` | previous / next swimlane, or previous / next calendar page |
 | `gg` | the first drawn card |
 | `G` | the last drawn card |
 | `⏎` `o` | open the panel on the cursor's card |
@@ -1340,7 +1343,7 @@ a note you could not see yourself going to, and it is what records:
 
 | Records | Does not |
 |---|---|
-| clicking a card, on any shape | `j` `k` `h` `l`, and `[` `]` across lanes |
+| clicking a card, on any shape | `j` `k` `h` `l`, and `[` `]` across lanes or calendar pages |
 | following a reference out of a note | `h` `l` across the spread — every pinned note is already on screen |
 | clicking a pinned spine, or `g [` / `g ]` | `o`, which places a page rather than going anywhere |
 | `gg` and `G` | |
@@ -1492,8 +1495,10 @@ land on is already whole on screen, and when it is not, seats it immediately and
 — so the cursor never outruns a glide and a spread that fits sits perfectly still while you read
 across it. Clicking a spine keeps the deliberate glide.
 
-Opening the spread itself does not glide. `"` changes modes and the complete arrangement appears at
-its final offset on the first paint; only clicking a spine asks the surface to show movement.
+Opening the spread itself grows the dock spines into the complete horizontal page run, right to left,
+with the open panel held as its right edge. Its last frame is the ordinary rightmost scroll position;
+the older visible spines are sticky overlap, not a separate compact state. Only clicking a spine asks
+the surface to glide to a different scroll position.
 
 Folded with no note open, the marked notes carry the whole signal and no spine covers the view. Open a
 note and the pinned spines appear at the panel's left edge; clicking one jumps to that note, the same

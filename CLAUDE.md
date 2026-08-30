@@ -63,6 +63,8 @@ conversation, not a judgement call.
 
 [docs/README.md](docs/README.md) has the boundaries between them written out.
 
+**Motion:** before creating or changing UI animation, follow [The State-Preserving Motion Rule](docs/DESIGN.md#the-state-preserving-motion-rule).
+
 Two habits the docs are held to: **no number that decays by working** — a count of notes or of rules
 goes stale silently, so either pin it in a test or leave it out — and **one place per answer.** If a
 second document would have to restate something to be complete, link instead.

@@ -2133,6 +2133,20 @@ input:focus-visible + .checkbox {
 }
 
 /*
+ * Spreading does not replace the open note. Its panel stays painted at the
+ * right-hand edge and the expanding pin strip stops beside it; `inert` on the
+ * element preserves the spread's one actionable page without dimming or
+ * reloading the anchored note.
+ */
+.panel.is-stack-anchor {
+  z-index: 22;
+}
+
+.scrim.is-stack-anchor {
+  pointer-events: none;
+}
+
+/*
  * Two intervals, not one.
  *
  * Every block used to be 18px from the next, so ten of them carried identical
@@ -2191,6 +2205,14 @@ input:focus-visible + .checkbox {
   right: var(--panel-w);
 }
 
+/* During a fold the real dock is already seated underneath the contracting
+   pages. It is paint-only until those pages reach their matching spines, then
+   it becomes the same visible object without a mount-time blink. */
+.pindock.is-under-spread {
+  z-index: 20;
+  pointer-events: none;
+}
+
 .pindock-spine {
   font: inherit;
   background: var(--surface);
@@ -2227,8 +2249,14 @@ input:focus-visible + .checkbox {
 
 /*
  * The spread: one horizontal scroller over everything, pages sticky inside it.
- * It replaces the panel rather than joining it — the panel is unmounted while
- * this is up — so it takes the panel's layer.
+ * It contains the already-open panel as its physical trailing page; without an
+ * open note it occupies the same layer on its own.
+ *
+ * A dock already clings to the right of an open panel, so a spread uses that
+ * same edge as its origin. When the run fits, its first page takes all spare
+ * space and the last page stays against that edge. Once the run is wider than
+ * the window the auto margin resolves to zero, preserving the sticky folding
+ * geometry and horizontal scroll equations exactly.
  */
 .pinstack {
   position: fixed;
@@ -2237,7 +2265,78 @@ input:focus-visible + .checkbox {
   overflow-x: auto;
   overflow-y: hidden;
   display: flex;
-  background: var(--ground);
+  isolation: isolate;
+  --pinpage-w: min(460px, 92vw);
+}
+
+/* The anchor exists before and after the spread. `display: contents` leaves its
+   child panel in the ordinary fixed layer while retaining the same React parent
+   that becomes the real horizontal strip on entry. */
+.pinstack.is-inactive {
+  display: contents;
+}
+
+.pinstack.is-inactive::before {
+  display: none;
+}
+
+/* The existing panel is the real trailing page. Its own scroll and component
+   identity survive; only its containing geometry changes from fixed rail to a
+   sticky flex child. That makes the final spread the same object the hand
+   panned through, rather than a visual stand-in that happens to touch it. */
+.pinstack.is-anchored > .panel.is-stack-anchor {
+  position: sticky;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  flex: 0 0 var(--panel-w);
+  width: var(--panel-w);
+  height: 100%;
+  z-index: 2;
+}
+
+.pinstack.is-anchored > .scrim.is-stack-anchor {
+  background: transparent;
+}
+
+/*
+ * The view stays present under a spread: a reading set is an expansion of the
+ * current place, not a destination that replaces it. This is deliberately far
+ * heavier than the panel's ordinary scrim — it leaves the board as orientation
+ * only, while the note pages keep the working contrast.
+ */
+.pinstack::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(10, 8, 14, 0.78);
+  opacity: 0;
+  transition: opacity var(--pinspread-dim-ms) linear;
+}
+
+.pinstack.is-spreading::before {
+  opacity: 1;
+}
+
+/* Once the aperture is open, its final dimness is a resting state, not an
+   animation fill that disappears when the entry class is removed. */
+.pinstack:not(.is-opening):not(.is-closing)::before {
+  opacity: 1;
+}
+
+/* The view recedes over the whole spread rather than falling dark before the
+   reading set has occupied it. Folding takes precisely the same dimness back
+   out before the dock is handed back to the view. */
+.pinstack.is-closing::before {
+  opacity: 0;
+}
+
+/* A second quote can turn a folding aperture around. Preserve its in-flight
+   dimness and continue toward the reading state rather than restarting either
+   surface from an artificial all-dark or all-clear frame. */
+.pinstack.is-resuming::before {
+  opacity: 1;
 }
 
 /* Mid-drag, the hand owns the surface: no selection grows under it. */
@@ -2250,12 +2349,53 @@ input:focus-visible + .checkbox {
 .pinpage {
   position: sticky;
   flex: none;
-  width: min(460px, 92vw);
+  width: var(--pinpage-w);
   height: 100%;
   display: flex;
+  overflow: hidden;
   background: var(--surface);
   border-left: 1px solid var(--rule);
   box-shadow: -12px 0 40px rgba(8, 6, 12, 0.18);
+  z-index: 1;
+}
+
+/*
+ * The dock is the first frame of the spread. These are not full cards hidden
+ * by a mask: a folded page is actually spine width, and it widens into the
+ * exact sticky page it will remain. The flex run stays right-aligned while it
+ * fits, so the rightmost spine unfolds first; each next page grows to its left.
+ */
+.pinstack.is-opening .pinpage,
+.pinstack.is-closing .pinpage {
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pinstack.is-opening .pinpage.is-entry-folded {
+  width: var(--spine-w);
+}
+
+/* Older pins stop as the real left-edge spine run. Their cards remain mounted
+   behind that aperture, ready to become a reading page without changing note
+   identity or layout. */
+.pinpage.is-kept-folded {
+  width: var(--spine-w);
+}
+
+/* The exact aperture in reverse. `is-exit-folded` stays mounted at spine width
+   until the dock has taken over, so folding cannot flash a replacement spine. */
+.pinstack.is-closing .pinpage.is-exit-folding,
+.pinstack.is-closing .pinpage.is-exit-folded {
+  width: var(--spine-w);
+}
+
+/*
+ * Flex's auto margin consumes only genuine spare room, so it is a right
+ * alignment when a spread fits and no different from normal flow when it does
+ * not. The first DOM page is the leftmost page; the trailing open page is
+ * therefore still the one that touches the right edge.
+ */
+.pinpage:first-child {
+  margin-left: auto;
 }
 
 /*
@@ -2265,6 +2405,14 @@ input:focus-visible + .checkbox {
  * and a page's top edge is the one strip nothing ever covers.
  */
 .pinpage.is-focus {
+  box-shadow:
+    inset 0 2px 0 0 var(--cursor-ink),
+    -12px 0 40px rgba(8, 6, 12, 0.18);
+}
+
+/* The open panel is a page in the same sequence, so it takes the exact cursor
+   edge a focused pinned page does. The panel stays otherwise unchanged. */
+.panel.is-stack-anchor.is-focus {
   box-shadow:
     inset 0 2px 0 0 var(--cursor-ink),
     -12px 0 40px rgba(8, 6, 12, 0.18);
@@ -2317,8 +2465,17 @@ input:focus-visible + .checkbox {
 }
 
 .pinpage-content {
-  flex: 1;
-  min-width: 0;
+  /*
+   * The card never narrows. During entry `.pinpage` is the growing aperture,
+   * while this is the final reading surface behind it; expanding therefore
+   * reveals the same laid-out note that horizontal panning normally covers and
+   * uncovers. Letting this flex would rewrap every heading, chip row and body
+   * paragraph while the aperture widened — a different physical rule from the
+   * spread's normal sticky fold.
+   */
+  flex: 0 0 calc(var(--pinpage-w) - 1px);
+  width: calc(var(--pinpage-w) - 1px);
+  min-width: calc(var(--pinpage-w) - 1px);
   /* Without this the scroll region below sizes to its content instead of the
      page — a flex child's min-height is its content unless told otherwise. */
   min-height: 0;
@@ -2337,6 +2494,20 @@ input:focus-visible + .checkbox {
   transition:
     opacity 140ms ease-out,
     visibility 0s 140ms;
+}
+
+/* The note body is already the page's body. Once a page starts gaining real
+   width it remains visible for the whole opening sequence; the edge reveals it
+   continuously instead of handing it back to the compact opacity rule between
+   pages or at the last frame. */
+.pinstack.is-opening:not(.is-closing):not(.is-resuming) .pinpage:not(.is-entry-folded) .pinpage-content {
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+
+.pinstack.is-opening:not(.is-closing):not(.is-resuming) .pinpage:not(.is-entry-folded) .pinpage-spine .spinelabel {
+  opacity: 0;
 }
 
 .pinpage-head {
@@ -2977,9 +3148,19 @@ textarea { resize: vertical; font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .pinpage-spine .spinelabel,
   .pinpage-content,
-  .pinpage.is-compact .pinpage-content {
+  .pinpage.is-compact .pinpage-content,
+  .pinstack::before,
+  .pinpage {
     transition: none;
   }
+
+  .pinstack::before,
+  .pinpage {
+    animation: none;
+  }
+
+  .pinstack.is-opening .pinpage,
+  .pinstack.is-closing .pinpage { transition: none; }
 
   .cardface.is-touched::after,
   .table tr.is-touched > td::after,

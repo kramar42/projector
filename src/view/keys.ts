@@ -1039,7 +1039,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     rows: [
       { ids: ['move.down', 'move.up'], does: 'down / up a column' },
       { ids: ['move.left', 'move.right'], does: 'across columns' },
-      { ids: ['lane.prev', 'lane.next'], does: 'across lanes' },
+      { ids: ['lane.prev', 'lane.next'], does: 'across lanes / calendar pages' },
       // `gg` is a sequence and `G` a binding, so the keys are written and the
       // coverage is declared.
       { keys: 'gg G', ids: ['cursor.last'], does: 'first / last' },

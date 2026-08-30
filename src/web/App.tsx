@@ -129,6 +129,8 @@ export function App() {
   // open note survive a reload; the expensive multi-note surface does not make
   // itself the next cold start merely because it was open on exit.
   const [stackOpen, setStackOpen] = useState(false);
+  /** Kept long enough for the physical spread to fold back into its dock. */
+  const [stackClosing, setStackClosing] = useState(false);
   // A slow response for the vault we just left must not re-install its metadata.
   const activeVault = useRef(vault);
   activeVault.current = vault;
@@ -136,9 +138,14 @@ export function App() {
   const openNote = new URLSearchParams(search).get(NOTE_PARAM);
   /** The URL-owned reading set. Its expanded presentation stays in memory. */
   const pins = useMemo(() => pinsOf(search), [search]);
+  /** The dock keeps every pinned note addressable, including the open one. */
+  const dockPinCount = pins.length;
   // A spread belongs to the vault it was opened in, not whichever vault is
   // selected next in the same mounted shell.
-  useEffect(() => setStackOpen(false), [vault]);
+  useEffect(() => {
+    setStackOpen(false);
+    setStackClosing(false);
+  }, [vault]);
   /**
    * The declined pile, opened over the view like the panel is.
    *
@@ -376,11 +383,19 @@ export function App() {
    * older search string.
    */
   const setStack = useCallback((open: boolean, note?: string | null) => {
-    setStackOpen(open);
+    if (open) {
+      setStackClosing(false);
+      setStackOpen(true);
+    } else if (stackOpen) {
+      setStackOpen(false);
+      setStackClosing(true);
+    }
     if (note === undefined) return;
     const { search: s, location: loc, navigate: go } = nav.current;
     go(`${loc}${patchSearch(s, { [NOTE_PARAM]: note })}`, { replace: true });
-  }, []);
+  }, [stackOpen]);
+  const stackVisible = stackOpen || stackClosing;
+  const finishStackClose = useCallback(() => setStackClosing(false), []);
 
   /**
    * Opening a note from *inside* a note — a reference chip, a reflink, a spread
@@ -855,12 +870,12 @@ export function App() {
       <div
         className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${
           openNote && !stackOpen ? 'panel-is-open' : ''
-        } ${openNote && pins.length && !stackOpen ? 'pins-are-docked' : ''}`}
-        // The dock's reach, for `--covered-right`: `SPINE_W` per pin, measured
+        } ${openNote && dockPinCount && !stackOpen ? 'pins-are-docked' : ''}`}
+        // The dock's reach, for `--covered-right`: `SPINE_W` per visible pin, measured
         // nowhere because it is a token — the same argument `.panel` makes.
         // It matters only beside an open panel; compact views carry their pins
         // on the notes' record marks and give none of the view to duplicate UI.
-        style={{ ['--pins-w' as string]: `${pins.length * SPINE_W}px` }}
+        style={{ ['--pins-w' as string]: `${dockPinCount * SPINE_W}px` }}
       >
         <Sidebar
           meta={meta}
@@ -873,7 +888,11 @@ export function App() {
             // Pins are a reading set, not a computed property of the notes. The
             // spread is their honest "only these" surface: no saved query or CLI
             // invocation acquires session state it cannot reproduce.
-            const landing = cursor.id && pins.includes(cursor.id) ? cursor.id : pins[pins.length - 1];
+            // Entering the spread lands where the physical run ends. An open
+            // panel is its real trailing page; otherwise the last pin is. A
+            // cursor left on an older pin belongs to the compact view and must
+            // not make the right edge look selected-by-proxy on entry.
+            const landing = openNote ?? pins[pins.length - 1];
             if (!landing) return;
             cursor.step(landing);
             setStack(true);
@@ -884,10 +903,10 @@ export function App() {
           onAddVault={() => setAddingVault(true)}
           onOpenNote={openCard}
           collapsed={sidebarCollapsed}
-          covered={stackOpen}
+          covered={stackVisible}
           onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
-        <main className="main" inert={stackOpen}>
+        <main className="main" inert={stackVisible}>
           {/*
             What the keyboard did, when it is worth saying.
 
@@ -937,14 +956,21 @@ export function App() {
           // Folded pins become navigation only while a note is open: title
           // spines at the panel's left edge, each opening that pinned note.
           <Suspense fallback={null}>
-            <PinDock pins={pins} openNote={openNote} notes={data?.notes ?? {}} onOpen={openCard} />
+            <PinDock
+              pins={pins}
+              openNote={openNote}
+              notes={data?.notes ?? {}}
+              onOpen={openCard}
+              underSpread={stackClosing}
+            />
           </Suspense>
         )}
-        {stackOpen && (pins.length > 0 || openNote) && (
+        {(openNote || (stackVisible && pins.length > 0)) && (
           <Suspense fallback={null}>
             <PinStack
               pins={pins}
               openNote={openNote}
+              notes={data?.notes ?? {}}
               cursor={cursor.id}
               meta={meta}
               // One actionable pointer: focus is the cursor. `?note=` is a
@@ -981,38 +1007,43 @@ export function App() {
               onUnsaved={(u) => {
                 panelUnsaved.current = u;
               }}
-            />
-          </Suspense>
-        )}
-        {openNote && !stackOpen && (
-          // A lazy chunk with no visible fallback: the panel slides in beside a
-          // board that is already drawn, and an empty aside for one network
-          // round-trip reads better than a flash of text inside it.
-          <Suspense fallback={null}>
-          <NotePanel
-            // Not keyed here any more — `NotePanel` keys the frame on the note it
-            // is *showing*, one level in, so the fetch outlives the reset and
-            // walking `j` down a list turns the page instead of blinking.
-            id={openNote}
-            meta={meta}
-            onClose={() => setOpenNote(null)}
-            onOpen={followCard}
-            /*
-             * The same reshape `gotoInverse` performs, from the row rather than
-             * from a keystroke — one `setFocus` call in both places, so the
-             * button and `g⇧⟨key⟩` cannot come to mean different things.
-             *
-             * No notification here, and that is the difference between the two.
-             * The keystroke announces itself because nothing on screen says a
-             * key was pressed; a click on a bullseye in the row it reshapes has
-             * already been seen. The rail's Focus row is the state either way,
-             * with its ✕ to undo.
-             */
-            onFocus={(id, via) => edit((spec) => setFocus(spec, { id, via, dir: 'in' }))}
-            onUnsaved={(u) => {
-              panelUnsaved.current = u;
-            }}
-          />
+              active={stackVisible}
+              closing={stackClosing}
+              onClosed={finishStackClose}
+            >
+              {openNote && (
+                // This is always the same React child. In compact mode its
+                // parent has no box; spreading only makes that parent the
+                // physical scroller, so the editor and its fetched payload are
+                // never replaced by a lookalike page.
+                <NotePanel
+                  // Not keyed here any more — `NotePanel` keys the frame on the note it
+                  // is *showing*, one level in, so the fetch outlives the reset and
+                  // walking `j` down a list turns the page instead of blinking.
+                  id={openNote}
+                  meta={meta}
+                  static={stackVisible}
+                  focused={stackVisible && cursor.id === openNote}
+                  onClose={() => setOpenNote(null)}
+                  onOpen={followCard}
+                  /*
+                   * The same reshape `gotoInverse` performs, from the row rather than
+                   * from a keystroke — one `setFocus` call in both places, so the
+                   * button and `g⇧⟨key⟩` cannot come to mean different things.
+                   *
+                   * No notification here, and that is the difference between the two.
+                   * The keystroke announces itself because nothing on screen says a
+                   * key was pressed; a click on a bullseye in the row it reshapes has
+                   * already been seen. The rail's Focus row is the state either way,
+                   * with its ✕ to undo.
+                   */
+                  onFocus={(id, via) => edit((spec) => setFocus(spec, { id, via, dir: 'in' }))}
+                  onUnsaved={(u) => {
+                    panelUnsaved.current = u;
+                  }}
+                />
+              )}
+            </PinStack>
           </Suspense>
         )}
       </div>
@@ -1292,9 +1323,15 @@ function run(command: Command, s: KeyState): void {
         if (!pages.length) return;
         if (command.along === 'row') {
           const at = cursor.id ?? openNote ?? pages[0]!;
-          document
-            .querySelector(`.pinstack [data-page="${CSS.escape(at)}"] .pinpage-scroll`)
-            ?.scrollBy({ top: command.delta * PAGE_SCROLL });
+          // The open note is held as the spread's physical right-hand anchor,
+          // so it keeps the panel scrollport it already had instead of gaining
+          // a duplicate page merely to receive `j` and `k`.
+          const scrollport = at === openNote
+            ? document.querySelector<HTMLElement>('.panel.is-stack-anchor')
+            : document.querySelector<HTMLElement>(
+                `.pinstack [data-page="${CSS.escape(at)}"] .pinpage-scroll`,
+              );
+          scrollport?.scrollBy({ top: command.delta * PAGE_SCROLL });
           return;
         }
         const at = pages.indexOf(cursor.id ?? openNote ?? '');
@@ -1302,6 +1339,13 @@ function run(command: Command, s: KeyState): void {
         const next = pages[to]!;
         if (next !== cursor.id) cursor.step(next);
         return;
+      }
+      // Brackets name the third visible dimension. On a board or canvas that is
+      // a lane; on a calendar it is the next or previous page of time. Keeping
+      // the binding at the view layer means a calendar does not need a second
+      // pager grammar beside the one every other shape already understands.
+      if (command.along === 'lane' && s.spec?.shape === 'calendar') {
+        return run({ kind: 'calendarPage', page: command.delta < 0 ? 'previous' : 'next' }, s);
       }
       /**
        * `j` means "the next one" — of whatever you are currently in.
@@ -2189,9 +2233,10 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
-     * Spread the pins, or fold them. Spreading unmounts the panel — the spread
-     * is read-only (C10) — so unsaved text gets the same question Escape asks
-     * before the surface holding it goes.
+     * Spread the pins, or fold them. Spreading holds an open panel inert at its
+     * right-hand edge while the pins expand beside it, so its already-rendered
+     * note never blinks. The spread is still read-only (C10), hence the same
+     * unsaved-text guard as Escape before changing modes.
      */
     case 'stack': {
       if (s.stackOpen) return s.setStack(false);
@@ -2202,7 +2247,10 @@ function run(command: Command, s: KeyState): void {
       if ((u.body || u.frontmatter) && !confirm(`${whatIsUnsaved(u)} unsaved changes. Spread anyway?`)) {
         return;
       }
-      const landing = openNote ?? (cursor.id && s.pins.includes(cursor.id) ? cursor.id : s.pins[s.pins.length - 1]);
+      // The selected page at entry is the terminal physical page, matching the
+      // sidebar affordance and the final frame of the expansion. `h`/`l` then
+      // make any older pin the selected page deliberately.
+      const landing = openNote ?? s.pins[s.pins.length - 1];
       if (landing) cursor.step(landing);
       return s.setStack(true);
     }
