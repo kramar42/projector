@@ -109,11 +109,11 @@ things.
   opened from and the note that opened it. `CommitInput` belongs to the same list: used in the rail and
   the canvas, used nowhere in the panel, whose remaining plain-Enter fields are exactly its shape.
 
-- **`⏎` on a Tab-focused panel action.** The key map claims `⏎` as `open`, which activates a focused
+- **`⏎` on a Tab-focused panel action.** The key map claims `⏎` as `take`, which activates a focused
   item only inside a `[data-navlist]`; the panel corner is not one, so tabbing to the trash or to Start
   and pressing `⏎` opens the cursor's note instead of pressing the button. It fails safe in both cases
   — a wart, not a bug. The fix is either the corner becoming a navlist (which would also put Delete in
-  the `j`/`k` walk, and it is not obvious that it should be) or `open` pressing any focused panel
+  the `j`/`k` walk, and it is not obvious that it should be) or `take` pressing any focused panel
   button; neither is worth deciding while the buttons are also reachable by `!` and by mouse.
 
 - **A second `pj intake rejudge` rewrites what the first one wrote.** Its facet half is idempotent — the

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { IconButton } from '../components/Button.tsx';
+import { Button, IconButton } from '../components/Button.tsx';
 import { KeyHints } from '../components/KeyHint.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { NO_WRITES, usePanelWriter } from './usePanelWriter.ts';
 import { NoteTiers } from './tiers.tsx';
-import { revealScroll, SPINE_W } from './pins.ts';
+import { revealScroll, SPINE_W, stackPages } from './pins.ts';
 import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
 
 /**
@@ -25,12 +25,12 @@ import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
  * the facet chips, the link kinds, the derived rows and the workshop cannot
  * come to look like a summary of a note instead of the note.
  *
- * **Exactly one page is actionable: the focused one.** The others are `inert`
- * and draw no key hints, which is the same sentence twice — a key reaches the
- * focused page, so a hint on any other would name a stroke that acts somewhere
- * else on screen. That is what keeps the cursor the only pointer with four notes
- * up: the focused page *is* `?note=`, so there is one surface a write can land
- * on, exactly as there is one panel (C10).
+ * **Exactly one page body is actionable: the focused one.** The other bodies are
+ * `inert` and draw no key hints, which is the same sentence twice — a key reaches
+ * the focused page, so a hint on any other would name a stroke that acts
+ * somewhere else. Page-level open and unpin controls remain controls on every
+ * header; none writes note content. This keeps the cursor the only write target
+ * even when `?note=` holds a separate trailing page for context (C10).
  *
  * The fold is CSS `position: sticky` with per-index offsets, not measurement:
  * page i may go no further left than `i` spines and no further right than the
@@ -100,6 +100,7 @@ export function PinStack({
   onCursor,
   onOpen,
   onUnpin,
+  onMakeOpen,
   onFocus,
   onUnsaved,
 }: {
@@ -107,20 +108,22 @@ export function PinStack({
   openNote: string | null;
   cursor: string | null;
   meta: Meta;
-  /** Focus moved to a page: the cursor and `?note=` go together, one pointer. */
+  /** Focus moved to a page. The open slot, if present, stays where it is. */
   onCursor: (id: string) => void;
   /** Follow a reference out of a page. Modifiers decide how — see `followCard`. */
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onUnpin: (id: string) => void;
+  /** Promote a pin into the trailing open slot without folding the spread. */
+  onMakeOpen: (id: string) => void;
   /** Reshape the view around a derived row — the shell owns the query. */
   onFocus: (id: string, via: string) => void;
   /** What the focused page would lose if it were folded — the panel's guard. */
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
 }) {
-  // The open note is a page too — rightmost, unless it is itself a pin, in
-  // which case it is already on screen at its pin's place and a second copy
-  // would be the same note twice.
-  const pages = openNote && !pins.includes(openNote) ? [...pins, openNote] : pins;
+  // The open note is a role, not a second membership. If it is pinned too it
+  // temporarily leaves the pin run and occupies the trailing slot; closing or
+  // replacing it restores its original pin position without another state key.
+  const pages = stackPages(pins, openNote);
   const strip = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -170,9 +173,17 @@ export function PinStack({
   // The focused page comes into view before it is painted — `h`/`l` can repeat
   // faster than a smooth scroll, and the cursor must never outrun the note it
   // identifies. A spine click below keeps the glide because it is the motion.
-  const focused = cursor && pages.includes(cursor) ? cursor : openNote;
+  const focused = cursor && pages.includes(cursor)
+    ? cursor
+    : openNote && pages.includes(openNote)
+      ? openNote
+      : pages[pages.length - 1] ?? null;
   useLayoutEffect(() => {
-    if (focused) reveal(pages.indexOf(focused));
+    if (!focused) return;
+    // A deep link or a pins-only spread may arrive without a cursor on one of
+    // its pages. Normalise the one pointer before paint as well as the scroll.
+    if (cursor !== focused) onCursor(focused);
+    reveal(pages.indexOf(focused));
     // `pages` is derived from the same URL state a focus change re-renders on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused, pages.length, reveal]);
@@ -231,8 +242,10 @@ export function PinStack({
           right={(pages.length - 1 - i) * SPINE_W}
           isFocus={id === focused}
           isPinned={pins.includes(id)}
+          isOpen={id === openNote}
           onFocus={() => onCursor(id)}
           onSpine={() => reveal(i, 'smooth')}
+          onMakeOpen={() => onMakeOpen(id)}
           onOpen={onOpen}
           onUnpin={() => onUnpin(id)}
           onFocusRow={onFocus}
@@ -250,8 +263,10 @@ function PinPage({
   right,
   isFocus,
   isPinned,
+  isOpen,
   onFocus,
   onSpine,
+  onMakeOpen,
   onOpen,
   onUnpin,
   onFocusRow,
@@ -263,8 +278,10 @@ function PinPage({
   right: number;
   isFocus: boolean;
   isPinned: boolean;
+  isOpen: boolean;
   onFocus: () => void;
   onSpine: () => void;
+  onMakeOpen: () => void;
   onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onUnpin: () => void;
   onFocusRow: (id: string, via: string) => void;
@@ -310,7 +327,7 @@ function PinPage({
       className={`pinpage ${isFocus ? 'is-focus' : ''}`}
       data-page={id}
       style={{ left, right }}
-      aria-label={title}
+      aria-label={isOpen ? `Open note: ${title}` : title}
       onPointerDown={onFocus}
     >
       <button
@@ -327,6 +344,20 @@ function PinPage({
           {card && <RecordMark card={card} pinned={isPinned} />}
           <h2 className="pinpage-title">{title}</h2>
           {write.busy && <span className="panel-busy">{write.busy}…</span>}
+          {isOpen ? (
+            <span className="pinpage-role">open</span>
+          ) : (
+            <Button
+              tone="ghost"
+              size="tiny"
+              extra="pinpage-open"
+              data-act="open"
+              title={`Open "${title}" at the right (o)`}
+              onClick={onMakeOpen}
+            >
+              open
+            </Button>
+          )}
           {isPinned && (
             <IconButton
               glyph="close"

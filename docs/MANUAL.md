@@ -1375,7 +1375,8 @@ sight — the reading set beside the writing set, and the two never touch.
 | `"` | **spread** the pins side by side over the view, or fold them back |
 | `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
 | `j` `k` | scroll the focused page |
-| `⏎` `o` | fold the spread onto the focused note's panel |
+| `o` | move the focused pin into the **open slot** at the right, without leaving the spread |
+| `⏎` | fold the spread onto the focused note's panel |
 | `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a page's `✕` do, so no chain of Escapes can cost you the set |
 
 **A page draws the note exactly as the panel does** — the same facet rows, the same links, the same
@@ -1384,15 +1385,27 @@ leaves out is the **key hints**: the little mono letters beside a row appear on 
 nowhere else, since a key acts on that page and a hint anywhere else would be naming a stroke that
 lands somewhere you are not.
 
-**Exactly one page is actionable, and it is the focused one.** The others cannot be clicked, cannot be
-tabbed into and cannot write — so there is still one place a keystroke can land with four notes on
-screen. Editing the note in front of you is `⏎`, which folds the spread onto its panel; any command
-that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there.
+**Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
+and cannot write — so there is still one place a keystroke can land with four notes on screen. Their
+header controls remain available to open or unpin the page, because those arrange the reading set and
+do not edit the note. Editing the note in front of you is `⏎`, which folds the spread onto its panel;
+any command that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there. The covered board and
+sidebar are inert: they cannot receive a stray click, Tab or screen-reader cursor through the spread.
+
+**Pins and an open note are two roles, not two copies.** With only pins, the pages keep pin order. If a
+note is open, it is the full page at the far right while `h` and `l` move focus independently across
+the pages to its left. Press `o`—or use a page header's **open** control—to send a pin into that slot.
+If the outgoing open note was unpinned it is replaced; if it was pinned, it returns to its original
+place in the pin run. A pin opened at the right stays a pin, so closing the open slot restores it rather
+than losing it.
 
 **The spread only moves when it has to.** Walking with `h` and `l` scrolls nothing while the page you
 land on is already whole on screen, and when it is not, seats it immediately and only as far as needed
 — so the cursor never outruns a glide and a spread that fits sits perfectly still while you read
 across it. Clicking a spine keeps the deliberate glide.
+
+Opening the spread itself does not glide. `"` changes modes and the complete arrangement appears at
+its final offset on the first paint; only clicking a spine asks the surface to show movement.
 
 Folded with no note open, the marked notes carry the whole signal and no spine covers the view. Open a
 note and the pinned spines appear at the panel's left edge; clicking one jumps to that note, the same

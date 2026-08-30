@@ -50,7 +50,7 @@ import {
   strippedOfStrays,
   type Patch,
 } from './query.ts';
-import { PAGE_SCROLL, SPINE_W } from './panel/pins.ts';
+import { afterRemovingPage, PAGE_SCROLL, SPINE_W, stackPages } from './panel/pins.ts';
 import { useSelection, type Selection } from './selection.ts';
 import { focusSoon, useCursor, type Cursor } from './cursor.ts';
 import {
@@ -346,7 +346,11 @@ export function App() {
    */
   const setPins = useCallback((ids: string[]) => {
     const { search: s, location: loc, navigate: go } = nav.current;
-    go(`${loc}${patchSearch(s, pinsPatch(ids))}`, { replace: true });
+    const p: Patch = pinsPatch(ids);
+    // A pins-only spread with no pins is no surface at all. Clear the mode in
+    // the same URL write, or `stack=1` lies dormant until a later pin appears.
+    if (!ids.length && !new URLSearchParams(s).get(NOTE_PARAM)) p[STACK_PARAM] = null;
+    go(`${loc}${patchSearch(s, p)}`, { replace: true });
   }, []);
 
   /**
@@ -794,10 +798,10 @@ export function App() {
             // Pins are a reading set, not a computed property of the notes. The
             // spread is their honest "only these" surface: no saved query or CLI
             // invocation acquires session state it cannot reproduce.
-            const first = cursor.id && pins.includes(cursor.id) ? cursor.id : pins[0];
-            if (!first) return;
-            cursor.step(first);
-            setStack(true, first);
+            const landing = cursor.id && pins.includes(cursor.id) ? cursor.id : pins[pins.length - 1];
+            if (!landing) return;
+            cursor.step(landing);
+            setStack(true);
           }}
           patch={patch}
           edit={edit}
@@ -805,9 +809,10 @@ export function App() {
           onAddVault={() => setAddingVault(true)}
           onOpenNote={openCard}
           collapsed={sidebarCollapsed}
+          covered={stackOpen}
           onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
-        <main className="main">
+        <main className="main" inert={stackOpen}>
           {/*
             What the keyboard did, when it is worth saying.
 
@@ -867,14 +872,21 @@ export function App() {
               openNote={openNote}
               cursor={cursor.id}
               meta={meta}
-              // One pointer: focusing a page is the cursor arriving on it, and
-              // `?note=` rides along so a write lands where the eye is.
-              onCursor={(id) => {
+              // One actionable pointer: focus is the cursor. `?note=` is a
+              // separate trailing slot on this surface and moves only when the
+              // reader explicitly opens something.
+              onCursor={cursor.step}
+              onOpen={followCard}
+              onUnpin={(id) => {
+                if (cursor.id === id && openNote !== id) {
+                  cursor.step(afterRemovingPage(stackPages(pins, openNote), id));
+                }
+                setPins(pins.filter((p) => p !== id));
+              }}
+              onMakeOpen={(id) => {
                 cursor.step(id);
                 setOpenNote(id);
               }}
-              onOpen={followCard}
-              onUnpin={(id) => setPins(pins.filter((p) => p !== id))}
               // The same reshape the panel's derived rows make, so a bullseye
               // means one thing wherever it is drawn.
               onFocus={(id, via) => edit((spec) => setFocus(spec, { id, via, dir: 'in' }))}
@@ -1126,15 +1138,10 @@ function axisRow(facet: string, inverse: boolean): Element | null {
   return [...rows].find((r) => r.hasAttribute('data-inverse') === inverse) ?? null;
 }
 
-/** The spread's pages, in drawing order: pins, then the open note if it is not one. */
-function stackPages(s: Pick<KeyState, 'pins' | 'openNote'>): string[] {
-  return s.openNote && !s.pins.includes(s.openNote) ? [...s.pins, s.openNote] : [...s.pins];
-}
-
 /**
  * The commands that aim at the panel's own controls or put the keyboard inside
- * it. The spread is read-only and the panel is not mounted under it (C10), so
- * each of these folds the spread on its way — see the guard in `run`.
+ * it. The spread mounts no panel, so each of these folds it on the way — see the
+ * guard in `run`. Direct facet writes may still reach its one focused page.
  */
 const NEEDS_PANEL = new Set<Command['kind']>([
   'gotoRegion', 'openAxisControl', 'work', 'judge', 'remove', 'rename', 'toggleProject', 'enrich',
@@ -1189,12 +1196,12 @@ function run(command: Command, s: KeyState): void {
       /**
        * The spread re-reads the motion keys the way a navlist does, and for the
        * same reason: what is in front of you is not the view. `h`/`l` walk the
-       * pages — the cursor and `?note=` move together, one pointer — and `j`/`k`
-       * scroll the focused page, because with the view covered "the next card"
-       * is not a place the eye can follow, and reading is what the spread is for.
+       * pages while the trailing `?note=` stays put, and `j`/`k` scroll the
+       * focused page. The cursor remains the one write target; the open slot is
+       * context, not a second pointer.
        */
       if (s.stackOpen) {
-        const pages = stackPages(s);
+        const pages = stackPages(s.pins, s.openNote);
         if (!pages.length) return;
         if (command.along === 'row') {
           const at = cursor.id ?? openNote ?? pages[0]!;
@@ -1206,10 +1213,7 @@ function run(command: Command, s: KeyState): void {
         const at = pages.indexOf(cursor.id ?? openNote ?? '');
         const to = at === -1 ? 0 : Math.min(pages.length - 1, Math.max(0, at + command.delta));
         const next = pages[to]!;
-        if (next !== cursor.id) {
-          cursor.step(next);
-          setOpenNote(next);
-        }
+        if (next !== cursor.id) cursor.step(next);
         return;
       }
       /**
@@ -1828,12 +1832,9 @@ function run(command: Command, s: KeyState): void {
     case 'moveTo': {
       // `gg`/`G` on the spread are its ends, for the reason `move` gives.
       if (s.stackOpen) {
-        const pages = stackPages(s);
+        const pages = stackPages(s.pins, s.openNote);
         const next = command.end === 'first' ? pages[0] : pages[pages.length - 1];
-        if (next && next !== cursor.id) {
-          cursor.step(next);
-          setOpenNote(next);
-        }
+        if (next && next !== cursor.id) cursor.step(next);
         return;
       }
       return goToSpot(command.end === 'first' ? firstSpot(grid) : lastSpot(grid));
@@ -1847,6 +1848,7 @@ function run(command: Command, s: KeyState): void {
       return;
     }
 
+    case 'take':
     case 'open': {
       /**
        * Inside a chip list, `⏎` follows the chip.
@@ -1867,10 +1869,14 @@ function run(command: Command, s: KeyState): void {
         }
         return;
       }
-      // On the spread, `⏎` folds it onto the focused note's panel — "take what
-      // is under the cursor", where what is under it is a page. One URL write.
+      // The spread distinguishes its two verbs. `o` promotes the focused page
+      // into the trailing open slot and stays here; Enter takes the focused page
+      // into the ordinary panel. Outside the spread both still open a note.
       if (s.stackOpen) {
-        s.setStack(false, cursor.id ?? openNote);
+        const on = cursor.id ?? openNote;
+        if (!on) return;
+        if (command.kind === 'open') setOpenNote(on);
+        else s.setStack(false, on);
         return;
       }
       const spot = s.cursorSpot ?? firstSpot(grid);
@@ -2015,6 +2021,8 @@ function run(command: Command, s: KeyState): void {
       if ((u.body || u.frontmatter) && !confirm(`${whatIsUnsaved(u)} unsaved changes. Spread anyway?`)) {
         return;
       }
+      const landing = openNote ?? (cursor.id && s.pins.includes(cursor.id) ? cursor.id : s.pins[s.pins.length - 1]);
+      if (landing) cursor.step(landing);
       return s.setStack(true);
     }
 

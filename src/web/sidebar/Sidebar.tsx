@@ -39,6 +39,7 @@ export function Sidebar({
   onAddVault,
   onOpenNote,
   collapsed,
+  covered,
   onToggleCollapsed,
 }: {
   meta: Meta;
@@ -65,6 +66,8 @@ export function Sidebar({
   onAddVault: () => void;
   onOpenNote: (id: string) => void;
   collapsed: boolean;
+  /** A full-screen reading surface is painted over the rail. */
+  covered: boolean;
   onToggleCollapsed: () => void;
 }) {
   const spec = data?.spec;
@@ -86,7 +89,7 @@ export function Sidebar({
 
   if (collapsed) {
     return (
-      <nav className="sidebar sidebar-collapsed" aria-label="Collapsed sidebar">
+      <nav className="sidebar sidebar-collapsed" aria-label="Collapsed sidebar" inert={covered}>
         <button
           className="sidebar-toggle"
           type="button"
@@ -115,7 +118,7 @@ export function Sidebar({
   }
 
   return (
-    <nav className="sidebar">
+    <nav className="sidebar" inert={covered}>
       {/* Which vault, and how much is in it. The row is labelled like every other
           rail row now: `Vault` was one of two that a reader had to identify from
           its value alone, and a folder name on its own is a word, not a control.

@@ -350,7 +350,7 @@ test('the singles', () => {
   assert.deepEqual(commandOf(['.']), { kind: 'palette' });
   assert.deepEqual(commandOf(['n']), { kind: 'newCard' });
   assert.deepEqual(commandOf(['o']), { kind: 'open' });
-  assert.deepEqual(commandOf(['Enter']), { kind: 'open' });
+  assert.deepEqual(commandOf(['Enter']), { kind: 'take' });
 });
 
 test('an unbound key is left alone', () => {

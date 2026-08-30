@@ -2103,6 +2103,25 @@ input:focus-visible + .checkbox {
 }
 
 /*
+ * The two roles at the trailing edge of a page head.
+ *
+ * A text action rather than a new arrow glyph: it names the state transition
+ * without extending the icon alphabet, and the open page answers with the same
+ * word in the meta register so the right-hand slot is explicit. Neither spends
+ * accent on standing state.
+ */
+.pinpage-open {
+  flex: none;
+}
+
+.pinpage-role {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  color: var(--ink-3);
+}
+
+/*
  * No padding of its own: it holds `.panel-body`, which is the panel's own tier
  * stack and owns the interval on all four sides. A page that padded as well
  * would draw the note at a different rhythm from the panel one keystroke away,

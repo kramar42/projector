@@ -9,11 +9,12 @@ import type { Spot } from './views/motion.ts';
  * edges from it — and `:focus-visible` is the browser's. Three meanings for one
  * word in one file is how a rename goes wrong six months later.
  *
- * It is **the only pointer**. `?note=` is described in `query.ts` as "where you
- * are looking, not what you are looking at", and that is this: with the panel
- * open it shows the cursor's note, so motion flips the panel down the list, and
- * following a reference simply moves the cursor. There is no second pointer to
- * keep in step, and so no rule about which of the two a write lands on.
+ * It is **the only actionable pointer**. With the ordinary panel open, `?note=`
+ * shows the cursor's note, so motion flips the panel down the list and following
+ * a reference simply moves the cursor. The spread is the deliberate exception
+ * in *placement*, not in action: `?note=` becomes a stable trailing page while
+ * the cursor walks every page, and writes still land on the cursor alone. The
+ * open slot is context, never a second target.
  *
  * ## Why it is state and not a URL parameter
  *

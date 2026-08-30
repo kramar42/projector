@@ -27,7 +27,7 @@ import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
 import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
-import { revealScroll } from '../src/web/panel/pins.ts';
+import { afterRemovingPage, revealScroll, stackPages } from '../src/web/panel/pins.ts';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -362,6 +362,18 @@ test('revealing a spread page clears the full sticky page on its right', () => {
   assert.equal(revealScroll(1, 8, 460, 1280, 0, 2400), 270);
   assert.equal(revealScroll(1, 8, 460, 1280, 2400, 2400), 426, 'walking left clears elder spines');
   assert.equal(revealScroll(7, 8, 460, 1280, 0, 2400), 2400, 'the final page reaches the scroll end');
+});
+
+test('the open note is the spread\'s trailing slot, even when it is pinned', () => {
+  assert.deepEqual(stackPages(['a', 'b', 'c'], null), ['a', 'b', 'c']);
+  assert.deepEqual(stackPages(['a', 'b', 'c'], 'x'), ['a', 'b', 'c', 'x']);
+  assert.deepEqual(stackPages(['a', 'b', 'c'], 'b'), ['a', 'c', 'b']);
+});
+
+test('removing a spread page keeps focus beside the place that disappeared', () => {
+  assert.equal(afterRemovingPage(['a', 'b', 'c'], 'b'), 'c');
+  assert.equal(afterRemovingPage(['a', 'b', 'c'], 'c'), 'b');
+  assert.equal(afterRemovingPage(['a'], 'a'), null);
 });
 
 test('the vault is URL-owned context, not a query parameter', () => {

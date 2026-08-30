@@ -332,14 +332,20 @@ side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
   the focused page, because absence is already `KeyHint`'s word for "no key reaches this", which is
   what is true there.
 - **Exactly one page is writable, and that is what preserves the single pointer (C10).** On the spread
-  `h`/`l` move the cursor across pages and `?note=` rides with it, so `cursor ≡ ?note=` holds there
-  exactly as it does over a board and a facet write needs no new rule to find its target. The other
-  pages are guarded **twice**: `inert` for the pointer, and `NO_WRITES` — a frozen writer that reaches
-  no route — for everything else. Two guards because one of them is a UI-level claim: `inert` blocks
-  hit-testing and focus, and a synthetic `click()` walks straight past it, which is exactly how much
-  the invariant is worth. A command that needs the panel folds the spread on its way, in **one URL
-  write** — `nav.current` is render-captured, so the second of two navigations in one handler reads a
-  search string the first has already replaced (`setStack` carries the landing note for exactly this).
+  `h`/`l` move the cursor across pages while `?note=` stays in the trailing open slot. That is a second
+  *placement*, never a second pointer: facet writes still ask the cursor alone. The other page bodies
+  are guarded **twice**: `inert` for the pointer, and `NO_WRITES` — a frozen writer that reaches no
+  route — for everything else. Page-level open and unpin controls remain live because they change the
+  reading arrangement rather than note content. Two guards because one of them is a UI-level claim:
+  `inert` blocks hit-testing and focus, and a synthetic `click()` walks straight past it, which is
+  exactly how much the invariant is worth. The board and sidebar underneath the spread are inert too;
+  a visually covered control may not remain in the tab order or accessibility tree.
+- **There are two states, expressed without a new key.** With only pins, the pages are `?pins=` in pin
+  order. With an open note, `?note=` is appended as the full rightmost page. If that note is also a pin,
+  it temporarily leaves the drawn pin run but stays at its original position in `?pins=`; closing or
+  replacing the open note therefore restores it in place. `o` promotes the focused pin into that slot,
+  so an unpinned open note is replaced and a pinned one swaps back into the run. `Enter` still folds
+  the spread onto the focused note's ordinary panel. `gg`, `G`, `h` and `l` move focus only.
 - **The fold is geometry, not measurement.** A spread page is `position: sticky` with per-index
   offsets — no further left than its elders' spines, no further right than its juniors' — so pages
   fold to their own spines at either viewport edge instead of scrolling away, and there is no
@@ -355,6 +361,8 @@ side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
   still behind its neighbours; a direct spine click keeps the glide. `L` is `i × w` and not
   `offsetLeft`, because Chrome reports a stuck element's `offsetLeft` at the position it is stuck to —
   read from there, every page measured as already seated and nothing ever scrolled.
+  The same layout effect seats the spread on first paint. Entering with `"` is a mode change, not a
+  gesture that moved content, so it appears at its final offset with no arrival animation.
 
 One more mechanism moved to make this work, and it is not about pins. **The cursor now carries a
 placement as well as an id.** A note drawn in two columns has two placements, so `locate` answering

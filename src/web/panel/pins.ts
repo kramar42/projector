@@ -22,6 +22,22 @@ export const SPINE_W = 34;
  */
 export const PAGE_SCROLL = 160;
 
+/** The spread's pages in drawing order. */
+export function stackPages(pins: readonly string[], openNote: string | null): string[] {
+  if (!openNote) return [...pins];
+  // Membership and placement are different facts. A pin promoted into the open
+  // slot keeps its place in `?pins=` but leaves the run while it occupies the
+  // trailing slot; replacing or closing it therefore restores the old order.
+  return [...pins.filter((id) => id !== openNote), openNote];
+}
+
+/** Where focus lands when a page disappears from the spread. */
+export function afterRemovingPage(pages: readonly string[], removed: string): string | null {
+  const at = pages.indexOf(removed);
+  if (at === -1) return pages[pages.length - 1] ?? null;
+  return pages[at + 1] ?? pages[at - 1] ?? null;
+}
+
 /**
  * The horizontal offset that leaves one spread page readable.
  *

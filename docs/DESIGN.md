@@ -1208,6 +1208,14 @@ from its neighbours (`ink` against `ink-2`), which is how a reading copy recedes
 fade taking the hairlines and chip fills down with it. Nothing else on the surface spends accent, per
 the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
 
+The rightmost page may carry a second role: the **open slot**. Its tiny `open` label is meta register,
+not accent, because it names standing placement rather than focus. Every other page answers with an
+equally quiet text action that sends it there; text is used instead of inventing an arrow glyph for a
+state transition the word names exactly. An opened pin temporarily leaves the drawn pin run but keeps
+its membership and order, so replacement restores it without a second animation or a second state
+token. Entering the spread is instantaneous under the Stillness Rule; only a direct spine click glides.
+The covered rail and view are `inert`, matching the visual layer in the accessibility tree.
+
 **A pinned note's record mark keeps its accent glyph inside a `--pinned` surround.** The mark is
 `accent` everywhere because it is the app speaking about the note (see `.recordmark`); replacing that
 colour made the same glyph change meaning and left too little contrast at its smallest sizes. A

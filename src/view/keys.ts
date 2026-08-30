@@ -298,7 +298,10 @@ export type Command =
   | { kind: 'switchVault' }
   /** Step within whatever list of chips currently holds focus. */
   | { kind: 'listMove'; delta: number }
+  /** Open the thing under the cursor without leaving the current surface. */
   | { kind: 'open' }
+  /** Take the thing under the cursor into its ordinary note panel. */
+  | { kind: 'take' }
   // Three members rather than one with a union of `how`, so that ruling out two
   // of them narrows to the third: `delta` belongs to `extend` alone, and a
   // reader — or a compiler — should not have to take that on trust.
@@ -321,8 +324,8 @@ export type Command =
   | { kind: 'undo' }
   | { kind: 'redo' }
   /**
-   * Pin the cursor's note, or unpin it — the note keeps a vertical title spine
-   * at the right edge while you work, panel open or not.
+   * Pin the cursor's note, or unpin it. Compact views show the pin on the note's
+   * record mark; title spines appear beside an open panel and within the spread.
    *
    * A pin is a *reading* mark, not a selection: `?sel=` is what a bulk write
    * lands on, `?pins=` is what stays in sight. Keeping them apart is what lets
@@ -802,7 +805,7 @@ export const BINDINGS: readonly Binding[] = [
   { id: 'trail.back', stroke: 'H', command: { kind: 'trail', delta: -1 } },
   { id: 'trail.forward', stroke: 'L', command: { kind: 'trail', delta: 1 } },
 
-  { id: 'open.enter', stroke: 'Enter', glyph: '⏎', command: { kind: 'open' } },
+  { id: 'open.enter', stroke: 'Enter', glyph: '⏎', command: { kind: 'take' } },
   { id: 'open.o', stroke: 'o', command: { kind: 'open' } },
 
   { id: 'select.toggle', stroke: 'x', command: { kind: 'select', how: 'toggle' } },
@@ -1028,12 +1031,13 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     // write lands on, a pin is what stays in sight.
     section: 'Pins',
     rows: [
-      { ids: ['pin.toggle'], does: 'pin / unpin — the note keeps a title spine at the right edge' },
+      { ids: ['pin.toggle'], does: 'pin / unpin the focused note' },
       { ids: ['stack.toggle'], does: 'spread the pins side by side / fold them back' },
       // Sequences of keys the cursor rows already account for, re-read by the
       // spread the way a navlist re-reads them — so keys are written, not ids.
       { keys: 'h l', does: 'across the spread pages — writes land on the focused one' },
       { keys: 'j k', does: 'scroll the focused page' },
+      { keys: 'o', does: 'send the focused page to the open slot at right' },
       { keys: '⏎', does: 'fold the spread onto the focused note' },
     ],
   },
