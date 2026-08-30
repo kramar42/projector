@@ -19,6 +19,26 @@ export function vaultOf(search: string): string | null {
 }
 
 /**
+ * Has the reader asked for anything beyond *which vault*?
+ *
+ * The one question the landing view turns on, and it is here rather than inline
+ * in `App` because getting it wrong is silent. It used to be `if (search)`, from
+ * when a view was a path and the vault was not in the query at all; once the
+ * vault became a parameter — written before there is any metadata to hold a
+ * `home` view — that test was true on every load and the landing view stopped
+ * happening, on every vault, for as long as nobody looked at a fresh one.
+ *
+ * A parameter of any other name is a question: a view, a shape, a filter, an
+ * open note, a set of pins. Only the vault is context.
+ */
+export function asksOnlyForAVault(search: string): boolean {
+  for (const [key] of new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)) {
+    if (key !== VAULT_PARAM) return false;
+  }
+  return true;
+}
+
+/**
  * The URL is the current page's source of truth. Request helpers are kept free
  * of React, so they read it here rather than carrying a second vault state.
  */

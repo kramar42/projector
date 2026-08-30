@@ -470,6 +470,12 @@ Change a control while one is open and the sidebar says *modified*, with **save*
 named view stays what you left it. *Save current as…* writes the query you are looking at; saving over
 an existing name replaces its query and keeps its arrangement.
 
+**Opening a vault opens its `home` view**, or its first saved view if it has no `home`, or the bare
+query if it has no views at all — and the choice is written into the address bar, so what you are
+looking at is always something you could have linked to. Only `?vault=` is context: a URL that names a
+view, a shape, a filter, a note or a set of pins is a question you asked, and opening it leaves it
+exactly as it is.
+
 **Arrangement only exists in a saved view.** Node positions and manual note order live in the view file,
 never on a note — the same note can sit at a different place on each canvas and in a different order in
 each column. Notes own identity and content; views own arrangement. So an ad-hoc query is auto-laid-out

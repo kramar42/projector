@@ -36,7 +36,7 @@ import { Sidebar } from './sidebar/Sidebar.tsx';
 import { VaultPicker } from './VaultPicker.tsx';
 import { Cheatsheet } from './Cheatsheet.tsx';
 import { Palette } from './Palette.tsx';
-import { VAULT_PARAM, vaultOf } from './vault.ts';
+import { asksOnlyForAVault, VAULT_PARAM, vaultOf } from './vault.ts';
 import {
   NOTE_PARAM,
   DECLINED_PARAM,
@@ -476,13 +476,27 @@ export function App() {
     navigate(`/${patchSearch(search, { [VAULT_PARAM]: meta.vaultName })}`, { replace: true });
   }, [meta, vault, search, navigate]);
 
-  // Nothing asked for: open `home` if the vault has one, else the first saved
-  // view, else the bare query. Rewritten into the URL so it is always
-  // authoritative and an explicitly empty filter stays representable.
+  /**
+   * Nothing asked for: open `home` if the vault has one, else the first saved
+   * view, else the bare query. Rewritten into the URL so it is always
+   * authoritative and an explicitly empty filter stays representable.
+   *
+   * "Nothing asked for" is *besides the vault*, and that is the whole of this.
+   * The guard used to be `isRoot` — a path test, back when a view was a place —
+   * and became `if (search)` when a view became a query. But choosing a vault is
+   * itself a search parameter now, and it is written before any metadata exists
+   * to have a home view in, so `search` was never empty by the time this could
+   * run: every vault opened on an ungrouped ad-hoc board, including the shipped
+   * tutorial, whose `home.yaml` says "Opened when nothing else is asked for" in
+   * its first line.
+   *
+   * `patchSearch` rather than a fresh string for the same reason: the vault is a
+   * parameter like any other and must survive being landed on.
+   */
   useEffect(() => {
-    if (!meta || search) return;
+    if (!meta || !asksOnlyForAVault(search)) return;
     const home = meta.views.find((v) => v.name === 'home') ?? meta.views[0];
-    if (home) navigate(`/?view=${encodeURIComponent(home.name)}`, { replace: true });
+    if (home) navigate(`/${patchSearch(search, { view: home.name })}`, { replace: true });
   }, [meta, search, navigate]);
 
   const wire = apiSearch(search);

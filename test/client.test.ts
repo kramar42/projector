@@ -25,7 +25,7 @@ import {
   selectionPatch,
   strippedOfStrays,
 } from '../src/web/query.ts';
-import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
+import { asksOnlyForAVault, VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
 import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
@@ -476,6 +476,34 @@ test('the vault is URL-owned context, not a query parameter', () => {
     'editing a view cannot lose which vault it belongs to',
   );
   assert.equal(VAULT_PARAM, 'vault');
+});
+
+/**
+ * The landing view, and the regression that took it away silently.
+ *
+ * `App` opens the vault's `home` view when the reader has asked for nothing
+ * else. That test was `if (search)` — correct while a view was a *path* and the
+ * vault was not in the query — and stayed after the vault became a parameter
+ * written on the way in, at which point it was true on every load and no vault
+ * ever landed on its home view again. Nothing failed; every vault simply opened
+ * on an ungrouped ad-hoc board, the shipped tutorial included.
+ *
+ * So the question is a function, and it is asserted from both sides: the vault
+ * alone is context, and a parameter of any other name is something the reader
+ * asked for and must be left alone.
+ */
+test('only the vault is context; anything else in the URL is a question', () => {
+  assert.equal(asksOnlyForAVault(''), true, 'the bare root asks nothing');
+  assert.equal(asksOnlyForAVault('?vault=notes'), true, 'and choosing a vault is not a question');
+  assert.equal(asksOnlyForAVault('vault=notes'), true, 'with or without the ?');
+
+  for (const asked of ['view=home', 'shape=table', 'note=a', 'pins=a,b', 'sel=a', 'q=rust', 'f.status=active']) {
+    assert.equal(
+      asksOnlyForAVault(`?vault=notes&${asked}`),
+      false,
+      `${asked} is a question the reader asked, and the landing view may not overwrite it`,
+    );
+  }
 });
 
 test('a practice key lights every cheatsheet pattern it can complete', () => {
