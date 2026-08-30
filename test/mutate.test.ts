@@ -14,6 +14,7 @@ import {
   deleteNote,
   mergeNotes,
   mtimeOf,
+  renameNote,
   patchFields,
   patchNote,
   repointed,
@@ -61,6 +62,92 @@ const card = (id: string, facets: string) =>
 
 const facetsOf = (root: string, id: string) =>
   readAll(paths(root).notes).notes.get(id)?.facets ?? {};
+
+// ---------------------------------------------------------------- rename
+
+test('renaming a note repoints every declared reference and its saved-view identity', () => {
+  const v = vault({
+    'workflow-app-evidence': card('workflow-app-evidence', 'priority: [now]'),
+    holder: card('holder', 'parent: [workflow-app-evidence]'),
+  });
+  try {
+    writeFileSync(
+      paths(v.root).facets,
+      readFileSync(paths(v.root).facets, 'utf8') +
+        'depends: { label: Depends on, type: ref, single: false }\n',
+      'utf8',
+    );
+    writeFileSync(
+      join(paths(v.root).notes, 'holder.md'),
+      card('holder', 'parent: [workflow-app-evidence], depends: [workflow-app-evidence]'),
+      'utf8',
+    );
+    mkdirSync(paths(v.root).views, { recursive: true });
+    writeFileSync(
+      join(paths(v.root).views, 'tracking.yaml'),
+      `shape: board\nfilter: { parent: [workflow-app-evidence], depends: [workflow-app-evidence] }\n` +
+        `focus: { id: workflow-app-evidence, via: parent, dir: in }\ngroupBy: [parent]\n` +
+        `nodes: { workflow-app-evidence: { x: 10, y: 20 } }\n` +
+        `order: { workflow-app-evidence: [workflow-app-evidence, holder] }\n`,
+      'utf8',
+    );
+    mkdirSync(join(paths(v.root).assets, 'workflow-app-evidence'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'workflow-app-evidence', 'evidence.png'), 'image', 'utf8');
+
+    const result = renameNote(v.root, 'workflow-app-evidence', 'workflow-service');
+
+    assert.deepEqual(result, { repointed: 2, views: 1 });
+    assert.equal(readAll(paths(v.root).notes).notes.has('workflow-app-evidence'), false);
+    assert.ok(readAll(paths(v.root).notes).notes.has('workflow-service'));
+    assert.equal(readAll(paths(v.root).notes).notes.get('workflow-service')?.title, 'WORKFLOW-APP-EVIDENCE');
+    assert.deepEqual(facetsOf(v.root, 'holder').parent, ['workflow-service']);
+    assert.deepEqual(facetsOf(v.root, 'holder').depends, ['workflow-service']);
+    assert.ok(existsSync(join(paths(v.root).assets, 'workflow-service', 'evidence.png')));
+    const view = readFileSync(join(paths(v.root).views, 'tracking.yaml'), 'utf8');
+    assert.doesNotMatch(view, /workflow-app-evidence/);
+    assert.match(view, /workflow-service/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('renaming a folder note moves its whole project folder', () => {
+  const v = vault({ holder: card('holder', 'parent: [workflow-app]') });
+  try {
+    mkdirSync(join(paths(v.root).notes, 'workflow-app'));
+    writeFileSync(
+      join(paths(v.root).notes, 'workflow-app', 'README.md'),
+      '---\nid: workflow-app\ntitle: Workflow app\nproject: {}\n---\n',
+      'utf8',
+    );
+    writeFileSync(join(paths(v.root).notes, 'workflow-app', 'AGENTS.md'), 'instructions', 'utf8');
+    writeFileSync(join(paths(v.root).notes, 'workflow-app', 'child.md'), '# Child\n', 'utf8');
+
+    renameNote(v.root, 'workflow-app', 'workflow-service');
+
+    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'README.md')));
+    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'AGENTS.md')));
+    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'child.md')));
+    assert.deepEqual(facetsOf(v.root, 'holder').parent, ['workflow-service']);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('renaming refuses an occupied id before it repoints anything', () => {
+  const v = vault({
+    old: card('old', 'priority: [now]'),
+    new: card('new', 'priority: [month]'),
+    holder: card('holder', 'parent: [old]'),
+  });
+  try {
+    assert.throws(() => renameNote(v.root, 'old', 'new'), Invalid);
+    assert.ok(readAll(paths(v.root).notes).notes.has('old'));
+    assert.deepEqual(facetsOf(v.root, 'holder').parent, ['old']);
+  } finally {
+    v.cleanup();
+  }
+});
 
 // ---------------------------------------------------------------- bulkMove
 

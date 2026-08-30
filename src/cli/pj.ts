@@ -44,7 +44,7 @@ import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work
 import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
-import { createNote, deleteNote, mergeNotes, patchNote, patchFields } from '../server/mutate.ts';
+import { createNote, deleteNote, mergeNotes, patchNote, patchFields, renameNote } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 
 // ---------------------------------------------------------------- flags
@@ -270,6 +270,7 @@ const HELP = `pj — projector CLI${vaultNote}
   pj set <id>... [--title t] [--facet f=v] [--add f=v]
          [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
   pj merge <id>... --into <id>                         fold notes into one, keeping its facets
+  pj mv <id> <new-id>                                  rename a note, repointing references
   pj rm <id>...                                        delete, dropping references to it
   pj work <id> [--dry-run] [--no-open] [--new]         multi-repo worktree workspace + briefing;
                                                        reopens a session already working there
@@ -1098,6 +1099,19 @@ try {
       console.log(
         `merged ${res.merged} note(s) into ${into}` +
           (res.repointed ? `, repointing ${res.repointed} reference(s)` : ''),
+      );
+      break;
+    }
+
+    case 'mv': {
+      const { rest } = argFlags(argv, []);
+      const [from, to, extra] = rest;
+      if (!from || !to || extra) fail('pj mv <id> <new-id>');
+      const res = renameNote(root, from, to);
+      console.log(
+        `renamed ${from} to ${to}` +
+          (res.repointed ? `, repointing ${res.repointed} reference(s)` : '') +
+          (res.views ? `, updating ${res.views} saved view(s)` : ''),
       );
       break;
     }

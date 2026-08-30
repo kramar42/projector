@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
+import { readAll } from '../src/index/indexer.ts';
 
 /**
  * The CLI, run as a binary.
@@ -126,6 +127,24 @@ test('grouping prints one section per declared value, empty ones included', () =
     // `later` is declared and carried by nobody; it is still a group.
     assert.match(r.out, /## later \(0\)/);
     assert.match(r.out, /in \d+ group\(s\)/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('mv renames an id and repoints references', () => {
+  const v = vault();
+  try {
+    writeFileSync(
+      join(paths(v.root).notes, 'beta.md'),
+      '---\nid: beta\ntitle: Beta\nfacets: { parent: [alpha] }\n---\nsecond\n',
+      'utf8',
+    );
+    const r = run(['--vault', v.root, 'mv', 'alpha', 'gamma']);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /renamed alpha to gamma/);
+    assert.ok(readAll(paths(v.root).notes).notes.has('gamma'));
+    assert.deepEqual(readAll(paths(v.root).notes).notes.get('beta')?.facets.parent, ['gamma']);
   } finally {
     v.cleanup();
   }

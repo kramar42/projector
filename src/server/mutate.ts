@@ -27,7 +27,7 @@ import { merged } from '../schema/merge.ts';
 import { suppress } from '../intake/db.ts';
 import { parseLink } from '../schema/links.ts';
 import { readAll } from '../index/indexer.ts';
-import { viewFileFor } from './views.ts';
+import { loadViewFiles, viewFileFor } from './views.ts';
 import type { Note } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../schema/slug.ts';
@@ -554,6 +554,153 @@ export function repointed(
     else delete out[name];
   }
   return changed ? { facets: out, changed } : null;
+}
+
+const NOTE_ID = /^[a-z0-9][a-z0-9-]*$/;
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Replace one note id in a scalar or list without changing the surrounding YAML shape. */
+function renamedValue(value: unknown, from: string, to: string): unknown {
+  if (value === from) return to;
+  if (!Array.isArray(value) || !value.includes(from)) return value;
+  return [...new Set(value.map((item) => (item === from ? to : item)))];
+}
+
+/**
+ * The saved pieces of a view that name notes.
+ *
+ * A view is a query, but it also owns arrangement (C9). Its reference filters
+ * and focus are names in the graph; `nodes` and the values inside `order` are
+ * note ids; an order's key is a reference value only when that is the view's
+ * primary grouping. Keeping those distinctions here avoids teaching a rename
+ * the spelling of any particular reference facet (C4).
+ */
+function renamedView(
+  raw: Record<string, unknown>,
+  refFacets: readonly string[],
+  primary: string | undefined,
+  from: string,
+  to: string,
+): Record<string, unknown> | null {
+  const patch: Record<string, unknown> = {};
+
+  const filter = record(raw.filter);
+  if (filter) {
+    const next = { ...filter };
+    let changed = false;
+    for (const name of refFacets) {
+      const before = next[name];
+      const after = renamedValue(before, from, to);
+      if (after !== before) {
+        next[name] = after;
+        changed = true;
+      }
+    }
+    if (changed) patch.filter = next;
+  }
+
+  const focus = record(raw.focus);
+  if (focus?.id === from) patch.focus = { ...focus, id: to };
+
+  const nodes = record(raw.nodes);
+  if (nodes?.[from] !== undefined) {
+    if (nodes[to] !== undefined) throw new Invalid(`a saved view already has a position for "${to}"`);
+    const next = { ...nodes, [to]: nodes[from] };
+    delete next[from];
+    patch.nodes = next;
+  }
+
+  const order = record(raw.order);
+  if (order) {
+    const next: Record<string, unknown> = {};
+    let changed = false;
+    for (const [column, value] of Object.entries(order)) {
+      const nextColumn = primary && refFacets.includes(primary) && column === from ? to : column;
+      if (next[nextColumn] !== undefined) {
+        throw new Invalid(`a saved view already has an order for "${nextColumn}"`);
+      }
+      const nextValue = renamedValue(value, from, to);
+      next[nextColumn] = nextValue;
+      changed ||= nextColumn !== column || nextValue !== value;
+    }
+    if (changed) patch.order = next;
+  }
+
+  return Object.keys(patch).length ? patch : null;
+}
+
+/**
+ * Rename a note's stable id and every generic place that points at it.
+ *
+ * IDs are the values reference facets carry, so moving only the file turns a
+ * parent or project into a dangling label. The reference vocabulary already says
+ * which facets contain ids; this walk uses that declaration rather than naming
+ * `parent`, `project`, or any future relation (C4). Every target is planned
+ * before the first write so an occupied id, file, asset directory, or saved-view
+ * arrangement leaves the vault unchanged.
+ */
+export function renameNote(root: string, from: string, to: string): { repointed: number; views: number } {
+  if (!NOTE_ID.test(to)) throw new Invalid(`"${to}" is not a lowercase slug`);
+  if (from === to) throw new Invalid(`"${from}" already has that id`);
+
+  const p = paths(root);
+  const { notes } = readAll(p.notes);
+  const source = notes.get(from);
+  if (!source) throw new Invalid(`no note with id "${from}"`);
+  if (notes.has(to)) throw new Invalid(`id "${to}" is already taken`);
+
+  const folderNote = basename(source.file) === 'README.md' && dirname(source.file) !== p.notes;
+  const sourceDir = dirname(source.file);
+  const targetFile = folderNote
+    ? join(dirname(sourceDir), to, 'README.md')
+    : join(sourceDir, `${to}.md`);
+  if (folderNote ? existsSync(dirname(targetFile)) : existsSync(targetFile)) {
+    throw new Invalid(`cannot rename "${from}": ${relative(p.notes, targetFile)} already exists`);
+  }
+
+  const sourceAssets = join(p.assets, from);
+  const targetAssets = join(p.assets, to);
+  if (existsSync(sourceAssets) && existsSync(targetAssets)) {
+    throw new Invalid(`cannot rename "${from}": assets/${to} already exists`);
+  }
+
+  const refFacets = refFacetsOf(root);
+  const viewPlans = loadViewFiles(root)
+    .map((view) => ({
+      file: view.file,
+      patch: renamedView(view.raw, refFacets, view.spec.query.groupBy?.[0], from, to),
+    }))
+    .filter((plan): plan is { file: string; patch: Record<string, unknown> } => plan.patch !== null);
+
+  // The target declares its new id before anything points at it. There is no
+  // multi-file transaction, so the preflight above is the refusal boundary and
+  // each individual write stays atomic.
+  patchAll(root, source.file, { id: to });
+
+  let moved = 0;
+  for (const rec of notes.values()) {
+    if (rec.id === from) continue;
+    const plan = repointed(facetsNow(rec), refFacets, new Set([from]), to, rec.id);
+    if (!plan) continue;
+    moved += plan.changed;
+    patchAll(root, rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
+  }
+  // A folder note brings its children and instructions along. This waits until
+  // the reference walk above has used the paths it read before the directory
+  // moved; a flat note is the same move over one file.
+  if (folderNote) renameSync(sourceDir, dirname(targetFile));
+  else renameSync(source.file, targetFile);
+  if (existsSync(sourceAssets)) renameSync(sourceAssets, targetAssets);
+  for (const plan of viewPlans) {
+    writeNoteFile(plan.file, patchYamlFile(readFileSync(plan.file, 'utf8'), plan.patch));
+  }
+
+  return { repointed: moved, views: viewPlans.length };
 }
 
 /**

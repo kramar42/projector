@@ -1179,6 +1179,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |
+| `pj mv <id> <new-id>` | rename a note's stable id. Its file (or project folder), assets, every declared reference facet, and saved-view focus, filters and arrangement follow the new id; the note's title stays as it was |
 | `pj merge <id>… --into <id>` | fold notes into one. The survivor keeps its facets; the rest bring their body, links, references and capture fingerprints, and their files go |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
