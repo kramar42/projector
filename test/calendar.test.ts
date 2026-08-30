@@ -182,7 +182,14 @@ test('the cursor grid is one lane of the page’s days, the rail last, from the 
   const facets = { due: def('date') } as unknown as Facets;
   const note = (due: string[]) => ({ facets: due.length ? { due } : {} });
   const data = {
-    spec: { shape: 'calendar', show: [], query: { filter: {} } },
+    spec: {
+      shape: 'calendar',
+      show: [],
+      query: { filter: {} },
+      // The cursor grid must use the same saved order the calendar renders.
+      // Otherwise `a` is the cursor at row one while row zero draws its ring.
+      order: { '2026-08-24': ['b', 'a'] },
+    },
     ids: ['a', 'b', 'loose'],
     notes: { a: note(['2026-08-24']), b: note(['2026-08-24', '2026-08-26']), loose: note([]) },
   } as unknown as QueryResponse;
@@ -193,7 +200,7 @@ test('the cursor grid is one lane of the page’s days, the rail last, from the 
   assert.equal(grid.columns[0], '2026-08-24');
   assert.equal(grid.columns[7], NONE, 'the rail is the last column, so `l` reaches it');
   // A note due twice on the page is two placements, exactly as the view draws it.
-  assert.deepEqual(grid.cells[0]![0], ['a', 'b']);
+  assert.deepEqual(grid.cells[0]![0], ['b', 'a']);
   assert.deepEqual(grid.cells[0]![2], ['b']);
   assert.deepEqual(grid.cells[0]![7], ['loose']);
   assert.equal(grid.continuous, false, 'a day is a column with a visible end, the board’s rule');

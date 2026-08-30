@@ -1,6 +1,6 @@
 import { groupsFor } from './groups.ts';
 import { NONE } from '../../schema/vocabulary.ts';
-import { calendarPage, dateAxis, placements } from '../../view/calendar.ts';
+import { arrangePlacements, calendarPage, dateAxis, placements } from '../../view/calendar.ts';
 import { paramsOf } from '../query.ts';
 import type { Facets, QueryResponse } from '../types.ts';
 
@@ -80,9 +80,9 @@ export function gridOf(
   /**
    * A calendar is a one-lane board whose columns are the page's days, in
    * reading order, with the unscheduled rail as the last column. The same two
-   * pure calls the view makes (`calendarPage`, `placements`) over the same
-   * inputs, so the walk and the drawing cannot disagree — the promise this
-   * module already makes about `groupsFor`.
+   * pure calls the view makes (`calendarPage`, `placements`, then its saved
+   * arrangement) over the same inputs, so the walk and the drawing cannot
+   * disagree — the promise this module already makes about `groupsFor`.
    *
    * The drawn rows are a *layout* of one run of days, not lanes: a lane would
    * put a different date at every (lane, column) and leave `columns` — which is
@@ -98,7 +98,10 @@ export function gridOf(
     if (!axis) return EMPTY;
     const today = calendar.today ?? new Date().toISOString().slice(0, 10);
     const page = calendarPage(Object.fromEntries(paramsOf(calendar.search)), today);
-    const placed = placements(data.ids, (id) => data.notes[id]?.facets[axis] ?? [], page);
+    const placed = arrangePlacements(
+      placements(data.ids, (id) => data.notes[id]?.facets[axis] ?? [], page),
+      data.spec.order,
+    );
     const days = page.days.flat();
     return {
       cells: [[...days.map((d) => placed.byDay.get(d) ?? []), placed.unscheduled]],
