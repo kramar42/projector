@@ -9,6 +9,8 @@ import {
   initVault,
   looksLikeVault,
   normalise,
+  registerVault,
+  resolveRegisteredVault,
   resolveDoc,
   shippedVaults,
   suggestName,
@@ -48,6 +50,25 @@ test('the suggested name is the folder name, and nothing cleverer', () => {
   assert.equal(suggestName('/Users/k/notes/vault'), 'vault');
   assert.equal(suggestName('/Users/k/Code/projector/vaults/tutorial'), 'tutorial');
   assert.equal(suggestName('/Users/k/second-brain'), 'second-brain');
+});
+
+test('a registered vault name is a unique, stable selector', () => {
+  const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-names-'));
+  const registry = pathJoin(dir, 'vaults.json');
+  const before = process.env.PROJECTOR_VAULTS;
+  process.env.PROJECTOR_VAULTS = registry;
+  try {
+    const one = pathJoin(dir, 'one');
+    const two = pathJoin(dir, 'two');
+    registerVault(one, 'notes');
+    assert.equal(resolveRegisteredVault('notes')?.path, one);
+    assert.equal(resolveRegisteredVault(one)?.name, 'notes', 'old path links remain readable');
+    assert.throws(() => registerVault(two, 'notes'), /already names/);
+  } finally {
+    if (before === undefined) delete process.env.PROJECTOR_VAULTS;
+    else process.env.PROJECTOR_VAULTS = before;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('doc refs resolve against the vault, and absolutely when absolute', () => {

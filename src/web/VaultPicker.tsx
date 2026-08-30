@@ -61,7 +61,7 @@ export function VaultPicker({
     setError(null);
     try {
       const res = await vaultApi.open(target, { name: name.trim() || undefined, create });
-      onOpened(res.vault.path);
+      onOpened(res.vault.name);
     } catch (err) {
       setError((err as Error).message);
     } finally {

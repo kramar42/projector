@@ -2055,22 +2055,50 @@ input:focus-visible + .checkbox {
     -12px 0 40px rgba(8, 6, 12, 0.18);
 }
 
-/* The page's own left edge — the part that stays when the page folds away. */
+/*
+ * The compact title overlays the page instead of reserving a strip beside its
+ * body. In readable mode it has no paint and cannot intercept the note; once
+ * folded, the page's left edge and the next page's left edge are its only two
+ * rules — an internal divider would add a needless third line.
+ */
 .pinpage-spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
   font: inherit;
-  background: var(--surface);
+  background: transparent;
   color: var(--ink-2);
   border: none;
-  border-right: 1px solid var(--rule);
   padding: 14px 0 0;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  cursor: pointer;
+  cursor: default;
+  pointer-events: none;
 }
 
-.pinpage-spine:hover {
+.pinpage.is-compact .pinpage-spine {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pinpage.is-compact .pinpage-spine:hover {
   background: var(--surface-2);
+}
+
+/*
+ * One title, in the orientation the exposed width can support. The fixed page
+ * and its sticky offsets never move: only paint crosses over, so folding a note
+ * cannot reflow the spread or make a keyboard target jump. `visibility` follows
+ * opacity after the fade so hidden editors also leave the accessibility tree.
+ */
+.pinpage-spine .spinelabel {
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+.pinpage.is-compact .pinpage-spine .spinelabel {
+  opacity: 1;
 }
 
 .pinpage-content {
@@ -2081,6 +2109,19 @@ input:focus-visible + .checkbox {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 140ms ease-out,
+    visibility 0s;
+}
+
+.pinpage.is-compact .pinpage-content {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 140ms ease-out,
+    visibility 0s 140ms;
 }
 
 .pinpage-head {
@@ -2738,6 +2779,12 @@ textarea { resize: vertical; font-family: inherit; }
    the information, the easing is only how it arrives. It still clears, because the
    class comes off when the hold expires. */
 @media (prefers-reduced-motion: reduce) {
+  .pinpage-spine .spinelabel,
+  .pinpage-content,
+  .pinpage.is-compact .pinpage-content {
+    transition: none;
+  }
+
   .cardface.is-touched::after,
   .table tr.is-touched > td::after,
   .panel-title.is-touched::after,

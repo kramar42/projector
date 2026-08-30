@@ -22,6 +22,34 @@ export const SPINE_W = 34;
  */
 export const PAGE_SCROLL = 160;
 
+/** At two spine widths, prose gives way to the page's compact title. */
+export const PAGE_COMPACT_W = SPINE_W * 2;
+
+/** Whether the painted part of a fixed-width page is only a folded sliver. */
+export function isCompactPage(exposedWidth: number): boolean {
+  return exposedWidth <= PAGE_COMPACT_W;
+}
+
+/**
+ * How much of each fixed-width spread page is actually painted unobscured.
+ *
+ * Sticky pages overlap rather than resize. Later siblings paint over earlier
+ * ones, so a page ends at the next page's left edge even though its DOM rect
+ * remains full width. Keeping this geometry pure makes the spine/content switch
+ * follow what a reader can see instead of what `offsetWidth` keeps reporting.
+ */
+export function exposedPageWidths(
+  pages: readonly { left: number; right: number }[],
+  viewport: { left: number; right: number },
+): number[] {
+  return pages.map((page, i) => {
+    const younger = pages[i + 1];
+    const left = Math.max(page.left, viewport.left);
+    const right = Math.min(page.right, viewport.right, younger?.left ?? Infinity);
+    return Math.max(0, right - left);
+  });
+}
+
 /** The spread's pages in drawing order. */
 export function stackPages(pins: readonly string[], openNote: string | null): string[] {
   if (!openNote) return [...pins];

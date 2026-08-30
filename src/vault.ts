@@ -212,19 +212,37 @@ export function isRegistered(path: string): boolean {
   return readRegistry().some((v) => v.path === want);
 }
 
+/**
+ * Resolve the browser/CLI spelling of an already opened vault.
+ *
+ * Names are the public selector and win first. A canonical path remains a
+ * backwards-compatible spelling for old links and for the registry endpoints,
+ * but new browser URLs do not need to disclose a machine-specific full path.
+ */
+export function resolveRegisteredVault(ref: string): VaultEntry | null {
+  const vaults = readRegistry();
+  const named = vaults.find((v) => v.name === ref);
+  if (named) return named;
+  const want = normalise(ref);
+  return vaults.find((v) => v.path === want) ?? null;
+}
+
 export function registerVault(path: string, name?: string): VaultEntry {
   const p = normalise(path);
   const vaults = readRegistry();
   const found = vaults.find((v) => v.path === p);
+  const desired = name?.trim() || found?.name || suggestName(p);
+  const owner = vaults.find((v) => v.name === desired && v.path !== p);
+  if (owner) throw new Error(`vault name "${desired}" already names ${owner.path}`);
   if (found) {
-    if (name) found.name = name;
+    found.name = desired;
     found.lastOpenedAt = Date.now();
     writeRegistry(vaults);
     return found;
   }
   const entry: VaultEntry = {
     path: p,
-    name: name?.trim() || suggestName(p),
+    name: desired,
     addedAt: Date.now(),
     lastOpenedAt: Date.now(),
   };

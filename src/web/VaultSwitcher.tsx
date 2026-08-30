@@ -95,7 +95,7 @@ function VaultMenu({
             disabled={!v.exists}
             onClick={() => {
               close();
-              if (v.path !== meta.vault) onSwitch(v.path);
+              if (v.path !== meta.vault) onSwitch(v.name);
             }}
             title={v.path}
           >

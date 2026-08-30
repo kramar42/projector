@@ -3,6 +3,7 @@ import { currentVault } from './vault.ts';
 import type { FoldRow } from '../schema/fold.ts';
 import type { DeclinedPage, NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
 import { foreignOf } from './changed.ts';
+import { createEventHub } from './events.ts';
 export { FLUSH_MS } from './changed.ts';
 
 /**
@@ -279,25 +280,24 @@ export function onDataChange(
   fn: (ids: string[]) => void,
   event: 'change' | 'enriched' = 'change',
 ): () => void {
-  const es = new EventSource('/api/events');
-  es.addEventListener(event, (e) => {
+  return serverEvents.subscribe(event, (e) => {
     // Events carry the vault they came from: a change in another vault is none
     // of this tab's business.
     let ids: string[] = [];
     try {
       const data = JSON.parse((e as MessageEvent<string>).data) as {
         vault?: string;
+        vaultName?: string;
         ids?: string[];
       };
       const mine = currentVault();
-      if (data.vault && mine && data.vault !== mine) return;
+      if (data.vault && mine && data.vault !== mine && data.vaultName !== mine) return;
       ids = data.ids ?? [];
     } catch {
       /* older payload shape; fall through and refresh */
     }
     fn(ids);
   });
-  return () => es.close();
 }
 
 /**
@@ -312,16 +312,16 @@ export function onDataChange(
  * does not engage C2 at all: there is no service to write to.
  */
 export function onAttention(fn: (notes: { id: string; title: string }[]) => void): () => void {
-  const es = new EventSource('/api/events');
-  es.addEventListener('attention', (e) => {
+  return serverEvents.subscribe('attention', (e) => {
     try {
       const data = JSON.parse((e as MessageEvent<string>).data) as {
         vault?: string;
+        vaultName?: string;
         ids?: string[];
         titles?: string[];
       };
       const mine = currentVault();
-      if (data.vault && mine && data.vault !== mine) return;
+      if (data.vault && mine && data.vault !== mine && data.vaultName !== mine) return;
       const ids = data.ids ?? [];
       const titles = data.titles ?? [];
       if (!ids.length) return;
@@ -330,5 +330,7 @@ export function onAttention(fn: (notes: { id: string; title: string }[]) => void
       /* an unreadable payload is not worth interrupting anyone about */
     }
   });
-  return () => es.close();
 }
+
+/** One permanent request for every live reader in this tab, opened lazily. */
+const serverEvents = createEventHub(() => new EventSource('/api/events'));

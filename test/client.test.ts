@@ -29,7 +29,15 @@ import { VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
 import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
-import { afterRemovingPage, revealScroll, stackPages } from '../src/web/panel/pins.ts';
+import {
+  afterRemovingPage,
+  exposedPageWidths,
+  isCompactPage,
+  revealScroll,
+  SPINE_W,
+  stackPages,
+} from '../src/web/panel/pins.ts';
+import { createEventHub, type EventStream } from '../src/web/events.ts';
 import { KeyHint, KeyHints } from '../src/web/components/KeyHint.tsx';
 
 /**
@@ -389,6 +397,63 @@ test('the open note is the spread\'s trailing slot, even when it is pinned', () 
   assert.deepEqual(stackPages(['a', 'b', 'c'], 'b'), ['a', 'c', 'b']);
 });
 
+test('a spread page presentation follows exposed paint, not its fixed card width', () => {
+  assert.deepEqual(
+    exposedPageWidths(
+      [
+        { left: 0, right: 460 },
+        { left: 34, right: 494 },
+        { left: 494, right: 954 },
+      ],
+      { left: 0, right: 900 },
+    ),
+    [34, 460, 406],
+    'a younger sticky page covers its elder while every card remains 460px wide',
+  );
+  assert.equal(isCompactPage(SPINE_W * 2 + 1), false, 'content survives until only two spines fit');
+  assert.equal(isCompactPage(SPINE_W * 2), true, 'the exact two-spine boundary folds the page');
+});
+
+test('live readers share one event stream until the last subscriber leaves', () => {
+  class FakeStream implements EventStream {
+    closed = false;
+    listeners = new Map<string, ((event: MessageEvent<string>) => void)[]>();
+    addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void {
+      const listeners = this.listeners.get(type) ?? [];
+      listeners.push(listener);
+      this.listeners.set(type, listeners);
+    }
+    close(): void { this.closed = true; }
+    emit(type: string, data: string): void {
+      for (const listener of this.listeners.get(type) ?? []) listener({ data } as MessageEvent<string>);
+    }
+  }
+
+  const streams: FakeStream[] = [];
+  const hub = createEventHub(() => {
+    const stream = new FakeStream();
+    streams.push(stream);
+    return stream;
+  });
+  const seen: string[] = [];
+  const offA = hub.subscribe('change', (event) => seen.push(`a:${event.data}`));
+  const offB = hub.subscribe('change', (event) => seen.push(`b:${event.data}`));
+  const offAttention = hub.subscribe('attention', (event) => seen.push(`n:${event.data}`));
+
+  assert.equal(streams.length, 1, 'several useLive readers must spend one HTTP connection');
+  streams[0]!.emit('change', '1');
+  assert.deepEqual(seen, ['a:1', 'b:1']);
+  offA();
+  offB();
+  assert.equal(streams[0]!.closed, false, 'another event kind still owns the stream');
+  offAttention();
+  assert.equal(streams[0]!.closed, true);
+
+  const offAgain = hub.subscribe('change', () => undefined);
+  assert.equal(streams.length, 2, 'a later reader opens one fresh shared stream');
+  offAgain();
+});
+
 test('removing a spread page keeps focus beside the place that disappeared', () => {
   assert.equal(afterRemovingPage(['a', 'b', 'c'], 'b'), 'c');
   assert.equal(afterRemovingPage(['a', 'b', 'c'], 'c'), 'b');
@@ -396,18 +461,18 @@ test('removing a spread page keeps focus beside the place that disappeared', () 
 });
 
 test('the vault is URL-owned context, not a query parameter', () => {
-  const search = '?vault=%2FUsers%2Fme%2Fnotes&view=home&filterstyle=chip';
+  const search = '?vault=notes&view=home&filterstyle=chip';
 
-  assert.equal(vaultOf(search), '/Users/me/notes');
+  assert.equal(vaultOf(search), 'notes');
   assert.equal(
     strippedOfStrays(search),
-    '?vault=%2FUsers%2Fme%2Fnotes&view=home',
+    '?vault=notes&view=home',
     'normalising a URL must preserve its selected vault',
   );
   assert.equal(apiSearch(search), '?view=home', 'the vault names the request header, never the view');
   assert.equal(
-    patchSearch('?vault=%2FUsers%2Fme%2Fnotes&view=home', { shape: 'table' }),
-    '?vault=%2FUsers%2Fme%2Fnotes&view=home&shape=table',
+    patchSearch('?vault=notes&view=home', { shape: 'table' }),
+    '?vault=notes&view=home&shape=table',
     'editing a view cannot lose which vault it belongs to',
   );
   assert.equal(VAULT_PARAM, 'vault');

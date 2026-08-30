@@ -5,8 +5,10 @@
  * by the user the way an Obsidian vault is: point at a folder. There is no
  * default and no assumed directory name — with nothing chosen, the app asks.
  *
- * This is deliberately not browser storage. A URL with a bad path must still be
+ * This is deliberately not browser storage. A URL with a bad name must still be
  * recoverable by deleting `vault=`, and a link must say which library it opens.
+ * Names are unique in the registry; old full-path values remain accepted by the
+ * server and are canonicalised after metadata loads.
  */
 
 export const VAULT_PARAM = 'vault';

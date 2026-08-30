@@ -1107,6 +1107,10 @@ The folders you have opened are listed in `vaults.json` next to the app, and the
 one that is on that list — so a page in your browser cannot point it at an arbitrary directory. It is
 the only thing written outside a vault; delete it and you lose the list, nothing else.
 
+The browser URL names that registered vault (`?vault=work`), rather than exposing its machine-specific
+full path. Names are unique in one registry. A full-path URL made by an older build still opens and is
+rewritten to the registered name after the server resolves it.
+
 ```bash
 pj vaults                                  # list. A `~` on a count means "as of that
                                            #   vault's last index" — reading it is instant
@@ -1413,7 +1417,11 @@ note and the pinned spines appear at the panel's left edge; clicking one jumps t
 act as clicking its card. Spread, the pages glue edge to edge and scroll sideways — drag a
 spine, a header or a margin to pan (prose stays selectable), click a spine to glide that page fully
 into view, and a spread wider than the window folds its far pages down to their spines instead of
-scrolling them away.
+scrolling them away. A page never changes width while it folds, and its body owns the full card — no
+empty spine strip sits beside readable content. Only when two spine widths or less remain exposed do
+the normal header and body fade away and the title appear once, vertically, at the left. The folded
+page uses only its two outer boundary lines, with no internal divider. Revealing more width reverses
+that crossfade; reduced-motion preferences make the same switch instant.
 
 **Three ways out of a note you are reading.** In the panel and on a spread page alike, a reference
 chip follows on click and the modifiers say how: plain click **replaces** what you are reading and

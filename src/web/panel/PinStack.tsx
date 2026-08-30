@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { Button, IconButton } from '../components/Button.tsx';
@@ -6,7 +6,7 @@ import { KeyHints } from '../components/KeyHint.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { NO_WRITES, usePanelWriter } from './usePanelWriter.ts';
 import { NoteTiers } from './tiers.tsx';
-import { revealScroll, SPINE_W, stackPages } from './pins.ts';
+import { exposedPageWidths, isCompactPage, revealScroll, SPINE_W, stackPages } from './pins.ts';
 import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
 
 /**
@@ -124,8 +124,9 @@ export function PinStack({
   // The open note is a role, not a second membership. If it is pinned too it
   // temporarily leaves the pin run and occupies the trailing slot; closing or
   // replacing it restores its original pin position without another state key.
-  const pages = stackPages(pins, openNote);
+  const pages = useMemo(() => stackPages(pins, openNote), [pins, openNote]);
   const strip = useRef<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState<ReadonlySet<string>>(() => new Set());
 
   /**
    * Bring page i into view — and **only** as far as it takes.
@@ -190,6 +191,41 @@ export function PinStack({
   }, [focused, pages.length, reveal]);
 
   /**
+   * A card never changes width; only its presentation follows the width not
+   * covered by a younger sticky page. Content keeps the whole page until only
+   * two spine widths remain, then it gives way to the vertical title. CSS
+   * crossfades the two layers without moving either one.
+   */
+  useLayoutEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const viewport = el.getBoundingClientRect();
+      const rects = [...el.children].map((page) => page.getBoundingClientRect());
+      const widths = exposedPageWidths(rects, viewport);
+      const next = new Set(pages.filter((_, i) => isCompactPage(widths[i] ?? 0)));
+      setCompact((current) => {
+        if (current.size === next.size && [...current].every((id) => next.has(id))) return current;
+        return next;
+      });
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    el.addEventListener('scroll', schedule, { passive: true });
+    const resize = new ResizeObserver(schedule);
+    resize.observe(el);
+    return () => {
+      el.removeEventListener('scroll', schedule);
+      resize.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [pages]);
+
+  /**
    * Drag-to-pan, the way the board pans: grab a margin, a header or a spine and
    * pull. Prose, links and buttons are exempt so text stays selectable and a
    * click stays a click — the 4px threshold is what tells the two apart.
@@ -244,6 +280,7 @@ export function PinStack({
           isFocus={id === focused}
           isPinned={pins.includes(id)}
           isOpen={id === openNote}
+          isCompact={compact.has(id)}
           onFocus={() => onCursor(id)}
           onSpine={() => reveal(i, 'smooth')}
           onMakeOpen={() => onMakeOpen(id)}
@@ -265,6 +302,7 @@ function PinPage({
   isFocus,
   isPinned,
   isOpen,
+  isCompact,
   onFocus,
   onSpine,
   onMakeOpen,
@@ -280,6 +318,7 @@ function PinPage({
   isFocus: boolean;
   isPinned: boolean;
   isOpen: boolean;
+  isCompact: boolean;
   onFocus: () => void;
   onSpine: () => void;
   onMakeOpen: () => void;
@@ -321,11 +360,11 @@ function PinPage({
    * called either way because it is a hook, and because the page it belongs to
    * becomes the focused one the moment `h` or `l` lands on it.
    */
-  const write = isFocus ? writer : NO_WRITES;
+  const write = isFocus && !isCompact ? writer : NO_WRITES;
 
   return (
     <section
-      className={`pinpage ${isFocus ? 'is-focus' : ''}`}
+      className={`pinpage ${isFocus ? 'is-focus' : ''} ${isCompact ? 'is-compact' : ''}`}
       data-page={id}
       style={{ left, right }}
       aria-label={isOpen ? `Open note: ${title}` : title}
@@ -337,10 +376,13 @@ function PinPage({
         style={{ width: SPINE_W }}
         title={`${title} — slide it fully into view`}
         onClick={onSpine}
+        disabled={!isCompact}
+        aria-hidden={!isCompact}
+        tabIndex={isCompact ? 0 : -1}
       >
         <span className="spinelabel">{title}</span>
       </button>
-      <div className="pinpage-content">
+      <div className="pinpage-content" aria-hidden={isCompact}>
         <header className="pinpage-head">
           {card && <RecordMark card={card} pinned={isPinned} />}
           <h2 className="pinpage-title">{title}</h2>
@@ -378,7 +420,7 @@ function PinPage({
           on" the panel gets by being the only one mounted. Hints become invisible
           with it, but keep their boxes so moving focus does not move the labels.
         */}
-        <div className="pinpage-scroll" inert={!isFocus}>
+        <div className="pinpage-scroll" inert={!isFocus || isCompact}>
           {error && <div className="pane-error">{error}</div>}
           {!data && !error && <div className="pane-loading">loading…</div>}
           {data && card && (

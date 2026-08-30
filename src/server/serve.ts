@@ -12,6 +12,7 @@ import {
   normalise,
   registerVault,
   suggestName,
+  resolveRegisteredVault,
   touchVault,
 } from '../vault.ts';
 import { jiraConfig } from '../sources/jira.ts';
@@ -85,12 +86,12 @@ class NoVault extends Error {}
 function vaultOf(c: Context): string {
   const header = c.req.header('X-Projector-Vault');
   if (header) {
-    const want = normalise(header);
-    if (!isRegistered(want)) throw new NoVault(`vault not registered: ${want}`);
-    if (!existsSync(want)) throw new NoVault(`vault directory is missing: ${want}`);
-    ensureWatched(want);
-    ensurePolling(want);
-    return want;
+    const entry = resolveRegisteredVault(header);
+    if (!entry) throw new NoVault(`vault not registered: ${header}`);
+    if (!existsSync(entry.path)) throw new NoVault(`vault directory is missing: ${entry.path}`);
+    ensureWatched(entry.path);
+    ensurePolling(entry.path);
+    return entry.path;
   }
   // No header: fall back only when the choice is unambiguous.
   const known = listVaults().filter((v) => v.exists);
@@ -1017,7 +1018,8 @@ app.get('/api/events', (c) =>
   streamSSE(c, async (stream) => {
     let alive = true;
     const send: Send = (event, rev, vault, ids, titles) => {
-      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault, ids, titles }) });
+      const vaultName = listVaults().find((entry) => entry.path === vault)?.name;
+      void stream.writeSSE({ event, data: JSON.stringify({ rev, vault, vaultName, ids, titles }) });
     };
     listeners.add(send);
     await stream.writeSSE({ event: 'hello', data: JSON.stringify({ rev: revision }) });

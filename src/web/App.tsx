@@ -456,12 +456,19 @@ export function App() {
   }, [vault, loadMeta]);
 
   const switchVault = useCallback(
-    (path: string) => {
+    (selector: string) => {
       // The query may name a view or a focus note from the *old* vault.
-      navigate(`/${patchSearch('', { [VAULT_PARAM]: path })}`, { replace: true });
+      navigate(`/${patchSearch('', { [VAULT_PARAM]: selector })}`, { replace: true });
     },
     [navigate],
   );
+
+  // Full-path links from older builds remain valid, then become the portable,
+  // human-readable spelling as soon as the server has resolved them.
+  useEffect(() => {
+    if (!meta || vault !== meta.vault || meta.vaultName === vault) return;
+    navigate(`/${patchSearch(search, { [VAULT_PARAM]: meta.vaultName })}`, { replace: true });
+  }, [meta, vault, search, navigate]);
 
   // Nothing asked for: open `home` if the vault has one, else the first saved
   // view, else the bare query. Rewritten into the URL so it is always
@@ -755,7 +762,9 @@ export function App() {
     );
   }
   if (error) return <div className="boot-error">Cannot reach the projector server: {error}</div>;
-  if (!meta || meta.vault !== vault) return <div className="boot">starting…</div>;
+  if (!meta || (meta.vault !== vault && meta.vaultName !== vault)) {
+    return <div className="boot">starting…</div>;
+  }
 
   return (
     <EnrichmentProvider>

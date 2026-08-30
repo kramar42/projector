@@ -348,12 +348,16 @@ side over the view (`src/web/panel/PinStack.tsx`). Five decisions carry it:
   replacing the open note therefore restores it in place. `o` promotes the focused pin into that slot,
   so an unpinned open note is replaced and a pinned one swaps back into the run. `Enter` still folds
   the spread onto the focused note's ordinary panel. `gg`, `G`, `h` and `l` move focus only.
-- **The fold is geometry, not measurement.** A spread page is `position: sticky` with per-index
+- **The fold keeps geometry fixed; presentation follows exposure.** A spread page is `position: sticky` with per-index
   offsets — no further left than its elders' spines, no further right than its juniors' — so pages
   fold to their own spines at either viewport edge instead of scrolling away, and there is no
   overflow bookkeeping to drift. The offsets and the open panel-side dock's `--covered-right` reach
   are all multiples of one constant (`src/web/panel/pins.ts`), written inline rather than restated in
-  the stylesheet.
+  the stylesheet. Its DOM width never changes. The visible width is measured from the painted
+  interval left before the next, later-painted page begins. The normal header and body own the full
+  card width until only two spine widths remain; then they fade out while the same title fades in
+  vertically on an out-of-flow spine. The compact page has only its own and its neighbour's boundary
+  rules, with no internal divider. Only opacity moves, and reduced-motion makes the switch immediate.
   The same two offsets give `reveal` its answer, with one sticky subtlety: the first page to the right
   is still a **whole page** until normal flow reaches the focused page's edge; only the pages behind
   it have folded to spines. Thus the lower bound reserves `w + (n−2−i)·SPINE_W` when a younger page
@@ -363,6 +367,12 @@ side over the view (`src/web/panel/PinStack.tsx`). Five decisions carry it:
   still behind its neighbours; a direct spine click keeps the glide. `L` is `i × w` and not
   `offsetLeft`, because Chrome reports a stuck element's `offsetLeft` at the position it is stuck to —
   read from there, every page measured as already seated and nothing ever scrolled.
+
+**Live readers share one event stream.** `useLive` subscribes every mounted query and note to file
+changes, but `src/web/events.ts` multiplexes those listeners over one lazy `EventSource` per tab. An
+event stream is a permanent HTTP request; one per spread page exhausted the browser's HTTP/1
+connection allowance and left the note-body fetches waiting behind requests that never end. The last
+subscriber closes the shared stream.
   The same layout effect seats the spread on first paint. Entering with `"` is a mode change, not a
   gesture that moved content, so it appears at its final offset with no arrival animation.
 
@@ -1092,7 +1102,8 @@ reaches the browser: enrichment responses carry the resolved fields, never the t
 ## Why the registry is a file
 
 `vaults.json` cannot be `localStorage`, because the **server** is the party that needs it. A request
-names its vault in an `X-Projector-Vault` header, and the server refuses a path that is not registered —
+names its vault in an `X-Projector-Vault` header, and the server resolves that unique registered name
+(or a legacy full path) and refuses anything that is not registered —
 so the header is a reference to a folder you chose rather than an arbitrary path a page can name.
 `localStorage` is browser-side; the server cannot read it.
 
