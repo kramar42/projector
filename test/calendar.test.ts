@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CAL_PARAMS,
+  CAL_PARAM,
   addDays,
   arrangePlacements,
   calendarPage,
@@ -215,16 +215,16 @@ test('the cursor grid is one lane of the page’s days, the rail last, from the 
   assert.equal(bare.columns.length, 0);
 });
 
-test('calendar is a shape the wire carries, and its page params are not query params', () => {
+test('calendar is a shape the wire carries, and only its page anchor is not query config', () => {
   // Through the URL: a live control like any shape.
   const spec = parseSpec({ shape: 'calendar' });
   assert.equal(spec.shape, 'calendar');
   assert.equal(specToParams(spec).shape, 'calendar');
 
-  // The page and grid ride beside the query, like `?sel=`: a saved view must
-  // not store a date that decays, and turning a page must not refetch. If one
-  // of these ever joins SPEC_PARAMS, that is a decision, not a drift.
-  for (const p of CAL_PARAMS) {
-    assert.ok(!(SPEC_PARAMS as readonly string[]).includes(p), `${p} must stay out of the spec`);
-  }
+  // The anchor rides beside the query, like `?sel=`: a saved view must not
+  // store a date that decays. The grid settings are reusable view config.
+  assert.ok(!(SPEC_PARAMS as readonly string[]).includes(CAL_PARAM));
+  assert.ok((SPEC_PARAMS as readonly string[]).includes('cal.cols'));
+  assert.ok((SPEC_PARAMS as readonly string[]).includes('cal.rows'));
+  assert.ok((SPEC_PARAMS as readonly string[]).includes('cal.start'));
 });

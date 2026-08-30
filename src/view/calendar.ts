@@ -10,14 +10,11 @@ import { applyOrder } from './order.ts';
  * and a drop writes the date facet through the same `bulkMove` a board drop uses.
  * What is genuinely new is *which days are on screen*, and that is this module.
  *
- * Where that state lives is the decision worth writing down. The page, the grid
- * and the week start are **app-owned URL parameters** like `?sel=` and `?note=`
- * — where you are looking, not what you are looking at — and deliberately not
- * spec params. Three things follow, each wanted: turning a page never refetches
- * (the answer cannot have changed), *save current as…* never stores a page that
- * would decay by the time the view is reopened, and no `localStorage` key or
- * view-file key exists (C9 — the URL is the view, and a key nothing reads is not
- * part of it).
+ * Where that state lives is the decision worth writing down. The page anchor is
+ * an app-owned URL parameter like `?sel=` and `?note=` — where you are looking,
+ * not what you are looking at. The reusable grid settings are part of the view
+ * spec, with URL params acting as live overrides, so a named view can remember
+ * its shape without freezing it to an old date.
  */
 
 /** The first day shown — a YYYY-MM-DD anchor. Absent means the page with today on it. */
@@ -35,6 +32,22 @@ export const CAL_PARAMS: readonly string[] = [
   CAL_ROWS_PARAM,
   CAL_START_PARAM,
 ];
+
+/** The reusable calendar settings stored in a named view's `calendar:` block. */
+export interface CalendarConfig {
+  days?: number;
+  rows?: number;
+  starts?: WeekDay;
+}
+
+/** Translate saved calendar settings to the URL-shaped params page arithmetic reads. */
+export function calendarParams(config: CalendarConfig | undefined): Record<string, string> {
+  return {
+    ...(config?.days !== undefined ? { [CAL_COLS_PARAM]: String(config.days) } : {}),
+    ...(config?.rows !== undefined ? { [CAL_ROWS_PARAM]: String(config.rows) } : {}),
+    ...(config?.starts !== undefined ? { [CAL_START_PARAM]: config.starts } : {}),
+  };
+}
 
 /** In `Date.getUTCDay` order, so `indexOf` is the day number. */
 export const WEEK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;

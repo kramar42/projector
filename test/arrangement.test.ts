@@ -113,6 +113,18 @@ test('saving over a view keeps the arrangement it already had', () => {
   }
 });
 
+test('saving a partial update keeps the calendar view config', () => {
+  const { root, cleanup } = vault({
+    timeline: 'shape: calendar\ntitle: Timeline\ncalendar: {days: 14, rows: 5, starts: sun}\n',
+  });
+  try {
+    saveView(root, 'timeline', { shape: 'calendar', title: 'Timeline' });
+    assert.deepEqual(read(root, 'timeline').calendar, { days: 14, rows: 5, starts: 'sun' });
+  } finally {
+    cleanup();
+  }
+});
+
 test('saving a composition keeps its columns and saved-only meaning', () => {
   const { root, cleanup } = vault({
     triage:

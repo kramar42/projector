@@ -13,6 +13,7 @@ import {
   CAL_START_PARAM,
   WEEK_DAYS,
   calendarPage,
+  calendarParams,
   arrangePlacements,
   dateAxis,
   dayLabel,
@@ -92,7 +93,7 @@ export function CalendarView({
   /** A request to move the cursor's placement up or down within its day. */
   nudge: number | null;
   onNudged: () => void;
-  /** The page's own query string — the page and grid params are read off it. */
+  /** The page's own query string — the anchor and any grid overrides are read off it. */
   search: string;
   /** Write URL params. The calendar owns `cal`/`cal.*` the way `?sel=` is owned. */
   patch: (p: Patch, replace?: boolean) => void;
@@ -106,7 +107,10 @@ export function CalendarView({
   // design: both read the UTC date, the same clock the buckets use.
   const today = new Date().toISOString().slice(0, 10);
   const params = useMemo(() => Object.fromEntries(paramsOf(search)), [search]);
-  const page = useMemo(() => calendarPage(params, today), [params, today]);
+  const page = useMemo(
+    () => calendarPage({ ...calendarParams(data.spec.calendar), ...params }, today),
+    [data.spec.calendar, params, today],
+  );
 
   /**
    * The axis a drop writes: the first date facet in `show`, else the vault's
@@ -238,10 +242,15 @@ export function CalendarView({
     void reorder(day, next);
   }, [nudge, onNudged, cursor, cursorSpot, viewName, days, orderedFor, reorder]);
 
-  /** Page and grid edits. Defaults are removed rather than written, so a URL says only what differs. */
+  /** The page anchor and grid overrides are URL edits; grid values are persisted when the view is saved. */
   const goTo = (day: string | null) => patch({ [CAL_PARAM]: day });
-  const setGrid = (key: string, value: string, fallback: string) =>
-    patch({ [key]: value === fallback ? null : value }, true);
+  const setGrid = (key: string, value: string, fallback: string) => {
+    const setting =
+      key === CAL_COLS_PARAM ? 'days' : key === CAL_ROWS_PARAM ? 'rows' : 'starts';
+    const inherited = data.savedSpec?.calendar?.[setting];
+    const baseline = inherited === undefined ? fallback : String(inherited);
+    patch({ [key]: value === baseline ? null : value }, true);
+  };
 
   const acting = visibleSelection(selected, data.ids);
   const empty = data.total === 0 ? emptyReason(meta, data) : null;

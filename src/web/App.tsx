@@ -781,9 +781,10 @@ export function App() {
           onNewHandled={clearNewIn}
           nudge={nudge}
           onNudged={clearNudge}
-          // The page lives in `cal`/`cal.*`, outside the wire — so the search
+          // The page anchor lives in `cal`, outside the wire — so the search
           // string is a dependency here where the other shapes need only `wire`:
-          // turning a page re-renders without refetching.
+          // turning a page re-renders without refetching. Grid settings are
+          // spec params and arrive in `data.spec` as saved view config.
           search={search}
           patch={patch}
           reload={reload}

@@ -82,9 +82,9 @@ function isOwnParam(key: string): boolean {
   if (key === VAULT_PARAM) return true;
   return (
     key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || key === PINS_PARAM ||
-    // The calendar's page and grid — where you are looking, like `?note=`, so
-    // they ride beside the query rather than in it: turning a page must not
-    // refetch, and a saved view must not store a date that decays (C9).
+    // The calendar's page and grid are app-owned URL state. The page anchor is
+    // deliberately outside the query so turning a page must not refetch; grid
+    // settings are also spec params, allowing a named view to save them.
     CAL_PARAMS.includes(key) ||
     isQueryParam(key)
   );

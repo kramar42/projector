@@ -1,5 +1,12 @@
 import type { Focus, Query } from '../index/query.ts';
 import { DIRS, LISTS_AXIS, NONE, SHAPES, type Dir, type Shape } from '../schema/vocabulary.ts';
+import {
+  CAL_COLS_PARAM,
+  CAL_ROWS_PARAM,
+  CAL_START_PARAM,
+  WEEK_DAYS,
+  type CalendarConfig,
+} from './calendar.ts';
 
 export { DIRS, LISTS_AXIS, NONE, SHAPES, type Dir, type Shape };
 
@@ -32,6 +39,9 @@ export const SPEC_PARAMS = [
   'dir',
   'depth',
   'show',
+  CAL_COLS_PARAM,
+  CAL_ROWS_PARAM,
+  CAL_START_PARAM,
 ] as const;
 
 export interface ViewSpec {
@@ -51,6 +61,8 @@ export interface ViewSpec {
    * nothing" was answered by the one you forgot.
    */
   show: string[];
+  /** Reusable calendar geometry; the page anchor remains URL-only. */
+  calendar?: CalendarConfig;
   /**
    * What to say when this view draws nothing, for a view whose emptiness is the
    * *goal* rather than a problem.
@@ -181,6 +193,15 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
 
   const shape = one(params.shape, SHAPES) ?? 'board';
 
+  const calendar: CalendarConfig = {};
+  const days = Number(params[CAL_COLS_PARAM]);
+  if (Number.isInteger(days) && days >= 1 && days <= 14) calendar.days = days;
+  const rows = Number(params[CAL_ROWS_PARAM]);
+  if (Number.isInteger(rows) && rows >= 1 && rows <= 12) calendar.rows = rows;
+  if ((WEEK_DAYS as readonly string[]).includes(params[CAL_START_PARAM] ?? '')) {
+    calendar.starts = params[CAL_START_PARAM] as CalendarConfig['starts'];
+  }
+
   return {
     shape,
     query,
@@ -188,6 +209,7 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
     // not: one declared in `facets.yaml` must work without a second place
     // enumerating what exists. An unknown one draws nothing.
     show: list(params.show),
+    ...(Object.keys(calendar).length ? { calendar } : {}),
   };
 }
 
@@ -210,6 +232,9 @@ export function specToParams(spec: ViewSpec): Record<string, string> {
     if (q.focus.depth !== undefined) out.depth = String(q.focus.depth);
   }
   if (spec.show.length) out.show = spec.show.join(',');
+  if (spec.calendar?.days !== undefined) out[CAL_COLS_PARAM] = String(spec.calendar.days);
+  if (spec.calendar?.rows !== undefined) out[CAL_ROWS_PARAM] = String(spec.calendar.rows);
+  if (spec.calendar?.starts !== undefined) out[CAL_START_PARAM] = spec.calendar.starts;
   return out;
 }
 
@@ -247,6 +272,7 @@ export const VIEW_KEYS: readonly string[] = [
   'groupBy',
   'sort',
   'show',
+  'calendar',
   // Composition and the two flags that ride with it. Saved-file only: no live
   // control writes them, so `specToFile` never emits one and only `specFromFile`
   // below reads them.
@@ -282,6 +308,15 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (Array.isArray(raw.groupBy)) params.group = raw.groupBy.map(String).join(',');
   if (Array.isArray(raw.sort)) params.sort = raw.sort.map(String).join(',');
   if (Array.isArray(raw.show)) params.show = raw.show.map(String).join(',');
+
+  const calendar = raw.calendar as Record<string, unknown> | undefined;
+  if (calendar && typeof calendar === 'object') {
+    // `days`/`starts` follow the labels in the calendar controls. The internal
+    // URL names remain `cols`/`start` because they describe page arithmetic.
+    if (calendar.days !== undefined) params[CAL_COLS_PARAM] = String(calendar.days);
+    if (calendar.rows !== undefined) params[CAL_ROWS_PARAM] = String(calendar.rows);
+    if (calendar.starts !== undefined) params[CAL_START_PARAM] = String(calendar.starts);
+  }
 
   const spec = parseSpec(params);
   spec.name = name;
@@ -329,6 +364,7 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
     ...(spec.show.length ? { show: spec.show } : {}),
+    ...(spec.calendar && Object.keys(spec.calendar).length ? { calendar: spec.calendar } : {}),
     ...(spec.lists?.length ? { lists: spec.lists } : {}),
     ...(spec.unlisted ? { unlisted: true } : {}),
     ...(spec.whenEmpty ? { whenEmpty: spec.whenEmpty } : {}),

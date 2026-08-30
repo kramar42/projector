@@ -1315,7 +1315,7 @@ export function saveView(root: string, name: string, body: Record<string, unknow
   if (existsSync(file)) {
     const before = (parse(readFileSync(file, 'utf8')) ?? {}) as Record<string, unknown>;
     merged = { ...body };
-    for (const key of ['lists', 'unlisted', 'whenEmpty', 'expect', 'nodes', 'order']) {
+    for (const key of ['calendar', 'lists', 'unlisted', 'whenEmpty', 'expect', 'nodes', 'order']) {
       if (merged[key] === undefined && before[key] !== undefined) merged[key] = before[key];
     }
   }

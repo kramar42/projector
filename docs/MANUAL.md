@@ -707,15 +707,21 @@ has a card. The unscheduled rail is the last column.
 carries no value on the axis. Dated notes that fall outside the visible page are counted in the
 header — `3 earlier · 5 later` — rather than silently missing.
 
-The page is part of the URL, not of the query, so it is shareable and back-buttonable and a saved
-view never stores it:
+The page anchor is part of the URL, not of the query, so it is shareable and back-buttonable and a
+saved view never stores an old date. The reusable grid settings are saved with a named view:
 
 | Param | Meaning |
 |---|---|
 | `cal` | the anchor day, `YYYY-MM-DD`. Absent means the page with today on it; `‹` and `›` move it a page at a time |
-| `cal.cols` | days per row, default 7. At 7 the rows are weeks, aligned to `cal.start` |
-| `cal.rows` | rows per page, default 1 — so `7 × 1` is a week and `7 × 5` is a month's worth |
-| `cal.start` | which weekday starts a row: `mon` (default) … `sun` |
+| `cal.cols` | days per row, default 7. At 7 the rows are weeks, aligned to `cal.start`; saved as `calendar.days` |
+| `cal.rows` | rows per page, default 1 — so `7 × 1` is a week and `7 × 5` is a month's worth; saved as `calendar.rows` |
+| `cal.start` | which weekday starts a row: `mon` (default) … `sun`; saved as `calendar.starts` |
+
+The view-file form is:
+
+```yaml
+calendar: {days: 7, rows: 5, starts: mon}
+```
 
 ## Editing
 

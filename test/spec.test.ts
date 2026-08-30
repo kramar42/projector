@@ -180,6 +180,42 @@ test('saving writes the complete effective view', () => {
   });
 });
 
+test('calendar grid settings round-trip through view config', () => {
+  const spec = parseSpec({
+    shape: 'calendar',
+    'cal.cols': '14',
+    'cal.rows': '5',
+    'cal.start': 'sun',
+  });
+
+  assert.deepEqual(spec.calendar, { days: 14, rows: 5, starts: 'sun' });
+  assert.deepEqual(specToParams(spec), {
+    shape: 'calendar',
+    'cal.cols': '14',
+    'cal.rows': '5',
+    'cal.start': 'sun',
+  });
+  assert.deepEqual(specToFile(spec, 'Timeline').calendar, {
+    days: 14,
+    rows: 5,
+    starts: 'sun',
+  });
+
+  const reloaded = specFromFile('timeline', specToFile(spec, 'Timeline'));
+  assert.deepEqual(reloaded.calendar, spec.calendar);
+});
+
+test('calendar defaults can override a saved grid setting', () => {
+  const saved = specFromFile('timeline', {
+    shape: 'calendar',
+    calendar: { days: 14, rows: 5, starts: 'sun' },
+  });
+  const next = parseSpec({ ...specToParams(saved), 'cal.rows': '1' });
+  const patch = specToPatch(next, saved, '?view=timeline&cal.rows=1');
+  assert.equal(patch['cal.rows'], '1');
+  assert.ok(!patchIsEmpty(patch));
+});
+
 test('a file round-trips through save and reload', () => {
   const original = parseSpec({
     shape: 'table',
