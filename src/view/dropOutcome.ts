@@ -98,6 +98,8 @@ export interface FacetIntent {
   ids: string[];
   moves: AxisMove[];
   mode: DragMode;
+  /** The insertion indicated on a cross-column drop, once the move has landed. */
+  insertion?: { column: string; ids: string[] };
 }
 
 /** Nothing to do, and why — four silent early returns used to live here. */
@@ -153,6 +155,14 @@ export interface DropInput {
   viewName: string | undefined;
 }
 
+/** Insert cards at a target's original index, after removing any cards that travel with them. */
+function reordered(order: readonly string[], ids: readonly string[], at: number): string[] {
+  const moving = new Set(ids);
+  const without = order.filter((id) => !moving.has(id));
+  const index = order.slice(0, at).filter((id) => !moving.has(id)).length;
+  return [...without.slice(0, index), ...ids, ...without.slice(index)];
+}
+
 export function dropOutcome(input: DropInput): DropIntent {
   const { cardId, from, fromLane, to, toLane, onCard, groupBy, laneBy, mode } = input;
   const { selected, order, viewName } = input;
@@ -171,7 +181,16 @@ export function dropOutcome(input: DropInput): DropIntent {
   if (moves.length) {
     // Dragging a card that is not part of the selection moves just that card.
     const ids = selected.has(cardId) ? [...selected] : [cardId];
-    return { kind: 'facet', ids, moves, mode };
+    // A target card also names a position. Before this was intentionally ignored
+    // whenever the drop crossed a facet, so the first drop only put the card in
+    // the new column and the reader had to drag it a second time to honour the
+    // insertion line. A lane-only move stays just a move: order is per column,
+    // so that line cannot name a useful order across lanes.
+    const insertion =
+      onCard && viewName && to !== from
+        ? { column: to, ids: reordered(order, ids, onCard.index + (onCard.below ? 1 : 0)) }
+        : undefined;
+    return { kind: 'facet', ids, moves, mode, ...(insertion ? { insertion } : {}) };
   }
 
   // Nothing crossed an axis, so the drag means order and nothing else. This is
@@ -186,14 +205,10 @@ export function dropOutcome(input: DropInput): DropIntent {
   // The index and the list it lands in must be the same list. It used to be the
   // per-lane cell's index spliced into the cross-lane column, which agreed only
   // when there was no second axis.
-  const at = onCard.index + (onCard.below ? 1 : 0);
-  const cut = order.indexOf(cardId);
-  const without = order.filter((id) => id !== cardId);
-  const index = cut !== -1 && cut < at ? at - 1 : at;
   return {
     kind: 'reorder',
     column: to,
-    ids: [...without.slice(0, index), cardId, ...without.slice(index)],
+    ids: reordered(order, [cardId], onCard.index + (onCard.below ? 1 : 0)),
   };
 }
 

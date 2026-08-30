@@ -874,6 +874,13 @@ test('every command the grammar emits is one the dispatcher acts on', () => {
   assert.deepEqual(wired, [], `no longer parked, so the exception should go: ${wired.join(', ')}`);
 });
 
+test('a pending reorder reaches the memoized board', () => {
+  const src = SRC('../src/web/App.tsx');
+  assert.match(src, /<BoardView[\s\S]*?nudge=\{nudge\}/, 'the board receives the pending key command');
+  const deps = src.slice(src.indexOf('}, [data, meta, queryError, shape'), src.indexOf('\n\n  if (gate || !vault)'));
+  assert.match(deps, /\bnudge\b/, 'the memo redraws when ⌥j or ⌥k sets its pending command');
+});
+
 /**
  * Keyboard parity: a control a pointer can reach, a keyboard can reach too.
  *

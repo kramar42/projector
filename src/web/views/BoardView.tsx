@@ -210,8 +210,10 @@ export function BoardView({
           dragMode: intent.mode,
         });
         reload();
+        return true;
       } catch (err) {
         setProblem((err as ApiError).message);
+        return false;
       }
     },
     [reload],
@@ -262,7 +264,17 @@ export function BoardView({
         });
 
         if (intent.kind === 'reorder') void reorder(intent.column, intent.ids);
-        else if (intent.kind === 'facet') void move(intent);
+        else if (intent.kind === 'facet') {
+          void (async () => {
+            if (await move(intent)) {
+              // The facet write makes the card appear in its new column; the
+              // arrangement write then preserves the position its drop line
+              // already showed. They must be sequential or the view may rank a
+              // card before the move has made it a member of that column.
+              if (intent.insertion) await reorder(intent.insertion.column, intent.insertion.ids);
+            }
+          })();
+        }
       },
     });
   }, [move, reorder, orderedFor, viewName, groupBy, laneBy, selected]);
@@ -300,7 +312,10 @@ export function BoardView({
         className="board-scroll"
         // The Trello pan: press the background, drag, the board follows. Cards
         // and controls are exempt — see `pan.ts` for the whole gesture.
-        ref={useCallback((el: HTMLDivElement | null) => (el ? attachPan(el) : undefined), [])}
+        ref={useCallback(
+          (el: HTMLDivElement | null) => (el ? attachPan(el, { vertical: Boolean(laneBy) }) : undefined),
+          [laneBy],
+        )}
       >
         {lanes.map((lane, laneIndex) => (
           <div key={lane ?? '·'} className={`lane ${lane !== undefined ? 'is-laned' : ''}`}>

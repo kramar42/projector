@@ -779,7 +779,7 @@ export function App() {
         reload={reload}
       />
     );
-  }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire, search]);
+  }, [data, meta, queryError, shape, setOpenNote, openCard, cursor.id, cursor.step, selection, reload, patch, wire, search, nudge, clearNudge]);
 
   if (gate || !vault) {
     return (

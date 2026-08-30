@@ -1,6 +1,6 @@
 /**
  * Trello's board pan: press on the background, drag horizontally, the board
- * scrolls. Press-and-drag already means something on the things of the board —
+ * scrolls. With swimlanes, it scrolls in both directions. Press-and-drag already means something on the things of the board —
  * a card drags to move it — so panning belongs to everything that is *not* one:
  * the gaps between columns, a column's empty tail, the headers.
  *
@@ -21,28 +21,33 @@ export const PAN_EXEMPT =
  * The threshold is what keeps a plain click a click: without it, the press
  * half of every click on the background would capture the pointer and the
  * release would arrive marked as the end of a zero-length drag. Horizontal
- * only, because vertical is already taken — the columns scroll themselves.
+ * only on a one-axis board, because its columns scroll themselves. Swimlanes
+ * make the board itself vertically scrollable, so the same hand gesture owns
+ * that axis there too.
  */
 export const PAN_THRESHOLD = 4;
 
-export function panEngages(dx: number): boolean {
-  return Math.abs(dx) >= PAN_THRESHOLD;
+export function panEngages(dx: number, dy = 0, vertical = false): boolean {
+  return Math.abs(dx) >= PAN_THRESHOLD || (vertical && Math.abs(dy) >= PAN_THRESHOLD);
 }
 
 /** Wire the gesture onto the scroll container. Returns the detach. */
-export function attachPan(el: HTMLElement): () => void {
+export function attachPan(el: HTMLElement, options: { vertical?: boolean } = {}): () => void {
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest(PAN_EXEMPT)) return;
 
     const startX = e.clientX;
+    const startY = e.clientY;
     const startLeft = el.scrollLeft;
+    const startTop = el.scrollTop;
     let engaged = false;
 
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
       if (!engaged) {
-        if (!panEngages(dx)) return;
+        if (!panEngages(dx, dy, options.vertical)) return;
         engaged = true;
         el.classList.add('is-panning');
         // Captured only once the pan is real, so an un-engaged press still
@@ -56,6 +61,7 @@ export function attachPan(el: HTMLElement): () => void {
         }
       }
       el.scrollLeft = startLeft - dx;
+      if (options.vertical) el.scrollTop = startTop - dy;
     };
 
     const onUp = (ev: PointerEvent) => {

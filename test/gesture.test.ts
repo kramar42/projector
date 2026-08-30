@@ -154,6 +154,25 @@ test('dragging an unselected card moves only that card', () => {
   assert.deepEqual(intent.ids, ['z']);
 });
 
+test('a cross-column drop keeps its indicated insertion position', () => {
+  const intent = dropOutcome({
+    cardId: 'a',
+    from: 'now',
+    fromLane: '',
+    to: 'later',
+    toLane: null,
+    onCard: { id: 'c', index: 1, below: false },
+    groupBy: 'priority',
+    laneBy: '',
+    mode: 'replace',
+    selected: new Set(),
+    order: ['b', 'c', 'd'],
+    viewName: 'home',
+  });
+  assert.ok(intent.kind === 'facet');
+  assert.deepEqual(intent.insertion, { column: 'later', ids: ['b', 'a', 'c', 'd'] });
+});
+
 /**
  * A reorder splices into the column's stored order, and the index it is given has
  * to be an index into that same list. It used to be the position within one
@@ -437,6 +456,8 @@ test('a pan engages on real horizontal travel, so a click stays a click', async 
   assert.equal(panEngages(PAN_THRESHOLD - 1), false, 'a tremble is not a pan');
   assert.equal(panEngages(PAN_THRESHOLD), true);
   assert.equal(panEngages(-PAN_THRESHOLD), true, 'both directions pan');
+  assert.equal(panEngages(0, PAN_THRESHOLD, true), true, 'lanes pan vertically');
+  assert.equal(panEngages(0, PAN_THRESHOLD, false), false, 'single-axis boards reserve vertical drag');
 
   // The exemptions are the things a press already means something on: the card
   // owns drag, the controls own click. The board's own surfaces must NOT be
