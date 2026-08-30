@@ -26,7 +26,7 @@ import {
   strippedOfStrays,
 } from '../src/web/query.ts';
 import { asksOnlyForAVault, VAULT_PARAM, vaultOf } from '../src/web/vault.ts';
-import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
+import { matchesCheatsheetModifierRow, matchesCheatsheetModifierToken, matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
 import {
@@ -518,9 +518,32 @@ test('a practice key lights every cheatsheet pattern it can complete', () => {
   assert.ok(matchesCheatsheetRow('⌥j ⌥k', { key: 'j', altKey: true }, axes));
   assert.ok(matchesCheatsheetRow('gg G', { key: 'g', altKey: false }, axes), 'a prefix teaches its completion');
   assert.ok(matchesCheatsheetRow('⏎', { key: 'Enter', altKey: false }, axes));
+  assert.ok(matchesCheatsheetRow('esc', { key: 'Escape', altKey: false }, axes));
 
   assert.ok(!matchesCheatsheetRow('j k h l', { key: 'j', altKey: true }, axes));
   assert.ok(!matchesCheatsheetRow('g ⟨axis⟩', { key: 'z', altKey: false }, axes));
+  assert.ok(!matchesCheatsheetRow('esc', { key: 'e', altKey: false }, axes), 'Escape is not the e prefix');
+});
+
+test('practice mode distinguishes held Shift bindings from their plain keys', () => {
+  const shifted = { key: 'F', altKey: false, shiftKey: true };
+  const plain = { key: 'f', altKey: false, shiftKey: false };
+
+  assert.ok(matchesCheatsheetRow('g ⇧F', shifted, []), 'a visible Shift prefix matches its key');
+  assert.ok(matchesCheatsheetRow('G', { key: 'G', altKey: false, shiftKey: true }, []));
+  assert.ok(!matchesCheatsheetRow('g ⇧F', plain, []));
+  assert.ok(!matchesCheatsheetRow('j k h l', shifted, []), 'Shift+F is not bare F');
+});
+
+test('practice mode previews every binding in a held modifier family', () => {
+  assert.ok(matchesCheatsheetModifierRow('⌥j ⌥k', { altKey: true, shiftKey: false }));
+  assert.ok(matchesCheatsheetModifierToken('⌥j', { altKey: true, shiftKey: false }));
+  assert.ok(!matchesCheatsheetModifierToken('j', { altKey: true, shiftKey: false }));
+
+  assert.ok(matchesCheatsheetModifierRow('gg G', { altKey: false, shiftKey: true }));
+  assert.ok(matchesCheatsheetModifierRow('g ⇧F', { altKey: false, shiftKey: true }));
+  assert.ok(matchesCheatsheetModifierToken('G', { altKey: false, shiftKey: true }));
+  assert.ok(!matchesCheatsheetModifierRow('j k h l', { altKey: false, shiftKey: true }));
 });
 
 test('practice mode recognises the physical option keys a Mac actually sends', () => {

@@ -883,6 +883,18 @@ the tier between a token and a screen, where two things that look alike are eith
 two that must stay apart. Each rule is stated in one line, then the cases that tested it. Where a rule
 looks broken and is not, the carve-out is under **Accepted Exceptions** below.
 
+### The Icon-First Control Rule
+
+**A common static one-word action is an icon button; its keyboard label sits beside it.**
+
+The button face is for the mark, not for spelling `close`, `add`, `check`, `refresh`, `edit`, `start`,
+or `trash` over and over. Use the closed `IconButton` glyph set when the action has an unambiguous mark;
+keep the full action name in `aria-label` and `title`, and put a `<kbd>` beside the mark when a key also
+invokes it. The cheatsheet closes with `✕` and `esc`, not a static `close` word.
+
+This does not turn every action into a puzzle: destructive bulk actions, ambiguous actions, and controls
+that need a phrase remain text buttons. The exception is earned by comprehension, not by convenience.
+
 ### The Removal Rule
 
 **`✕` unlinks. The trash destroys. A `danger` word destroys many.**

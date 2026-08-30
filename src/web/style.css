@@ -5171,6 +5171,9 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .cheatsheet-close {
   grid-column: 3;
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /*

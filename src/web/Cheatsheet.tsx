@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { KEYMAP } from '../view/keys.ts';
-import { Button } from './components/Button.tsx';
+import { IconButton } from './components/Button.tsx';
 import { useDialogFocus } from './components/useDialogFocus.ts';
 import {
+  cheatsheetModifierLabel,
   cheatsheetKeyLabel,
   cheatsheetStrokeLabel,
   cheatsheetStrokeOf,
+  matchesCheatsheetModifierRow,
+  matchesCheatsheetModifierToken,
   matchesCheatsheetRow,
   type KeyboardLayout,
+  type CheatsheetModifiers,
   type CheatsheetStroke,
 } from './cheatsheetKeys.ts';
 import type { Meta } from './types.ts';
@@ -33,9 +37,18 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
     .map(([, def]) => ({ key: def.key!, label: def.label, single: def.single }));
   const axisKeys = axes.map((axis) => axis.key);
   const [stroke, setStroke] = useState<CheatsheetStroke | null>(null);
+  const [heldModifiers, setHeldModifiers] = useState<CheatsheetModifiers>({ altKey: false, shiftKey: false });
   const [layout, setLayout] = useState<KeyboardLayout | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
+  const heldCode = useRef<string | null>(null);
   useDialogFocus(dialog);
+
+  // The close control is the first tabbable item, but a modal opens as a
+  // reading surface rather than as an action menu. Give the surface focus so
+  // opening `?` does not make the close control look preselected.
+  useEffect(() => {
+    dialog.current?.focus();
+  }, []);
 
   // `key` becomes a symbol under Option on macOS, so it cannot tell the sheet
   // whether a Dvorak reader pressed their labelled J. The browser's layout map
@@ -60,13 +73,48 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
       // Tab is navigation, not a stroke to rehearse. Let the dialog own its
       // ordinary focus loop so the sheet remains usable without its shortcuts.
       if (event.key === 'Escape' || event.key === 'Tab') return;
-      if (/^(Shift|Control|Alt|Meta|CapsLock|AltGraph)$/.test(event.key)) return;
+      if (event.key === 'Shift' || event.key === 'Alt' || event.key === 'AltGraph') {
+        event.preventDefault();
+        setHeldModifiers((current) => ({
+          altKey: current.altKey || event.key === 'Alt' || event.key === 'AltGraph',
+          shiftKey: current.shiftKey || event.key === 'Shift',
+        }));
+        return;
+      }
+      if (/^(Control|Meta|CapsLock)$/.test(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      // The key is held state, not a history entry: release clears the same
+      // physical key so the accent never claims a shortcut that is no longer down.
+      setHeldModifiers({ altKey: event.altKey, shiftKey: event.shiftKey });
       setStroke(cheatsheetStrokeOf(event, layout ?? undefined));
     };
-    window.addEventListener('keydown', capture, true);
-    return () => window.removeEventListener('keydown', capture, true);
+    const release = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || event.key === 'Tab') return;
+      if (event.key === 'Shift' || event.key === 'Alt' || event.key === 'AltGraph') {
+        setHeldModifiers((current) => ({
+          altKey: event.key === 'Alt' || event.key === 'AltGraph' ? false : current.altKey,
+          shiftKey: event.key === 'Shift' ? false : current.shiftKey,
+        }));
+        if (heldCode.current === null) setStroke(null);
+        return;
+      }
+      if (/^(Control|Meta|CapsLock)$/.test(event.key)) return;
+      setStroke((current) => (current && event.code === heldCode.current ? null : current));
+      if (event.code === heldCode.current) heldCode.current = null;
+    };
+    const captureWithHeldKey = (event: KeyboardEvent) => {
+      capture(event);
+      if (!/^(Shift|Control|Alt|Meta|CapsLock|AltGraph|Escape|Tab)$/.test(event.key)) {
+        heldCode.current = event.code;
+      }
+    };
+    window.addEventListener('keydown', captureWithHeldKey, true);
+    window.addEventListener('keyup', release, true);
+    return () => {
+      window.removeEventListener('keydown', captureWithHeldKey, true);
+      window.removeEventListener('keyup', release, true);
+    };
   }, [layout]);
 
   return (
@@ -82,14 +130,22 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
               <h3>{section.section}</h3>
               <dl>
                 {section.rows.map((row) => {
-                  const matching = matchesCheatsheetRow(row.keys, stroke, axisKeys);
+                  const matching = stroke
+                    ? matchesCheatsheetRow(row.keys, stroke, axisKeys)
+                    : matchesCheatsheetModifierRow(row.keys, heldModifiers);
                   return (
                     <div key={row.keys} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
                       <dt>
                         {row.keys.split(' ').map((k) => (
                           <kbd
                             key={k}
-                            className={matchesCheatsheetRow(k, stroke, axisKeys) ? 'is-match' : ''}
+                            className={
+                              (stroke
+                                ? matchesCheatsheetRow(k, stroke, axisKeys)
+                                : matchesCheatsheetModifierToken(k, heldModifiers))
+                                ? 'is-match'
+                                : ''
+                            }
                           >
                             {cheatsheetKeyLabel(k)}
                           </kbd>
@@ -113,7 +169,9 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
             {axes.length ? (
               <dl>
                 {axes.map((axis) => {
-                  const matching = matchesCheatsheetRow('⟨axis⟩', stroke, [axis.key]);
+                  const matching = stroke
+                    ? matchesCheatsheetRow('⟨axis⟩', stroke, [axis.key])
+                    : matchesCheatsheetModifierRow('⟨axis⟩', heldModifiers);
                   return (
                     <div key={axis.key} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
                       <dt>
@@ -141,11 +199,23 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
         </div>
         <div className="cheatsheet-foot">
           <span className="cheatsheet-last-key" aria-live="polite">
-            {stroke && <kbd className="is-match">{cheatsheetStrokeLabel(stroke)}</kbd>}
+            {stroke ? (
+              <kbd className="is-match">{cheatsheetStrokeLabel(stroke)}</kbd>
+            ) : (
+              cheatsheetModifierLabel(heldModifiers) && (
+                <kbd className="is-match">{cheatsheetModifierLabel(heldModifiers)}</kbd>
+              )
+            )}
           </span>
-          <Button tone="ghost" size="tiny" extra="cheatsheet-close" onClick={onClose}>
-            close
-          </Button>
+          <span className="cheatsheet-close">
+            <IconButton
+              glyph="close"
+              aria-label="Close keyboard shortcuts"
+              title="Close keyboard shortcuts"
+              onClick={onClose}
+            />
+            <kbd>esc</kbd>
+          </span>
         </div>
       </div>
     </>
