@@ -5041,6 +5041,12 @@ input[data-nav]:focus + .checkbox {
   flex: none;
 }
 
+/* A spread page gaining focus reveals its shortcuts without reflowing every
+   annotated row. `visibility`, unlike `display`, preserves the exact box. */
+.keyhint.is-hidden {
+  visibility: hidden;
+}
+
 /*
  * The rail is the exception, and earns it: its label column is a fixed 78px, so
  * the hints there do form a column — seven of them, one per row, read down the

@@ -63,6 +63,12 @@ function declarations(prop: string): { value: string; line: number }[] {
  */
 const RELATIVE_BY_DESIGN = new Set(['0.8em']);
 
+test('a hidden key hint keeps its geometry', () => {
+  const rule = CODE.match(/\.keyhint\.is-hidden\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.match(rule, /visibility:\s*hidden/, 'visibility hides paint without removing the box');
+  assert.doesNotMatch(rule, /display:\s*none/, 'display none would shift the annotated label');
+});
+
 test('every font-size is a step from the scale', () => {
   const tokens = declared('text');
   assert.ok(tokens.size >= 10, 'the scale should be declared in :root');

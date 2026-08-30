@@ -18,22 +18,26 @@ import { createContext, useContext } from 'react';
  * repetition anything louder becomes the thing you read first.
  */
 export function KeyHint({ keys, means }: { keys: string; means: string }) {
-  if (!useContext(HintsOn)) return null;
+  const shown = useContext(HintsOn);
   return (
-    <kbd className="keyhint" title={means}>
+    <kbd
+      className={`keyhint${shown ? '' : ' is-hidden'}`}
+      title={shown ? means : undefined}
+      aria-hidden={shown ? undefined : true}
+    >
       {keys}
     </kbd>
   );
 }
 
 /**
- * Whether the hints are drawn at all, for a surface where they would be lying.
+ * Whether the hints are painted, for a surface where they would be lying.
  *
  * The spread draws a pinned note with the same blocks the panel does, and on a
  * page that is not the focused one those keys reach *the focused page* — so a
  * hint beside a row you cannot act on names a key that will do the same thing
- * somewhere else on screen. Absence is already this component's vocabulary for
- * "no key reaches this", which is exactly what is true there.
+ * somewhere else on screen. Its box remains in the layout so moving focus
+ * changes only the annotation, never the label or content beside it.
  *
  * A context rather than a prop because the hints sit five levels down inside
  * `NoteTiers`, and a surface that suppresses them suppresses all of them.

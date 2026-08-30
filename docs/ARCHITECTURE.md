@@ -314,12 +314,14 @@ where things sit (C8).
 
 `'` pins the cursor's note; its record mark shows the pin without covering the compact view. While a
 note panel is open the pins stand beside it as title-spine navigation, and `"` spreads them side by
-side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
+side over the view (`src/web/panel/PinStack.tsx`). Five decisions carry it:
 
-- **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=` and the
-  spread in `?stack=`, beside `?sel=` and `?note=` and outside `SPEC_PARAMS` for their reasons: a pin
-  must not refetch, a reload must not lose a reading workspace, and a saved view must not remember
-  one — a view is a query, and a reading stack is a moment. `?sel=` is what a bulk write lands on;
+- **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=`, beside
+  `?sel=` and `?note=` and outside `SPEC_PARAMS`: a pin must not refetch, a reload must not lose a
+  reading workspace, and a saved view must not remember one — a view is a query, and a reading stack
+  is a moment. Whether that stack is spread is component state. Persisting the expanded presentation
+  made every cold `stack=1` load eagerly import the markdown tier and fetch/render every note body;
+  reopening it is one `"` and should be deliberate. `?sel=` is what a bulk write lands on;
   `?pins=` is what stays in sight; the two never touch. A list rather than a set, because the spread
   draws pins oldest-left and order is the one thing `?sel=`'s shape cannot carry.
   The footer count opens the spread as the pinned-only surface; it does not manufacture a `pinned`
@@ -328,9 +330,9 @@ side over the view (`src/web/panel/PinStack.tsx`). Three decisions carry it:
   arrived: a second rendering built to look like the panel is a second rendering that drifts from it,
   and the facet hues, link kinds and derived rows are exactly what a reader compares across four notes
   at once. What the two surfaces disagree about is the frame and who may write — neither is a fact
-  about the note. The **key hints go with the writing**: `KeyHints` switches them off everywhere but
-  the focused page, because absence is already `KeyHint`'s word for "no key reaches this", which is
-  what is true there.
+  about the note. The **key hints go with the writing**: `KeyHints` hides their paint everywhere but
+  the focused page, because no key reaches an unfocused body. It retains each hint's box, so moving
+  the cursor changes the annotation without shifting a label, chip row or section heading.
 - **Exactly one page is writable, and that is what preserves the single pointer (C10).** On the spread
   `h`/`l` move the cursor across pages while `?note=` stays in the trailing open slot. That is a second
   *placement*, never a second pointer: facet writes still ask the cursor alone. The other page bodies

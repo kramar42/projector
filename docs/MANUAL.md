@@ -1383,7 +1383,8 @@ sight — the reading set beside the writing set, and the two never touch.
 `Children`-style derived rows, the same workshop — because it is the same component. What a page
 leaves out is the **key hints**: the little mono letters beside a row appear on the focused page and
 nowhere else, since a key acts on that page and a hint anywhere else would be naming a stroke that
-lands somewhere you are not.
+lands somewhere you are not. Their empty slots remain, so changing focus reveals reminders without
+moving the labels or content they annotate.
 
 **Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
 and cannot write — so there is still one place a keystroke can land with four notes on screen. Their
@@ -1420,10 +1421,12 @@ records the trail (`H` comes back); `⌥`-click sends the reference **to a new p
 `⇧`-click pins **the note you are on** and follows — Andy-Matuschak-style reading, the trail piling
 up as spines instead of hiding in the jumplist.
 
-Pins live in the URL (`?pins=`, spread state in `?stack=`) like the selection does: they survive a
-reload and a change of shape, and they are never part of a saved view — a view is a query, and a
-reading stack is a moment. The footer's pinned count opens that stack directly: it is the pinned-only
-surface without pretending that a momentary reading set is a computed axis on every note.
+Pins live in the URL (`?pins=`) like the selection does: they survive a reload and a change of shape,
+and they are never part of a saved view — a view is a query, and a reading stack is a moment. Whether
+the pages are spread is deliberately memory-only: reopening the app starts in the compact view instead
+of eagerly loading and rendering every pinned body. The footer's pinned count opens that stack directly:
+it is the pinned-only surface without pretending that a momentary reading set is a computed axis on
+every note.
 
 ## Writing
 

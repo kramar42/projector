@@ -40,7 +40,6 @@ import { VAULT_PARAM, vaultOf } from './vault.ts';
 import {
   NOTE_PARAM,
   DECLINED_PARAM,
-  STACK_PARAM,
   apiSearch,
   patchSearch,
   pinsOf,
@@ -125,19 +124,20 @@ export function App() {
     vault ? null : { reason: undefined },
   );
   const [addingVault, setAddingVault] = useState(false);
+  // Spreading is presentation, not part of the reading workspace. Pins and the
+  // open note survive a reload; the expensive multi-note surface does not make
+  // itself the next cold start merely because it was open on exit.
+  const [stackOpen, setStackOpen] = useState(false);
   // A slow response for the vault we just left must not re-install its metadata.
   const activeVault = useRef(vault);
   activeVault.current = vault;
 
   const openNote = new URLSearchParams(search).get(NOTE_PARAM);
-  /**
-   * The reading set: pinned notes, and whether they are spread over the view.
-   *
-   * Both URL-owned — see `PINS_PARAM` and `STACK_PARAM` in `query.ts` for why
-   * a pin is neither a selection nor part of any view.
-   */
+  /** The URL-owned reading set. Its expanded presentation stays in memory. */
   const pins = useMemo(() => pinsOf(search), [search]);
-  const stackOpen = new URLSearchParams(search).get(STACK_PARAM) === '1';
+  // A spread belongs to the vault it was opened in, not whichever vault is
+  // selected next in the same mounted shell.
+  useEffect(() => setStackOpen(false), [vault]);
   /**
    * The declined pile, opened over the view like the panel is.
    *
@@ -341,31 +341,28 @@ export function App() {
 
   /**
    * Pins are written like the selection: `replace` always, because pinning is a
-   * pick and the back button is for views. One write per gesture — see
-   * `setStack` for why a gesture never writes the URL twice.
+   * pick and the back button is for views. One URL write per gesture.
    */
   const setPins = useCallback((ids: string[]) => {
     const { search: s, location: loc, navigate: go } = nav.current;
-    const p: Patch = pinsPatch(ids);
-    // A pins-only spread with no pins is no surface at all. Clear the mode in
-    // the same URL write, or `stack=1` lies dormant until a later pin appears.
-    if (!ids.length && !new URLSearchParams(s).get(NOTE_PARAM)) p[STACK_PARAM] = null;
-    go(`${loc}${patchSearch(s, p)}`, { replace: true });
+    // A pins-only spread with no pins is no surface at all. Close it in the same
+    // gesture rather than leaving the view inert under an empty overlay.
+    if (!ids.length && !new URLSearchParams(s).get(NOTE_PARAM)) setStackOpen(false);
+    go(`${loc}${patchSearch(s, pinsPatch(ids))}`, { replace: true });
   }, []);
 
   /**
-   * Spread or fold the pins — and, folding, land on a note in the same write.
+   * Spread or fold the pins — and, folding, optionally land on a note.
    *
-   * One patch rather than `setStack` + `setOpenNote`, and that is load-bearing:
-   * `nav.current` is captured at render, so the second of two navigations in
-   * one handler reads the search string the first has already replaced and
-   * quietly puts its keys back. Every gesture below writes the URL exactly once.
+   * The mode itself is memory state. When folding also changes `?note=`, that
+   * note still gets one URL write; the state update cannot race or restore an
+   * older search string.
    */
   const setStack = useCallback((open: boolean, note?: string | null) => {
+    setStackOpen(open);
+    if (note === undefined) return;
     const { search: s, location: loc, navigate: go } = nav.current;
-    const p: Patch = { [STACK_PARAM]: open ? '1' : null };
-    if (note !== undefined) p[NOTE_PARAM] = note;
-    go(`${loc}${patchSearch(s, p)}`, { replace: true });
+    go(`${loc}${patchSearch(s, { [NOTE_PARAM]: note })}`, { replace: true });
   }, []);
 
   /**
@@ -953,7 +950,7 @@ interface KeyState {
   pins: string[];
   setPins: (ids: string[]) => void;
   stackOpen: boolean;
-  /** Fold or spread — and, folding, land on a note in the same URL write. */
+  /** Fold or spread — and, folding, optionally land on a note. */
   setStack: (open: boolean, note?: string | null) => void;
   panelUnsaved: { current: { body: boolean; frontmatter: boolean } };
   /** The vocabulary, for the declared value a digit names and its cardinality. */
@@ -1158,10 +1155,9 @@ function run(command: Command, s: KeyState): void {
   /**
    * A command that needs the editing panel folds the spread first.
    *
-   * One URL write — the fold and the landing note together, which `setStack`
-   * exists to keep as one — and `s` is re-shadowed so the case below sees the
-   * panel as already open and does not write the URL a second time from a
-   * search string the fold has just replaced.
+   * One state transition and at most one URL write. `s` is re-shadowed so the
+   * case below sees the panel as already open and does not write the landing
+   * note a second time from a stale search string.
    */
   if (s.stackOpen && NEEDS_PANEL.has(command.kind)) {
     const on = s.cursor.id ?? s.openNote;
@@ -1933,6 +1929,10 @@ function run(command: Command, s: KeyState): void {
         if ((u.body || u.frontmatter) && !confirm(`${whatIsUnsaved(u)} unsaved changes. Close anyway?`)) {
           return;
         }
+        // With no pins, the open slot is the spread's final page. Closing that
+        // page must also uncover the view; an empty spread must not leave the
+        // board and rail inert with nothing painted over them.
+        if (s.stackOpen && !s.pins.length) return s.setStack(false, null);
         return setOpenNote(null);
       }
       /**

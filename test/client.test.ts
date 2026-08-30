@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { renderBody, taskLines, toggleTask } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
@@ -28,6 +30,7 @@ import { matchesCheatsheetRow } from '../src/web/cheatsheetKeys.ts';
 import { cheatsheetStrokeOf, cheatsheetStrokeLabel } from '../src/web/cheatsheetKeys.ts';
 import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
 import { afterRemovingPage, revealScroll, stackPages } from '../src/web/panel/pins.ts';
+import { KeyHint, KeyHints } from '../src/web/components/KeyHint.tsx';
 
 /**
  * Decisions the client makes, tested where they live rather than through a
@@ -333,8 +336,24 @@ test('a parameter the app does not own is dropped from the URL', () => {
   // And so is what you have picked out. Left off the owned list it would be
   // deleted from the address bar on load, exactly as `filterstyle` now is.
   assert.equal(strippedOfStrays('?sel=a,b&view=home'), null, 'sel is owned, not a stray');
-  // The reading set rides beside the selection, for the same reason.
-  assert.equal(strippedOfStrays('?pins=a,b&stack=1&view=home'), null, 'pins and stack are owned');
+  // The reading set survives; whether it is spread is transient presentation.
+  assert.equal(strippedOfStrays('?pins=a,b&view=home'), null, 'pins are owned');
+  assert.equal(
+    strippedOfStrays('?pins=a,b&stack=1&view=home'),
+    '?pins=a%2Cb&view=home',
+    'a retired stack deep link is normalised without losing its pins',
+  );
+});
+
+test('a suppressed key hint keeps its box in the markup', () => {
+  const hint = createElement(KeyHint, { keys: 'c', means: 'edit the body' });
+  const shown = renderToStaticMarkup(createElement(KeyHints, { on: true, children: hint }));
+  const hidden = renderToStaticMarkup(createElement(KeyHints, { on: false, children: hint }));
+
+  assert.match(shown, /<kbd class="keyhint"/);
+  assert.match(hidden, /<kbd class="keyhint is-hidden"/);
+  assert.match(hidden, /aria-hidden="true"/);
+  assert.match(hidden, />c<\/kbd>/, 'the same content reserves the same intrinsic width');
 });
 
 /**

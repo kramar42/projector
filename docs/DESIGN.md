@@ -1215,6 +1215,8 @@ state transition the word names exactly. An opened pin temporarily leaves the dr
 its membership and order, so replacement restores it without a second animation or a second state
 token. Entering the spread is instantaneous under the Stillness Rule; only a direct spine click glides.
 The covered rail and view are `inert`, matching the visual layer in the accessibility tree.
+Unfocused pages keep key-hint boxes at `visibility: hidden`; focus changes their ink, never the geometry
+of the label rows they annotate.
 
 **A pinned note's record mark keeps its accent glyph inside a `--pinned` surround.** The mark is
 `accent` everywhere because it is the app speaking about the note (see `.recordmark`); replacing that

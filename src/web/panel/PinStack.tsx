@@ -26,9 +26,10 @@ import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
  * come to look like a summary of a note instead of the note.
  *
  * **Exactly one page body is actionable: the focused one.** The other bodies are
- * `inert` and draw no key hints, which is the same sentence twice — a key reaches
- * the focused page, so a hint on any other would name a stroke that acts
- * somewhere else. Page-level open and unpin controls remain controls on every
+ * `inert` and hide their key hints, which is the same sentence twice — a key
+ * reaches the focused page, so a hint on any other would name a stroke that acts
+ * somewhere else. Hidden hints retain their boxes so focus never reflows a page.
+ * Page-level open and unpin controls remain controls on every
  * header; none writes note content. This keeps the cursor the only write target
  * even when `?note=` holds a separate trailing page for context (C10).
  *
@@ -374,9 +375,8 @@ function PinPage({
           Only the focused page is actionable, and `inert` is the whole of it:
           nothing inside takes focus, a click reaches nothing, and the subtree
           leaves the tab order — which is the same "one surface a write can land
-          on" the panel gets by being the only one mounted. Hints go with it,
-          since a key drawn beside a row it cannot reach is naming the focused
-          page's row instead.
+          on" the panel gets by being the only one mounted. Hints become invisible
+          with it, but keep their boxes so moving focus does not move the labels.
         */}
         <div className="pinpage-scroll" inert={!isFocus}>
           {error && <div className="pane-error">{error}</div>}

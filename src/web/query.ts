@@ -50,8 +50,8 @@ export const DECLINED_PARAM = 'declined';
  *
  * `?sel=` with a different job: a selection is what a bulk write lands on, a pin
  * is what stays in sight — reading marks, drawn as title spines at the right
- * edge and spread side by side by `?stack=`. Out of the query for `?sel=`'s
- * reasons (a saved view must not note them, a pin must not refetch), and in the
+ * edge and spread side by side in the transient spread. Out of the query for
+ * `?sel=`'s reasons (a saved view must not note them, a pin must not refetch), and in the
  * URL for its reasons too: the same notes are the same notes across a change of
  * shape, and a reading workspace should survive a reload.
  *
@@ -60,14 +60,6 @@ export const DECLINED_PARAM = 'declined';
  * a `Set` cannot carry.
  */
 export const PINS_PARAM = 'pins';
-
-/**
- * Whether the pins are spread side by side over the view.
- *
- * `?declined=`'s shape exactly: a surface over whatever you were looking at,
- * URL-owned so the back button folds it.
- */
-export const STACK_PARAM = 'stack';
 
 /** Params that belong to the query, so the rest can be preserved verbatim. */
 function isQueryParam(key: string): boolean {
@@ -89,8 +81,7 @@ function isOwnParam(key: string): boolean {
   // feature that adds a view-adjacent key cannot accidentally discard it.
   if (key === VAULT_PARAM) return true;
   return (
-    key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM ||
-    key === PINS_PARAM || key === STACK_PARAM ||
+    key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || key === PINS_PARAM ||
     // The calendar's page and grid — where you are looking, like `?note=`, so
     // they ride beside the query rather than in it: turning a page must not
     // refetch, and a saved view must not store a date that decays (C9).
