@@ -779,6 +779,8 @@ export function App() {
           onCursor={cursor.step}
           newIn={newIn}
           onNewHandled={clearNewIn}
+          nudge={nudge}
+          onNudged={clearNudge}
           // The page lives in `cal`/`cal.*`, outside the wire — so the search
           // string is a dependency here where the other shapes need only `wire`:
           // turning a page re-renders without refetching.

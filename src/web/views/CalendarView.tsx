@@ -13,6 +13,7 @@ import {
   CAL_START_PARAM,
   WEEK_DAYS,
   calendarPage,
+  arrangePlacements,
   dateAxis,
   dayLabel,
   pageLabel,
@@ -47,8 +48,10 @@ import type { Meta, NoteDTO, QueryResponse } from '../types.ts';
  *
  * A drop writes the date facet through the same intent pipeline as a board
  * drop: `dropOutcome` with the day as the column value, `(none)` for the
- * unscheduled rail, `POST /api/bulk` move at the end. Storage stays a raw
- * date, so the board's `due` buckets go on grouping exactly as before.
+ * unscheduled rail, `POST /api/bulk` move at the end. A saved view also owns
+ * the manual order of each raw day, exactly as it owns a board column's order.
+ * Storage stays a raw date, so the board's `due` buckets go on grouping exactly
+ * as before.
  */
 export function CalendarView({
   meta,
@@ -60,6 +63,8 @@ export function CalendarView({
   onCursor,
   newIn,
   onNewHandled,
+  nudge,
+  onNudged,
   search,
   patch,
   reload,
@@ -85,6 +90,9 @@ export function CalendarView({
    */
   newIn: string | null;
   onNewHandled: () => void;
+  /** A request to move the cursor's placement up or down within its day. */
+  nudge: number | null;
+  onNudged: () => void;
   /** The page's own query string — the page and grid params are read off it. */
   search: string;
   /** Write URL params. The calendar owns `cal`/`cal.*` the way `?sel=` is owned. */
@@ -107,6 +115,8 @@ export function CalendarView({
    */
   const axis = dateAxis(meta.facets, data.spec.show);
   const cards = data.notes;
+  // Like a board, an unnamed query has no file in which a manual order can live.
+  const viewName = data.spec.name;
 
   useRequestEnrichment([
     ...new Set(Object.values(cards).flatMap((c) => c.links.map((l) => l.raw))),
@@ -115,8 +125,31 @@ export function CalendarView({
   // The same two pure calls `gridOf` makes over the same inputs, which is what
   // keeps the cursor's walk and this drawing pointed at one screen.
   const placed = useMemo(
-    () => placements(data.ids, (id) => (axis ? cards[id]?.facets[axis] ?? [] : []), page),
-    [data.ids, cards, axis, page],
+    () =>
+      arrangePlacements(
+        placements(data.ids, (id) => (axis ? cards[id]?.facets[axis] ?? [] : []), page),
+        data.spec.order,
+      ),
+    [data.ids, data.spec.order, cards, axis, page],
+  );
+
+  const orderedFor = useCallback(
+    (day: string): string[] => (day === NONE ? placed.unscheduled : placed.byDay.get(day) ?? []),
+    [placed],
+  );
+
+  const reorder = useCallback(
+    async (day: string, ids: string[]) => {
+      if (!viewName) return;
+      setProblem(null);
+      try {
+        await api.saveArrangement(viewName, { order: { [day]: ids } });
+        reload();
+      } catch (err) {
+        setProblem((err as ApiError).message);
+      }
+    },
+    [viewName, reload],
   );
 
   const move = useCallback(
@@ -125,40 +158,86 @@ export function CalendarView({
       try {
         await api.bulk({ ids: intent.ids, op: 'move', moves: intent.moves, dragMode: intent.mode });
         reload();
+        return true;
       } catch (err) {
         setProblem((err as ApiError).message);
+        return false;
       }
     },
     [reload],
   );
 
   // One monitor, the board's shape: read the pointer, ask `dropOutcome`, obey.
-  // No lanes, no card-on-card order — a day's order is the query's sort.
+  // Calendar days have no lanes, but they do have the board's card-edge order.
   useEffect(() => {
     if (!axis) return;
     return monitorForElements({
       onDragStart: ({ source }) => setDragging(String(source.data.cardId ?? '')),
       onDrop: ({ source, location }) => {
         setDragging(null);
-        const target = location.current.dropTargets.find((t) => t.data.column !== undefined);
+        const targets = location.current.dropTargets;
+        const onCardTarget = targets.find((t) => t.data.cardId !== undefined);
+        const target = targets.find((t) => t.data.column !== undefined);
+        const day = target ? String(target.data.column ?? '') : null;
+        let onCard: { id: string; index: number; below: boolean } | null = null;
+        if (onCardTarget) {
+          const rect = onCardTarget.element.getBoundingClientRect();
+          onCard = {
+            id: String(onCardTarget.data.cardId ?? ''),
+            index: Number(onCardTarget.data.index ?? 0),
+            below: location.current.input.clientY > rect.top + rect.height / 2,
+          };
+        }
         const intent = dropOutcome({
           cardId: String(source.data.cardId ?? ''),
           from: String(source.data.column ?? ''),
           fromLane: '',
-          to: target ? String(target.data.column ?? '') : null,
+          to: day,
           toLane: null,
-          onCard: null,
+          onCard,
           groupBy: axis,
           laneBy: undefined,
           mode: modeFor(location.current.input),
           selected,
-          order: [],
-          viewName: undefined,
+          order: day ? orderedFor(day) : [],
+          viewName,
         });
-        if (intent.kind === 'facet') void move(intent);
+        if (intent.kind === 'reorder') void reorder(intent.column, intent.ids);
+        else if (intent.kind === 'facet') {
+          void (async () => {
+            if (await move(intent)) {
+              // The date write makes a card part of its new day; only then can
+              // its displayed insertion line become that day's saved order.
+              if (intent.insertion) await reorder(intent.insertion.column, intent.insertion.ids);
+            }
+          })();
+        }
       },
     });
-  }, [axis, selected, move]);
+  }, [axis, selected, move, reorder, orderedFor, viewName]);
+
+  const days = page.days.flat();
+
+  // The keyboard follows the cursor's *placement*, not merely its note id: a
+  // note scheduled twice can be ordered on either day independently.
+  useEffect(() => {
+    if (nudge === null) return;
+    onNudged();
+    if (!cursor || !cursorSpot) return;
+    if (!viewName) {
+      setProblem('Card order lives in a saved view. Save this query as one first.');
+      return;
+    }
+    const day = days[cursorSpot[1]] ?? null;
+    if (!day) return;
+    const ids = orderedFor(day);
+    const at = ids.indexOf(cursor);
+    const to = at + nudge;
+    if (at === -1 || to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    next.splice(to, 0, ...next.splice(at, 1));
+    void reorder(day, next);
+  }, [nudge, onNudged, cursor, cursorSpot, viewName, days, orderedFor, reorder]);
 
   /** Page and grid edits. Defaults are removed rather than written, so a URL says only what differs. */
   const goTo = (day: string | null) => patch({ [CAL_PARAM]: day });
@@ -187,7 +266,6 @@ export function CalendarView({
     );
   }
 
-  const days = page.days.flat();
   const shared = {
     axis,
     cards,
@@ -474,6 +552,7 @@ function DayColumn({
               key={id}
               card={card}
               column={day}
+              index={i}
               chips={chips}
               isSelected={selected.has(id)}
               isDragging={dragging === id}
@@ -504,6 +583,7 @@ function DayColumn({
 function CalCard({
   card,
   column,
+  index,
   chips,
   isSelected,
   isDragging,
@@ -516,6 +596,8 @@ function CalCard({
 }: {
   card: NoteDTO;
   column: string;
+  /** Position in this day before a drag removes anything. */
+  index: number;
   chips: string[];
   isSelected: boolean;
   isDragging: boolean;
@@ -533,6 +615,15 @@ function CalCard({
     if (!el) return;
     return draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) });
   }, [card.id, column]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return dropTargetForElements({
+      element: el,
+      getData: () => ({ cardId: card.id, column, index }),
+    });
+  }, [card.id, column, index]);
 
   const pointed = useCursorFocus(ref, isCursor);
 

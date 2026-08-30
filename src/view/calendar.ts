@@ -1,4 +1,6 @@
 import type { Facets } from '../schema/types.ts';
+import { NONE } from '../schema/vocabulary.ts';
+import { applyOrder } from './order.ts';
 
 /**
  * The calendar's page arithmetic, pure and DOM-free.
@@ -191,6 +193,28 @@ export interface Placements {
   /** Dated, but not on this page: how many notes are earlier, and later. */
   earlier: number;
   later: number;
+}
+
+/**
+ * Overlay a saved view's manual arrangement on the calendar projection.
+ *
+ * A calendar makes its columns from raw dates after the query has run, unlike a
+ * board whose groups arrive ordered in the payload. Applying the same rule here
+ * means an ISO date is a perfectly ordinary arrangement key, and a note due on
+ * two days can be placed independently in each. The incoming placement stays
+ * untouched so cursor arithmetic can continue to share its raw input.
+ */
+export function arrangePlacements(
+  placed: Placements,
+  order: Record<string, string[]> | undefined,
+): Placements {
+  return {
+    ...placed,
+    byDay: new Map(
+      [...placed.byDay].map(([day, ids]) => [day, applyOrder(ids, order?.[day])]),
+    ),
+    unscheduled: applyOrder(placed.unscheduled, order?.[NONE]),
+  };
 }
 
 /**

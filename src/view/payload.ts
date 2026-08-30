@@ -6,6 +6,9 @@ import { computedReader, projectRollups, runQuery } from '../index/query.ts';
 import { inboundCounts, refsOf } from '../index/refs.ts';
 import { summariseViews, type SavedViewSummary, type ViewSpec } from './spec.ts';
 import { toDTO, type NoteDTO } from './dto.ts';
+import { applyOrder } from './order.ts';
+
+export { applyOrder } from './order.ts';
 
 
 /**
@@ -198,27 +201,6 @@ function composeLists(
 export function layoutRelation(show: string[], facets: Facets): string | undefined {
   return show.find((name) => isRef(facets[name]));
 }
-
-/**
- * A column's cards in the order the saved view curates, then the rest.
- *
- * An id in `order` that no longer matches is skipped rather than held open, and a
- * card the order has never seen goes after the pinned ones — so a stored order
- * survives cards coming and going without needing to be rewritten.
- *
- * This ran in the browser, applied twice by two different paths in `BoardView` and
- * not at all in `TableView`, and never here — so `pj ls --view portfolio` and the
- * board disagreed about card order, as did a board column and a table section of
- * the same view. It is a property of the answer, not of one renderer.
- */
-export function applyOrder(ids: string[], order: string[] | undefined): string[] {
-  if (!order?.length) return ids;
-  const have = new Set(ids);
-  const pinned = order.filter((id) => have.has(id));
-  const seen = new Set(pinned);
-  return [...pinned, ...ids.filter((id) => !seen.has(id))];
-}
-
 
 function relationsAmong(
   notes: Map<string, Note>,

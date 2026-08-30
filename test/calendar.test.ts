@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CAL_PARAMS,
   addDays,
+  arrangePlacements,
   calendarPage,
   dateAxis,
   dayLabel,
@@ -152,6 +153,29 @@ test('placement splits the filter’s notes into days, the side list, and off-pa
   // Counted per note: where did my cards go, not how many values are elsewhere.
   assert.equal(placed.earlier, 1, 'last-month');
   assert.equal(placed.later, 2, 'next-month, and split-off-page counts once');
+});
+
+test('a saved calendar order is keyed by raw day, including a note placed twice', () => {
+  const page = calendarPage({}, TODAY); // 24–30 Aug
+  const values: Record<string, string[]> = {
+    a: ['2026-08-24'],
+    b: ['2026-08-24', '2026-08-26'],
+    c: ['2026-08-24', '2026-08-26'],
+    loose: [],
+  };
+  const raw = placements(['a', 'b', 'c', 'loose'], (id) => values[id] ?? [], page);
+  const arranged = arrangePlacements(raw, {
+    '2026-08-24': ['c', 'a'],
+    '2026-08-26': ['b'],
+    [NONE]: ['loose'],
+  });
+
+  assert.deepEqual(arranged.byDay.get('2026-08-24'), ['c', 'a', 'b']);
+  assert.deepEqual(arranged.byDay.get('2026-08-26'), ['b', 'c']);
+  assert.deepEqual(arranged.unscheduled, ['loose']);
+  // Ordering is an overlay, not a mutation of the date projection cursor
+  // arithmetic shares with the view.
+  assert.deepEqual(raw.byDay.get('2026-08-24'), ['a', 'b', 'c']);
 });
 
 test('the cursor grid is one lane of the page’s days, the rail last, from the same arithmetic', () => {
