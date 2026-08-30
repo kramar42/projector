@@ -5,8 +5,8 @@ facets:
   status: ["active"]
   project: ["platform"]
   tech: ["aws"]
-created: 2025-07-25  # older
-updated: 2026-08-25  # week
+created: 2025-07-26  # older
+updated: 2026-08-26  # week
 ---
 
 Renders: the dashed `(none)` column on a priority board at 0.72 opacity, and the

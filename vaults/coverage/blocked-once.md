@@ -6,8 +6,8 @@ facets:
   priority: ["now"]
   project: ["platform"]
   blocked_by: ["blocker-open"]
-created: 2025-07-25  # older
-updated: 2026-08-25  # week
+created: 2025-07-26  # older
+updated: 2026-08-26  # week
 ---
 
 Renders: the 3px `--bad` left border, `blocked_by` on the derived axis, and a blocker

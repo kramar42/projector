@@ -10,8 +10,8 @@ facets:
 project:
   repos:
     - { path: "../identity", base: "main" }
-created: 2025-07-25  # older
-updated: 2026-08-28  # fresh
+created: 2025-07-26  # older
+updated: 2026-08-29  # fresh
 ---
 
 Renders: a project that is itself a member of another project — so `▣` with a

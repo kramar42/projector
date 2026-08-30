@@ -4,7 +4,7 @@ title: "A note carrying every axis at once"
 facets:
   priority: ["now"]
   status: ["active"]
-  due: ["2026-09-01"]  # week
+  due: ["2026-09-02"]  # week
   energy: ["deep"]
   owner: ["oleksii"]
   waiting_on: ["person-c"]
@@ -14,8 +14,8 @@ facets:
   layer: ["layer-3"]
   project: ["platform", "identity"]
   parent: ["ideas"]
-created: 2025-07-25  # older
-updated: 2026-08-28  # fresh
+created: 2025-07-26  # older
+updated: 2026-08-29  # fresh
 ---
 
 Renders: fourteen chips in one row — the `--chip-tint` dilution test. Light mode

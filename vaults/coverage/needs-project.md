@@ -6,8 +6,8 @@ facets:
   priority: ["month"]
   energy: ["delegate"]
   domain: ["lifecycle"]
-created: 2025-07-25  # older
-updated: 2026-08-25  # week
+created: 2025-07-26  # older
+updated: 2026-08-26  # week
 ---
 
 Renders: the *Needs project* column of `views/triage.yaml`, and `(none)` on a

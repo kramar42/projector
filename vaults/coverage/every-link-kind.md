@@ -17,8 +17,8 @@ links:
   - "doc:docs/absent.md"
   - "slack:https://acme.slack.com/archives/C01234567/p1700000000000100"
   - "https://example.com/a/very/long/path/that/should/be/ellipsised/well/before/here"
-created: 2025-07-25  # older
-updated: 2026-08-28  # fresh
+created: 2025-07-26  # older
+updated: 2026-08-29  # fresh
 ---
 
 Renders: every `linked` computed axis value, and the failure paths that matter —
