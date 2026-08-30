@@ -14,7 +14,7 @@ import {
 } from '../src/view/calendar.ts';
 import { parseSpec, specToParams, SPEC_PARAMS } from '../src/view/spec.ts';
 import { NONE } from '../src/schema/vocabulary.ts';
-import { gridOf } from '../src/web/views/motion.ts';
+import { gridOf, stepped } from '../src/web/views/motion.ts';
 import type { QueryResponse } from '../src/web/types.ts';
 import type { Facets } from '../src/schema/types.ts';
 
@@ -213,6 +213,31 @@ test('the cursor grid is one lane of the page’s days, the rail last, from the 
   // No date facet, no grid: the walk must not cross a screen that draws no cells.
   const bare = gridOf(data, { search: '', facets: {} as Facets, today: TODAY });
   assert.equal(bare.columns.length, 0);
+});
+
+test('the cursor grid includes saved calendar geometry, not just URL overrides', () => {
+  const facets = { due: def('date') } as unknown as Facets;
+  const note = (due: string[]) => ({ facets: due.length ? { due } : {} });
+  const data = {
+    spec: {
+      shape: 'calendar',
+      show: [],
+      query: { filter: {} },
+      calendar: { days: 7, rows: 2, starts: 'mon' },
+    },
+    ids: ['first-day', 'next-week', 'loose'],
+    notes: {
+      'first-day': note(['2026-08-24']),
+      'next-week': note(['2026-08-31']),
+      loose: note([]),
+    },
+  } as unknown as QueryResponse;
+
+  const grid = gridOf(data, { search: '?cal=2026-08-24', facets, today: TODAY });
+  assert.equal(grid.columns.length, 15, 'two saved weeks and the unscheduled rail');
+  assert.equal(grid.columns[14], NONE);
+  assert.deepEqual(grid.cells[0]![14], ['loose']);
+  assert.equal(stepped(grid, 'first-day', 'column', 1), 'next-week', 'l reaches the next saved row');
 });
 
 test('calendar is a shape the wire carries, and only its page anchor is not query config', () => {

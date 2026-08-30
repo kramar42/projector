@@ -1,6 +1,6 @@
 import { groupsFor } from './groups.ts';
 import { NONE } from '../../schema/vocabulary.ts';
-import { arrangePlacements, calendarPage, dateAxis, placements } from '../../view/calendar.ts';
+import { arrangePlacements, calendarPage, calendarParams, dateAxis, placements } from '../../view/calendar.ts';
 import { paramsOf } from '../query.ts';
 import type { Facets, QueryResponse } from '../types.ts';
 
@@ -97,7 +97,13 @@ export function gridOf(
     const axis = dateAxis(calendar.facets, data.spec.show);
     if (!axis) return EMPTY;
     const today = calendar.today ?? new Date().toISOString().slice(0, 10);
-    const page = calendarPage(Object.fromEntries(paramsOf(calendar.search)), today);
+    const page = calendarPage(
+      {
+        ...calendarParams(data.spec.calendar),
+        ...Object.fromEntries(paramsOf(calendar.search)),
+      },
+      today,
+    );
     const placed = arrangePlacements(
       placements(data.ids, (id) => data.notes[id]?.facets[axis] ?? [], page),
       data.spec.order,
