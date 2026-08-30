@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
-import { CardBody } from '../components/CardBody.tsx';
+import { CardTile } from '../components/CardTile.tsx';
 import { emptyReason, unusedGrouping } from '../../view/empty.ts';
 import { isCursorAt, type Spot } from './motion.ts';
 import { attachPan } from './pan.ts';
@@ -15,7 +15,6 @@ import { groupsFor, labelFor } from './groups.ts';
 import { IconButton } from '../components/Button.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
-import { useCursorFocus } from '../cursor.ts';
 import { LISTS_AXIS } from '../../schema/vocabulary.ts';
 
 /**
@@ -512,7 +511,7 @@ function Column({
         <span className="column-count">{group.ids.length}</span>
         <IconButton glyph="add" title="new card here" onClick={() => setAdding(true)} />
       </header>
-      <div className="column-body" ref={bodyRef}>
+      <div className="column-body card-stack" ref={bodyRef}>
         {adding && (
           <div className="newcard">
             <textarea
@@ -545,8 +544,7 @@ function Column({
             <CardTile
               key={id}
               card={card}
-              column={value}
-              lane={lane}
+              source={{ column: value, ...(lane !== undefined ? { lane } : {}) }}
               // The index into the column's *stored* order, not into this cell.
               // Under a secondary axis the cell is a subset of it, and a reorder
               // writes the stored list — so a cell-local index landed the card
@@ -580,110 +578,6 @@ function Column({
         })}
       </div>
     </section>
-  );
-}
-
-function CardTile({
-  card,
-  column,
-  lane,
-  index,
-  chips,
-  draggableTile,
-  orderable,
-  isSelected,
-  isCursor,
-  isEcho,
-  spot,
-  onCursor,
-  isDragging,
-  onSelect,
-  onOpen,
-}: {
-  card: NoteDTO;
-  column: string;
-  lane: string | undefined;
-  index: number;
-  chips: string[];
-  draggableTile: boolean;
-  orderable: boolean;
-  isSelected: boolean;
-  isCursor: boolean;
-  /** Another placement of the cursor's note: marked, but not the cursor. */
-  isEcho: boolean;
-  spot: Spot;
-  onCursor: (id: string, at?: Spot | null) => void;
-  isDragging: boolean;
-  onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string, at?: Spot | null) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [edge, setEdge] = useState<'top' | 'bottom' | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const cleanups: (() => void)[] = [];
-    if (draggableTile) {
-      cleanups.push(
-        draggable({ element: el, getInitialData: () => ({ cardId: card.id, column, lane }) }),
-      );
-    }
-    if (orderable) {
-      cleanups.push(
-        dropTargetForElements({
-          element: el,
-          getData: () => ({ cardId: card.id, index }),
-          canDrop: ({ source }) => source.data.cardId !== card.id,
-          onDrag: ({ location }) => {
-            const rect = el.getBoundingClientRect();
-            setEdge(location.current.input.clientY > rect.top + rect.height / 2 ? 'bottom' : 'top');
-          },
-          onDragLeave: () => setEdge(null),
-          onDrop: () => setEdge(null),
-        }),
-      );
-    }
-    return () => cleanups.forEach((f) => f());
-  }, [card.id, column, lane, index, draggableTile, orderable]);
-
-  const pointed = useCursorFocus(ref, isCursor);
-
-  return (
-    <div
-      ref={ref}
-      /**
-       * A roving tabindex, which is what makes this a keyboard path to a card at
-       * all — the tile was a `div` with an `onClick`, and NEXT.md's "there is no
-       * keyboard path to open a note" was exactly this attribute being absent.
-       *
-       * Only the cursor's tile is tabbable. Sixty-eight cards each taking a tab
-       * stop is not navigation, it is a wall, and the arrow keys are the way
-       * through a grid.
-       */
-      tabIndex={isCursor ? 0 : -1}
-      data-card={card.id}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${isEcho ? 'is-echo' : ''} ${
-        isDragging ? 'is-dragging' : ''
-      } ${edge ? `is-over-${edge}` : ''}`}
-      onClick={(e) => {
-        // Wherever a pointer lands, the keyboard picks up — otherwise the first
-        // `j` after a click jumps back to wherever the cursor had been left. But
-        // it picks up *where the card already is*: this click is about to open a
-        // panel over the board, and a cursor that scrolled itself clear of it
-        // would take the board out from under the pointer that opened it.
-        pointed();
-        onCursor(card.id, spot);
-        // Cmd/Ctrl or Shift builds a selection for a bulk action; a plain click opens.
-        if (e.metaKey || e.ctrlKey || e.shiftKey) {
-          e.preventDefault();
-          onSelect(card.id, true);
-        } else if (isSelected) onSelect(card.id, true);
-        else onOpen(card.id, spot);
-      }}
-    >
-      <CardBody card={card} showFacets={chips} />
-    </div>
   );
 }
 

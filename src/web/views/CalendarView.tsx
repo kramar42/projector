@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { ApiError, api } from '../api.ts';
-import { CardBody } from '../components/CardBody.tsx';
+import { CardTile } from '../components/CardTile.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { emptyReason } from '../../view/empty.ts';
 import { NONE } from '../../schema/vocabulary.ts';
@@ -25,7 +25,6 @@ import {
 import { useRequestEnrichment } from '../enrichment.tsx';
 import { BulkBar } from '../components/BulkBar.tsx';
 import { visibleSelection, type Selection } from '../selection.ts';
-import { useCursorFocus } from '../cursor.ts';
 import { isCursorAt, type Spot } from './motion.ts';
 import { paramsOf, type Patch } from '../query.ts';
 import type { Meta, NoteDTO, QueryResponse } from '../types.ts';
@@ -280,6 +279,7 @@ export function CalendarView({
     onOpen,
     onCreated: reload,
     onProblem: setProblem,
+    orderable: Boolean(viewName),
   };
 
   return (
@@ -443,6 +443,7 @@ function DayColumn({
   onOpen,
   onCreated,
   onProblem,
+  orderable,
 }: {
   /** The ISO day this column is, or `(none)` for the rail. */
   day: string;
@@ -466,6 +467,8 @@ function DayColumn({
   onOpen: (id: string, at?: Spot | null) => void;
   onCreated: () => void;
   onProblem: (msg: string) => void;
+  /** Mirrors a board: manual insertion needs a named view to keep it in. */
+  orderable: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [over, setOver] = useState(false);
@@ -521,7 +524,7 @@ function DayColumn({
         {ids.length > 0 && <span className="column-count">{ids.length}</span>}
         <IconButton glyph="add" title="new card here" onClick={() => setAdding(true)} />
       </header>
-      <div className="calendar-day-body">
+      <div className="calendar-day-body card-stack">
         {adding && (
           <div className="newcard">
             <textarea
@@ -548,12 +551,14 @@ function DayColumn({
           const card = cards[id];
           if (!card) return null;
           return (
-            <CalCard
+            <CardTile
               key={id}
               card={card}
-              column={day}
+              source={{ column: day }}
               index={i}
               chips={chips}
+              draggableTile
+              orderable={orderable}
               isSelected={selected.has(id)}
               isDragging={dragging === id}
               /* The placement the cursor is *at* — `locate`'s answer, so the
@@ -571,86 +576,5 @@ function DayColumn({
         })}
       </div>
     </Tag>
-  );
-}
-
-/** The board's tile in a day: its order lives under that day's raw date key. */
-function CalCard({
-  card,
-  column,
-  index,
-  chips,
-  isSelected,
-  isDragging,
-  isCursor,
-  isEcho,
-  spot,
-  onCursor,
-  onSelect,
-  onOpen,
-}: {
-  card: NoteDTO;
-  column: string;
-  /** Position in this day before a drag removes anything. */
-  index: number;
-  chips: string[];
-  isSelected: boolean;
-  isDragging: boolean;
-  isCursor: boolean;
-  isEcho: boolean;
-  spot: Spot;
-  onCursor: (id: string, at?: Spot | null) => void;
-  onSelect: (id: string, additive: boolean) => void;
-  onOpen: (id: string, at?: Spot | null) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [edge, setEdge] = useState<'top' | 'bottom' | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const cleanups = [
-      draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) }),
-      dropTargetForElements({
-        // `column` belongs to the day container. Keeping card data to the
-        // insertion target makes this target's role exactly the board's.
-        getData: () => ({ cardId: card.id, index }),
-        canDrop: ({ source }) => source.data.cardId !== card.id,
-        onDrag: ({ location }) => {
-          const rect = el.getBoundingClientRect();
-          setEdge(location.current.input.clientY > rect.top + rect.height / 2 ? 'bottom' : 'top');
-        },
-        onDragLeave: () => setEdge(null),
-        onDrop: () => setEdge(null),
-        element: el,
-      }),
-    ];
-    return () => cleanups.forEach((cleanup) => cleanup());
-  }, [card.id, column, index]);
-
-  const pointed = useCursorFocus(ref, isCursor);
-
-  return (
-    <div
-      ref={ref}
-      // Only the cursor's tile is tabbable — the board's roving tabindex.
-      tabIndex={isCursor ? 0 : -1}
-      data-card={card.id}
-      className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${
-        isEcho ? 'is-echo' : ''
-      } ${isDragging ? 'is-dragging' : ''} ${edge ? `is-over-${edge}` : ''}`}
-      onClick={(e) => {
-        // Wherever a pointer lands, the keyboard picks up — the board's rule.
-        pointed();
-        onCursor(card.id, spot);
-        if (e.metaKey || e.ctrlKey || e.shiftKey) {
-          e.preventDefault();
-          onSelect(card.id, true);
-        } else if (isSelected) onSelect(card.id, true);
-        else onOpen(card.id, spot);
-      }}
-    >
-      <CardBody card={card} showFacets={chips} />
-    </div>
   );
 }

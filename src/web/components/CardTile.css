@@ -1,0 +1,26 @@
+/*
+ * The scrollport that holds a shared CardTile stack.
+ *
+ * An active card's outline is drawn three pixels outside its face. Every stack
+ * has to make that ink reachable at both ends; a board column once carried this
+ * rule alone, which let a calendar's first and last cards clip their cursor.
+ */
+.card-stack {
+  --ring-out: 3px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  scroll-padding-top: calc(var(--covered-top, 0px) + var(--ring-out));
+  scroll-padding-bottom: calc(var(--covered-bottom, 0px) + var(--ring-out));
+  scroll-padding-left: var(--ring-out);
+}
+
+/* A day is denser than a board column, but still reserves the cursor's 3px. */
+.calendar-day-body.card-stack {
+  padding: 4px 6px 6px;
+  gap: 6px;
+}
