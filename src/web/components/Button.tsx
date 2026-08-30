@@ -176,6 +176,28 @@ const GLYPH = {
     px: 15,
     path: 'M4.9 2.7L12.7 8L4.9 13.3Z',
   },
+  /**
+   * An eye with a line through it: what the filter is *not* showing.
+   *
+   * Drawn without a pupil. At the size this is used — the collapsed rail counts
+   * with it at 12px — a lens, a pupil and a slash is three marks inside twelve
+   * pixels and the slash already crosses where the pupil would be, so the pupil
+   * costs legibility and buys nothing the outline does not already say.
+   */
+  hidden: {
+    px: 15,
+    /*
+     * A lens at a 2:1 ratio, struck through. Nearer a circle it stops being an
+     * eye and becomes `ø` — the first cut was 1.4:1 and read as a slashed circle
+     * at every size. And no pupil: at the 12px the collapsed rail counts with,
+     * a lens, a pupil and a slash is three marks inside twelve pixels, and the
+     * slash already crosses where the pupil would be.
+     */
+    path: 'M1.9 8Q8 2 14.1 8Q8 14 1.9 8ZM3.4 12.6L12.6 3.4',
+    /* Heavier than the shared 1.2, because it is a large thin outline rather
+       than a compact one and goes weightless beside the marks without it. */
+    sw: 1.5,
+  },
   /** Send a pinned page into the trailing open slot. */
   open: {
     px: 15,
@@ -222,6 +244,42 @@ const GLYPH = {
 export type GlyphName = keyof typeof GLYPH;
 
 /**
+ * One glyph from the table, with no button around it.
+ *
+ * The table is the closed glyph set and says so — "a new glyph should mean a row
+ * in the table above and nothing in the stylesheet" — but until now the only way
+ * to reach a row was to render a `<button>`, so anything that needed a drawing
+ * and *was not* a control had to redraw it somewhere else. That is the drift the
+ * table exists to prevent, and the collapsed rail's counts are exactly the case:
+ * a mark and a number, no button.
+ *
+ * It carries the row's own `px` as its font size the way `IconButton` does, so a
+ * glyph is the same weight wherever it is drawn; a caller that wants it at the
+ * size of the text around it says `size="inherit"`.
+ */
+export function Glyph({ glyph, size }: { glyph: GlyphName; size?: 'inherit' }) {
+  const g = GLYPH[glyph] as { mark?: string; path?: string; fill?: string; px: number; sw?: number };
+  if (!g.path) return <span aria-hidden="true">{g.mark}</span>;
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="1em"
+      height="1em"
+      style={size === 'inherit' ? undefined : { fontSize: `${g.px}px` }}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={g.sw ?? 1.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={g.path} />
+      {g.fill && <path d={g.fill} fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
+
+/**
  * A glyph button that is a toggle rather than an action.
  *
  * `on` is the only way to get a pressed icon button, and it writes both halves at
@@ -247,6 +305,8 @@ export function IconButton({
     /** Drawn in `currentColor` rather than stroked — see `refresh`. */
     fill?: string;
     px: number;
+    /** Per-glyph stroke weight, where the shared 1.2 does not suit the drawing. */
+    sw?: number;
     nudge?: string;
   };
   return (
@@ -265,7 +325,7 @@ export function IconButton({
           height="1em"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth={g.sw ?? 1.2}
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"

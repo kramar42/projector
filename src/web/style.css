@@ -547,6 +547,12 @@ body {
   color: var(--pinned);
 }
 
+/* What the filter is hiding is an absence, and the app does not spend accent on
+   one. It keeps the row's own annotation ink. */
+.sidebar-ribbon-icon.is-quiet {
+  color: inherit;
+}
+
 .pinicon {
   display: block;
   width: 1em;

@@ -479,11 +479,12 @@ prefix, so `keyc` finds `keycloak` while you are still typing.
 | **what is waiting on you** | unjudged candidates, when a sweep has left any |
 | **what this view is doing** | how many notes the filter is hiding, and how many are pinned |
 
-The rows in the last two groups name the key that reaches them — `+` judges a candidate, `,F` opens
-the filter — because at that width a word will not fit and the key is the app's own way of saying
-*this is what reaches that*. The pinned row draws the thumbtack instead, because a pin has a mark
-already; pressing it spreads the pins, and pressing the filter's count is the same as opening the
-filter rail.
+A row draws a mark where it has one and names its key where it does not, because at that width a word
+will not fit and a key is the app's own way of saying *this is what reaches that*. So the four mark
+states draw their glyphs, the filter's count draws a struck-out eye, the pinned count draws the
+thumbtack — and unjudged, which has no drawing of its own, names `+`, the key that judges the
+candidate under the cursor. Pressing the pinned count spreads the pins. Every row's tooltip spells out
+the sentence and the stroke.
 
 **What is deliberately absent.** *Shown* — the four mark counts already sum to it. *The selection* —
 the bulk bar is its readout, floats over the view, and is drawn whether or not the rail is. *The

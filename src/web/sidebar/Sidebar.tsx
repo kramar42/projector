@@ -5,7 +5,7 @@ import { FilterPanel } from './FilterPanel.tsx';
 import { SavedViews } from './SavedViews.tsx';
 import { FacetsSection, ShapeSection } from './QueryControls.tsx';
 import { FocusSection } from './FocusSection.tsx';
-import { IconButton } from '../components/Button.tsx';
+import { Glyph, IconButton } from '../components/Button.tsx';
 import { MARK_STATES, MarkGlyph, PinIcon, stateMeans, tallyMarks } from '../components/CardBody.tsx';
 import { type Patch } from '../query.ts';
 import { clearFilters, setSearch } from '../../view/intents.ts';
@@ -158,15 +158,20 @@ export function Sidebar({
           The selection is absent for the same reason — the bulk bar *is* its
           readout, floats over the view, and is drawn whether or not the rail is.
 
-          Filtered-out names its key, having no mark of its own. Pinned draws the
-          thumbtack, because it *has* one — the same two paths a mark's tack is
-          built from, upright here because nothing is holding it.
+          Both rows draw rather than name a key. Filtered-out takes the struck-out
+          eye from the glyph table — the app's one drawing for *not shown* — and
+          pinned takes the thumbtack, which is the same two paths a mark's tack is
+          built from, upright here because nothing is holding it. The eye is drawn
+          in `ink-3` and not `accent`: the notes it counts are the ones that are
+          not here, and the app does not speak in accent about an absence.
         */}
         {(hidden > 0 || pins > 0) && (
           <div className="ribbon-group" role="group" aria-label="This view">
             {hidden > 0 && (
               <div className="sidebar-ribbon-info" title={`${hidden} filtered out — , ⇧F opens the filter`}>
-                <kbd className="keyhint">,F</kbd>
+                <span className="sidebar-ribbon-icon is-quiet">
+                  <Glyph glyph="hidden" size="inherit" />
+                </span>
                 <span>{hidden}</span>
               </div>
             )}

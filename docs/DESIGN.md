@@ -481,11 +481,18 @@ carrying a `project:` block, so clicking the glyph adds or removes it. Everywher
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
 tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for every drawn glyph —
-`trash`, `refresh`, `edit`, `start`, `focus`) so they read as one family — but
+`trash`, `refresh`, `edit`, `start`, `focus`, `open`, `hidden`) so they read as one family — but
 those metrics deliberately do **not** live here. The glyph set is closed, so the table in
 `src/web/components/Button.tsx` carries the size beside the character it belongs to, and a new glyph is
 a row there rather than a rule in the stylesheet. They are per-glyph measurements, not steps in the
-type scale, which is why the scale test does not police them.
+type scale, which is why the scale test does not police them. **Stroke weight is one of those
+measurements** — the shared 1.2 suits a compact drawing and goes weightless on a large thin one, so
+`hidden` names 1.5 in its own row rather than the stylesheet reaching in to thicken it.
+
+A row is reachable without a button around it (`Glyph`), which is what stops the table from being
+bypassed. Until it was, the only way to draw a glyph was to render a control, so anything that needed a
+drawing and *was not* one had to redraw it elsewhere — the exact drift a closed set exists to prevent.
+The collapsed rail's counts are the case that showed it: a mark and a number, no button.
 
 ## Layout
 
