@@ -1451,7 +1451,7 @@ sight — the reading set beside the writing set, and the two never touch.
 | `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A **yellow thumbtack** appears stuck into its record mark wherever the note is drawn, so you can see what you are holding without leaving the board — and clicking the mark is the same toggle, which is also the only way a pointer can make a pin. Open a note and the pins appear beside its panel as navigable title spines |
 | `g [` `g ]` | previous / next pinned note, opened in the panel — the keyboard's way to the folded spines. It wraps, and from a note that is not pinned it enters at the near end. In the spread it is `h` / `l`, which already walk the pages |
 | `"` | **spread** the pins side by side over the view, or fold them back |
-| `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
+| `h` `l` | across the spread pages. The focused page **is** the cursor: its facet writes and `g c` / `g y` edits land there |
 | `j` `k` | scroll the focused page |
 | `o` | move the focused pin into the **open slot** at the right, without leaving the spread |
 | `⏎` | fold the spread onto the focused note's panel |
@@ -1471,12 +1471,14 @@ lands somewhere you are not. Their empty slots remain, so changing focus reveals
 moving the labels or content they annotate.
 
 **Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
-and cannot write — so there is still one place a keystroke can land with four notes on screen. Their
-header controls remain available to open or unpin the page, because those arrange the reading set and
-do not edit the note. A page folded down to its spine is inert altogether: there is nothing to press
-on a note you cannot see, by pointer or by Tab. Editing the note in front of you is `⏎`, which folds the spread onto its panel;
-any command that needs the panel (`g c`, `!`, `⌫`, …) folds it on the way there. The covered board and
-sidebar are inert: they cannot receive a stray click, Tab or screen-reader cursor through the spread.
+and cannot write — so there is still one place a keystroke can land with four notes on screen. Its
+region and axis keys edit that page in place: `g c` edits its body, `g y` its frontmatter, `g f` its
+facets and `g ⇧F` adds one. None changes the open slot or folds the spread. Their header controls
+remain available to open or unpin the page, because those arrange the reading set and do not edit the
+note. A page folded down to its spine is inert altogether: there is nothing to press on a note you
+cannot see, by pointer or by Tab. `⏎` still folds onto the focused note's panel; commands belonging to
+that panel frame (`!`, `⌫`, …) fold on the way there. The covered board and sidebar are inert: they
+cannot receive a stray click, Tab or screen-reader cursor through the spread.
 
 **Pins and an open note are two roles, not two copies.** With only pins, the pages keep pin order. If a
 note is open, it is the full page at the far right while `h` and `l` move focus independently across
@@ -1495,10 +1497,8 @@ land on is already whole on screen, and when it is not, seats it immediately and
 — so the cursor never outruns a glide and a spread that fits sits perfectly still while you read
 across it. Clicking a spine keeps the deliberate glide.
 
-Opening the spread itself grows the dock spines into the complete horizontal page run, right to left,
-with the open panel held as its right edge. Its last frame is the ordinary rightmost scroll position;
-the older visible spines are sticky overlap, not a separate compact state. Only clicking a spine asks
-the surface to glide to a different scroll position.
+Opening the spread itself does not glide. `"` changes modes and the complete arrangement appears at
+its final offset on the first paint; only clicking a spine asks the surface to show movement.
 
 Folded with no note open, the marked notes carry the whole signal and no spine covers the view. Open a
 note and the pinned spines appear at the panel's left edge; clicking one jumps to that note, the same

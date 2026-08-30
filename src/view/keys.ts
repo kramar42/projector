@@ -352,9 +352,8 @@ export type Command =
   /**
    * Spread the pinned notes side by side over the view, or fold them back.
    *
-   * The spread is read-only (C10 — content is edited in the panel, and the
-   * panel is not mounted under it), so `escape` closes the open note first and
-   * folds the spread second; neither touches the pins themselves.
+   * The spread has one writable page: the cursor. Region and axis shortcuts
+   * enter that page in place; every other pinned page remains read-only.
    */
   | { kind: 'stack' }
   | { kind: 'search' }

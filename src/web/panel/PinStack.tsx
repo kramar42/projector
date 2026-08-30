@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { IconButton } from '../components/Button.tsx';
@@ -9,10 +9,6 @@ import { useWorkStarter } from './useWorkStarter.ts';
 import { NoteTiers } from './tiers.tsx';
 import { exposedPageWidths, isCompactPage, revealScroll, SPINE_W, stackPages } from './pins.ts';
 import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
-
-/** The CSS aperture transition, and its deliberately half-way sibling cadence. */
-const SPREAD_MS = 420;
-const SPREAD_STAGGER_MS = SPREAD_MS / 2;
 
 /**
  * The pinned notes, in their two drawn states.
@@ -32,7 +28,7 @@ const SPREAD_STAGGER_MS = SPREAD_MS / 2;
  *
  * **Exactly one page body is actionable: the focused one.** The other bodies are
  * `inert` and hide their key hints, which is the same sentence twice — a key
- * reaches the focused page, so a hint on any other would name a stroke that acts
+ * enters the focused page, so a hint on any other would name a stroke that acts
  * somewhere else. Hidden hints retain their boxes so focus never reflows a page.
  * Page-level open and unpin controls remain controls on every
  * header; none writes note content. This keeps the cursor the only write target
@@ -69,22 +65,15 @@ export function PinDock({
   openNote,
   notes,
   onOpen,
-  underSpread = false,
 }: {
   pins: string[];
   openNote: string;
   notes: QueryResponse['notes'];
   /** A spine click opens that note — the same act as clicking its card. */
   onOpen: (id: string) => void;
-  /** Pre-mounted beneath a folding spread for a no-replacement handoff. */
-  underSpread?: boolean;
 }) {
   return (
-    <div
-      className={`pindock ${underSpread ? 'is-under-spread' : ''}`}
-      aria-label="Pinned notes"
-      aria-hidden={underSpread}
-    >
+    <div className="pindock" aria-label="Pinned notes">
       {pins.map((id) => (
         <DockSpine
           key={id}
@@ -127,7 +116,6 @@ function DockSpine({
 export function PinStack({
   pins,
   openNote,
-  notes,
   cursor,
   meta,
   onCursor,
@@ -137,15 +125,9 @@ export function PinStack({
   onMakeOpen,
   onFocus,
   onUnsaved,
-  closing = false,
-  onClosed,
-  active = true,
-  children,
 }: {
   pins: string[];
   openNote: string | null;
-  /** Query titles keep folded spines legible while their full notes load. */
-  notes: QueryResponse['notes'];
   cursor: string | null;
   meta: Meta;
   /** Focus moved to a page. The open slot, if present, stays where it is. */
@@ -161,173 +143,13 @@ export function PinStack({
   onFocus: (id: string, via: string) => void;
   /** What the focused page would lose if it were folded — the panel's guard. */
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
-  /** Folding is the same physical aperture sequence, in reverse. */
-  closing?: boolean;
-  /** The final narrow aperture has met the compact dock. */
-  onClosed?: () => void;
-  /** Stay mounted with the open panel while the spread itself is folded away. */
-  active?: boolean;
-  /** The existing open panel is the physical trailing page, never a redraw. */
-  children?: ReactNode;
 }) {
   // The open note is a role, not a second membership. If it is pinned too it
   // temporarily leaves the pin run and occupies the trailing slot; closing or
   // replacing it restores its original pin position without another state key.
-  const allPages = useMemo(() => stackPages(pins, openNote), [pins, openNote]);
-  /*
-   * The open note stays mounted as the strip's trailing panel while pins unfold
-   * beside it. It remains in `allPages` for keyboard order, but not in `pages`:
-   * the panel is its actual page, not a second copy to keep in sync.
-   */
-  const pages = useMemo(() => allPages.filter((id) => id !== openNote), [allPages, openNote]);
+  const pages = useMemo(() => stackPages(pins, openNote), [pins, openNote]);
   const strip = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState<ReadonlySet<string>>(() => new Set());
-  const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set());
-  const [opening, setOpening] = useState(true);
-  /*
-   * The opening state is geometry, not a mask over the final drawing. Starting
-   * with all pages at one spine width puts the same row at the same right edge
-   * as the dock. Each page then receives its real width, right to left. The
-   * flex run grows into its final sticky layout, so every intermediate frame is
-   * a valid (if narrow) version of the surface rather than a card teleported
-   * behind a clip path.
-   */
-  const [unfoldingAt, setUnfoldingAt] = useState<number | null>(null);
-  const [foldingAt, setFoldingAt] = useState<number | null>(null);
-  // Every pin finishes as the same full-width sticky page that horizontal
-  // panning uses. The entry sequence alone narrows apertures; it must not leave
-  // a second, non-scrollable "some cards are really spines" layout behind.
-  const expandedCount = pages.length;
-  const firstExpanded = 0;
-  // A command can reverse the hand while the right-to-left cascade is still
-  // running. Fold the aperture that is actually moving (and then its already
-  // opened neighbours), never an older planned page that is still a spine.
-  const firstFolding =
-    opening && unfoldingAt !== null ? Math.max(firstExpanded, unfoldingAt) : firstExpanded;
-  // Dimming is one continuous context change, so it lasts no less or more than
-  // the aperture cascade it accompanies, never longer just because pins exist.
-  const spreadDuration = SPREAD_MS + Math.max(0, expandedCount - 1) * SPREAD_STAGGER_MS;
-  const foldDuration = SPREAD_MS + Math.max(0, pages.length - 1 - firstFolding) * SPREAD_STAGGER_MS;
-  // This transient class keeps the aperture transition installed on the exact
-  // frame a folding stack is asked to spread again. Without it, removing the
-  // closing class drops the transition declaration before the width can turn
-  // around, which is the source of the visible jump on a rapid second press.
-  const resuming = !closing && !opening && foldingAt !== null;
-
-  // A spine is honest while a page is loading. Once every page has its note,
-  // the already-visible spines become those pages in reading order — no page
-  // ever unfolds to a `loading…` body and then changes underneath the reader.
-  useEffect(() => {
-    if (!active) return;
-    setLoaded(new Set());
-    setOpening(true);
-    setUnfoldingAt(null);
-  }, [active, pages.join(',')]);
-  const ready = active && pages.every((id) => loaded.has(id));
-
-  useEffect(() => {
-    if (!active || !ready || closing || !opening) return;
-    if (!pages.length) {
-      setOpening(false);
-      return;
-    }
-    if (!expandedCount) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setUnfoldingAt(-1);
-      setOpening(false);
-      return;
-    }
-
-    let frame = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cancelled = false;
-    const unfold = (at: number) => {
-      frame = requestAnimationFrame(() => {
-        if (cancelled) return;
-        setUnfoldingAt(at);
-        timer = setTimeout(() => {
-          if (cancelled) return;
-          if (at === firstExpanded) {
-            // The final frame is the actual scrollable spread: every aperture
-            // is whole and the strip is seated at its right-hand end, where the
-            // pages nearest the anchored open note are visible first.
-            setUnfoldingAt(firstExpanded - 1);
-            // Let the ResizeObserver read the final real width before normal
-            // fold paint is allowed back in. Without these two frames a stale
-            // compact bit could briefly hide a body that has already expanded.
-            frame = requestAnimationFrame(() => {
-              frame = requestAnimationFrame(() => {
-                const el = strip.current;
-                if (el) el.scrollLeft = el.scrollWidth - el.clientWidth;
-                setOpening(false);
-              });
-            });
-            return;
-          }
-          unfold(at - 1);
-        }, at === firstExpanded ? SPREAD_MS : SPREAD_STAGGER_MS);
-      });
-    };
-    unfold(pages.length - 1);
-    return () => {
-      cancelled = true;
-      if (frame) cancelAnimationFrame(frame);
-      if (timer) clearTimeout(timer);
-    };
-  }, [active, closing, expandedCount, firstExpanded, opening, ready, pages.length]);
-
-  // Keep the right edge—the open note's edge—fixed while entry widths grow.
-  // Once all pages have their real width, this is precisely the ordinary
-  // rightmost horizontal-scroll position, not a presentation-only substitute.
-  useLayoutEffect(() => {
-    if (!active || !opening || unfoldingAt === null) return;
-    const el = strip.current;
-    if (el) el.scrollLeft = el.scrollWidth - el.clientWidth;
-  }, [active, opening, unfoldingAt]);
-
-  /*
-   * Fold through the same apertures in the opposite order. The stack remains
-   * mounted until the last one reaches spine width; only then can the dock take
-   * over without replacing a wide card with a different element mid-frame.
-   */
-  useEffect(() => {
-    if (!closing) {
-      setFoldingAt(null);
-      return;
-    }
-    if (!active) return;
-    if (!pages.length || !expandedCount || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      onClosed?.();
-      return;
-    }
-
-    let frame = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cancelled = false;
-    const fold = (at: number) => {
-      frame = requestAnimationFrame(() => {
-        if (cancelled) return;
-        setFoldingAt(at);
-        timer = setTimeout(() => {
-          if (cancelled) return;
-          if (at === pages.length - 1) {
-            onClosed?.();
-            return;
-          }
-          fold(at + 1);
-        }, at === pages.length - 1 ? SPREAD_MS : SPREAD_STAGGER_MS);
-      });
-    };
-    fold(firstFolding);
-    return () => {
-      cancelled = true;
-      if (frame) cancelAnimationFrame(frame);
-      if (timer) clearTimeout(timer);
-    };
-  }, [active, closing, expandedCount, firstFolding, onClosed, pages.length]);
-  const onLoaded = useCallback((id: string) => {
-    setLoaded((current) => (current.has(id) ? current : new Set([...current, id])));
-  }, []);
 
   /**
    * Bring page i into view — and **only** as far as it takes.
@@ -347,7 +169,7 @@ export function PinStack({
    */
   const reveal = useCallback((i: number, behavior: ScrollBehavior = 'auto') => {
     const el = strip.current;
-    const page = el?.querySelectorAll<HTMLElement>(':scope > .pinpage')[i];
+    const page = el?.children[i] as HTMLElement | undefined;
     if (!el || !page) return;
     const w = page.offsetWidth;
     /*
@@ -363,7 +185,7 @@ export function PinStack({
     const at = el.scrollLeft;
     const to = revealScroll(
       i,
-      pages.length,
+      el.children.length,
       w,
       el.clientWidth,
       at,
@@ -371,26 +193,25 @@ export function PinStack({
     );
     if (to === at) return;
     el.scrollTo({ left: to, behavior });
-  }, [pages.length]);
+  }, []);
 
   // The focused page comes into view before it is painted — `h`/`l` can repeat
   // faster than a smooth scroll, and the cursor must never outrun the note it
   // identifies. A spine click below keeps the glide because it is the motion.
-  const focused = cursor && allPages.includes(cursor)
+  const focused = cursor && pages.includes(cursor)
     ? cursor
-    : openNote && allPages.includes(openNote)
+    : openNote && pages.includes(openNote)
       ? openNote
-      : allPages[allPages.length - 1] ?? null;
+      : pages[pages.length - 1] ?? null;
   useLayoutEffect(() => {
-    if (!active || !focused) return;
+    if (!focused) return;
     // A deep link or a pins-only spread may arrive without a cursor on one of
     // its pages. Normalise the one pointer before paint as well as the scroll.
     if (cursor !== focused) onCursor(focused);
-    const at = pages.indexOf(focused);
-    if (at !== -1) reveal(at);
+    reveal(pages.indexOf(focused));
     // `pages` is derived from the same URL state a focus change re-renders on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, focused, pages.length, reveal]);
+  }, [focused, pages.length, reveal]);
 
   /**
    * A card never changes width; only its presentation follows the width not
@@ -400,14 +221,12 @@ export function PinStack({
    */
   useLayoutEffect(() => {
     const el = strip.current;
-    if (!active || !el) return;
+    if (!el) return;
     let frame = 0;
     const measure = () => {
       frame = 0;
       const viewport = el.getBoundingClientRect();
-      const rects = [...el.querySelectorAll<HTMLElement>(':scope > .pinpage')].map((page) =>
-        page.getBoundingClientRect(),
-      );
+      const rects = [...el.children].map((page) => page.getBoundingClientRect());
       const widths = exposedPageWidths(rects, viewport);
       const next = new Set(pages.filter((_, i) => isCompactPage(widths[i] ?? 0)));
       setCompact((current) => {
@@ -422,16 +241,12 @@ export function PinStack({
     el.addEventListener('scroll', schedule, { passive: true });
     const resize = new ResizeObserver(schedule);
     resize.observe(el);
-    // Opening changes a page's actual width. Observe those same pages, not
-    // just the viewport, so the normal fold state is already correct at the
-    // moment the expansion settles — there is no final content handoff.
-    [...el.querySelectorAll<HTMLElement>(':scope > .pinpage')].forEach((page) => resize.observe(page));
     return () => {
       el.removeEventListener('scroll', schedule);
       resize.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [active, pages]);
+  }, [pages]);
 
   /**
    * Drag-to-pan, the way the board pans: grab a margin, a header or a spine and
@@ -440,7 +255,7 @@ export function PinStack({
    */
   const pan = useRef<{ x: number; left: number; on: boolean } | null>(null);
   const down = (e: React.PointerEvent) => {
-    if (!active || e.button !== 0) return;
+    if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('a, button, p, pre, code, li, h2')) return;
     pan.current = { x: e.clientX, left: strip.current?.scrollLeft ?? 0, on: false };
   };
@@ -467,62 +282,30 @@ export function PinStack({
 
   return (
     <div
-      className={`pinstack ${active ? '' : 'is-inactive'} ${openNote ? 'is-anchored' : ''} ${opening || resuming ? 'is-opening' : ''} ${
-        opening && ready && expandedCount > 0 && unfoldingAt !== null ? 'is-spreading' : ''
-      } ${closing ? 'is-closing' : ''} ${resuming ? 'is-resuming' : ''}`}
+      className="pinstack"
       ref={strip}
-      style={{
-        ['--spine-w' as string]: `${SPINE_W}px`,
-        ['--pinspread-dim-ms' as string]: `${closing ? foldDuration : spreadDuration}ms`,
-      }}
       role="region"
       aria-label="Pinned notes, spread"
-      inert={closing}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={up}
     >
-      {active && pages.map((id, i) => (
+      {pages.map((id, i) => (
         <PinPage
           key={id}
           id={id}
-          known={notes[id]?.title}
           meta={meta}
           // The sticky pair that makes the fold: no further left than my elders'
           // spines, no further right than my juniors'.
           left={i * SPINE_W}
-          // The trailing panel has a real flex width, so it needs no synthetic
-          // spine reservation here. Its own sticky geometry takes the right
-          // edge; the pins retain exactly the offsets horizontal panning uses.
           right={(pages.length - 1 - i) * SPINE_W}
-          entry={
-            !ready || !expandedCount || unfoldingAt === null || i < firstExpanded
-              ? 'folded'
-              : i === unfoldingAt
-                ? 'unfolding'
-                : 'unfolded'
-          }
-          exit={
-            !closing || foldingAt === null
-              ? 'open'
-              : i < foldingAt
-                ? 'folded'
-                : i === foldingAt
-                  ? 'folding'
-                  : 'open'
-          }
-          keptFolded={false}
           isFocus={id === focused}
           isPinned={pins.includes(id)}
           isOpen={id === openNote}
-          isCompact={(!closing && opening) || compact.has(id)}
-          onLoaded={() => onLoaded(id)}
+          isCompact={compact.has(id)}
           onFocus={() => onCursor(id)}
-          onSpine={() => {
-            onCursor(id);
-            reveal(i, 'smooth');
-          }}
+          onSpine={() => reveal(i, 'smooth')}
           onMakeOpen={() => onMakeOpen(id)}
           onOpen={onOpen}
           onUnpin={() => onUnpin(id)}
@@ -531,25 +314,19 @@ export function PinStack({
           onUnsaved={onUnsaved}
         />
       ))}
-      {children}
     </div>
   );
 }
 
 function PinPage({
   id,
-  known,
   meta,
   left,
   right,
-  entry,
-  exit,
-  keptFolded,
   isFocus,
   isPinned,
   isOpen,
   isCompact,
-  onLoaded,
   onFocus,
   onSpine,
   onMakeOpen,
@@ -560,22 +337,13 @@ function PinPage({
   onUnsaved,
 }: {
   id: string;
-  known: string | undefined;
   meta: Meta;
   left: number;
   right: number;
-  /** A real page grows from the dock spine into this same final page. */
-  entry: 'folded' | 'unfolding' | 'unfolded';
-  /** The same page contracts back into the dock spine. */
-  exit: 'open' | 'folding' | 'folded';
-  /** This older pin remains in the left-edge spine run at rest. */
-  keptFolded: boolean;
   isFocus: boolean;
   isPinned: boolean;
   isOpen: boolean;
   isCompact: boolean;
-  /** The parent waits for complete pages before the spines unfold. */
-  onLoaded: () => void;
   onFocus: () => void;
   onSpine: () => void;
   onMakeOpen: () => void;
@@ -587,10 +355,7 @@ function PinPage({
 }) {
   const { data, error, reload } = useLive<NoteDetail>(() => api.note(id), [id]);
   const card = data?.note;
-  const title = card?.title ?? known ?? id;
-  useEffect(() => {
-    if (data || error) onLoaded();
-  }, [data, error, onLoaded]);
+  const title = card?.title ?? id;
 
   /**
    * A page holds its own unsaved flags, and only the focused one reports them.
@@ -626,19 +391,10 @@ function PinPage({
    * becomes the focused one the moment `h` or `l` lands on it.
    */
   const write = isFocus && !isCompact ? writer : NO_WRITES;
-  const isEntryFolded = entry === 'folded';
-  const isUnfolding = entry === 'unfolding';
-  const isFolded = keptFolded || isEntryFolded || isCompact;
-  const isExitFolding = exit === 'folding';
-  const isExitFolded = exit === 'folded';
 
   return (
     <section
-      className={`pinpage ${isFocus ? 'is-focus' : ''} ${isFolded ? 'is-compact' : ''} ${
-        isEntryFolded ? 'is-entry-folded' : ''
-      } ${keptFolded ? 'is-kept-folded' : ''} ${isUnfolding ? 'is-unfolding' : ''} ${isExitFolding ? 'is-exit-folding' : ''} ${
-        isExitFolded ? 'is-exit-folded' : ''
-      }`}
+      className={`pinpage ${isFocus ? 'is-focus' : ''} ${isCompact ? 'is-compact' : ''}`}
       data-page={id}
       style={{ left, right }}
       aria-label={isOpen ? `Open note: ${title}` : title}
@@ -650,9 +406,9 @@ function PinPage({
         style={{ width: SPINE_W }}
         title={`${title} — slide it fully into view`}
         onClick={onSpine}
-        disabled={!isFolded}
-        aria-hidden={!isFolded}
-        tabIndex={isFolded ? 0 : -1}
+        disabled={!isCompact}
+        aria-hidden={!isCompact}
+        tabIndex={isCompact ? 0 : -1}
       >
         <span className="spinelabel">{title}</span>
       </button>
@@ -663,7 +419,7 @@ function PinPage({
         meant by both — not here — and says it to the pointer, the tab order and
         the accessibility tree at once.
       */}
-      <div className="pinpage-content" inert={isFolded || isUnfolding}>
+      <div className="pinpage-content" inert={isCompact}>
         <header className="pinpage-head">
           {/* The mark is the pin control here too, so a page carries the fact
               and its reversal in one place — which is what let the trailing

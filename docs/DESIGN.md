@@ -216,12 +216,11 @@ owns one hue family — so a chip's hue tells you which axis it is before you re
 edge is the same colour as its chips. The app owns the palette, seven families taken from xoria's own
 syntax roles; the *vault* says which axis takes which, with `hue:` in `facets.yaml`. That was nine CSS
 rules named after nine facets, which meant the stylesheet decided that priority was orange and a vault's
-own vocabulary could only be grey. Second, **the surface is still.** The ordinary state has only two
-CSS transitions — one on a grid track, one on a width, both a box changing size. The two exceptions
-are both events a reader has to orient to: a foreign change flushes the affected value, and opening a
-pinned spread grows the dock's reading set from the right while the unchanged view dims underneath. A
-surface that sits open on a second monitor all day is a readout, and a readout that moves without a
-reason is a distraction.
+own vocabulary could only be grey. Second, **the surface is still.** Two
+CSS transitions exist in the whole stylesheet — one on a grid track, one on a width, both a box
+changing size — and there are no keyframes. A
+surface that sits open on a second monitor all day is a readout, and a readout that moves is a
+distraction.
 
 The precision is literal, not atmospheric. The note mark beside every title carries two
 `translateY` constants — `0.054em` and `-0.058em` — derived from where each glyph's ink actually centres
@@ -1349,19 +1348,18 @@ page; folded spines are panel-side navigation, never standalone view chrome.**
 The pins arrived long after the panel settled, so like the calendar they are a stated borrowing. A
 spread page (`.pinpage`) is the panel's surface, hairline and shadow at panel width; its head is the
 panel's head — headline-step title behind a hairline, mark first; its body is `.md` and its facts are
-`.kv`, unchanged, because a read-only rendering of a note must read as *the note*, not as a summary
-of one. The dock appears only beside an open panel, where every pinned note keeps its spine addressable;
-the opened one is marked by its small horizontal accent, which is correspondence rather than cursor focus.
-A compact view draws no duplicate spines over its content because its record marks already show the pins. The open dock and
-the spread cover the view the way the panel does (**a view does not
+`.kv`, unchanged, because every rendering of a note must read as *the note*, not as a summary of one.
+The dock appears only beside an open panel, where its spines are navigation between pinned
+notes; a compact view draws no duplicate spines over its content because its record marks already
+show the pins. The open dock and the spread cover the view the way the panel does (**a view does not
 move when a note opens** — the reach is declared through `--covered-right`, never reserved as a
 track), and the spread takes the panel's own layer because the two never coexist.
 
 The borrowing is now literal: a page renders `NoteTiers`, which is the panel's own tier stack, so
-there is no second rendering of a note to keep in step with the first. What a page adds is a spine and
-what it takes away is the **key hints** — `KeyHints` switches them off on every page but the focused
-one, which is the same sentence as "only the focused page is actionable" said in the vocabulary
-`KeyHint` already has, where absence means *no key reaches this*.
+there is no second rendering of a note to keep in step with the first. What a page adds is a spine;
+the focused page keeps its **key hints** and its editor, while `KeyHints` switches both affordance and
+keyboard reach off everywhere else. That is "only the focused page is actionable" said in the
+vocabulary `KeyHint` already has, where absence means *no key reaches this*.
 
 The spine is the one thing the pins own: a title turned on its side (`.spinelabel`, Title step —
 it names a note, so it takes the step a note's title takes on a face), drawn as the page's own left
@@ -1370,7 +1368,8 @@ spine instead of vanishing behind one. The focused page carries the cursor's acc
 edge — the one strip of a page its overlapping neighbours never cover — and steps up the ink ladder
 from its neighbours (`ink` against `ink-2`), which is how a reading copy recedes without an opacity
 fade taking the hairlines and chip fills down with it. Nothing else on the surface spends accent, per
-the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
+the App Voice Rule: a spread is a reading surface with one explicit write target, and standing pins
+are standing facts.
 
 The rightmost page may carry a second role: the **open slot**, and the two roles are told apart by
 what the head's corner carries rather than by a label. A pinned page carries `→` alone — send me to
@@ -1386,12 +1385,8 @@ The arrow is the one glyph added for this. It replaced the word `open` and a `ro
 `open` back — two words spending head width to name a placement the drawing shows — and it earns its
 place because the act is directional and the destination is literally to its right. An opened pin
 temporarily leaves the drawn pin run but keeps its membership and order, so replacement restores it
-without a second state token. Entering the spread is the one deliberate mode transition: an open note
-stays painted as the right-hand panel, and its pinned spines expand from that unchanged edge in pin
-order only after their full note bodies have loaded. The motion neither reflows the anchor nor changes
-the fold; a reduced-motion preference arrives at that same final arrangement immediately. A direct
-spine click still glides only when it needs to reveal a folded page. The covered rail and view are
-`inert`, matching the visual layer in the accessibility tree.
+without a second animation or a second state token. Entering the spread is instantaneous under the Stillness Rule; only a direct spine click glides.
+The covered rail and view are `inert`, matching the visual layer in the accessibility tree.
 Unfocused pages keep key-hint boxes at `visibility: hidden`; focus changes their ink, never the geometry
 of the label rows they annotate.
 
@@ -1471,10 +1466,9 @@ mark was spoken for.
 
 ### Don't:
 
-- **Don't** animate a note, chip, column, panel or table for decoration. The only long transition is
-  the pinned spread's actual page width; the only keyframes are the foreign-change flush and the spread
-  scrim. A surface that sits open all day must be still. **See The State-Preserving Motion Rule and The
-  Something Moved Rule.**
+- **Don't** animate a note, chip, column, panel or table. There are no keyframes in this system and no
+  transition longer than 140ms, and both existing ones animate a width. A surface that sits open all
+  day must be still. **One exception, and one only — see The Something Moved Rule.**
 - **Don't** drift toward consumer SaaS polish: generous whitespace, 16px body type, large radii,
   gradients, illustrated empty states, spring easing. The working type size here is 12.5px and the
   largest radius is 10px, on purpose.
@@ -1522,24 +1516,17 @@ mark was spoken for.
 #### The State-Preserving Motion Rule
 
 **Motion traces a real change of state; it never disguises a replacement.** Start, end and every
-frame between them must be a coherent rendering of the same thing: the same content, order, identity,
-and interaction state. Keep the rendered entity mounted where that is possible; do not fetch it again,
-crossfade it with a substitute, or use a mask and transform to fake geometry it does not have.
+frame between them must be a coherent rendering of the same content, order, identity and interaction
+state. Keep the rendered entity mounted where possible; never use a transition to cover a fetch,
+remount, substituted surface or different layout rule.
 
-Motion earns its place when it exposes the relationship the reader already caused or can see. A pinned
-spread is the model: the open note remains its right-hand anchor, and the existing dock spines widen one
-at a time into the actual sticky pages that natural horizontal panning later folds back into spines. Each
-page keeps its final reading width throughout; the changing width is only the aperture that exposes the
-same laid-out page. The dimmed view remains the same view, merely receding as the reading set occupies
-it. The run grows right-to-left while its right edge stays fixed to the open panel; once every aperture
-is full, the strip rests at its ordinary rightmost horizontal-scroll position. The left spines are sticky
-overlap from that same scrollable page run, not a second compact layout: dragging, clicking a spine, and
-`h`/`l` all reveal the already-mounted full cards. Folding runs that same aperture in reverse and the
-dock takes over only when the final spine has physically closed. If an intermediate state cannot be
-expressed by the normal layout and interaction rules, settle directly instead.
+If that continuity cannot be expressed by the ordinary layout and interaction model, settle directly.
+The pinned spread is deliberately instantaneous until it can be made to use the same page sequence,
+focus rule and horizontal geometry before, during and after any movement.
 
-Check interruption as part of the design: opening, closing, a changed pin set, and reduced motion must
-all land on a truthful current state, never expose an orphaned frame from a previous one.
+**Entering an editor is a focus change, not a layout change.** Preserve the occupied stage and the
+text metrics when a readout becomes editable; focus treatment may arrive, but adjacent content must
+not jump. A later size change earns its place only when the reader actually changed the content.
 
 **The Something Moved Rule.** *Motion is permitted for exactly one thing: telling the reader that a
 note changed when they did not change it.* This is the one event on this surface that stillness cannot

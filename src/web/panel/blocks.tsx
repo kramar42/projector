@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { IconButton } from '../components/Button.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
@@ -144,11 +144,14 @@ function AddAxis({
                  * Not only for the keyboard: a pointer has nothing else holding
                  * focus at this moment either, so the same landing is right.
                  */
-                focusSoon(() =>
-                  document.querySelector<HTMLElement>(
-                    `.panel [data-axis="${CSS.escape(n)}"]:not([data-inverse]) [data-nav]`,
-                  ),
-                );
+                focusSoon(() => {
+                  const root =
+                    document.querySelector<HTMLElement>('.pinstack .pinpage.is-focus') ??
+                    document.querySelector<HTMLElement>('.panel');
+                  return root?.querySelector<HTMLElement>(
+                    `[data-axis="${CSS.escape(n)}"]:not([data-inverse]) [data-nav]`,
+                  ) ?? null;
+                });
               }}
             >
               <span className="truncate pop-pick-name">{defs[n]!.label}</span>
@@ -540,9 +543,25 @@ export function Body({
 }) {
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  /**
+   * Raw markdown and rendered markdown have deliberately different geometry.
+   * Freeze the body stage before exchanging them: entering an editor is a focus
+   * change, not permission for the links and refs below it to jump away.
+   */
+  const stage = useRef<HTMLDivElement | null>(null);
+  const [stageHeight, setStageHeight] = useState<number | null>(null);
   const report = (d: boolean) => {
     setDirty(d);
     onDirtyChange(d);
+  };
+  const beginEditing = () => {
+    setStageHeight(stage.current?.getBoundingClientRect().height ?? null);
+    setEditing(true);
+  };
+  const stopEditing = () => {
+    if (!mayClose(dirty, 'body')) return;
+    setEditing(false);
+    setStageHeight(null);
   };
   return (
     <section className={`panel-section ${lit ? 'is-touched' : ''}`} data-section="body">
@@ -563,18 +582,20 @@ export function Body({
             on={editing}
             title={editing ? 'Stop editing the body' : 'Edit the body'}
             aria-label={editing ? 'Stop editing the body' : 'Edit the body'}
-            onClick={() => {
-              if (editing && !mayClose(dirty, 'body')) return;
-              setEditing((v) => !v);
-            }}
+            onClick={editing ? stopEditing : beginEditing}
           />
         </span>
       </h3>
+      <div
+        ref={stage}
+        className={`body-stage ${editing ? 'is-editing' : ''}`}
+        style={editing && stageHeight !== null ? { height: stageHeight } : undefined}
+      >
       {editing ? (
         <BodyEditor
           // Escape closes the editor, through the same guard the toggle uses: the
           // key and the button are one act, so they ask the same question.
-          onEscape={() => mayClose(dirty, 'body') && setEditing(false)}
+          onEscape={stopEditing}
           cardId={card.id}
           value={card.body}
           onDirtyChange={report}
@@ -614,6 +635,7 @@ export function Body({
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>
       )}
+      </div>
     </section>
   );
 }

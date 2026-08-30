@@ -352,18 +352,16 @@ test('every field is drawn by the app, not the browser', () => {
 });
 
 /**
- * Still at rest. Only the foreign-change flush earns a keyframe. The spread is
- * a direct interpolation of its physical dimensions, and it alone is permitted one longer width
- * transition because that width is the real state the reader is orienting to.
+ * Still at rest. No keyframes, and no transition longer than 140ms.
  *
  * The rule with the widest blast radius in the Don't list and nothing checked it.
  * A surface that sits open on a second monitor all day is a readout, and one
  * transition added in sympathy is how a readout stops being one.
  */
-test('the surface is still, apart from the changes a reader needs to orient to', () => {
-  // The sanctioned exception, named. A foreign write needs to locate its changed
-  // value. The pin spread interpolates its actual width and opacity instead of
-  // replaying an animation, so a new command can reverse it from any frame.
+test('the surface is still, apart from the one thing stillness cannot say', () => {
+  // The sanctioned exception, named. DESIGN.md's The Something Moved Rule is the
+  // argument; this is the enforcement. A second keyframe or a second animated
+  // property fails here, which is the difference between an exception and a hole.
   assert.deepEqual(
     [...CODE.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]!),
     ['touched'],
@@ -371,14 +369,11 @@ test('the surface is still, apart from the changes a reader needs to orient to',
   );
   // The set, not the sequence: the flush is declared on several selectors and
   // cancelled on several more, and how many of each is a layout detail. What must
-  // not grow is the named animation and its reduced-motion opt-out.
+  // not grow is the number of distinct animations, which is one.
   assert.deepEqual(
     [...new Set([...CODE.matchAll(/(?<!-)\banimation:\s*([^;]+);/g)].map((m) => m[1]!.trim()))].sort(),
-    [
-      'none',
-      'touched 2600ms ease-out 1',
-    ],
-    'an animation declaration that is not an approved orientation transition or its reduced-motion opt-out',
+    ['none', 'touched 2600ms ease-out 1'],
+    'an animation declaration that is not the flush, or its reduced-motion opt-out',
   );
   // It fires once and it does not loop: a thing that keeps moving is a thing you
   // stop seeing, and this has to still be legible on the hundredth change.
@@ -407,14 +402,8 @@ test('the surface is still, apart from the changes a reader needs to orient to',
     'the flush overlay must rest transparent — a CSS animation releases to its base style',
   );
 
-  const slow = [...CODE.matchAll(/transition:[^;]*?(\d+)ms/g)]
-    .filter((m) => Number(m[1]) > 140)
-    .map((m) => m[0]);
-  assert.deepEqual(
-    slow,
-    ['transition: width 420ms'],
-    `a long transition other than the state-preserving pin spread: ${slow.join(', ')}`,
-  );
+  const slow = [...CODE.matchAll(/transition:[^;]*?(\d+)ms/g)].filter((m) => Number(m[1]) > 140).map((m) => m[0]);
+  assert.deepEqual(slow, [], `a transition longer than 140ms: ${slow.join(', ')}`);
 });
 
 /**
@@ -832,7 +821,6 @@ test('every drawing of the cursor reads the one value that can sleep', () => {
   const SITES = [
     '.column-card.is-cursor .cardface',
     '.column-card.is-echo .cardface',
-    '.panel.is-stack-anchor.is-focus',
     '.pinpage.is-focus',
     '.table tbody tr.is-cursor > td',
     '.table tbody tr.is-cursor > td:first-child',
@@ -858,7 +846,7 @@ test('every drawing of the cursor reads the one value that can sleep', () => {
   // (b) And none of them reaches past it to the accent, which is the drift that
   // cannot be seen: such a rule paints correctly right up until the keyboard leaves.
   const literal = rules()
-    .filter((r) => /\bis-cursor\b|\bis-echo\b|\.panel\.is-stack-anchor\.is-focus|\.pinpage\.is-focus/.test(r.sel))
+    .filter((r) => /\bis-cursor\b|\bis-echo\b|\.pinpage\.is-focus/.test(r.sel))
     .filter((r) => /var\(--accent\)/.test(r.body))
     .map((r) => r.sel);
   assert.deepEqual(
