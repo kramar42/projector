@@ -1,11 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { IconButton } from '../components/Button.tsx';
+import { Button, IconButton } from '../components/Button.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
 import { KeyHint } from '../components/KeyHint.tsx';
 import { FacetEditor } from '../components/FacetEditor.tsx';
 import { LinkEditor } from '../components/LinkEditor.tsx';
-import { BodyEditor } from '../components/BodyEditor.tsx';
+import { BodyEditor, type BodyEditorHandle } from '../components/BodyEditor.tsx';
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { focusSoon } from '../cursor.ts';
@@ -543,25 +543,21 @@ export function Body({
 }) {
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
-  /**
-   * Raw markdown and rendered markdown have deliberately different geometry.
-   * Freeze the body stage before exchanging them: entering an editor is a focus
-   * change, not permission for the links and refs below it to jump away.
-   */
-  const stage = useRef<HTMLDivElement | null>(null);
-  const [stageHeight, setStageHeight] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const editor = useRef<BodyEditorHandle>(null);
   const report = (d: boolean) => {
     setDirty(d);
     onDirtyChange(d);
   };
   const beginEditing = () => {
-    setStageHeight(stage.current?.getBoundingClientRect().height ?? null);
+    setSaving(false);
+    setNote(null);
     setEditing(true);
   };
   const stopEditing = () => {
     if (!mayClose(dirty, 'body')) return;
     setEditing(false);
-    setStageHeight(null);
   };
   return (
     <section className={`panel-section ${lit ? 'is-touched' : ''}`} data-section="body">
@@ -577,6 +573,20 @@ export function Body({
           asymmetric on purpose: only the closing direction destroys a document.
         */}
         <span className="section-do">
+          {editing && (
+            <>
+              <Button
+                tone="primary"
+                size="small"
+                disabled={!dirty || saving}
+                onClick={() => editor.current?.save()}
+              >
+                {saving ? 'saving…' : 'Save'}
+              </Button>
+              <span className="editor-hint">⌘S</span>
+              {note && <span className="editor-note">{note}</span>}
+            </>
+          )}
           <IconButton
             glyph="edit"
             on={editing}
@@ -586,19 +596,17 @@ export function Body({
           />
         </span>
       </h3>
-      <div
-        ref={stage}
-        className={`body-stage ${editing ? 'is-editing' : ''}`}
-        style={editing && stageHeight !== null ? { height: stageHeight } : undefined}
-      >
       {editing ? (
         <BodyEditor
+          ref={editor}
           // Escape closes the editor, through the same guard the toggle uses: the
           // key and the button are one act, so they ask the same question.
           onEscape={stopEditing}
           cardId={card.id}
           value={card.body}
           onDirtyChange={report}
+          onSavingChange={setSaving}
+          onNoteChange={setNote}
           // `write.body` rejects on failure, which is the contract this editor
           // has always assumed. It used to be handed a function that caught
           // everything and resolved, so a refused save reported "saved", cleared
@@ -635,7 +643,6 @@ export function Body({
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>
       )}
-      </div>
     </section>
   );
 }

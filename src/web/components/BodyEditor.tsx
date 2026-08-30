@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { EditorView, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting } from '@codemirror/language';
-import { projectorHighlight } from './highlight.ts';
 import { api } from '../api.ts';
 import { plural } from '../plural.ts';
-import { Button } from './Button.tsx';
 import { useDocumentEditor } from './useDocumentEditor.ts';
+import { withoutOuterBlankLines } from '../../view/markdown.ts';
 
 /**
  * CodeMirror over the raw markdown, deliberately not a WYSIWYG.
@@ -16,27 +14,38 @@ import { useDocumentEditor } from './useDocumentEditor.ts';
  * churn every diff. Here the text is the document: nothing changes except what
  * is typed.
  */
-export function BodyEditor({
-  cardId,
-  value,
-  onSave,
-  onDirtyChange,
-  onEscape,
-}: {
+export interface BodyEditorHandle {
+  save(): void;
+}
+
+type BodyEditorProps = {
   cardId: string;
   value: string;
   /** Rejects on failure. A save that cannot fail is a save that can lose text. */
   onSave: (body: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Lets the owning section keep save status in its stable header. */
+  onSavingChange?: (saving: boolean) => void;
+  /** Brief success feedback belongs beside the command that caused it. */
+  onNoteChange?: (note: string | null) => void;
   /** Escape: hand the document back to whoever opened it. */
   onEscape?: () => void;
-}) {
+};
+
+export const BodyEditor = forwardRef<BodyEditorHandle, BodyEditorProps>(function BodyEditor({
+  cardId,
+  value,
+  onSave,
+  onDirtyChange,
+  onSavingChange,
+  onNoteChange,
+  onEscape,
+}, ref) {
   /**
    * A success that fades, and a refusal that does not.
    *
-   * One `note` with a `bad` flag put both in the same slot — mono `--text-meta`
-   * wedged into the button bar beside "unsaved". The sibling editor on the same
-   * panel, over the same `usePanelWriter` contract, draws its refusal as a
+   * The parent shows a brief success beside Save. The sibling editor on the same
+   * panel, over the same `usePanelWriter` contract, draws a refusal as a
    * `.banner.is-bad` in the `.editor` column instead; one component reported one
    * event two ways. The banner is the register for "your text was not written",
    * so the refusal moves there and `note` keeps what it is good at.
@@ -47,7 +56,6 @@ export function BodyEditor({
   const extensions = useMemo(
     () => [
       markdown(),
-      syntaxHighlighting(projectorHighlight, { fallback: true }),
       placeholder('Free-form markdown — description, links, checklists, pasted images.'),
       // Paste an image and it lands in the note's own assets directory.
       EditorView.domEventHandlers({
@@ -74,9 +82,9 @@ export function BodyEditor({
 
   const { hostRef, dirty, saving, save } = useDocumentEditor({
     docId: cardId,
-    value,
+    value: withoutOuterBlankLines(value),
     extensions,
-    onSave,
+    onSave: (text) => onSave(withoutOuterBlankLines(text)),
     onEscape,
   });
 
@@ -100,6 +108,12 @@ export function BodyEditor({
   const report = useRef(onDirtyChange);
   report.current = onDirtyChange;
 
+  const reportSaving = useRef(onSavingChange);
+  reportSaving.current = onSavingChange;
+
+  const reportNote = useRef(onNoteChange);
+  reportNote.current = onNoteChange;
+
   useEffect(() => {
     report.current?.(dirty);
   }, [dirty]);
@@ -107,6 +121,16 @@ export function BodyEditor({
   // Report false on the way out, so the panel's close guard is not left warning
   // about text that no longer exists — closing the editor destroys the document.
   useEffect(() => () => report.current?.(false), []);
+
+  useEffect(() => {
+    reportSaving.current?.(saving);
+  }, [saving]);
+  useEffect(() => () => reportSaving.current?.(false), []);
+
+  useEffect(() => {
+    reportNote.current?.(note);
+  }, [note]);
+  useEffect(() => () => reportNote.current?.(null), []);
 
   const run = () => {
     save().then(
@@ -129,21 +153,16 @@ export function BodyEditor({
     );
   };
 
+  // Saving remains an editor operation — ⌘S and the header button enter here —
+  // while the control lives in the section header so editing introduces no body
+  // chrome or second visual rhythm.
+  useImperativeHandle(ref, () => ({ save: run }), [run]);
+
   return (
     <div className="editor">
-      <div ref={hostRef} className="editor-host" />
-      <div className="editor-bar">
-        <Button tone="primary" onClick={run} disabled={!dirty || saving}>
-          {saving ? 'saving…' : dirty ? 'Save' : 'Saved'}
-        </Button>
-        <span className="editor-hint">⌘S</span>
-        {note && <span className="editor-note">{note}</span>}
-        {dirty && <span className="editor-dirty">unsaved</span>}
-      </div>
-      {/* Below the bar, in the `.editor` column — the placement
-          `.editor > .banner { margin: 0 }` was written for and the frontmatter
-          editor beside this one already uses. */}
+      <div ref={hostRef} className="editor-host is-body" />
+      {/* A refusal stays beside the text it leaves intact. */}
       {refused && <div className="banner is-bad">{refused}</div>}
     </div>
   );
-}
+});

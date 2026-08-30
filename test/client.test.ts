@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { renderBody, taskLines, toggleTask } from '../src/view/markdown.ts';
+import { renderBody, taskLines, toggleTask, withoutOuterBlankLines } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
@@ -76,6 +76,12 @@ test('a note body cannot smuggle markup into the panel', () => {
   // Markdown itself still works — escaping the source must not disable it.
   assert.match(renderBody('# Title'), /<h1/);
   assert.match(renderBody('- one\n- two'), /<li/);
+});
+
+test('the raw body drops only accidental blank lines at its edges', () => {
+  assert.equal(withoutOuterBlankLines('\n \nfirst\n\nsecond\n\n'), 'first\n\nsecond');
+  assert.equal(withoutOuterBlankLines('  indented code\n'), '  indented code');
+  assert.equal(withoutOuterBlankLines('\n\n'), '');
 });
 
 /**

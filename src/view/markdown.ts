@@ -25,6 +25,18 @@ const md = new Marked({
 });
 
 /**
+ * LLM-written bodies commonly acquire separator-only lines at the file edges.
+ * They have no markdown meaning, but CodeMirror gives each one a visible row.
+ * Keep interior whitespace untouched — it can be prose, a list, or a code block
+ * — and remove only those accidental outer rows before editing or saving.
+ */
+export function withoutOuterBlankLines(body: string): string {
+  return body
+    .replace(/^(?:[ \t]*\r?\n)+/, '')
+    .replace(/(?:\r?\n[ \t]*)+$/, '');
+}
+
+/**
  * A note body as HTML, safe to hand to `dangerouslySetInnerHTML`.
  *
  * The source is escaped **before** markdown runs, so raw HTML in a note — written

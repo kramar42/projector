@@ -1524,9 +1524,10 @@ If that continuity cannot be expressed by the ordinary layout and interaction mo
 The pinned spread is deliberately instantaneous until it can be made to use the same page sequence,
 focus rule and horizontal geometry before, during and after any movement.
 
-**Entering an editor is a focus change, not a layout change.** Preserve the occupied stage and the
-text metrics when a readout becomes editable; focus treatment may arrive, but adjacent content must
-not jump. A later size change earns its place only when the reader actually changed the content.
+**Entering an editor is a focus change, not a layout change.** Preserve the body’s text metrics and
+use its existing scrollport; focus treatment may arrive, but editor chrome must not add a second
+scrollbar or a new flow row that moves adjacent content. A later size change earns its place only
+when the reader actually changed the content.
 
 **The Something Moved Rule.** *Motion is permitted for exactly one thing: telling the reader that a
 note changed when they did not change it.* This is the one event on this surface that stillness cannot

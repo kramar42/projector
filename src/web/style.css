@@ -2453,46 +2453,6 @@ input:focus-visible + .checkbox {
 }
 
 /*
- * The body has a small, stable working stage even when its readout is one line.
- * Entering `g c` freezes this box and swaps only its contents, so links and
- * every tier below keep their physical place. The editor itself scrolls within
- * the stage; a focus change is never a re-layout of the note.
- */
-.body-stage {
-  min-height: 72px;
-}
-
-.body-stage.is-editing {
-  overflow: hidden;
-}
-
-.body-stage.is-editing .editor {
-  height: 100%;
-  min-height: 0;
-}
-
-.body-stage.is-editing .editor-host {
-  flex: 1;
-  min-height: 0;
-  /* The readout and CodeMirror share mono/body/1.6. Remove the editor's box
-     and inset here so entering it changes only focus, not the first glyph's
-     position or the body stage's measured edge. */
-  border-color: transparent;
-  border-radius: 0;
-  background: transparent;
-}
-
-.body-stage.is-editing .editor-host .cm-editor,
-.body-stage.is-editing .editor-host .cm-scroller {
-  height: 100%;
-  max-height: none;
-}
-
-.body-stage.is-editing .editor-host .cm-scroller {
-  padding: 0;
-}
-
-/*
  * A section head outranks the rows under it, and does it with colour.
  *
  * It did not. At the Label step a head is 9.5px against a facet row's 12px, so a
@@ -3857,30 +3817,59 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* body editor */
 
-.editor { display: flex; flex-direction: column; gap: 6px; }
+/*
+ * An editor belongs to the note's one vertical scrollport. Its controls live in
+ * the section header, and CodeMirror grows with the document instead of making
+ * a second scrollbar inside the first.
+ */
+.editor { position: relative; }
 .editor-host {
-  border: 1px solid var(--rule-2);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface);
+  min-width: 0;
 }
-.editor-host .cm-editor { max-height: 60vh; }
+.editor-host .cm-editor { min-height: 0; }
 .editor-host .cm-editor.cm-focused { outline: none; }
 .editor-host .cm-scroller {
-  font-family: var(--mono);
+  /* Raw text remains source text, but it is still the note's body: share the
+     rendered body's proportional face and line box so entering edit is a focus
+     change rather than the document changing typographic identity. */
+  font-family: var(--sans);
   font-size: var(--text-body);
   line-height: 1.6;
-  padding: 8px 4px;
+  color: var(--ink-2);
+  padding: 0;
+}
+.editor-host.is-body .cm-content,
+.editor-host.is-body .cm-line {
+  font-family: var(--sans);
+  font-size: var(--text-body);
+  line-height: 1.6;
 }
 .editor-host .cm-content { caret-color: var(--accent); }
+
+/* Markdown's paragraph break is 10px (`.md p` above). A blank source line is
+   that same break, not a second full text line; otherwise switching to raw
+   makes every paragraph gap visibly taller than the rendered note. */
+.editor-host.is-body .cm-line:has(> br:only-child) {
+  min-height: 10px;
+  height: 10px;
+  line-height: 10px;
+}
 .editor-host .cm-gutters { display: none; }
 .editor-host .cm-activeLine { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .editor-host .cm-selectionBackground,
 .editor-host .cm-editor ::selection { background: var(--accent-soft) !important; }
 .editor-host .cm-placeholder { color: var(--ink-3); font-style: italic; }
 
-.editor-bar { display: flex; gap: 10px; align-items: center; }
-.editor-hint, .editor-note, .editor-dirty {
+.editor-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--surface);
+}
+.editor-hint, .editor-note {
   font-family: var(--mono);
   font-size: var(--text-meta);
   color: var(--ink-3);
@@ -3890,11 +3879,11 @@ textarea { resize: vertical; font-family: inherit; }
  * The fading success, and only that.
  *
  * A refusal used to share this slot behind an `.is-bad` modifier — the right
- * colour and lifetime, in the wrong register: mono `--text-meta` in the button
- * bar, where the frontmatter editor on the same panel and the same write contract
- * renders the same event as a `.banner.is-bad` below the bar. "Your text was not
- * written" is a banner's job on every other surface in the app, so it takes one
- * here too, and this keeps `saved` and `attached N images`.
+ * colour and lifetime, in the wrong register. The frontmatter editor on the same
+ * panel and the same write contract renders the same event as a `.banner.is-bad`
+ * below its text. "Your text was not written" is a banner's job on every other
+ * surface in the app, so it takes one here too, and this keeps `saved` and
+ * `attached N images` in the header.
  */
 .editor-note { color: var(--ok); }
 .editor-dirty { color: var(--warn); margin-left: auto; }
