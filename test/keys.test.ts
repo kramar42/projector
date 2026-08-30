@@ -20,6 +20,7 @@ import {
   type Pending,
 } from '../src/view/keys.ts';
 import { DEPTH, emptyHistory, inverseOf, recorded, redone, undone, type Step } from '../src/view/undo.ts';
+import { DEPTH as TRAIL_DEPTH, back, emptyTrail, forward, jumped } from '../src/view/trail.ts';
 import {
   drawn,
   first,
@@ -759,6 +760,65 @@ test('a vault that declares no keys simply has no gotos', () => {
     { kind: 'gotoRegion', region: 'links' },
     'a region is not a facet',
   );
+});
+
+// ----------------------------------------------------------------- the trail
+
+/**
+ * `H` and `L`, which are a jumplist and not a history.
+ *
+ * The rules were all implemented and none of them asserted, which is how the
+ * most visible one stayed broken: a jump *from nowhere* records nothing, and a
+ * cold `?note=` load left the cursor unset — so the first reference followed
+ * from a shared link pushed nothing and `H` did not come back. Every case below
+ * is one a reader hits.
+ */
+const walk = (trail: ReturnType<typeof emptyTrail>, at: string | null, delta: 1 | -1) =>
+  (delta === -1 ? back : forward)(trail, at);
+
+test('the trail records where you left, and walks back through it', () => {
+  let t = emptyTrail();
+  t = jumped(t, 'a', 'b');
+  t = jumped(t, 'b', 'c');
+  assert.deepEqual(t.behind, ['a', 'b']);
+
+  const first = walk(t, 'c', -1)!;
+  assert.equal(first.to, 'b', 'H is the note you came from');
+  const second = walk(first.trail, 'b', -1)!;
+  assert.equal(second.to, 'a');
+  assert.equal(walk(second.trail, 'a', -1), null, 'and it stops rather than wrapping');
+
+  // Forward is the same move with the stacks swapped, which is the whole reason
+  // one function serves both.
+  assert.equal(walk(second.trail, 'a', 1)!.to, 'b');
+});
+
+test('a jump from nowhere records nothing, because there is nowhere to come back to', () => {
+  // The shared-link case exactly: no cursor yet, then a reference is followed.
+  const t = jumped(emptyTrail(), null, 'b');
+  assert.deepEqual(t.behind, [], 'a first jump in a fresh session leaves no mark');
+  assert.equal(walk(t, 'b', -1), null, 'so H has nothing to do, and says so by doing nothing');
+});
+
+test('landing where you already are is not a jump', () => {
+  const t = jumped(emptyTrail(), 'a', 'a');
+  assert.deepEqual(t.behind, [], 'clicking the card under the cursor may not fill the trail');
+});
+
+test('a new jump abandons forward, as it does in a browser', () => {
+  let t = jumped(jumped(emptyTrail(), 'a', 'b'), 'b', 'c');
+  const backOnce = walk(t, 'c', -1)!;
+  assert.deepEqual(backOnce.trail.ahead, ['c'], 'L would return');
+  t = jumped(backOnce.trail, 'b', 'd');
+  assert.deepEqual(t.ahead, [], 'and then it would not: you never went to c from d');
+});
+
+test('the trail is capped, and the cap drops the oldest rather than refusing the newest', () => {
+  let t = emptyTrail();
+  for (let i = 0; i <= TRAIL_DEPTH + 10; i++) t = jumped(t, `n${i}`, `n${i + 1}`);
+  assert.equal(t.behind.length, TRAIL_DEPTH);
+  assert.equal(t.behind[t.behind.length - 1], `n${TRAIL_DEPTH + 10}`, 'the newest survives');
+  assert.equal(t.behind[0], `n${11}`, 'the oldest is what goes');
 });
 
 // ------------------------------------------------------- keyboard parity

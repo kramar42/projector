@@ -1283,12 +1283,31 @@ Three rules carry most of it:
 | `gg` | the first drawn card |
 | `G` | the last drawn card |
 | `⏎` `o` | open the panel on the cursor's card |
-| `H` `L` | back / forward through notes you have *followed* — see the trail, below |
+| `H` `L` | back / forward along the trail — see below for what puts a note on it |
 | `Esc` | close the cheatsheet, then leave a list, then dismiss a message, then close the panel, then clear the selection |
 
 The cursor is the only pointer: with the panel open it **is** the panel, so `j` turns the page to the
 next card. It is not stored in the URL and starts unset — the first motion key puts it on the first
-drawn card.
+drawn card, and a link that names a note (`?note=`) puts it on that one.
+
+### The trail
+
+**`H` and `L` walk the notes you jumped to, not every card you stepped past.** A **jump** is a move to
+a note you could not see yourself going to, and it is what records:
+
+| Records | Does not |
+|---|---|
+| clicking a card, on any shape | `j` `k` `h` `l`, and `[` `]` across lanes |
+| following a reference out of a note | `h` `l` across the spread — every pinned note is already on screen |
+| clicking a pinned spine, or `g [` / `g ]` | `o`, which places a page rather than going anywhere |
+| `gg` and `G` | |
+| opening a note from the rail | |
+
+This is vim's jumplist and not a browser history, for vim's reason: if every step were a stop, walking
+a column of forty would bury the one place you actually want to get back to. So twenty presses of `j`
+after a jump still leaves `H` meaning *the note I came from*. Fifty jumps are kept, a new jump
+abandons the forward stack the way a browser's does, and landing on the note you are already on
+records nothing.
 
 **A note drawn in several columns has one cursor and the rest are echoes.** A facet with two values
 puts its note in two columns, and only one of them is where the keyboard is. It takes the ring; the

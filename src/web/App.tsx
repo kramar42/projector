@@ -333,10 +333,10 @@ export function App() {
 
   const openCard = useCallback(
     (id: string | null, at?: Spot | null) => {
-      if (id) cursor.step(id, at);
+      if (id) cursor.jump(id, at);
       setOpenNote(id);
     },
-    [cursor.step, setOpenNote],
+    [cursor.jump, setOpenNote],
   );
 
   /**
@@ -498,6 +498,26 @@ export function App() {
     const home = meta.views.find((v) => v.name === 'home') ?? meta.views[0];
     if (home) navigate(`/${patchSearch(search, { view: home.name })}`, { replace: true });
   }, [meta, search, navigate]);
+
+  /**
+   * A link that opens a note puts the cursor on it, once.
+   *
+   * `?note=` is the shareable half of where you are, and the cursor is the
+   * transient half — so a cold load of someone's link had `?note=` and a cursor
+   * of `null`. Everything downstream reads as broken from that one gap: `jump`
+   * pushes nothing when there is nowhere to push, so the *first* reference you
+   * followed from a shared link recorded nothing and `H` did not come back. You
+   * had to touch the board first to make the trail work at all.
+   *
+   * A `step` rather than a `jump`, deliberately: this is the starting point, not
+   * a move away from one, and recording it would put a note on the trail that
+   * nothing ever left. It runs once by construction — the cursor is only ever
+   * `null` before something sets it, and `openCard(null)` closes the panel
+   * without clearing it.
+   */
+  useEffect(() => {
+    if (openNote && !cursor.id) cursor.step(openNote);
+  }, [openNote, cursor.id, cursor.step]);
 
   const wire = apiSearch(search);
   /**
@@ -1867,14 +1887,26 @@ function run(command: Command, s: KeyState): void {
     }
 
     case 'moveTo': {
-      // `gg`/`G` on the spread are its ends, for the reason `move` gives.
+      // `gg`/`G` on the spread are its ends, for the reason `move` gives — and
+      // they stay steps there: the pages are all on screen, so an end of the
+      // spread is somewhere you can see, not somewhere you jumped to.
       if (s.stackOpen) {
         const pages = stackPages(s.pins, s.openNote);
         const next = command.end === 'first' ? pages[0] : pages[pages.length - 1];
         if (next && next !== cursor.id) cursor.step(next);
         return;
       }
-      return goToSpot(command.end === 'first' ? firstSpot(grid) : lastSpot(grid));
+      /**
+       * Off the spread they record, which is vim's own line: `gg` and `G` set the
+       * jumplist mark and `j`/`k` do not, because an end of a list is exactly the
+       * place you go without meaning to stay.
+       */
+      const spot = command.end === 'first' ? firstSpot(grid) : lastSpot(grid);
+      const next = idAt(grid, spot);
+      if (!next) return;
+      cursor.jump(next, spot);
+      if (openNote) setOpenNote(next);
+      return;
     }
 
     case 'trail': {
@@ -2073,7 +2105,9 @@ function run(command: Command, s: KeyState): void {
             : s.pins.length - 1
           : (at + command.delta + s.pins.length) % s.pins.length;
       const next = s.pins[to]!;
-      cursor.step(next);
+      // A jump, like the spine click it mirrors: the folded dock shows one note,
+      // so stepping the ring moves you somewhere you could not see.
+      cursor.jump(next);
       setOpenNote(next);
       return;
     }

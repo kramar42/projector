@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { back, emptyTrail, forward, jumped, type Trail } from '../view/trail.ts';
 import type { Spot } from './views/motion.ts';
 
 /**
@@ -49,12 +50,23 @@ import type { Spot } from './views/motion.ts';
  *
  * `j` and `k` do **not** record. Vim's jumplist works the same way and for the
  * same reason: if every step were a stop, walking down a column of forty would
- * bury the one place you actually want to get back to. What records is a *jump* —
- * following a reference out of the note you were reading, which is the only way
- * the cursor moves somewhere it cannot walk back from.
+ * bury the one place you actually want to get back to.
  *
- * That makes `H` mean exactly one thing: **the note I came from**. Which is the
- * whole of "follow a ref, change something on that note, and come back".
+ * What records is a **jump**: a move to a note the cursor did not *step* to.
+ * Following a reference, clicking a card, clicking a pinned spine, `g [` / `g ]`,
+ * `gg` / `G`, opening one from the rail. What does not is one step along an
+ * ordering you can see — `j k h l`, the lane keys, and walking the spread, where
+ * every pinned note is already on screen and there is nothing to come back from.
+ *
+ * That line was drawn too narrowly for a long time: only `followCard` recorded,
+ * so `H` did nothing at all for a reader who navigates by clicking, which is most
+ * of them. Widening it is what makes `H` mean the thing it always claimed —
+ * **the note I came from** — rather than only ever meaning "the ref I followed".
+ *
+ * The cap stays at fifty because steps are excluded. A cap sized for recording
+ * every step would have to be small, and a small cap is flushed by one screenful
+ * of `j` — emptying the trail exactly when you have been reading around the note
+ * you want back.
  */
 export interface Cursor {
   id: string | null;
@@ -63,10 +75,16 @@ export interface Cursor {
    * step that computed one. A hint for `locate`, re-checked every render.
    */
   at: Spot | null;
-  /** Move without recording — motion keys, and a click. */
+  /** Move without recording — one step along an ordering you can see. */
   step: (id: string | null, at?: Spot | null) => void;
-  /** Move and record where we were: following a reference. */
-  jump: (id: string) => void;
+  /**
+   * Move and record where we were: anything that is not such a step.
+   *
+   * Takes a placement for the same reason `step` does — a click knows which drawn
+   * copy it landed on, and a jump that threw that away sent the cursor to the
+   * first copy of a note drawn twice.
+   */
+  jump: (id: string, at?: Spot | null) => void;
   /** Walk the trail. `-1` is back. Returns where it landed, or `null` for nowhere. */
   travel: (delta: 1 | -1) => string | null;
 }
@@ -80,15 +98,16 @@ export function useCursor(): Cursor {
   const [pos, setPos] = useState<{ id: string | null; at: Spot | null }>({ id: null, at: null });
   const id = pos.id;
   /**
-   * Behind and ahead, as two stacks — the shape a back/forward pair always is.
-   *
-   * In a ref rather than in state because nothing renders from them: the trail is
+   * The two stacks, in a ref because nothing renders from them: the trail is
    * consulted when `H` is pressed and is invisible the rest of the time, so
    * putting it in state would re-render the whole shell on every jump to change
    * nothing on screen.
+   *
+   * The arithmetic is `view/trail.ts`, beside `undo.ts` and for its reason: it is
+   * pure, it is the part that goes subtly wrong, and inside this hook there was
+   * no way to assert any of it.
    */
-  const behind = useRef<string[]>([]);
-  const ahead = useRef<string[]>([]);
+  const trail = useRef<Trail>(emptyTrail());
   const on = useRef<string | null>(null);
   on.current = id;
 
@@ -97,32 +116,24 @@ export function useCursor(): Cursor {
     [],
   );
 
-  const jump = useCallback((next: string) => {
-    const from = on.current;
-    if (from === next) return;
-    if (from) behind.current.push(from);
-    // A new jump abandons the forward stack, exactly as a browser's does — the
-    // alternative is a "forward" that leads somewhere you never went from here.
-    ahead.current = [];
-    // Capped, because this is a convenience and not a record. Fifty is far past
-    // what anyone walks back through and far short of what would be worth
-    // worrying about holding.
-    if (behind.current.length > 50) behind.current.shift();
-    // No placement: a followed reference may not be drawn at all, and guessing
-    // one would be a hint `locate` has to throw away on arrival.
-    setPos({ id: next, at: null });
+  const jump = useCallback((next: string, spot: Spot | null = null) => {
+    if (on.current === next) return;
+    trail.current = jumped(trail.current, on.current, next);
+    // `null` unless the caller genuinely knew: a followed reference may not be
+    // drawn at all, and a guessed placement is a hint `locate` throws away on
+    // arrival. A click did know, and passes it.
+    setPos({ id: next, at: spot });
   }, []);
 
   const travel = useCallback((delta: 1 | -1) => {
-    const from = delta === -1 ? behind.current : ahead.current;
-    const to = delta === -1 ? ahead.current : behind.current;
-    const next = from.pop();
-    if (next === undefined) return null;
-    if (on.current) to.push(on.current);
-    setPos({ id: next, at: null });
+    const walk = delta === -1 ? back : forward;
+    const landed = walk(trail.current, on.current);
+    if (!landed) return null;
+    trail.current = landed.trail;
+    setPos({ id: landed.to, at: null });
     // The id rather than a flag, because the caller has to mirror it into the
     // open panel and cannot read `id` back until the next render.
-    return next;
+    return landed.to;
   }, []);
 
   return { id, at: pos.at, step, jump, travel };

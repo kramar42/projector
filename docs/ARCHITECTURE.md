@@ -399,9 +399,20 @@ a step that answered with an id alone would resolve back to the first copy on th
 itself.
 
 Escape's order is a decision: the open note closes first, the spread folds second, and neither unpins
-— only `'` and a page's `✕` do, so no chain of Escapes can cost the set. Following a reference out of
+— only `'` and a pin control do, so no chain of Escapes can cost the set. Following a reference out of
 a note has three gestures, in the panel and on a page alike: plain click replaces and records the
 trail, `⌥` sends the target to a new pin, `⇧` pins the note being read and follows.
+
+**The trail is a jumplist, and what counts as a jump is a fact about a surface.** `useCursor` offers
+`step` and `jump`; the dispatcher picks, because the question is whether you could see where you were
+going. One step along a visible ordering is a step — `j k h l`, the lane keys, walking the spread,
+where every pinned note is already drawn. Everything else jumps: a click, a followed reference, a
+pinned spine, `g [` / `g ]`, `gg` / `G`, the rail's focus rows. That line was drawn far too narrowly
+for a long time — only `followCard` recorded — so `H` did nothing at all for a reader who navigates by
+clicking, and a shared `?note=` link left the cursor unset, which meant even the *first* reference
+followed from one recorded nothing. The link seeds the cursor now, with a `step`: it is where you
+started, not somewhere you left. The stack arithmetic is `src/view/trail.ts`, pure and beside
+`undo.ts` for its reason — it is what goes subtly wrong, and inside the hook nothing could assert it.
 
 ## The index memo
 
@@ -1253,7 +1264,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
 | `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
-| `keys.test.ts` | the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
+| `keys.test.ts` | the trail's two stacks — a jump from nowhere recording nothing (the shared-link case, where a cold `?note=` left the cursor unset and `H` did nothing), landing where you already are not being a jump, a new jump abandoning forward, and the cap dropping the oldest — the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
