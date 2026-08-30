@@ -12,20 +12,27 @@ export interface CheatsheetKeyEvent {
   shiftKey: boolean;
 }
 
+/** The small, browser-provided part of a keyboard layout map we need. */
+export interface KeyboardLayout {
+  get(code: string): string | undefined;
+}
+
 /**
  * Translate a browser event into the keyboard grammar's stable spelling.
  *
  * `event.key` is the character a keyboard layout produced and is therefore the
  * right answer for ordinary and Shift strokes — Dvorak's physical J key is `h`,
  * not `j`. macOS is the deliberate exception for Option: it turns ⌥J into `∆`
- * and ⌥1 into `¡`, while the dispatcher reads `code` for its two physical Option
- * commands. Practice mode follows that same narrow exception.
+ * and ⌥1 into `¡`. Option digits remain physical, but letters resolve through
+ * the active layout map so Dvorak's labelled J is both recognised and displayed
+ * as J rather than as its QWERTY position.
  */
-export function cheatsheetStrokeOf(event: CheatsheetKeyEvent): CheatsheetStroke {
+export function cheatsheetStrokeOf(event: CheatsheetKeyEvent, layout?: KeyboardLayout): CheatsheetStroke {
   if (!event.altKey) return { key: event.key, altKey: false };
   const letter = /^Key([A-Z])$/.exec(event.code);
   if (letter) {
-    return { key: letter[1]!.toLowerCase(), altKey: true };
+    const labelled = layout?.get(event.code)?.toLowerCase();
+    return { key: labelled && /^[a-z]$/.test(labelled) ? labelled : letter[1]!.toLowerCase(), altKey: true };
   }
   const digit = /^Digit([0-9])$/.exec(event.code);
   if (digit) return { key: digit[1]!, altKey: true };

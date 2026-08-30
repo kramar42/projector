@@ -544,10 +544,24 @@ test('practice mode recognises the physical option keys a Mac actually sends', (
   assert.equal(cheatsheetStrokeLabel({ key: 'P', altKey: false }), '⇧P');
 });
 
+test('practice mode shows and matches Option letters in the active layout', () => {
+  const dvorak = new Map([
+    ['KeyC', 'j'],
+    ['KeyJ', 'h'],
+  ]);
+  const optionJ = cheatsheetStrokeOf({ key: '∆', code: 'KeyC', altKey: true, shiftKey: false }, dvorak);
+  const optionH = cheatsheetStrokeOf({ key: '∆', code: 'KeyJ', altKey: true, shiftKey: false }, dvorak);
+
+  assert.deepEqual(optionJ, { key: 'j', altKey: true });
+  assert.equal(cheatsheetStrokeLabel(optionJ), '⌥j');
+  assert.ok(matchesCheatsheetRow('⌥j ⌥k', optionJ, []));
+  assert.equal(cheatsheetStrokeLabel(optionH), '⌥h');
+  assert.ok(!matchesCheatsheetRow('⌥j ⌥k', optionH, []));
+});
+
 test('practice mode keeps unmodified keys in the active keyboard layout', () => {
-  // On Dvorak the physical QWERTY J key produces `h`. Only Option commands
-  // belong to a physical key: ordinary navigation must practice what the layout
-  // actually sends, exactly as the dispatcher does.
+  // On Dvorak the physical QWERTY J key produces `h`. Ordinary navigation must
+  // practice what the layout actually sends, exactly as the dispatcher does.
   const dvorakH = cheatsheetStrokeOf({ key: 'h', code: 'KeyJ', altKey: false, shiftKey: false });
   const dvorakHShifted = cheatsheetStrokeOf({ key: 'H', code: 'KeyJ', altKey: false, shiftKey: true });
 

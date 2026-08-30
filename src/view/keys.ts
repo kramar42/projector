@@ -448,6 +448,8 @@ export interface KeyStroke {
    * the bug it prevents is invisible on Linux.
    */
   code: string;
+  /** The active layout's unmodified character for `code`, when the browser exposes it. */
+  layoutKey?: string;
   shiftKey: boolean;
   altKey: boolean;
   ctrlKey: boolean;
@@ -458,6 +460,14 @@ export interface KeyStroke {
 function digitOf(stroke: KeyStroke): number | null {
   const m = /^Digit([0-9])$/.exec(stroke.code);
   return m ? Number(m[1]) : null;
+}
+
+/** The letter a reader's keyboard labels this physical key, with a QWERTY fallback. */
+function optionLetterOf(stroke: KeyStroke): string | null {
+  const layout = stroke.layoutKey?.toLowerCase();
+  if (layout && /^[a-z]$/.test(layout)) return layout;
+  const physical = /^Key([A-Z])$/.exec(stroke.code);
+  return physical ? physical[1]!.toLowerCase() : null;
 }
 
 export interface Dispatch {
@@ -688,11 +698,11 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
   if (altKey) {
     const digit = digitOf(stroke);
     if (digit !== null && digit > 0) return emit({ kind: 'view', ordinal: digit });
-    // `code`, not `key`, for the same reason the digits use it: ⌥j on macOS
-    // yields `∆` and ⌥k yields `˚`, so a `key` test here works everywhere except
-    // on the machine this is written for.
-    if (stroke.code === 'KeyJ') return emit({ kind: 'reorder', delta: 1 });
-    if (stroke.code === 'KeyK') return emit({ kind: 'reorder', delta: -1 });
+    // `key` is a macOS Option symbol, but a physical QWERTY code is wrong on
+    // Dvorak. The layout map resolves the unmodified labelled letter; where it
+    // is unavailable, the code preserves the long-standing QWERTY fallback.
+    if (optionLetterOf(stroke) === 'j') return emit({ kind: 'reorder', delta: 1 });
+    if (optionLetterOf(stroke) === 'k') return emit({ kind: 'reorder', delta: -1 });
     return nothing;
   }
 

@@ -184,10 +184,11 @@ export function dropOutcome(input: DropInput): DropIntent {
     // A target card also names a position. Before this was intentionally ignored
     // whenever the drop crossed a facet, so the first drop only put the card in
     // the new column and the reader had to drag it a second time to honour the
-    // insertion line. A lane-only move stays just a move: order is per column,
-    // so that line cannot name a useful order across lanes.
+    // insertion line. The stored order is shared by a column across lanes, so a
+    // lane-only move can and must write that order too: its target tile is the
+    // exact offset in that shared list.
     const insertion =
-      onCard && viewName && to !== from
+      onCard && viewName
         ? { column: to, ids: reordered(order, ids, onCard.index + (onCard.below ? 1 : 0)) }
         : undefined;
     return { kind: 'facet', ids, moves, mode, ...(insertion ? { insertion } : {}) };

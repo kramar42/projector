@@ -5,6 +5,7 @@ import {
   cheatsheetStrokeLabel,
   cheatsheetStrokeOf,
   matchesCheatsheetRow,
+  type KeyboardLayout,
   type CheatsheetStroke,
 } from './cheatsheetKeys.ts';
 import type { Meta } from './types.ts';
@@ -30,6 +31,20 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
     .map(([, def]) => ({ key: def.key!, label: def.label, single: def.single }));
   const axisKeys = axes.map((axis) => axis.key);
   const [stroke, setStroke] = useState<CheatsheetStroke | null>(null);
+  const [layout, setLayout] = useState<KeyboardLayout | null>(null);
+
+  // `key` becomes a symbol under Option on macOS, so it cannot tell the sheet
+  // whether a Dvorak reader pressed their labelled J. The browser's layout map
+  // is the unmodified answer for that physical key and is also what the main
+  // dispatcher uses for ⌥J/⌥K.
+  useEffect(() => {
+    let alive = true;
+    const keyboard = (navigator as Navigator & { keyboard?: { getLayoutMap?: () => Promise<KeyboardLayout> } }).keyboard;
+    void keyboard?.getLayoutMap?.().then((map) => alive && setLayout(map)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /**
    * The sheet is a practice surface, not a pass-through overlay. Capture at the
@@ -42,11 +57,11 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
       if (/^(Shift|Control|Alt|Meta|CapsLock|AltGraph)$/.test(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      setStroke(cheatsheetStrokeOf(event));
+      setStroke(cheatsheetStrokeOf(event, layout ?? undefined));
     };
     window.addEventListener('keydown', capture, true);
     return () => window.removeEventListener('keydown', capture, true);
-  }, []);
+  }, [layout]);
 
   return (
     <>

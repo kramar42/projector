@@ -269,12 +269,22 @@ test('u undoes and U redoes, one hand and no modifier', () => {
  * The bug this pins is invisible on Linux: macOS turns ⌥1 into `¡` and ⌥j into
  * `∆`, so every modified binding in the map is unreachable through `event.key`.
  */
-test('⌥ reads the physical key, because macOS rewrites the character', () => {
+test('⌥ falls back to the physical key, because macOS rewrites the character', () => {
   const optOne = stroke('¡', { code: 'Digit1', altKey: true });
   assert.deepEqual(bind(null, optOne, ctx()).command, { kind: 'view', ordinal: 1 });
 
   const optJ = stroke('∆', { code: 'KeyJ', altKey: true });
   assert.deepEqual(bind(null, optJ, ctx()).command, { kind: 'reorder', delta: 1 });
+});
+
+test('⌥ letter commands follow the active keyboard layout, while ⌥ numbers remain physical', () => {
+  const dvorakJ = stroke('∆', { code: 'KeyC', altKey: true, layoutKey: 'j' });
+  const dvorakH = stroke('∆', { code: 'KeyJ', altKey: true, layoutKey: 'h' });
+  const optionOne = stroke('¡', { code: 'Digit1', altKey: true, layoutKey: '1' });
+
+  assert.deepEqual(bind(null, dvorakJ, ctx()).command, { kind: 'reorder', delta: 1 });
+  assert.equal(bind(null, dvorakH, ctx()).command, null, 'the Dvorak H key is not ⌥J');
+  assert.deepEqual(bind(null, optionOne, ctx()).command, { kind: 'view', ordinal: 1 });
 });
 
 test('⌥0 is not a view, because saved views are counted from one', () => {

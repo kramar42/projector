@@ -255,6 +255,21 @@ test('a swimlane drop onto a tile moves the card instead of writing a phantom or
   assert.deepEqual(intent.moves, [{ facet: 'priority', from: 'someday', to: 'now' }]);
 });
 
+test('a swimlane drop onto a tile keeps its indicated position in the shared column order', () => {
+  const intent = dropOutcome({
+    ...matrix,
+    cardId: 'd',
+    from: 'active',
+    fromLane: 'someday',
+    to: 'active',
+    toLane: 'now',
+    onCard: { id: 'b', index: 1, below: false },
+    order: ['a', 'b', 'c', 'd'],
+  });
+  assert.ok(intent.kind === 'facet');
+  assert.deepEqual(intent.insertion, { column: 'active', ids: ['a', 'd', 'b', 'c'] });
+});
+
 test('a diagonal drag names both axes and stays one intent', () => {
   const intent = dropOutcome({
     ...matrix,

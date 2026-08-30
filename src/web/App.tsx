@@ -73,6 +73,7 @@ import {
   specToPatch,
 } from '../view/intents.ts';
 import { bind, inField, type Command, type Pending } from '../view/keys.ts';
+import type { KeyboardLayout } from './cheatsheetKeys.ts';
 import {
   emptyHistory,
   inverseOf,
@@ -646,6 +647,14 @@ export function App() {
   );
 
   const keys = useRef<KeyState | null>(null);
+  /** Used only for Option letters, whose `key` is a macOS symbol rather than their label. */
+  const keyLayout = useRef<KeyboardLayout | null>(null);
+  useEffect(() => {
+    const keyboard = (navigator as Navigator & { keyboard?: { getLayoutMap?: () => Promise<KeyboardLayout> } }).keyboard;
+    void keyboard?.getLayoutMap?.().then((map) => {
+      keyLayout.current = map;
+    }).catch(() => {});
+  }, []);
   keys.current = {
     grid,
     cursor,
@@ -694,7 +703,15 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const s = keys.current;
       if (!s) return;
-      const out = bind(pending.at, e, {
+      const out = bind(pending.at, {
+        key: e.key,
+        code: e.code,
+        layoutKey: keyLayout.current?.get(e.code),
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+      }, {
         facetKeys: s.facetKeys,
         groupedAxis: s.groupedAxis,
         inField: inField(e.target as HTMLElement | null),
