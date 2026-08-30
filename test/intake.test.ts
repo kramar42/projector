@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
-import { closeIntakeDb, commitWatermark, recordPending, rescues, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
+import { closeIntakeDb, commitWatermark, openIntakeDb, recordPending, rescues, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
@@ -1462,12 +1462,51 @@ test('a page stops, says there is more, and resumes without repeating', () => {
     assert.equal(first.rows.length, 3);
     assert.equal(first.more, true);
     assert.equal(first.total, 7, 'the total ignores the page');
+    assert.equal(first.matching, 7, 'and so does what matches, with nothing to match on');
 
-    // Paged on `at`, not an offset: a suppression landing between two reads must
-    // not shift a row into a page that has already gone past.
-    const second = suppressions(root, { limit: 3, before: first.rows.at(-1)!.at });
+    // Paged on the row, not an offset: a suppression landing between two reads
+    // must not shift a row into a page that has already gone past.
+    const second = suppressions(root, { limit: 3, before: cursorOf(first.rows.at(-1)!) });
     const seen = new Set([...first.rows, ...second.rows].map((r) => r.fingerprint));
     assert.equal(seen.size, first.rows.length + second.rows.length, 'no row read twice');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** Where the next page starts: the previous one's last row, both halves. */
+const cursorOf = (row: { at: string; fingerprint: string }) => ({
+  at: row.at,
+  fingerprint: row.fingerprint,
+});
+
+/**
+ * The pile is written by a sweep, and a sweep declines in a synchronous loop —
+ * so `at` is a millisecond several rows can share, and `at DESC` alone is not an
+ * order. Walking a pile of ties used to lose every row that shared the boundary
+ * instant with the one a page ended on.
+ */
+test('a page walks a pile whose rows share an instant', () => {
+  const root = vault({ a: card('a') });
+  try {
+    for (let i = 0; i < 9; i++) suppress(root, { fingerprint: `git:${i}`, reason: 'one sweep' });
+    // Every row to the same instant, which is what a fast sweep produces anyway.
+    openIntakeDb(root).exec("UPDATE suppressed SET at = '2026-08-30T09:00:00.000Z'");
+
+    const seen: string[] = [];
+    let page = suppressions(root, { limit: 4 });
+    for (;;) {
+      seen.push(...page.rows.map((r) => r.fingerprint));
+      if (!page.more) break;
+      page = suppressions(root, { limit: 4, before: cursorOf(page.rows.at(-1)!) });
+    }
+
+    assert.equal(new Set(seen).size, 9, 'every row is reached exactly once');
+    assert.deepEqual(
+      [...seen].sort(),
+      Array.from({ length: 9 }, (_, i) => `git:${i}`).sort(),
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1486,8 +1525,19 @@ test('search reaches the reason, not only the title', () => {
     assert.deepEqual(suppressions(root, { q: 'eslint' }).rows.map((r) => r.fingerprint), ['git:2']);
     assert.equal(suppressions(root, { q: 'nothing like this' }).rows.length, 0);
 
-    // And the total stays the whole pile, because it is what the footer counts.
+    // And the total stays the whole pile, because it is what the footer counts,
+    // while `matching` honours the search, because it is what a pager counts:
+    // "1 of 2 declined" is one sentence about one population either way round.
     assert.equal(suppressions(root, { q: 'routine' }).total, 2);
+    assert.equal(suppressions(root, { q: 'routine' }).matching, 1);
+    assert.equal(suppressions(root, { q: 'nothing like this' }).matching, 0);
+
+    // A page of a filtered pile counts the filter, not the page: this is the
+    // number a "page 1 of N" is divided out of, and reading it off `total` would
+    // promise pages that do not exist.
+    const paged = suppressions(root, { q: 'bump', limit: 1 });
+    assert.equal(paged.matching, 1);
+    assert.equal(paged.more, false, 'and there is nothing behind a page that holds all of the matches');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

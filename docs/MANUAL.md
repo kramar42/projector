@@ -1020,13 +1020,17 @@ issue the source still holds — not the card you deleted, and not your edits to
 knowing: the channel falls back to its default window, so something declined longer ago than that will
 not return on its own — `pj intake --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
 the search reaches the reason as well as the title, because someone hunting for a card they
-half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI, a box and a
-`more` row in the panel — which is the table's last row, so `j` walks onto it and carries the walk onto
-the page it fetches. Both
+half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI; in the panel,
+a box and a pager — twenty rows to a page, `[` and `]` for the page before and after, and the search
+narrows what the pages are cut from rather than only what is drawn on this one. Both
 matter more than they look: getting the order wrong costs you some scrolling, and hiding the wrong
 thing costs you the item — so a no is always reversible and the pile is always readable. Each row says
 when it was declined and whether the model or you decided, because a model's no is a guess you may want
 to check and yours is not; the head counts both the whole pile and the classifier's share of it.
+
+A row you bring back **stays where it is**, struck through and marked `brought back`, until you leave
+the page. Dropping it would leave a gap in a page of twenty and put a different row under the cursor —
+and the point of a page is that it holds still while you read it.
 
 **A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
 duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
@@ -1546,7 +1550,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,w` | focus — walk from a note |
 | `,c` | clear the filters |
 | `,\` | collapse the rail |
-| `,d` | what a sweep declined, and why — paged and searchable. `j` `k` walk it, `⏎` brings a row back, `more` is the last row rather than a control beside the table, so the walk pages the pile itself. `Esc` leaves the search box, then the pile |
+| `,d` | what a sweep declined, and why — a page at a time, searchable. `j` `k` walk the rows, `[` `]` are the page before and after, `/` reaches the search box, `⏎` brings the row under the cursor back. `Esc` leaves the search box back into the rows, and from the rows it closes the pile |
 | `,b` | the bulk bar, once cards are selected. `h` `l` walk it, `⏎` takes what is under the cursor |
 | `,t` | the canvas toolbar — what drags create, `+ note`, Save layout |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |

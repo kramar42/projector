@@ -136,10 +136,21 @@ export const api = {
     })
   ),
 
-  declined: (opts: { q?: string; before?: string } = {}) => {
+  /**
+   * One page of it. `before` is the previous page's last row — both halves,
+   * because two declines can share a millisecond and `at` alone is then not a
+   * position. See `SuppressionQuery.before`.
+   */
+  declined: (
+    opts: { q?: string; limit?: number; before?: { at: string; fingerprint: string } } = {},
+  ) => {
     const p = new URLSearchParams();
     if (opts.q) p.set('q', opts.q);
-    if (opts.before) p.set('before', opts.before);
+    if (opts.limit) p.set('limit', String(opts.limit));
+    if (opts.before) {
+      p.set('before', opts.before.at);
+      p.set('beforeId', opts.before.fingerprint);
+    }
     const qs = p.toString();
     return get<DeclinedPage>(`/api/intake/declined${qs ? `?${qs}` : ''}`);
   },

@@ -5313,11 +5313,34 @@ input[data-nav]:focus + .checkbox {
  * Borrows `.cheatsheet`'s frame — same scrim, same depth, same surface — because
  * both are one surface opened over whatever you were looking at, and giving this
  * its own box would be a second answer to a question already settled. What it adds
- * is a head row and a table narrow enough to read a reason in.
+ * is a head row, a table narrow enough to read a reason in, and a pager.
+ *
+ * **It pages rather than scrolls**, which is the one place it refuses the frame it
+ * borrows: `.cheatsheet` is `overflow: auto` because a keyboard map is one long
+ * document you read top to bottom, and this is a list you work through a screen at
+ * a time. A surface that scrolls without being a field of text is a place to lose
+ * your position in, and the pile's own answer to "there is more" is `]`. So the
+ * box is a column — head, rows, foot — and only the middle of the three can give.
  */
 .declined {
   width: min(880px, 94vw);
   padding: 14px 18px 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/*
+ * The rows, and the surface's only scroller.
+ *
+ * A safety net rather than the mechanism: twenty rows fit at any ordinary window
+ * height, and a window short enough to clip them still has to be able to reach
+ * the last row — `]` is the next page, which is no help at all in finding the
+ * bottom of this one.
+ */
+.declined-rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 .declined-head {
   display: flex;
@@ -5337,16 +5360,59 @@ input[data-nav]:focus + .checkbox {
 }
 .declined-table {
   width: 100%;
+  /*
+   * Fixed, so the two prose columns can be clipped at a width the browser is not
+   * allowed to renegotiate per page. Without it a page whose reasons happen to be
+   * short widens those columns and every column shifts under the reader between
+   * `[` and `]`, which is the one thing a pager must not do.
+   *
+   * The widths themselves are a `<colgroup>` in the markup rather than six rules
+   * here, and that is not a preference: under `table-layout: fixed` only the
+   * *first row* sizes a column, so a width declared on `td.declined-what` is read
+   * by nothing at all — which is how the two prose columns silently ended up
+   * sharing the leftover equally with the button column.
+   */
+  table-layout: fixed;
 }
-/* The two columns that hold prose. Capped so a long reason wraps instead of
-   pushing the action off the edge, which is the one control the row exists for. */
-.declined-what {
-  max-width: 34ch;
+/*
+ * The two columns that hold prose, clipped to one line each.
+ *
+ * Wrapping is the obvious treatment and it is what makes a fixed page impossible:
+ * one long reason makes its row two rows tall, and twenty of those fit on nobody's
+ * screen — so the page size would have to be a measurement rather than a number.
+ * The full text is on the cell's `title`, and the search reaches it whether or not
+ * it is drawn, so nothing here is only readable by being drawn.
+ */
+.declined-what,
+.declined-why {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .declined-why {
-  max-width: 30ch;
   color: var(--ink-2);
   font-size: var(--text-sm);
+}
+/*
+ * A row that has been brought back, still in place.
+ *
+ * Dropping it would be a gap in a page of twenty and a different row under the
+ * cursor; struck through and set back, it says what happened and holds the page
+ * still. The strike is on the two prose cells only — a struck-out timestamp reads
+ * as an error rather than as a completed act.
+ */
+.declined-table tr.is-restored {
+  color: var(--ink-3);
+}
+.declined-table tr.is-restored .declined-what,
+.declined-table tr.is-restored .declined-why {
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-2);
+}
+.declined-done {
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  color: var(--ink-3);
 }
 /*
  * The sort key and the decider: two facts about the record, both in the meta
@@ -5418,11 +5484,37 @@ input[data-nav]:focus + .checkbox {
   text-align: right;
   white-space: nowrap;
 }
-/* The fold is the table's last row, so it is centred in its cell rather than in a
-   box of its own — see `Declined`'s note on why it lives inside the navlist. */
-.declined-more td {
+
+/*
+ * The pager, and the keys that reach it.
+ *
+ * It sits under the rows rather than over them — a `position: sticky` foot would
+ * be answering the scroll this surface deliberately does not have. The hints run
+ * to the far edge because they are an annotation on the surface, not a control in
+ * the row: the reading order is prev · where you are · next, and then, quietly,
+ * how to do all three without the mouse.
+ */
+.declined-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+.declined-page {
+  font-family: var(--mono);
+  font-size: var(--text-chip);
+  color: var(--ink-3);
+  /* A fixed slot, so `page 9 of 12` does not shove `next ›` sideways on the press
+     that produced it. */
+  min-width: 9ch;
   text-align: center;
-  padding: 8px 0 4px;
+}
+.declined-hints {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 /*

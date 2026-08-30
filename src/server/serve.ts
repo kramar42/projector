@@ -994,12 +994,16 @@ app.post('/api/note/:id/fold', async (c) => {
 app.get('/api/intake/declined', (c) => {
   const root = vaultOf(c);
   const q = c.req.query('q');
-  const before = c.req.query('before');
+  // Both halves of the cursor or neither: `at` alone is not a position in the
+  // pile, because a sweep can write several rows in one millisecond. See
+  // `SuppressionQuery.before`.
+  const at = c.req.query('before');
+  const fingerprint = c.req.query('beforeId');
   const limit = Number(c.req.query('limit') ?? 0);
   return c.json(
     suppressions(root, {
       ...(q ? { q } : {}),
-      ...(before ? { before } : {}),
+      ...(at && fingerprint ? { before: { at, fingerprint } } : {}),
       ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
     }),
   );

@@ -516,14 +516,21 @@ export interface SuppressionQuery {
   /** Page size. One more than this is fetched to answer `more` without a count. */
   limit?: number;
   /**
-   * Keep reading below this `at`, which is the previous page's last row.
+   * Keep reading below this row, which is the previous page's last one.
    *
    * A cursor rather than an offset because the list only ever grows, and it grows
    * at the end being read from: a sweep landing between two pages of an offset
    * walk shifts every row down one, so the reader sees a row twice and never sees
    * another. Paging on the value being sorted by cannot do that.
+   *
+   * **The whole row, not its `at`.** `at` is `Date.toISOString()`, so a sweep that
+   * declines four candidates in one synchronous loop writes four rows with the
+   * same millisecond — and `at DESC` alone is then not an order at all, so which
+   * of the four a page ends on is the engine's choice and `at < ?` skips the other
+   * three outright. Ordering by `(at, fingerprint)` makes the sequence total, and
+   * a cursor that names both halves lands exactly between two rows.
    */
-  before?: string;
+  before?: { at: string; fingerprint: string };
 }
 
 export interface SuppressionPage {
@@ -532,6 +539,16 @@ export interface SuppressionPage {
   more: boolean;
   /** Every suppression, ignoring `q` and the page — what the footer counts. */
   total: number;
+  /**
+   * How many match the filter, ignoring the page — what a pager counts.
+   *
+   * `total` cannot do this job: the moment a surface pages, "3 of 21" while
+   * searching means three of the twenty-one *unfiltered* rows, which is two
+   * populations in one sentence — the mistake `byModel` below was written to
+   * stop. Equal to `total` when nothing is being filtered on, and read from the
+   * same scan so the three can never disagree.
+   */
+  matching: number;
   /**
    * How many of `total` the classifier decided, on the same terms.
    *
@@ -556,27 +573,41 @@ const DEFAULT_PAGE = 50;
 export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): SuppressionPage {
   const conn = openIntakeDb(dataRoot);
   const limit = Math.max(1, Math.min(500, opts.limit ?? DEFAULT_PAGE));
-  const where: string[] = [];
-  const args: (string | number)[] = [];
+
+  /**
+   * What the reader asked to see, kept apart from where the page starts.
+   *
+   * They read as one `WHERE` on the page query and they are two different
+   * questions: the filter is the population, and the cursor is a position within
+   * it. Counting `matching` means asking the first without the second, which a
+   * single accumulated clause cannot be asked for.
+   */
+  const filter: string[] = [];
+  const filterArgs: (string | number)[] = [];
 
   if (opts.channel) {
-    where.push('channel = ?');
-    args.push(opts.channel);
+    filter.push('channel = ?');
+    filterArgs.push(opts.channel);
   }
   if (opts.wasJudged !== undefined) {
-    where.push('was_judged = ?');
-    args.push(opts.wasJudged ? 1 : 0);
+    filter.push('was_judged = ?');
+    filterArgs.push(opts.wasJudged ? 1 : 0);
   }
   if (opts.q?.trim()) {
     // Three columns, because a reader looking for something they half-remember
     // may remember the wording of the reason rather than the title.
-    where.push('(title LIKE ? OR reason LIKE ? OR fingerprint LIKE ?)');
+    filter.push('(title LIKE ? OR reason LIKE ? OR fingerprint LIKE ?)');
     const like = `%${opts.q.trim()}%`;
-    args.push(like, like, like);
+    filterArgs.push(like, like, like);
   }
+
+  const where = [...filter];
+  const args = [...filterArgs];
   if (opts.before) {
-    where.push('at < ?');
-    args.push(opts.before);
+    // The compound comparison spelled out, because SQLite has no row-value form
+    // here: strictly older, or the same instant and further down the tie-break.
+    where.push('(at < ? OR (at = ? AND fingerprint < ?))');
+    args.push(opts.before.at, opts.before.at, opts.before.fingerprint);
   }
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -585,24 +616,35 @@ export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): Sup
   const rows = conn
     .prepare(
       `SELECT fingerprint, channel, title, reason, at, decided_by AS decidedBy, was_judged
-         FROM suppressed ${clause} ORDER BY at DESC LIMIT ?`,
+         FROM suppressed ${clause} ORDER BY at DESC, fingerprint DESC LIMIT ?`,
     )
     .all(...args, limit + 1) as unknown as (Omit<Suppression, 'wasJudged'> & {
     was_judged: number;
   })[];
 
-  // Both counts in one statement: they are the same scan, and two statements is
-  // how they could ever disagree.
+  // All three counts in one statement: they are the same scan, and separate
+  // statements are how they could ever disagree. The filter goes in as a
+  // `FILTER` clause rather than a `WHERE`, so the population and the subset of
+  // it are counted over one pass.
   const counts = conn
     .prepare(
-      `SELECT count(*) AS n, count(*) FILTER (WHERE decided_by = 'model') AS m FROM suppressed`,
+      `SELECT count(*) AS n,
+              count(*) FILTER (WHERE decided_by = 'model') AS m,
+              count(*) FILTER (WHERE ${filter.length ? filter.join(' AND ') : '1'}) AS k
+         FROM suppressed`,
     )
-    .get() as { n: number; m: number };
+    .get(...filterArgs) as { n: number; m: number; k: number };
   const page = rows.slice(0, limit).map(({ was_judged, ...r }) => ({
     ...r,
     wasJudged: Boolean(was_judged),
   }));
-  return { rows: page, more: rows.length > limit, total: counts.n, byModel: counts.m };
+  return {
+    rows: page,
+    more: rows.length > limit,
+    total: counts.n,
+    matching: counts.k,
+    byModel: counts.m,
+  };
 }
 
 /**

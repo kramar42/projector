@@ -296,7 +296,7 @@ Three rules fall out of that and are worth stating, because each was a decision:
   picks, on a surface whose value is that every row is worth picking.
 - **It lists nothing that needs an argument.** Removing one link and restoring one
   declined candidate are always about *which*, and a palette row cannot carry that.
-  Both are walks — `g l` and the navlist in the declined pile.
+  Both are walks — `g l` and the row cursor in the declined pile.
 
 **Axis rows are expanded at draw time**, from the vault's own vocabulary, because
 that is the one thing a static table cannot hold (C4 — the client names no facet).
@@ -729,12 +729,30 @@ carries the count, which the sidebar draws
 with the vault stats rather than in the footer: the footer answers *what is on screen, and why it is
 not more* about the current query, and a pile a sweep turned down does not move when you filter. `,d` opens it from the keyboard.
 
-It is **paged on `at` and searched with `LIKE`**, because the pile only ever grows: every sweep that
-declines something adds a row and only a rescue removes one. A cursor rather than an offset, for the
-reason the watermark gives about itself — the list grows at the end being read from, so an offset walk
-interrupted by a sweep shows a row twice and never shows another. The page fetches one row more than
-it needs, so `more` is a fact about what was read rather than a second count over a growing table, and
-`total` ignores the search because it is what the footer is counting. Without it an empty board has two meanings and no way to tell them apart, which is the whole
+It is **paged on `(at, fingerprint)` and searched with `LIKE`**, because the pile only ever grows:
+every sweep that declines something adds a row and only a rescue removes one. A cursor rather than an
+offset, for the reason the watermark gives about itself — the list grows at the end being read from, so
+an offset walk interrupted by a sweep shows a row twice and never shows another. **Both halves of the
+cursor**, because a sweep declines in a synchronous loop and `at` is `toISOString()`: several rows share
+a millisecond, `at DESC` alone is therefore not an order, and a boundary of `at < ?` dropped every row
+that tied with the one a page ended on. Ordering by the pair makes the sequence total and lets a cursor
+land exactly between two rows.
+
+The page fetches one row more than it needs, so `more` is a fact about what was read rather than a
+second count over a growing table. Three counts come back from one scan and each answers a different
+question: `total` ignores the search, because it is what the sidebar counts; `matching` honours it,
+because it is what a pager divides by; `byModel` is the classifier's share of `total`, so the head can
+say both in one sentence without them being two populations.
+
+**The surface pages rather than scrolls, so `[` and `]` are the pages and it owns the keyboard
+outright.** Those are the board's lane keys and `j`/`k` are its motion keys, and there is no board in
+front of you — a stroke that reached the dispatcher would move something behind the scrim. So a capture
+listener at the window takes every key that is not a browser shortcut, the way `Cheatsheet` already
+does. Going forward is a cursor; going *back* is a stack of the boundaries each page started at, held
+in the client, so `[` is a step into a value already in hand rather than an offset the pile can
+invalidate.
+
+Without it an empty board has two meanings and no way to tell them apart, which is the whole
 justification: it is the audit trail for a decision the app made on its own, and the only place a wrong
 one can be put right.
 
@@ -1272,7 +1290,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
-| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
+| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; that the pile pages over rows sharing one instant without losing any of them, and that a filtered read counts what matches as well as the whole pile; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
 | `keys.test.ts` | the trail's two stacks — a jump from nowhere recording nothing (the shared-link case, where a cold `?note=` left the cursor unset and `H` did nothing), landing where you already are not being a jump, a new jump abandoning forward, and the cap dropping the oldest — the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |

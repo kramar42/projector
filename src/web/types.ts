@@ -138,12 +138,15 @@ export interface Declined {
  *
  * Paged because it only grows: every sweep that declines something adds a row and
  * nothing removes one but a rescue. `more` says there is another page behind this
- * one; `total` ignores the search, because it is what the sidebar counts.
+ * one; `total` ignores the search, because it is what the sidebar counts, and
+ * `matching` honours it, because it is what the pager counts.
  */
 export interface DeclinedPage {
   rows: Declined[];
   more: boolean;
   total: number;
+  /** How many match the search, ignoring the page — the pager's denominator. */
+  matching: number;
   /** Of `total`, how many the classifier decided — the same population, so the two can be said together. */
   byModel: number;
 }

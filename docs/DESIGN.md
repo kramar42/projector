@@ -1215,10 +1215,15 @@ the fourth one relitigating it:
   had its landing in the key dispatcher, so `,d` put the cursor in the table and the footer's count
   did not: the same surface had a keyboard or no keyboard depending on how you got there, and with no
   keyboard `j` and `k` reached the board behind the scrim instead.
-- **Escape is two steps when a field is on it.** A field owns every key it is given, so the surface's
-  own Escape has to be answered by the field first — leave the field, then leave the surface. The
-  palette had the opposite bug and it is the sharper illustration: it opens *with focus in its input*,
-  so its Escape reached nothing at all and the key was dead.
+- **Escape is two steps when a field is on it, and the first step lands somewhere.** A field owns
+  every key it is given, so the surface's own Escape has to be answered by the field first — leave
+  the field, then leave the surface. The palette had the opposite bug and it is the sharper
+  illustration: it opens *with focus in its input*, so its Escape reached nothing at all and the key
+  was dead. The declined pile had the subtler one: leaving its search box *blurred*, which put focus
+  on the body, so the first press cost the surface its keyboard and the second press was the only key
+  that still worked. A step out of a field returns focus to the surface's own list, so the two-step is
+  field → list → gone rather than field → nowhere → gone, and from the list — where you land, and
+  where the visit is spent — Escape closes on the first press.
 - **No accent on standing state.** This is the App Voice Rule applied to a surface that is a *list of
   facts*. `.rail-declined` argues it in its own comment — a count that is nonzero most of the time
   would wear the accent permanently, which is how an accent stops meaning anything — and `.chip.is-model`
@@ -1228,6 +1233,17 @@ the fourth one relitigating it:
   loudest clause.
 - **A chip is a facet value.** A property of the *record* — who decided, when — is meta register, not a
   chip. `By` was a chip because a chip was the nearest thing to hand.
+- **A list surface pages; it does not scroll.** The frame is `overflow: auto` because a keyboard map is
+  one document read top to bottom. A list of rows worked through one at a time is not, and a scroller
+  on it is a place to lose your position — so `.declined` overrides the one property, sizes its page to
+  a screenful, and answers *there is more* with a pager. The cost is paid in the cells: the two prose
+  columns clip to one line, because a wrapping reason makes a row two rows tall and a page size that
+  has to be measured is not a page size. What is clipped stays on the cell's `title` and stays
+  searchable, so nothing is readable only by being drawn.
+- **The row is the cursor, not the control inside it.** A surface whose rows each carry one act is
+  choosing between rows, so the row is what wears `.table tbody tr.is-cursor` and the button inside it
+  is not a tab stop. Lighting the button instead says the act is what you are picking, when the act is
+  the same on every row and only the row differs.
 
 ### The Borrowed Chrome Rule
 

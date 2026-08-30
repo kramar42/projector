@@ -954,9 +954,11 @@ try {
           );
         }
         // The pile only grows, so a page that stops has to say so — otherwise the
-        // last line reads as the end of the list.
+        // last line reads as the end of the list. Counted against `matching`
+        // rather than `total`, because with `--q` those are two populations and
+        // "3 of 21" would be three of the matches over the whole pile.
         console.log(
-          `${rows.length} of ${page.total}${page.more ? ' — more behind this page; narrow with --q or raise --limit' : ''}`,
+          `${rows.length} of ${page.matching}${page.matching === page.total ? '' : ` matching, of ${page.total} declined`}${page.more ? ' — more behind this page; narrow with --q or raise --limit' : ''}`,
         );
         break;
       }
