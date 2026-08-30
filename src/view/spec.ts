@@ -313,7 +313,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   return spec;
 }
 
-/** What gets written for *save current as…*: the query half, never arrangement. */
+/** What gets written for *save current as…*: the complete view currently on screen. */
 export function specToFile(spec: ViewSpec, title: string): Record<string, unknown> {
   const q = spec.query;
   const filter: Record<string, string[]> = {};
@@ -329,6 +329,12 @@ export function specToFile(spec: ViewSpec, title: string): Record<string, unknow
     ...(q.groupBy?.length ? { groupBy: q.groupBy } : {}),
     ...(q.sort?.length ? { sort: q.sort } : {}),
     ...(spec.show.length ? { show: spec.show } : {}),
+    ...(spec.lists?.length ? { lists: spec.lists } : {}),
+    ...(spec.unlisted ? { unlisted: true } : {}),
+    ...(spec.whenEmpty ? { whenEmpty: spec.whenEmpty } : {}),
+    ...(spec.expect ? { expect: spec.expect } : {}),
+    ...(spec.nodes ? { nodes: spec.nodes } : {}),
+    ...(spec.order ? { order: spec.order } : {}),
   };
 }
 
@@ -403,4 +409,3 @@ export function summariseViews(views: ViewSpec[]): SavedViewSummary[] {
       shape: v.shape,
     }));
 }
-

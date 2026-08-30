@@ -509,9 +509,10 @@ is a filtered subset — replacing the `nodes` map would silently discard the po
 filter happened to hide. Same for `order`, per column. An entry is dropped only when its note is
 actually gone, and the live-id set is built at most once per save.
 
-**Saving a view keeps its arrangement.** *Save current as…* over an existing name replaces the query
-wholesale and leaves `nodes` and `order` alone, so refining a saved view's filter does not
-cost you its layout.
+**Saving a view keeps its structure.** *Save current as…* writes the complete effective `ViewSpec`:
+the query beside `lists:`, `unlisted`, `whenEmpty`, `expect`, `nodes` and `order`. Updating an existing
+name keeps any saved-only field a direct caller did not supply, so refining a composition's filter does
+not erase its columns or its layout.
 
 **Two sentinels, one reason.** The server merges a saved view's parameters *under* the URL's, so an
 absent key means "inherit". Clearing something therefore needs an explicit empty value: `f.status=`
@@ -1254,7 +1255,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | | |
 |---|---|
 | `agent.test.ts` | branch naming — every placeholder spelling substitutes and a typo is refused — the desktop deep link and the one shell string left beside it, base-branch fallback, worktree preparation, both of `planWork`'s refusals, a dry run naming worktrees rather than checkouts, the briefing asking the session to register nothing; plus the workspace as the thing a note records — the sessions under a directory including its worktrees and excluding a slug collision the transcript's own `cwd` settles, the three ways a workspace can be opened, and the record being written once however often work is started; and `pj log` reading every single-valued axis out of git diffs, with the blob walk counting bytes so a multi-byte body cannot derail it |
-| `arrangement.test.ts` | positions and note order merge rather than replace; save keeps arrangement |
+| `arrangement.test.ts` | positions and note order merge rather than replace; saving keeps a composition and every saved-only field |
 | `cache.test.ts` | the index memo: a hit when nothing moved, a rebuild when a note lands, a rebuild when another process replaces the index under an open handle, and a dispose that throws not taking the rebuild with it |
 | `calendar.test.ts` | the calendar's page arithmetic: the default page being the week around today, the anchor snapping to the declared week start only at week width, paging by a whole page and coming back to the same start, bad parameters degrading to defaults with hostile counts capped, UTC day arithmetic across month, year and leap boundaries, page and cell labels where the month turns, the date axis read from `show` first and the vocabulary second, placement splitting the filter's notes into days / the unscheduled rail / per-note off-page counts, the cursor grid being one lane of the page's days with the rail as the last column — empty when the vault declares no date facet — and the page params pinned *outside* `SPEC_PARAMS`, so a saved view cannot store a date that decays |
 | `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |

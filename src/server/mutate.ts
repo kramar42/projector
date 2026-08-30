@@ -1285,9 +1285,11 @@ export function saveArrangement(
 /**
  * Write a saved view — *save current as…*, and updating one in place.
  *
- * Only the query half is written: arrangement belongs to whatever the view
- * already holds, so saving a new query over an existing name keeps its positions
- * rather than throwing them away.
+ * A save is a snapshot of the view on screen, including its composition and
+ * arrangement. Direct callers may provide only a query, though, so updating an
+ * existing name keeps every saved-only field it did not explicitly supply. A
+ * filter added to a `lists:` view therefore refines those same columns instead
+ * of turning it into an unrelated board (C9).
  */
 export function saveView(root: string, name: string, body: Record<string, unknown>): { name: string } {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -1300,8 +1302,9 @@ export function saveView(root: string, name: string, body: Record<string, unknow
   if (existsSync(file)) {
     const before = (parse(readFileSync(file, 'utf8')) ?? {}) as Record<string, unknown>;
     merged = { ...body };
-    if (before.nodes) merged.nodes = before.nodes;
-    if (before.order) merged.order = before.order;
+    for (const key of ['lists', 'unlisted', 'whenEmpty', 'expect', 'nodes', 'order']) {
+      if (merged[key] === undefined && before[key] !== undefined) merged[key] = before[key];
+    }
   }
 
   // Through the YAML patcher rather than a bare stringify, so a view the app

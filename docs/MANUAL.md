@@ -498,8 +498,9 @@ not change under you.
 
 A saved view is a named query in `.projector/views/*.yaml`, listed in the sidebar and switchable at any time.
 Change a control while one is open and the sidebar says *modified*, with **save** and **revert** — so a
-named view stays what you left it. *Save current as…* writes the query you are looking at; saving over
-an existing name replaces its query and keeps its arrangement.
+named view stays what you left it. *Save current as…* writes the complete view you are looking at: its
+query, `lists:` columns, saved-only meaning and arrangement. Saving Triage after adding a filter keeps
+its rule columns and records that filter alongside them.
 
 **Opening a vault opens its `home` view**, or its first saved view if it has no `home`, or the bare
 query if it has no views at all — and the choice is written into the address bar, so what you are

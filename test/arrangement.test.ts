@@ -113,6 +113,32 @@ test('saving over a view keeps the arrangement it already had', () => {
   }
 });
 
+test('saving a composition keeps its columns and saved-only meaning', () => {
+  const { root, cleanup } = vault({
+    triage:
+      'shape: board\ntitle: Triage\nlists: [intake, needs-status]\nunlisted: true\n' +
+      'whenEmpty: Everything is filed\nexpect: empty\nnodes: { a: { x: 7, y: 7 } }\norder: { Intake: [a] }\n',
+  });
+  try {
+    // Filtering a composition refines its children; it must not turn it into an
+    // ordinary board by dropping the file-only fields that name those children.
+    saveView(root, 'triage', { shape: 'table', title: 'Filtered triage', filter: { priority: ['now'] } });
+    assert.deepEqual(read(root, 'triage'), {
+      shape: 'table',
+      title: 'Filtered triage',
+      filter: { priority: ['now'] },
+      lists: ['intake', 'needs-status'],
+      unlisted: true,
+      whenEmpty: 'Everything is filed',
+      expect: 'empty',
+      nodes: { a: { x: 7, y: 7 } },
+      order: { Intake: ['a'] },
+    });
+  } finally {
+    cleanup();
+  }
+});
+
 test('a saved view is named by a slug and reads back through the loader', () => {
   const { root, cleanup } = vault();
   try {

@@ -148,7 +148,7 @@ test('a view file reads back as the query it was written from', () => {
   assert.equal(spec.query.q, 'keycloak');
 });
 
-test('saving writes the query half and never the arrangement', () => {
+test('saving writes the complete effective view', () => {
   const spec = parseSpec({
     shape: 'canvas',
     'f.project': 'project-a',
@@ -158,6 +158,10 @@ test('saving writes the query half and never the arrangement', () => {
   });
   spec.nodes = { 'project-a': { x: 10, y: 20 } };
   spec.order = { now: ['a', 'b'] };
+  spec.lists = ['needs-status', 'needs-priority'];
+  spec.unlisted = true;
+  spec.whenEmpty = 'Everything is filed';
+  spec.expect = 'empty';
   const file = specToFile(spec, 'Project A graph');
   assert.deepEqual(file, {
     shape: 'canvas',
@@ -167,9 +171,13 @@ test('saving writes the query half and never the arrangement', () => {
     filter: { project: ['project-a'] },
     groupBy: ['priority'],
     show: ['parent', 'tech'],
+    lists: ['needs-status', 'needs-priority'],
+    unlisted: true,
+    whenEmpty: 'Everything is filed',
+    expect: 'empty',
+    nodes: { 'project-a': { x: 10, y: 20 } },
+    order: { now: ['a', 'b'] },
   });
-  assert.ok(!('nodes' in file));
-  assert.ok(!('order' in file));
 });
 
 test('a file round-trips through save and reload', () => {
