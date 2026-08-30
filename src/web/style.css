@@ -759,6 +759,11 @@ body {
  * filtered. The 2px is what binds it to `filtered out` — the rest of the sentence
  * is spaced by `·`, so anything looser reads as its own clause.
  */
+/* A count and the control acting on it do not get separated by a line break. */
+.rail-clause {
+  white-space: nowrap;
+}
+
 .rail-active .rail-clear {
   display: inline-flex;
   align-items: center;

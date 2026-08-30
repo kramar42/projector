@@ -655,7 +655,9 @@ nested ones reads `1 / 7`.
 **Calendar.** Days as cells, from the same query: the filter, search and focus decide which notes
 exist, and each lands on the days its **date facet** holds — the first date facet in `show`, or the
 vault's first when `show` names none. Storage stays a raw date, so the board's `due` buckets group
-exactly as before; the calendar is just the one surface that draws the day itself.
+exactly as before; the calendar is just the one surface that draws the day itself. **Group by** keeps
+whatever it held and says so on hover: the cells are days, so there is nothing for it to draw here,
+and it stays live only so switching back to a board finds the grouping you left.
 
 | Gesture | Effect |
 |---|---|

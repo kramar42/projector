@@ -274,7 +274,12 @@ function ActiveStats({
       {hidden > 0 && (
         <>
           {' '}
-          · {hidden} filtered out{clear}
+          {/* The count and the control that clears it are one clause. Without
+              the wrapper the ✕ is an inline-flex box the line can break before,
+              and in the rail's width it does: it dropped onto a second line, on
+              its own, centred under the counts — which is the first thing the
+              shipped tutorial draws, since its `home` view filters. */}
+          · <span className="rail-clause">{hidden} filtered out{clear}</span>
         </>
       )}
       {data.context.length > 0 && (

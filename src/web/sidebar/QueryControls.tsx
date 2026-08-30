@@ -73,10 +73,20 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
           data-rail="group"
           value={composed ? LISTS_AXIS : group[0] ?? ''}
           disabled={composed}
+          /*
+           * A calendar keeps the value and cannot draw it — its cells are days,
+           * from the date facet, and nothing else groups them. Said rather than
+           * disabled, for the reason `then by` says the same thing about a
+           * canvas: switching shape back has to find the grouping you left, so
+           * the control that holds it must stay live and must stop implying it
+           * is doing something here.
+           */
           title={
             composed
               ? 'the columns are the views this one composes — group by is what it already is'
-              : undefined
+              : shape === 'calendar'
+                ? 'a calendar’s cells are days, from its date facet — it keeps this value for the other shapes but cannot draw it'
+                : undefined
           }
           onChange={(e) => edit((spec) => setGroupBy(spec, 0, e.target.value || null))}
         >

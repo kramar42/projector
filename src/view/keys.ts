@@ -830,7 +830,16 @@ export const BINDINGS: readonly Binding[] = [
   { id: 'open.enter', stroke: 'Enter', glyph: '⏎', command: { kind: 'take' } },
   { id: 'open.o', stroke: 'o', command: { kind: 'open' } },
 
-  { id: 'select.toggle', stroke: 'x', command: { kind: 'select', how: 'toggle' } },
+  /**
+   * One of the three is a palette row, and it is the one that is not motion.
+   *
+   * `x` writes `?sel=` about the note under the cursor, which is the same shape
+   * of act as `'` and `!` — both listed — and `*` was listed while `x` was not,
+   * so a reader searching the palette for *select* found half a family. `J`/`K`
+   * stay out: they move the cursor as they extend, which is the definition this
+   * list uses for motion.
+   */
+  { id: 'select.toggle', stroke: 'x', palette: 'Add this note to the selection', command: { kind: 'select', how: 'toggle' } },
   { id: 'select.down', stroke: 'J', command: { kind: 'select', how: 'extend', delta: 1 } },
   { id: 'select.up', stroke: 'K', command: { kind: 'select', how: 'extend', delta: -1 } },
   { id: 'select.all', stroke: '*', palette: 'Select everything on screen', command: { kind: 'select', how: 'all' } },
