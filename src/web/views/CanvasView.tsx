@@ -620,7 +620,16 @@ export function CanvasView({
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--dot)" />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable nodeColor="var(--minimap-node)" maskColor="var(--minimap-mask)" />
+          {/* All three colours as props, for one reason: React Flow reads them
+              from `--xy-*-props` custom properties its own rule resolves, and a
+              stylesheet rule of ours with the same selector loses to theirs. */}
+          <MiniMap
+            pannable
+            zoomable
+            bgColor="var(--surface)"
+            nodeColor="var(--minimap-node)"
+            maskColor="var(--minimap-mask)"
+          />
         </ReactFlow>
 
         {acting.length > 0 && (

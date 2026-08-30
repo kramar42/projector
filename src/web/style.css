@@ -1783,7 +1783,15 @@ input:focus-visible + .checkbox {
   color: var(--ink-3);
 }
 
-.react-flow__node {
+/*
+ * Scoped under `.canvas` — which is `<ReactFlow className="canvas">`, so it is
+ * this element's own ancestor and not a guess — wherever the library writes the
+ * same property on the same bare class. Its stylesheet is bundled after this
+ * one, so at equal specificity it wins and the declaration here reads as though
+ * it worked while doing nothing: the canvas cards were `cursor: default` for as
+ * long as this rule has existed. `test/theme.test.ts` now names every such tie.
+ */
+.canvas .react-flow__node {
   font-family: var(--sans);
   cursor: pointer;
 }
@@ -1848,13 +1856,13 @@ input:focus-visible + .checkbox {
    inherits its edge's colour as a fill otherwise and a red word floating over a
    graph reads as an error — `buildEdges` used to say this inline, where the type
    step was invisible to the scale test. */
-.react-flow__edge-text {
+.canvas .react-flow__edge-text {
   font-family: var(--mono);
   font-size: var(--text-chip);
   fill: var(--ink-2);
 }
 
-.react-flow__edge-textbg {
+.canvas .react-flow__edge-textbg {
   fill: var(--surface);
 }
 
@@ -1868,13 +1876,29 @@ input:focus-visible + .checkbox {
   background: var(--surface-2);
 }
 
+/*
+ * The minimap's ground is set on the component, not here — see `CanvasView`.
+ *
+ * React Flow paints it from `--xy-minimap-background-color-props`, and its own
+ * rule has the same selector and lands later in the bundle, so a `background`
+ * written here loses silently: the map came out white on a black canvas, the one
+ * lit rectangle in the app, and the losing declaration sat in this file reading
+ * as though it worked. The border and the radius are ours because nothing in
+ * their stylesheet claims them.
+ */
 .react-flow__minimap {
-  background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
 }
 
-.react-flow__attribution {
+/*
+ * Doubled selector for the reason above: the attribution has no prop to set, so
+ * specificity is the only lever, and a bare `.react-flow__attribution` lost —
+ * the badge sat on a half-opaque white slab in the corner of a black canvas.
+ * `.react-flow__panel` is the element's own second class, not a guess about the
+ * tree, so this cannot break by something moving.
+ */
+.react-flow__panel.react-flow__attribution {
   background: transparent;
   font-size: var(--text-micro);
 }

@@ -232,6 +232,72 @@ function rules(): { sel: string; body: string }[] {
 }
 
 /**
+ * A rule we write about a vendor's component has to actually win.
+ *
+ * The canvas is React Flow's, and fourteen rules here restyle its chrome. Two of
+ * them lost: `.react-flow__minimap` and `.react-flow__attribution` are selectors
+ * the library writes too, its stylesheet is bundled after this one, and equal
+ * specificity means last wins. So the minimap painted `#fff` and the attribution
+ * a half-opaque white slab — the two lit rectangles in a black app — while the
+ * declarations saying otherwise sat in this file reading as though they worked.
+ *
+ * A screenshot is what caught it, which is exactly the wrong instrument: nothing
+ * failed, nothing warned, and the file said the opposite of the app. This is the
+ * check that says so. It is deliberately about *collision*, not about looking
+ * right: a bare selector that the library also writes is a coin toss decided by
+ * bundle order, and the fix is a prop the library reads or one more class.
+ */
+test('a rule aimed at the canvas library outranks the library', () => {
+  const vendor = readFileSync(
+    fileURLToPath(new URL('../node_modules/@xyflow/react/dist/style.css', import.meta.url)),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** Property names a rule sets, custom properties excluded — those cascade by name. */
+  const props = (body: string) =>
+    [...body.matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map((m) => m[1]!).filter((p) => !p.startsWith('--'));
+
+  /** What the library sets, per selector. */
+  const theirs = new Map<string, Set<string>>();
+  for (const m of vendor.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const raw of m[1]!.split(',')) {
+      const sel = raw.trim();
+      const at = theirs.get(sel) ?? new Set<string>();
+      for (const p of props(m[2]!)) at.add(p);
+      theirs.set(sel, at);
+    }
+  }
+
+  /** A shorthand covers its own longhands, so `background` ties `background-color`. */
+  const covers = (a: string, b: string) => a === b || b.startsWith(`${a}-`) || a.startsWith(`${b}-`);
+
+  const ties: string[] = [];
+  for (const r of rules()) {
+    for (const raw of r.sel.split(',')) {
+      const sel = raw.trim();
+      // Only a bare single class can tie. Anything compound already outranks
+      // one, which is the fix as much as it is the reason to skip it here.
+      if (!/^\.react-flow[a-z_-]*$/.test(sel)) continue;
+      const mine = props(r.body);
+      for (const p of mine) {
+        for (const q of theirs.get(sel) ?? []) {
+          if (covers(p, q)) ties.push(`${sel} { ${p} } vs the library's ${q}`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...new Set(ties)].sort(),
+    [],
+    'the library writes these selectors too and its stylesheet is bundled after ' +
+      'this one, so bundle order decides which paint wins — set the value through ' +
+      'the component prop the library reads, or add a class the element already ' +
+      'carries:\n  ' + ties.join('\n  '),
+  );
+});
+
+/**
  * The One Casing Rule: uppercase is the Label register, reached by taking the
  * step — never by transforming a string at some other size.
  *

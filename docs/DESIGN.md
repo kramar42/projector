@@ -1164,6 +1164,25 @@ the fourth one relitigating it:
 - **A chip is a facet value.** A property of the *record* — who decided, when — is meta register, not a
   chip. `By` was a chip because a chip was the nearest thing to hand.
 
+### The Borrowed Chrome Rule
+
+**A rule that restyles the canvas library must outrank it, and the stylesheet has to make that
+visible.**
+
+The canvas is React Flow's, and fourteen rules here repaint its chrome into this palette. Its own
+stylesheet is bundled after this one, so a bare `.react-flow__…` selector that the library also writes
+is a tie decided by bundle order — and the library wins every one of them. Four did: the minimap
+painted white and the attribution sat on a half-opaque white slab, the two lit rectangles in a dark
+app, while canvas cards stayed `cursor: default`. Nothing failed and nothing warned; the stylesheet
+simply said the opposite of the screen.
+
+So a value the library exposes as a component prop is set there — `bgColor`, `nodeColor`, `maskColor`
+on `<MiniMap>`, which resolve to the `--xy-*-props` custom properties its own rule reads first — and
+everything else is scoped under `.canvas`, the class `<ReactFlow>` already carries, so the selector
+outranks the library's without inventing an element. `test/theme.test.ts` asserts the absence of every
+remaining tie, selector *and* property, because this is the one class of mistake in this file that a
+screenshot is the only other way to find.
+
 ### The Calendar Borrows Rule
 
 **A day cell is a column at cell scale; the calendar declares no register of its own.**
