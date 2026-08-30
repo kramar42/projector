@@ -574,12 +574,7 @@ function DayColumn({
   );
 }
 
-/**
- * The board's tile, minus what a calendar has no answer for: no stored order,
- * so no card-edge drop target. The click grammar and the roving tabindex are
- * the board's exactly, so a pointer and the keyboard mean the same thing per
- * shape.
- */
+/** The board's tile in a day: its order lives under that day's raw date key. */
 function CalCard({
   card,
   column,
@@ -609,20 +604,28 @@ function CalCard({
   onOpen: (id: string, at?: Spot | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState<'top' | 'bottom' | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    return draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) });
-  }, [card.id, column]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    return dropTargetForElements({
-      element: el,
-      getData: () => ({ cardId: card.id, column, index }),
-    });
+    const cleanups = [
+      draggable({ element: el, getInitialData: () => ({ cardId: card.id, column }) }),
+      dropTargetForElements({
+        // `column` belongs to the day container. Keeping card data to the
+        // insertion target makes this target's role exactly the board's.
+        getData: () => ({ cardId: card.id, index }),
+        canDrop: ({ source }) => source.data.cardId !== card.id,
+        onDrag: ({ location }) => {
+          const rect = el.getBoundingClientRect();
+          setEdge(location.current.input.clientY > rect.top + rect.height / 2 ? 'bottom' : 'top');
+        },
+        onDragLeave: () => setEdge(null),
+        onDrop: () => setEdge(null),
+        element: el,
+      }),
+    ];
+    return () => cleanups.forEach((cleanup) => cleanup());
   }, [card.id, column, index]);
 
   const pointed = useCursorFocus(ref, isCursor);
@@ -635,7 +638,7 @@ function CalCard({
       data-card={card.id}
       className={`column-card ${isSelected ? 'is-selected' : ''} ${isCursor ? 'is-cursor' : ''} ${
         isEcho ? 'is-echo' : ''
-      } ${isDragging ? 'is-dragging' : ''}`}
+      } ${isDragging ? 'is-dragging' : ''} ${edge ? `is-over-${edge}` : ''}`}
       onClick={(e) => {
         // Wherever a pointer lands, the keyboard picks up — the board's rule.
         pointed();
