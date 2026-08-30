@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { inField } from '../view/keys.ts';
 import { back, emptyTrail, forward, jumped, type Trail } from '../view/trail.ts';
 import type { Spot } from './views/motion.ts';
 
@@ -203,6 +204,88 @@ export function useCursorFocus(
 
   return useCallback(() => {
     pointed.current = true;
+  }, []);
+}
+
+/**
+ * Say, on the document, whether the keyboard has left the cursor (C12).
+ *
+ * The cursor's ring and the browser's `:focus-visible` ring are the same two
+ * declarations in the same colour, and both are on screen at once the moment the
+ * keyboard steps off the view: `f` puts focus on a filter value, `run` starts
+ * reading `document.activeElement` to decide what `j` means, and the card the
+ * cursor sat on goes on claiming the keyboard it no longer has. Two rings, one
+ * keyboard, and the reader has to guess which.
+ *
+ * So the card keeps its place and loses the accent. `--cursor-ink` is the one
+ * value all six drawings of a cursor share — a card's outline, a row's four inset
+ * shadows, a spread page's top edge — so this is one attribute rather than an
+ * override per surface, and the stylesheet beside `:focus-visible` is where the
+ * argument is written.
+ *
+ * ## What counts as leaving
+ *
+ * **A level above does not.** A popover or a modal dialog draws *over* the plane
+ * rather than beside it, so the ring underneath is context — where Escape puts you
+ * back — and not a competing claim. This is the one duplication that was never
+ * confusing, and the rule has to say so out loud or it takes the facet picker, the
+ * ref picker and the palette with it.
+ *
+ * **Nothing having focus does not.** The active element is `document.body` after a
+ * click on a column's background, and there `j` moves the cursor: the grid is the
+ * default owner of the keyboard, so an empty focus means the cursor is live.
+ *
+ * **Being inside the cursor's own element does not** — a chip on the card face, a
+ * link inside a spread page. The keys still reach the surface the cursor is on,
+ * which is what `[data-card]` and `[data-page]` mark.
+ *
+ * Everything else is: a rail value, a panel row, a select, a field. Text being
+ * typed is checked separately and first, because a field inside the cursor's own
+ * element still takes the keystroke.
+ *
+ * ## Why an attribute and not state
+ *
+ * Focus moves on every click and every list step, and none of it changes a single
+ * React tree — it changes one custom property. Putting it in state would re-render
+ * the whole shell to repaint one outline. `useEdgeInset` below writes to the DOM
+ * from an effect for the same reason and with the same justification: the value is
+ * a fact about the document, not about a component.
+ */
+export function useDormantRing(): void {
+  useEffect(() => {
+    const root = document.documentElement;
+
+    const away = (el: Element | null): boolean => {
+      if (!el || el === document.body) return false;
+      if (el.closest('[aria-modal="true"], .popover')) return false;
+      if (inField(el as HTMLElement)) return true;
+      return !el.closest('[data-card], [data-page]');
+    };
+
+    const say = (el: Element | null): void => {
+      if (away(el)) root.dataset.keys = 'away';
+      else delete root.dataset.keys;
+    };
+
+    say(document.activeElement);
+    const arrived = (e: FocusEvent): void => say(e.target as Element | null);
+    /**
+     * Only a focus that goes *nowhere*, because `focusout` fires before the
+     * matching `focusin` — so answering every one of them would read the outgoing
+     * element and be corrected a moment later. A `relatedTarget` of `null` is the
+     * case with no `focusin` coming: focus fell back to the document, which is the
+     * grid.
+     */
+    const left = (e: FocusEvent): void => {
+      if (!e.relatedTarget) say(null);
+    };
+    document.addEventListener('focusin', arrived);
+    document.addEventListener('focusout', left);
+    return () => {
+      document.removeEventListener('focusin', arrived);
+      document.removeEventListener('focusout', left);
+      delete root.dataset.keys;
+    };
   }, []);
 }
 

@@ -51,7 +51,7 @@ import {
 } from './query.ts';
 import { afterRemovingPage, PAGE_SCROLL, SPINE_W, stackPages } from './panel/pins.ts';
 import { useSelection, type Selection } from './selection.ts';
-import { focusSoon, useCursor, type Cursor } from './cursor.ts';
+import { focusSoon, useCursor, useDormantRing, type Cursor } from './cursor.ts';
 import {
   drawn,
   firstSpot,
@@ -236,6 +236,9 @@ export function App() {
   const selection = useSelection(selectedIds, commitSelection);
 
   const cursor = useCursor();
+  // One ring is lit at a time (C12). The cursor keeps its place while the keyboard
+  // is off in the rail or the panel, and stops claiming the keys — see `cursor.ts`.
+  useDormantRing();
   /**
    * What a keyboard write has to say for itself.
    *

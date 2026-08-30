@@ -394,6 +394,28 @@ Two things sit inside "the app speaking" rather than beside it, and both are loa
 Anything else that is a property of a note and reaches for the accent is the rule being broken, and
 three did: the project note's left border, every link kind's prefix, and the `unblocks` count.
 
+**Today is a label, not a place.** Today keeps the accent — it is live state and the app speaking,
+which is precisely what the rule above gives the accent to. What it does not keep is the **channel**.
+`.calendar-day.is-today` drew an accent border on the day box, and a box border is what the cursor and
+the drop target already draw: three accent strokes could be live in one calendar at once, and today
+under a drag differed from today by a wash alone. A colour that means four things in one grid means
+none of them.
+
+So it moves to the date, in the pill the day head already contains. `.column-count` sits beside the
+date at `--radius-pill`, recessed — `ink-3` on `surface-3` — and today is **filled**, `.facet-badge`'s
+pair verbatim: `accent` behind, `surface` in front. Fill against recess is what tells the two pills
+apart, where a second recessed one would have read as a second count. Every day's date carries the
+pill's padding and only today carries the fill, so the dates still read as a row; the head gives back
+the inset it takes.
+
+A quiet treatment was tried first — `--ink` on the same pill — and is the wrong answer for a reason
+worth keeping: a day drawn greyer than its neighbours reads as *deselected*, and today is the one day
+that is never that. Recession is the vocabulary of a thing being ruled out, which `is-empty` and
+`is-out` already use in the rail.
+
+What the move buys back is the box. An accent stroke on a day now means exactly one thing, which is
+that you are about to drop something on it.
+
 ## Typography
 
 **Display / Body Font:** the system UI stack (`ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
@@ -632,7 +654,7 @@ the panel's mark toggle and its new-value field — and on inline `code`;
 every control — button, input, select, reference row, banner, rail item; `--radius-lg` **6px** on a
 card face, the picker, the minimap, the editor host and a vault row; `--radius-badge` **7px** on a
 facet badge; `--radius-xl` **8px** on a container — a column, a popover, the bulk bar, the canvas
-toolbar; `--radius-pill` **10px** on a count badge and a canvas band; and `--radius-xs` **2px** on the
+toolbar; `--radius-pill` **10px** on a count badge, a canvas band and today's date; and `--radius-xs` **2px** on the
 smallest boxes — the progress track, the drawn checkbox, a markdown task-list checkbox and a link
 row's kind badge. Nothing is a full pill and nothing is square.
 
@@ -678,6 +700,34 @@ The cost is per element. A card takes an `outline`; a `<tr>` cannot — an outli
 per cell in most engines and a border shifts the column grid — so the table assembles the ring from
 inset shadows, two on every cell and a third on the ends. Four declarations for what a card gets in
 one, and the reason to keep the vocabulary to exactly two.
+
+**The Dormant Ring Rule.** A ring means the cursor, and the cursor is where the next key lands — so a
+ring drawn where the keyboard is *not* is the app pointing at the wrong thing. The keyboard leaves
+routinely: `f` steps into the filter rail, `gf` into a facet row, and each is a real focus move that
+`run` reads off `document.activeElement` to decide what `j` means. Until this rule the card went on
+claiming it, in the same accent at the same weight as the `:focus-visible` ring the rail value had just
+taken — two identical claims on one keyboard (C12).
+
+The card is not extinguished. It is still where the next write lands and where Escape puts you back, so
+it keeps its place and loses the accent: **the geometry says *here*, the colour says *live***. Dormant
+is `ink-3` at the same width and offset. Every surface reads one custom property, `--cursor-ink`, so
+"the cursor is asleep" is one declaration rather than an override per drawing — a card's outline, a
+row's four inset shadows and a spread page's top edge all follow it.
+
+**A level above does not wake it.** A popover or a modal dialog draws *over* the plane rather than
+beside it, so the ring underneath is context and not a competitor; the facet picker, the ref picker,
+the palette and the fold dialog all leave it lit. Nothing having focus does not wake it either — the
+active element is `document.body` after a click on a column's background, and there `j` still moves the
+cursor, because the view is the keyboard's default owner.
+
+Half of this the system already said. `.column-card.is-echo` draws the cursor's other placement more
+quietly than the cursor itself, and `.pinpage.is-focus` gives the spread's live page an accent inset
+top edge while the trailing `?note=` page is expressed as position and takes no paint at all. The
+spread is the surface you would expect to break this — it is the one place `?note=` and the cursor
+deliberately diverge — and it is the one that got it right first.
+
+Dormant is not dashed, for the reason the cursor is not: the Dashed Means Absent Rule is live at four
+sites. Nor is it an opacity, which would take the card's own edge down with the ring.
 
 ## Components
 

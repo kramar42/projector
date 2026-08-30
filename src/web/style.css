@@ -28,6 +28,18 @@
   --accent: #373762;      /* purple3 */
   --accent-soft: #ebebf7;
   /*
+   * What the cursor's ring is drawn in — the accent, until the keyboard leaves it.
+   *
+   * A role rather than a colour: every surface draws the cursor differently (a
+   * card takes an outline, a `<tr>` four inset shadows, a spread page one), so
+   * "the cursor is asleep" has six declarations to reach and exactly one value in
+   * common. `useDormantRing` sets the attribute; DESIGN.md's *The Dormant Ring
+   * Rule* is the argument. Declared once and not per theme: `--accent` and
+   * `--ink-3` are both redefined for dark, and a `var()` inside a custom property
+   * resolves where it is used.
+   */
+  --cursor-ink: var(--accent);
+  /*
    * The flush a note gets when it changed and the reader did not change it.
    *
    * Derived rather than picked, and derived from `--ink` rather than from a hue: it
@@ -117,7 +129,7 @@
   --radius-lg: 6px;       /* a card face, the picker, the minimap */
   --radius-badge: 7px;    /* the filter rail's marked count, and nothing else */
   --radius-xl: 8px;       /* a container: column, popover, bulk bar, toolbar */
-  --radius-pill: 10px;    /* a count badge, a canvas band */
+  --radius-pill: 10px;    /* a count badge, a canvas band, today's date */
 
   /* The one layout width that two rules have to agree about. `.panel` is the
      width, and `.shell` reserves the same width as a track so that an open panel
@@ -193,6 +205,29 @@
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/*
+ * The keyboard is somewhere else, so the cursor sleeps (C12).
+ *
+ * The ring above and the cursor's ring are the same two declarations in the same
+ * colour, deliberately — and that is exactly the collision, because both can be on
+ * screen at once: step into the filter rail and a rail value takes the browser ring
+ * while the card the cursor sat on keeps its own. Two identical claims on one
+ * keyboard, only one of which `j` obeys.
+ *
+ * The card is not the one that goes out. It is still where the next write lands and
+ * where Escape returns you, so it keeps its place and loses the accent: the geometry
+ * says *here*, the colour says *live*. `--ink-3` rather than a fade, because an
+ * opacity would take the card's own edge down with it.
+ *
+ * A level above is not a competitor and does not wake this: a popover or a dialog
+ * draws *over* the plane, so the ring it left behind is context — where you come
+ * back to — rather than a second claim on the same keys. `useDormantRing` is where
+ * that line is drawn.
+ */
+:root[data-keys='away'] {
+  --cursor-ink: var(--ink-3);
 }
 
 /*
@@ -2224,13 +2259,14 @@ input:focus-visible + .checkbox {
 }
 
 /*
- * The focused page is the cursor, so it takes the cursor's colour — an inset
- * top edge rather than an outline, because neighbouring pages overlap outlines
- * as they fold and a page's top edge is the one strip nothing ever covers.
+ * The focused page is the cursor, so it takes the cursor's colour — literally,
+ * `--cursor-ink`, so a page sleeps on the same terms a card does. An inset top edge
+ * rather than an outline, because neighbouring pages overlap outlines as they fold
+ * and a page's top edge is the one strip nothing ever covers.
  */
 .pinpage.is-focus {
   box-shadow:
-    inset 0 2px 0 0 var(--accent),
+    inset 0 2px 0 0 var(--cursor-ink),
     -12px 0 40px rgba(8, 6, 12, 0.18);
 }
 
@@ -3004,9 +3040,15 @@ textarea { resize: vertical; font-family: inherit; }
  * precisely to suppress that, and a cursor you cannot see after clicking is a
  * cursor you have to guess at before pressing `j`. So the state is drawn from
  * the class, and the two agree by using the same two declarations.
+ *
+ * Same geometry, and no longer the same colour by construction: the ring above is
+ * the browser saying *the keyboard is here* and this one says *the cursor is here*,
+ * which are the same sentence only while both are true. `--cursor-ink` is what
+ * lets the second one stop claiming it — see the dormant rule beside
+ * `:focus-visible`.
  */
 .column-card.is-cursor .cardface {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--cursor-ink);
   outline-offset: 1px;
 }
 
@@ -3018,8 +3060,8 @@ textarea { resize: vertical; font-family: inherit; }
  * cursor a thing you could see twice and be wrong about — and the board scrolled
  * to whichever came last in the DOM.
  *
- * So the echo says the same word more quietly: the accent, at one pixel and
- * dashed. Dashed rather than merely thinner because thin-and-solid at a glance is
+ * So the echo says the same word more quietly: the cursor's own ink, at one pixel
+ * and dashed — it is a copy of the cursor, so it sleeps when the cursor does. Dashed rather than merely thinner because thin-and-solid at a glance is
  * a ring that has not finished loading; a dash reads as *a copy of* rather than
  * *a weaker* — the same distinction the canvas draws between a tree edge and a
  * crossing one, by geometry before colour.
@@ -3029,7 +3071,7 @@ textarea { resize: vertical; font-family: inherit; }
  * they happen to be side by side.
  */
 .column-card.is-echo .cardface {
-  outline: 1px dashed var(--accent);
+  outline: 1px dashed var(--cursor-ink);
 }
 /* The tile itself never takes the browser ring: the face inside it is what is
    drawn, and two rings a pixel apart is a doubled edge. */
@@ -4310,12 +4352,29 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   min-width: 0;
 }
 
-.calendar-day.is-today {
-  border-color: var(--accent);
-}
-
+/*
+ * Today — DESIGN.md's *Today is a label, not a place*.
+ *
+ * It changes channel, not colour. The accent is right: today is live state and the
+ * app speaking, exactly what the App Voice Rule gives it. What was wrong is *where*
+ * — an accent border on the day box, which is the channel the cursor and the drop
+ * target already own, so a calendar could hold three accent strokes at once and
+ * today-under-a-drag differed from today by a wash.
+ *
+ * So it draws on the date, in the pill the day head already contains beside it.
+ * `.column-count` is recessed — `ink-3` on `surface-3` — and today is filled, which
+ * is `.facet-badge`'s pair verbatim: the accent behind, the surface in front. Fill
+ * against recess is what tells the two pills apart where a second recessed one
+ * would have read as a second count.
+ *
+ * Not `--ink`, which was the first version of this and read as *disabled*: a day
+ * that is greyer than its neighbours looks deselected, and today is the opposite of
+ * deselected.
+ */
 .calendar-day.is-today .calendar-day-date {
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+  border-radius: var(--radius-pill);
 }
 
 /* `.column.is-over`, verbatim: a drop target lights the same way everywhere. */
@@ -4325,19 +4384,24 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   background: var(--accent-soft);
 }
 
+/* The date carries the pill's own left inset, so the head gives back what it
+   takes: 2 + 6 is the 8px every other head starts its content at. */
 .calendar-day-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 5px 8px 5px 2px;
   flex: none;
 }
 
+/* Padded on every day, filled on one: today changes the paint and not the
+   alignment, so the dates still read as a row. */
 .calendar-day-date {
   font-family: var(--mono);
   font-size: var(--text-xs);
   color: var(--ink-2);
+  padding: 1px 6px;
 }
 
 .calendar-day-body {
@@ -4412,19 +4476,19 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
  * around it, exactly as on a board.
  */
 .table tbody tr.is-cursor > td {
-  box-shadow: inset 0 2px 0 -1px var(--accent), inset 0 -2px 0 -1px var(--accent);
+  box-shadow: inset 0 2px 0 -1px var(--cursor-ink), inset 0 -2px 0 -1px var(--cursor-ink);
 }
 .table tbody tr.is-cursor > td:first-child {
   box-shadow:
-    inset 0 2px 0 -1px var(--accent),
-    inset 0 -2px 0 -1px var(--accent),
-    inset 2px 0 0 0 var(--accent);
+    inset 0 2px 0 -1px var(--cursor-ink),
+    inset 0 -2px 0 -1px var(--cursor-ink),
+    inset 2px 0 0 0 var(--cursor-ink);
 }
 .table tbody tr.is-cursor > td:last-child {
   box-shadow:
-    inset 0 2px 0 -1px var(--accent),
-    inset 0 -2px 0 -1px var(--accent),
-    inset -2px 0 0 0 var(--accent);
+    inset 0 2px 0 -1px var(--cursor-ink),
+    inset 0 -2px 0 -1px var(--cursor-ink),
+    inset -2px 0 0 0 var(--cursor-ink);
 }
 /* The cursor's other placements, quieter — see `.column-card.is-echo`. A table
    draws its cursor as an inset edge rather than an outline, so the echo is the

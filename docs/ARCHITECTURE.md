@@ -21,6 +21,7 @@ number.
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
 | C9 | A view is a query, not a place | `view = filter × search × focus × group × sort × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
 | C10 | Structure is edited by gesture, content in the panel | facets, `parent` and edges by drag and bulk bar; title, body, links and `project:` only through `?note=` |
+| C12 | One keyboard, one place | exactly one thing is the cursor and exactly one thing is drawn as it; a pointer on a level the keyboard has left keeps its place and loses the accent |
 
 ## The shape of it
 

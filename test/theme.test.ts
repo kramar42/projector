@@ -798,6 +798,85 @@ test('a counter cannot lose its tabular guard by accident', () => {
   );
 });
 
+/**
+ * The cursor is drawn from one value, so that it can sleep (C12).
+ *
+ * Six declarations draw a cursor and no two of them look alike — a card takes an
+ * `outline`, a `<tr>` four inset shadows because it cannot, a spread page one
+ * because its neighbours overlap outlines as they fold. That is the cost The Wash
+ * And Ring Rule already accounts for. What The Dormant Ring Rule adds is that all
+ * six have to go quiet *together*, and the only way that stays true is if they
+ * share the value rather than the literal.
+ *
+ * They shared the literal until this pass, which is why the collision existed at
+ * all: `:focus-visible` and `.column-card.is-cursor` are the same two declarations
+ * in the same accent, and both were on screen the moment the keyboard stepped into
+ * the rail. A seventh drawing added in the accent would restore that silently — it
+ * would look right in every screenshot where the keyboard happens to be on the view.
+ *
+ * Pinned as a set rather than derived, for `COUNTERS`' reason: a set collected from
+ * "whichever rules use the property" cannot notice a rule dropping it.
+ */
+test('every drawing of the cursor reads the one value that can sleep', () => {
+  const SITES = [
+    '.column-card.is-cursor .cardface',
+    '.column-card.is-echo .cardface',
+    '.pinpage.is-focus',
+    '.table tbody tr.is-cursor > td',
+    '.table tbody tr.is-cursor > td:first-child',
+    '.table tbody tr.is-cursor > td:last-child',
+  ];
+
+  assert.match(ROOT, /--cursor-ink:\s*var\(--accent\)/, 'the cursor should rest in the accent');
+  const dormant = rules().find((r) => r.sel === ":root[data-keys='away']");
+  assert.ok(dormant, 'the dormant rule should exist — `useDormantRing` writes that attribute');
+  assert.match(
+    dormant.body,
+    /--cursor-ink:\s*var\(--ink-3\)/,
+    'a sleeping cursor keeps its geometry and loses the accent',
+  );
+
+  // (a) Nothing joined or left the set without this list being edited on purpose.
+  assert.deepEqual(
+    rules().filter((r) => /var\(--cursor-ink\)/.test(r.body)).map((r) => r.sel).sort(),
+    [...SITES].sort(),
+    'a drawing of the cursor joined or left `--cursor-ink`',
+  );
+
+  // (b) And none of them reaches past it to the accent, which is the drift that
+  // cannot be seen: such a rule paints correctly right up until the keyboard leaves.
+  const literal = rules()
+    .filter((r) => /\bis-cursor\b|\bis-echo\b|\.pinpage\.is-focus/.test(r.sel))
+    .filter((r) => /var\(--accent\)/.test(r.body))
+    .map((r) => r.sel);
+  assert.deepEqual(
+    literal,
+    [],
+    `a cursor drawn in the accent itself, which cannot go dormant:\n  ${literal.join('\n  ')}`,
+  );
+});
+
+/**
+ * Today draws on the date and never on the day box.
+ *
+ * DESIGN.md's *Today is a label, not a place*. The box border is the channel the
+ * cursor and the drop target own, and `.calendar-day.is-today` held it for as long
+ * as the calendar existed — so today, a drag-over and a cursor were three accent
+ * strokes in one grid. The colour was never the problem and today keeps it; where
+ * it lands is, and that is a one-line regression to make by accident.
+ */
+test('today is a label on the date, not a stroke on the day', () => {
+  const onTheBox = rules().filter((r) => /\.calendar-day\.is-today$/.test(r.sel.trim()));
+  assert.deepEqual(
+    onTheBox.map((r) => r.sel),
+    [],
+    'today drew on the day box, where an accent stroke already means drop here',
+  );
+  const onTheDate = rules().find((r) => r.sel === '.calendar-day.is-today .calendar-day-date');
+  assert.ok(onTheDate, 'today should draw on its date');
+  assert.match(onTheDate.body, /background:\s*var\(--accent\)/, 'today is filled, not recessed');
+});
+
 // ------------------------------------------------------------------- contrast
 
 /**
