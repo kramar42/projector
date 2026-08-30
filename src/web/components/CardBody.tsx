@@ -1,10 +1,9 @@
 import { useEnrichment } from '../enrichment.tsx';
 import { useTouched } from '../touched.tsx';
 import { plural } from '../plural.ts';
-import { useIsPinned, useUnpin } from '../pinned.tsx';
+import { useIsPinned, useTogglePin } from '../pinned.tsx';
 import { useHue } from '../vocabulary.tsx';
 import { LINK_KINDS, linkHue } from '../links.ts';
-import { PinButton } from './Button.tsx';
 import type { NoteDTO } from '../types.ts';
 
 /**
@@ -133,7 +132,7 @@ export function CardBody({
 }) {
   const { touched } = useTouched();
   const isPinned = useIsPinned();
-  const unpin = useUnpin();
+  const pin = useTogglePin();
   const pinned = isPinned(card.id);
   const blocked = card.blockedBy.filter((b) => !b.done);
   const facetKeys = showFacets.filter((f) => axisValues(card, f).length);
@@ -147,21 +146,8 @@ export function CardBody({
       onDoubleClick={() => onOpen?.(card.id)}
     >
       <div className="cardface-head">
-        <RecordMark card={card} />
+        <PinMark card={card} title={card.title} pinned={pinned} onToggle={() => pin(card.id)} />
         <span className="cardface-title">{card.title}</span>
-        {pinned && (
-          <PinButton
-            extra="cardface-pin"
-            aria-label={`Unpin ${card.title}`}
-            title={`Unpin "${card.title}" (')`}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              unpin(card.id);
-            }}
-            onDoubleClick={(event) => event.stopPropagation()}
-          />
-        )}
       </div>
 
       {facetKeys.length > 0 && (
@@ -214,7 +200,7 @@ export function CardBody({
  * grouping note off a board was the status filter, not the kind. C11 — nothing
  * derivable is also stored.
  */
-export function markOf(card: Marked): { glyph: string; role: Role; means: string } {
+export function markOf(card: Marked): { role: Role; isProject: boolean; referenced: boolean; means: string } {
   // One sentence for the count, so the project and container branches cannot
   // drift: a table draws the number for any note with references, projects
   // included, and the face carries the same fact only in this tooltip.
@@ -222,9 +208,10 @@ export function markOf(card: Marked): { glyph: string; role: Role; means: string
     card.refCount === 1
       ? '1 note references this one.'
       : `${plural(card.refCount, 'note')} reference this one.`;
+  const bits = { isProject: card.isProject, referenced: card.refCount > 0 };
   if (card.isProject) {
     return {
-      glyph: GLYPH_OF.project,
+      ...bits,
       role: 'project',
       means:
         'A project: other notes inherit its repos and instructions.' +
@@ -232,9 +219,9 @@ export function markOf(card: Marked): { glyph: string; role: Role; means: string
     };
   }
   if (card.refCount > 0) {
-    return { glyph: GLYPH_OF.container, role: 'container', means: references };
+    return { ...bits, role: 'container', means: references };
   }
-  return { glyph: GLYPH_OF.leaf, role: 'leaf', means: 'Nothing references this one.' };
+  return { ...bits, role: 'leaf', means: 'Nothing references this one.' };
 }
 
 /** The three roles a mark can name, in the order they nest. */
@@ -243,68 +230,187 @@ export const ROLES = ['project', 'container', 'leaf'] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
- * The glyph per role, and the only place the three characters are written.
+ * The mark, drawn — and the only place it is drawn.
  *
- * They used to appear twice: here, and hardcoded in the collapsed rail's ribbon.
- * That is how the ribbon came to count a *different* trichotomy from the one the
- * marks draw — see `tallyRoles` below.
+ * It was the characters `▣ ○ •`, chosen from the mono face, and the face is why
+ * they had to stop being characters. Two problems, one cause:
  *
- * `○` means "some other note names this one", across every reference facet —
- * which is what `nodesIn` has always said a node is: "being named by `parent` and
- * being named by `project` make a note a node equally". The mark used to read a
- * count of the `parent` facet alone, so the two disagreed about any note named
- * only through `blocks` or `project`.
+ * **They would not compose.** Measured at 15px, `•`'s ink was 4.35px across
+ * against `○`'s 8.94 — half the diameter and a quarter of the area, so the note
+ * every vault has most of drew as a speck beside its two siblings. `•` was
+ * already a repair (`·` was 1.85px, worse), which is as far as picking a
+ * character can get you: the ladder is whoever cut the font's, not ours.
  *
- * `•` rather than `·`. Measured at 15px in the mono stack, the middle dot's ink
- * is 1.85 × 2.23px against `○`'s 8.94 × 9.02 — nearly five times smaller in each
- * dimension, which is not a quieter mark, it is a speck. The bullet is
- * 4.35 × 4.34: legible, and still half the circle.
+ * **Nothing could be added to them.** A character is an advance width with ink
+ * somewhere inside it, and the ink's position is a measurement — which is what
+ * the three `translateY` nudges in `.recordmark` were. There was no way to put a
+ * second thing *on* a mark, so pinned-ness had to be drawn around it or beside
+ * it, and both failed for reasons DESIGN.md's Pin Rule records.
+ *
+ * ## Two facts, two channels
+ *
+ *   **fill**  — solid is a **project**: it owns repos and instructions its
+ *               members inherit. Hollow is not.
+ *   **shape** — square means **something names it**, through any reference
+ *               facet. A circle is self-contained; a square has corners for
+ *               edges to arrive at.
+ *
+ * All four combinations are drawn and all four mean something, at one 4.4
+ * half-width so the eye compares them on the two things that carry meaning
+ * rather than on how big they are.
+ *
+ * ## Why fill carries the project and not the other way round
+ *
+ * The obvious assignment is the opposite — shape is the nominal channel, so put
+ * the *kind* of thing on it — and it is wrong here, for three reasons that only
+ * showed up once a realistic screen was drawn both ways.
+ *
+ * **A project would have had two glyphs.** With shape on `isProject` and fill on
+ * references, a project nothing happens to name is a hollow square and one with
+ * members is a solid square: the same kind of thing, drawn two ways, and which
+ * you get decided by a fact about *other* notes. Fill on `isProject` means every
+ * project is solid, always, and its identity cannot be diluted by churn.
+ *
+ * **Pop-out has to be precise.** At this size fill separates preattentively and
+ * a circle against a rounded square does not. Measured on the author's vault:
+ * 11% of notes are projects, 23% are referenced. Spending fill on references
+ * makes a quarter of the screen solid to mark a fact that is true of a quarter
+ * of the screen — the cue is ~43% precise for "this is a project", which is the
+ * thing a reader actually scans for. Spending it on projects makes it exact.
+ *
+ * **Salience should track consequence.** A reference appears and disappears as
+ * links are made and broken, and nobody decided it about *this* note. Being a
+ * project is an act that moves the file into a folder of its own. The fact you
+ * chose belongs on the channel that shows, and the fact that happens to you
+ * belongs on the one that whispers. Or: **fill is what you decided, shape is
+ * what happened around it.**
+ *
+ * **Why not a third shape.** A triangle, a diamond or a hexagon at 10px with a
+ * 1.5px stroke is mush, and its meaning is not derivable — round and square are
+ * the two silhouettes that survive this size and are maximally unlike each
+ * other. Two channels already answer both questions; a third shape would spend a
+ * scarce, size-fragile resource on a distinction that has an answer.
  */
-export const GLYPH_OF: Record<Role, string> = {
-  project: '▣',
-  container: '○',
-  leaf: '•',
-};
+
+/** Solid means project. The heavier form is inset — solid weighs more than outline. */
+const CIRCLE = { on: <circle cx="8" cy="8" r="4" stroke="none" />,
+                 off: <circle cx="8" cy="8" r="3.65" fill="none" strokeWidth="1.5" /> };
 
 /**
- * A tally of one role, in words — for a readout that counts roles rather than
- * describing a single note, which is what `markOf`'s `means` is for.
+ * The square is a squircle on purpose, and the hollow one especially.
  *
- * Through `plural` because the app has one way of making a count and its noun
- * agree, and "1 notes something else is part of" is what not using it reads
- * like. The clause after the noun is the same sentence `markOf` uses, turned
- * around: "nothing is part of this one" becomes "nothing is part of".
+ * `rx` 1.7 hollow against 1.2 solid: an empty rounded rectangle at this size is
+ * the universal unchecked checkbox, and on a work app full of task lists that is
+ * a reading nobody wants. Rounder is further from a checkbox and still plainly
+ * not a circle. It applies to 13% of notes, which is the second commonest state.
  */
-export function tallyMeans(role: Role, n: number): string {
-  if (role === 'project') return plural(n, 'project');
-  // Phrased from the note's side rather than the referrer's: "1 note something
-  // references" is what putting the referrer first reads like. Through `plural`
-  // because the count needs a noun to be counting — "4 named by another note"
-  // leaves open what four of them are.
-  const noun = plural(n, 'note');
-  return role === 'container' ? `${noun} named by another` : `${noun} named by nothing`;
+const SQUARE = { on: <rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2" stroke="none" />,
+                 off: <rect x="4.35" y="4.35" width="7.3" height="7.3" rx="1.7" fill="none" strokeWidth="1.5" /> };
+
+/**
+ * The box: the marks' own 16 units, plus seven above and seven to the right.
+ *
+ * The tack needs that room and there is nothing else up there — the mark sits at
+ * the head of a title, so the space above it and before the text is empty by
+ * construction. A unit stays `1em/16`, so the silhouettes are drawn at exactly
+ * the size they were and only the canvas grew; `.markglyph` in the stylesheet
+ * pulls the two extra edges back out of the layout, so no title moves.
+ */
+const MARK_VIEW = '0 -7 23 23';
+
+/**
+ * And the box when there is no tack: the marks' own 16 units and nothing spare.
+ *
+ * Both boxes draw a unit at `1em/16` — see `.markglyph` — so the silhouette is
+ * the same size either way and only the canvas around it changes. That is what
+ * lets a mark be dropped somewhere with no room to overhang, like the collapsed
+ * rail's 38px ribbon, and still be the same drawing at the same scale.
+ */
+const TIGHT_VIEW = '0 0 16 16';
+
+const TACK = 'translate(14.93 1.07) rotate(45) scale(1.2) translate(-8 -8)';
+
+/** Head and needle, exactly as the retired `pin` button glyph drew them. */
+const TACK_HEAD = 'M5.1 2.5H10.9L10.2 6.3L12.2 8.5H3.8L5.8 6.3Z';
+const TACK_PIN = 'M8 8.5V13.5';
+
+/**
+ * The whole thumbtack, upright — for a count of the pinned *set*.
+ *
+ * The ribbon's pin row is about a set and has no one note to draw a silhouette
+ * for, so it draws the tack alone. Upright and at full size rather than the
+ * angled fragment a mark carries, because nothing is holding it: on a mark the
+ * angle and the depth say *pushed into this*, and there is nothing here to push
+ * it into.
+ *
+ * The same two paths, so there is no second pin drawing to keep in step with the
+ * first — which is the whole reason the mark's tack was built from the retired
+ * button glyph rather than redrawn.
+ */
+export function PinIcon() {
+  return (
+    <svg className="pinicon" viewBox="0 0 16 16" stroke="currentColor" fill="currentColor" aria-hidden="true">
+      <path d={TACK_HEAD} stroke="none" />
+      <path d={TACK_PIN} strokeWidth="1.55" strokeLinecap="round" fill="none" />
+    </svg>
+  );
 }
 
 /**
- * Tally a set of notes by what their mark says.
+ * The four states a mark can be in, in the order a note passes through them.
+ *
+ * The ribbon counts these rather than the three `Role`s, and the order is the
+ * lifecycle: a note arrives naming nothing and named by nothing, something comes
+ * to depend on it, and it may grow into a project — so reading the column top to
+ * bottom is reading how far along a vault's notes are.
+ *
+ * `Role` survives because `markOf` still answers "what is this, in a word" for a
+ * tooltip, and because three roles is what a *sentence* about a note wants. Four
+ * states is what a *count* wants, and they are the same two bits either way.
+ */
+export const MARK_STATES = [
+  { isProject: false, referenced: false, noun: 'note', names: 'nothing names' },
+  { isProject: false, referenced: true, noun: 'note', names: 'something names' },
+  { isProject: true, referenced: false, noun: 'project', names: 'nothing names' },
+  { isProject: true, referenced: true, noun: 'project', names: 'something names' },
+] as const;
+
+export type MarkState = (typeof MARK_STATES)[number];
+
+/**
+ * What one row of the tally says, in words — for a readout that counts states
+ * rather than describing a single note, which is what `markOf`'s `means` is for.
+ *
+ * Through `plural` because the app has one way of making a count and its noun
+ * agree, and "1 notes something names" is what not using it reads like.
+ */
+export function stateMeans(state: MarkState, n: number): string {
+  return `${plural(n, state.noun)} ${state.names}`;
+}
+
+/**
+ * Tally a set of notes by the mark each one draws.
  *
  * This exists because the collapsed rail was answering the same question from a
  * different source. It read the `type` computed axis, whose `node` value means
  * "named by **any** reference facet", while the mark was drawn from a count of the
  * `parent` facet alone — so the two disagreed on every note named only through
  * `blocks` or `project`. Measured on the 27-note fixture, the rail reported
- * 3 / 4 / 20 beside the glyphs `▣ ○ •` while the app drew 3 / 1 / 23: a ribbon
- * saying "4 linked nodes" next to the single `○` on screen.
+ * 3 / 4 / 20 beside its glyphs while the app drew 3 / 1 / 23: a ribbon saying
+ * "4 linked nodes" next to the single ring on screen.
  *
- * Both halves moved. `○` now means what `type` always meant — named by any
+ * Both halves moved. The square now means what `type` always meant — named by any
  * reference facet — and the ribbon counts through `markOf` rather than reading a
- * facet. So the glyphs, their tally and the `type` axis are one mechanism rather
+ * facet. So the marks, their tally and the `type` axis are one mechanism rather
  * than three that have to agree (PRODUCT.md), and the rail names no facet, which
  * the old version did three times over (C4).
  */
-export function tallyRoles(cards: Marked[]): Record<Role, number> {
-  const out: Record<Role, number> = { project: 0, container: 0, leaf: 0 };
-  for (const card of cards) out[markOf(card).role]++;
+export function tallyMarks(cards: Marked[]): number[] {
+  const out = MARK_STATES.map(() => 0);
+  for (const card of cards) {
+    const { isProject, referenced } = markOf(card);
+    out[MARK_STATES.findIndex((s) => s.isProject === isProject && s.referenced === referenced)]!++;
+  }
   return out;
 }
 
@@ -322,11 +428,108 @@ export interface Marked {
   refCount: number;
 }
 
-export function RecordMark({ card }: { card: Marked }) {
-  // The role is also a class, because each glyph needs its own optical nudge —
-  // see `.recordmark` in style.css.
-  const { glyph, role, means } = markOf(card);
-  return <span className={`recordmark is-${role}`} title={means}>{glyph}</span>;
+/**
+ * One mark, drawn — with the tack, or with room for it.
+ *
+ * The tack is always in the markup and its paint is the only thing that changes,
+ * which is what lets an unpinned mark answer a hover by *showing* what a click
+ * would do without the box under it moving by a pixel. Two colours, two facts:
+ * the silhouette stays `accent` because it says what the note is, and the tack
+ * is `--pinned` because it says you are holding it. Neither borrows the other's.
+ */
+export function MarkGlyph({
+  isProject,
+  referenced,
+  pinned,
+}: {
+  /** Solid. */
+  isProject: boolean;
+  /** Square. */
+  referenced: boolean;
+  pinned: boolean;
+}) {
+  const shape = referenced ? SQUARE : CIRCLE;
+  return (
+    <svg
+      className={`markglyph ${pinned ? 'is-pinned' : ''}`}
+      viewBox={pinned ? MARK_VIEW : TIGHT_VIEW}
+      stroke="currentColor"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      {isProject ? shape.on : shape.off}
+      {/*
+        Drawn last, so it sits on the mark rather than under it — the point has
+        to disappear *into* the silhouette for the thing to read as pushed in.
+      */}
+      <g className="markglyph-tack" transform={TACK}>
+        <path d={TACK_HEAD} stroke="none" />
+        <path d={TACK_PIN} strokeWidth="1.3" strokeLinecap="round" fill="none" />
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * The mark on a surface that only reads: a panel head's sibling, a reference
+ * row, a picker. It says what the note is and whether it is held, and does not
+ * offer to change either.
+ */
+export function RecordMark({ card, pinned = false }: { card: Marked; pinned?: boolean }) {
+  // The role is still a class: the glyph is drawn, but its optical nudge and the
+  // family it belongs to are things the stylesheet says — see `.recordmark`.
+  const { role, isProject, referenced, means } = markOf(card);
+  return (
+    <span className={`recordmark is-${role}`} title={pinned ? `${means}\nPinned.` : means}>
+      <MarkGlyph isProject={isProject} referenced={referenced} pinned={pinned} />
+    </span>
+  );
+}
+
+/**
+ * The mark, as the control that releases the pin it is drawing.
+ *
+ * The pin used to be a second button at the trailing edge of the title, and the
+ * trailing edge is where a card's *acts* live — so the one fact that is not an
+ * act sat among them, drawn as a filled key that was the loudest thing on a
+ * quiet face. Now the fact is on the mark and the mark is the control, which
+ * removes the second element rather than moving it.
+ *
+ * Clicking an unpinned mark pins it, which is new and was overdue: the pin was
+ * previously reachable by `'`, and by the palette, which itself opens only on a
+ * key — so a reader working entirely by pointer could unpin and could never pin.
+ *
+ * The hit area is grown by a pseudo-element rather than by padding (see
+ * `.recordmark.is-pin::after`): the mark is ~10px, which is not a target, and
+ * padding on a baseline-aligned flex item moves the title beside it.
+ */
+export function PinMark({ card, title, pinned, onToggle }: {
+  card: Marked;
+  title: string;
+  pinned: boolean;
+  onToggle: () => void;
+}) {
+  const { role, isProject, referenced, means } = markOf(card);
+  return (
+    <button
+      type="button"
+      className={`recordmark is-${role} is-pin`}
+      data-act="pin"
+      aria-pressed={pinned}
+      aria-label={`${pinned ? 'Unpin' : 'Pin'} ${title}`}
+      title={`${means}\nClick: ${pinned ? 'let this pin go' : 'pin it, so it stays in sight'} (')`}
+      // A card face is itself clickable, and on a canvas it is draggable. Both
+      // gestures start here and neither may be started by this.
+      onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      <MarkGlyph isProject={isProject} referenced={referenced} pinned={pinned} />
+    </button>
+  );
 }
 
 /**
@@ -339,8 +542,12 @@ export function RecordMark({ card }: { card: Marked }) {
  * removes it, and the note falls back to whichever of the two it earns from its
  * child count.
  */
-export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => void }) {
-  const { glyph, role, means } = markOf(card);
+export function ProjectMark({ card, pinned = false, onToggle }: {
+  card: Marked;
+  pinned?: boolean;
+  onToggle: () => void;
+}) {
+  const { role, isProject, referenced, means } = markOf(card);
   // What it is, then what a click makes it. Two facts, one line each, and the
   // second names the consequence rather than the mechanism — "members stop
   // inheriting" is what actually happens to other notes; "removes the project
@@ -355,14 +562,22 @@ export function ProjectMark({ card, onToggle }: { card: Marked; onToggle: () => 
       // Drawn only by the panel, which is the one place this is a control rather
       // than a glyph — so the address can live on the component.
       data-act="project"
-      title={`${means}\n${next}`}
+      title={`${means}${pinned ? '\nPinned.' : ''}\n${next}`}
       onClick={(e) => {
         // The title beside it opens the rename editor on click.
         e.stopPropagation();
         onToggle();
       }}
     >
-      {glyph}
+      {/*
+        It draws the tack like every other mark — the panel had no way at all to
+        say the note you are reading is pinned, which is the one surface where
+        you are most likely to want to know. It stays the *project* control here
+        rather than the pin one: this is the only mark that was already spoken
+        for, and a glyph that meant two different acts on two surfaces would be
+        worse than the asymmetry.
+      */}
+      <MarkGlyph isProject={isProject} referenced={referenced} pinned={pinned} />
     </button>
   );
 }

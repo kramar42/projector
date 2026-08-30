@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
 import { ProjectMark } from '../components/CardBody.tsx';
+import { useIsPinned } from '../pinned.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { useWorkStarter } from './useWorkStarter.ts';
@@ -107,6 +108,10 @@ function NoteCard({
   reload: () => void;
 }) {
   const { touched } = useTouched();
+  // Read here so the head's mark can draw the tack: the panel is the surface you
+  // are most likely to be reading a pinned note on, and it was the one that
+  // could not say so.
+  const isPinned = useIsPinned();
   const [editTitle, setEditTitle] = useState<string | null>(null);
 
   /**
@@ -308,7 +313,7 @@ function NoteCard({
           {card &&
             (editTitle === null ? (
               <h2 className={`panel-title ${lit('title') ? 'is-touched' : ''}`}>
-                <ProjectMark card={card} onToggle={() => toggleProject()} />
+                <ProjectMark card={card} pinned={isPinned(id)} onToggle={() => toggleProject()} />
                 {/*
                   The text carries the rename, not the heading.
                   The heading already contains the project toggle — a real button —

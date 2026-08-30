@@ -312,8 +312,8 @@ where things sit (C8).
 
 ### Pins are a reading surface, and the cursor stays the only pointer
 
-`'` pins the cursor's note; a filled pin at the trailing edge of its title shows that without covering
-the compact view. While a note panel is open the pins stand beside it as title-spine navigation, and
+`'` pins the cursor's note; a tack drawn into its record mark shows that without covering the compact
+view. While a note panel is open the pins stand beside it as title-spine navigation, and
 `"` spreads them side by side over the view (`src/web/panel/PinStack.tsx`). Six decisions carry it:
 
 - **It is not a fifth shape (C5), and not part of any view (C9).** The pins ride in `?pins=`, beside
@@ -348,15 +348,17 @@ the compact view. While a note panel is open the pins stand beside it as title-s
   replacing the open note therefore restores it in place. `o` promotes the focused pin into that slot,
   so an unpinned open note is replaced and a pinned one swaps back into the run. `Enter` still folds
   the spread onto the focused note's ordinary panel. `gg`, `G`, `h` and `l` move focus only.
-- **A pin is drawn by one control, which can also release it, and `App` still owns the URL.** The pin
-  is a button rather than a treatment of the record mark — one symbol may not answer both *what is
-  this note* and *am I holding it* — so it is drawn wherever a title is, on all four shapes and on a
-  spread page. That makes a pin a control on surfaces that have never written anything, and threading
-  the URL setter through four view components to reach it would widen five signatures. `PinnedProvider`
-  therefore carries `App`'s own `unpin` beside the membership test it already carried. It stays a
+- **The record mark is the pin control, and `App` still owns the URL.** Pinned-ness is a tack drawn
+  into the mark and the mark is the button that adds or removes it, so the fact and its reversal are
+  one element on every surface a title is drawn on — all four shapes, a spread page, the panel head.
+  That makes the mark a control on surfaces that have never written anything, and threading the URL
+  setter through four view components to reach it would widen five signatures. `PinnedProvider`
+  therefore carries `App`'s own `togglePin` beside the membership test it already carried. It stays a
   single route to `?pins=` — the provider holds the callback, it does not construct one — which is the
   property `query.ts` is careful to keep and the reason the context could not simply be given a setter
-  of its own. The folded dock is addressed from the keyboard by `g [` / `g ]` (`pinStep`), because a
+  of its own. A **toggle** rather than an unpin, and the widening is the point: the pin used to be
+  drawn only once a note was pinned, so a pointer could let one go and could never make one, with `'`
+  and a palette that itself opens only on a key being the only ways in. The folded dock is addressed from the keyboard by `g [` / `g ]` (`pinStep`), because a
   spine could be clicked and nothing reached one otherwise; in the spread the pages *are* the pins and
   the command defers to `h`/`l` rather than becoming a second walker over one row.
 - **The fold keeps geometry fixed; presentation follows exposure.** A spread page is `position: sticky` with per-index

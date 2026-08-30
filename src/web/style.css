@@ -473,7 +473,7 @@ body {
 .sidebar-collapsed {
   align-items: center;
   gap: 12px;
-  padding-top: 9px;
+  padding: 9px 2px 0;
 }
 
 .sidebar-collapsed .sidebar-toggle {
@@ -481,11 +481,42 @@ body {
   height: 24px;
 }
 
+/*
+ * Three questions, three groups, one hairline between them.
+ *
+ * The rule is the same device the expanded rail uses between its blocks, at the
+ * one width where a heading cannot fit — so the division is visible and costs no
+ * vertical space beyond the line itself. `:first-child` rather than a modifier
+ * class: the group that happens to be first is the one that needs no rule above
+ * it, and which groups are drawn depends on whether their counts are zero.
+ */
+.ribbon-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding-top: 9px;
+  border-top: 1px solid var(--rule);
+}
+
+.ribbon-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* A row is a mark over a number, and two of them are buttons — the declined pile
+   and the pinned set both open something, exactly as their counts do in the
+   expanded rail. The button reset is here so a row looks identical either way. */
 .sidebar-ribbon-info {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
   color: var(--ink-3);
   /* Longhands, not `font:`. The shorthand resets every font sub-property it does
      not name, `font-variant-numeric` included — so it silently undid the shared
@@ -497,9 +528,43 @@ body {
   line-height: 1.15;
 }
 
+.sidebar-ribbon-info.is-act {
+  cursor: pointer;
+}
+
+.sidebar-ribbon-info.is-act:hover {
+  color: var(--ink);
+}
+
 .sidebar-ribbon-icon {
   color: var(--accent);
   font-size: var(--text-body-sm);
+}
+
+/* The pin count draws the tack, so it takes the tack's colour rather than the
+   marks' — the same two facts kept on the same two tokens they are everywhere. */
+.sidebar-ribbon-icon.is-pin {
+  color: var(--pinned);
+}
+
+.pinicon {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+/*
+ * The rows that have no silhouette to draw name their key instead.
+ *
+ * `.keyhint` is already the app's mark for "this is what reaches that" and sits
+ * beside every addressable row in the expanded rail, so at 38px it is the
+ * vocabulary already in the reader's eye rather than a new one — and it teaches
+ * the stroke while it counts. The tack's row is the exception and draws the tack,
+ * because a pin *has* a mark and inventing a letter for it would be a second
+ * symbol for one fact.
+ */
+.sidebar-ribbon-info .keyhint {
+  font-size: var(--text-micro);
 }
 
 .rail-stats {
@@ -1480,16 +1545,114 @@ input:focus-visible + .checkbox {
   align-self: baseline;
 }
 
-/* `•` centres at 0.3716em of its own size (measured; the middle dot it replaced
-   was 0.3474em, which is where the old 0.03em came from). At mark = 0.8 × text:
-   0.3716×0.8 − 0.254 = 0.0433 of text size = 0.054em of the mark's own. */
-.recordmark.is-leaf {
-  transform: translateY(0.054em);
+/*
+ * One nudge, where there were three.
+ *
+ * The old marks were characters, so each sat wherever its cut put the ink inside
+ * its advance — `•` low, `○` and `▣` high — and the three `translateY` values
+ * here were measurements of somebody else's font. The glyph is drawn now and its
+ * box is square and centred, so what is left is the single question of where a
+ * square box sits against a baseline: the ink centre wants to be near the x-height
+ * middle rather than on the baseline the box's bottom sits on.
+ */
+/*
+ * One unit is `1em/16` in both boxes, so the silhouette is the same size whether
+ * or not there is a tack and only the canvas around it changes: 16 units at `1em`
+ * with no tack, 23 at `1.4375em` with one. Sized on the glyph itself rather than
+ * on `.recordmark svg`, because a mark is also drawn where there is no title to
+ * sit beside — the collapsed rail's ribbon counts them in 38px.
+ */
+.markglyph {
+  display: block;
+  width: 1em;
+  height: 1em;
 }
 
-.recordmark.is-container,
-.recordmark.is-project {
-  transform: translateY(-0.058em);
+.markglyph.is-pinned {
+  width: 1.4375em;
+  height: 1.4375em;
+}
+
+/*
+ * Beside a title, the tack's seven extra units are taken straight back out of
+ * the layout: the span is the 1em box it always was, and the ink simply reaches
+ * past it into space that is empty on every surface this is drawn on — a mark
+ * sits at the head of a title, so above it and before the text is nothing. So
+ * pinning a note cannot move its own title, or anything after it.
+ */
+.recordmark .markglyph {
+  transform: translateY(0.09em);
+}
+
+.recordmark .markglyph.is-pinned {
+  margin: -0.4375em -0.4375em 0 0;
+}
+
+/*
+ * The tack: the app speaking about *you*, in the one token that means only that,
+ * on a silhouette that keeps the accent and keeps meaning what the note is.
+ * `--pinned` is the yellow family's value under a name that is not the family's,
+ * for the reason its declaration gives — a pin is not a facet value.
+ */
+/* Head and needle both, which is why it sets `fill` as well as `stroke`. */
+.markglyph-tack {
+  stroke: var(--pinned);
+  fill: var(--pinned);
+  /* Always drawn, never moving the box. An unpinned mark carries an invisible
+     tack so a hover can show what a click would do without a pixel shifting. */
+  opacity: 0;
+}
+
+.markglyph.is-pinned .markglyph-tack {
+  opacity: 1;
+}
+
+/*
+ * A mark that is a control answers the pointer in the tack alone.
+ *
+ * Hovering a pinned mark mutes it: the preview of letting go, in `ink-3`, which
+ * is the register of annotation rather than of state. Hovering an unpinned one
+ * shows the same muted tack — the same preview, run the other way — and that is
+ * the whole of how a pointer can now *make* a pin, which it never could.
+ */
+.recordmark.is-pin:hover .markglyph-tack,
+.recordmark.is-pin:focus-visible .markglyph-tack {
+  stroke: var(--ink-3);
+  fill: var(--ink-3);
+  opacity: 1;
+}
+
+/*
+ * A mark is about 10px, which is not a target.
+ *
+ * Grown with a pseudo-element rather than with padding: this is a baseline-aligned
+ * flex item, and padding on it moves the title beside it — the exact alignment the
+ * drawn glyph was adopted to stop having to negotiate.
+ */
+.recordmark.is-pin {
+  position: relative;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  /*
+   * `font-family` and `line-height`, never the `font:` shorthand, and no `color`.
+   * A button's UA style names a family and a size, so the family has to be taken
+   * back — but the shorthand takes the size back too, and `.recordmark.is-pin`
+   * outranks `.recordmark`, so `font: inherit` silently replaced the `0.8em` two
+   * rules up with the title's own size and `color: inherit` replaced the accent
+   * with body ink. The mark came out full-size and grey, and both rules still
+   * read as though they applied.
+   */
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recordmark.is-pin::after {
+  content: '';
+  position: absolute;
+  inset: -7px -6px;
 }
 
 .cardface-title {
@@ -1499,13 +1662,6 @@ input:focus-visible + .checkbox {
   overflow-wrap: anywhere;
   flex: 1;
   min-width: 0;
-}
-
-/* A pin is its own fact, at the trailing title edge rather than around the
-   record-type mark. The slight lift optically aligns its 20px box to the title. */
-.cardface-pin {
-  align-self: flex-start;
-  margin: -2px -2px 0 auto;
 }
 
 .cardface-excerpt {
@@ -3204,28 +3360,6 @@ textarea { resize: vertical; font-family: inherit; }
 .icon-button.is-on {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-/*
- * Pinned is a held state and an available reversal, so it earns the filled key
- * treatment the cheatsheet uses for a matched key. Yellow is the pin's own
- * semantic token; ground ink keeps the small filled thumbtack legible in both
- * themes. This deliberately overrides the generic pressed toggle above.
- */
-.icon-button.pin-button {
-  color: var(--ground);
-  background: var(--pinned);
-  border-color: var(--pinned);
-}
-
-.icon-button.pin-button:hover {
-  color: var(--ground);
-  background: color-mix(in srgb, var(--pinned) 86%, var(--ink));
-  border-color: color-mix(in srgb, var(--pinned) 86%, var(--ink));
-}
-
-.table-pin {
-  margin-left: auto;
 }
 
 /*

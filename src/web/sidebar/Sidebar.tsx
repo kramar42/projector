@@ -6,7 +6,7 @@ import { SavedViews } from './SavedViews.tsx';
 import { FacetsSection, ShapeSection } from './QueryControls.tsx';
 import { FocusSection } from './FocusSection.tsx';
 import { IconButton } from '../components/Button.tsx';
-import { GLYPH_OF, ROLES, tallyMeans, tallyRoles } from '../components/CardBody.tsx';
+import { MARK_STATES, MarkGlyph, PinIcon, stateMeans, tallyMarks } from '../components/CardBody.tsx';
 import { type Patch } from '../query.ts';
 import { clearFilters, setSearch } from '../../view/intents.ts';
 import type { NoteDTO, Edit, Meta, QueryResponse, ViewSpec } from '../types.ts';
@@ -72,20 +72,31 @@ export function Sidebar({
 }) {
   const spec = data?.spec;
   /**
-   * What the collapsed ribbon reports: the notes on screen, tallied by what
-   * their own mark says.
+   * What the collapsed ribbon reports, in three groups.
    *
-   * It used to read the `type` computed axis and name three of its values, which
-   * was wrong twice over: it named a facet in the UI (C4), and it answered the
-   * question from a different source than the marks did — `type`'s `node` counts a
-   * note named by *any* reference facet, where a drawn `○` then meant the
-   * `parent` facet alone. The mark has since taken the broader meaning, so the two
-   * agree on the definition; counting through `markOf` is what stops them drifting
-   * apart again, and it names no facet.
+   * It used to be one: three rows tallying the notes on screen by their mark.
+   * That was the right *kind* of thing to put in 38px — a mark and a number — and
+   * far too little of it, because collapsing the rail hid every count the
+   * expanded one carries. A reader working collapsed could not see that a sweep
+   * had left four candidates unjudged, or that the filter was hiding half the
+   * vault, or how many notes they were holding.
+   *
+   * So: **what is here**, tallied by mark; **what is waiting on a person**, which
+   * is a fact about the vault; and **what this view is doing**, which is a fact
+   * about the query. Three questions, three groups, a hairline between them —
+   * the same division the expanded rail already makes between its stats block and
+   * its footer, at a width where a heading will not fit.
+   *
+   * The first group always draws all four states, zeros included, because it is a
+   * vocabulary and its shape should not change under the reader. The other two
+   * hide a row that is zero: they are exceptions, and an exception that is not
+   * happening should not take a line to say so.
    */
-  const marks = tallyRoles(
+  const marks = tallyMarks(
     (data?.ids ?? []).map((id) => data!.notes[id]).filter((c): c is NoteDTO => Boolean(c)),
   );
+  const hidden = Math.max(0, (data?.universe ?? 0) - (data?.total ?? 0));
+  const unjudged = meta.counts.unjudged ?? 0;
 
   if (collapsed) {
     return (
@@ -99,20 +110,81 @@ export function Sidebar({
         >
           »
         </button>
-        {/* One row per role, from one table — rather than three blocks each
-            spelling its own glyph beside a count read from somewhere else. */}
-        {ROLES.map((role) => (
-          <div
-            key={role}
-            className="sidebar-ribbon-info"
-            title={`${tallyMeans(role, marks[role])} in this query`}
-          >
-            <span className="sidebar-ribbon-icon" aria-hidden="true">
-              {GLYPH_OF[role]}
-            </span>
-            <span>{marks[role]}</span>
+
+        {/* What is on screen. One row per state, from one table — rather than
+            blocks each spelling their own glyph beside a count read from
+            somewhere else, which is how the ribbon and the board came to
+            disagree. The drawing is the real `MarkGlyph`, not a lookalike. */}
+        <div className="ribbon-group" role="group" aria-label="On screen, by mark">
+          {MARK_STATES.map((state, i) => (
+            <div
+              key={`${state.isProject}${state.referenced}`}
+              className="sidebar-ribbon-info"
+              title={`${stateMeans(state, marks[i]!)}, in this view`}
+            >
+              <span className="sidebar-ribbon-icon">
+                <MarkGlyph isProject={state.isProject} referenced={state.referenced} pinned={false} />
+              </span>
+              <span>{marks[i]}</span>
+            </div>
+          ))}
+        </div>
+
+        {/*
+          Waiting on a person. A fact about the vault rather than about the query,
+          which is why it is its own group and why the number does not move when
+          the filter does — the expanded rail makes the same split for the reason.
+
+          The declined pile is deliberately *not* here. It is the one count that is
+          neither what you are looking at nor what is waiting on you: it is a log
+          of what a sweep already decided, read when something is missing and not
+          otherwise. In 38px it would be a permanent number for an occasional
+          question, which is the opposite of what a collapsed rail is for. The
+          expanded rail still carries it, and `,d` still opens it.
+        */}
+        {unjudged > 0 && (
+          <div className="ribbon-group" role="group" aria-label="Waiting on a person">
+            <div className="sidebar-ribbon-info" title={`${unjudged} unjudged — + judges the one under the cursor`}>
+              <kbd className="keyhint">+</kbd>
+              <span>{unjudged}</span>
+            </div>
           </div>
-        ))}
+        )}
+
+        {/*
+          What this view is doing. `shown` is deliberately absent: the four counts
+          above already sum to it, and a number that is the sum of the four
+          directly on top of it is the duplication this pass has been removing.
+          The selection is absent for the same reason — the bulk bar *is* its
+          readout, floats over the view, and is drawn whether or not the rail is.
+
+          Filtered-out names its key, having no mark of its own. Pinned draws the
+          thumbtack, because it *has* one — the same two paths a mark's tack is
+          built from, upright here because nothing is holding it.
+        */}
+        {(hidden > 0 || pins > 0) && (
+          <div className="ribbon-group" role="group" aria-label="This view">
+            {hidden > 0 && (
+              <div className="sidebar-ribbon-info" title={`${hidden} filtered out — , ⇧F opens the filter`}>
+                <kbd className="keyhint">,F</kbd>
+                <span>{hidden}</span>
+              </div>
+            )}
+            {pins > 0 && (
+              <button
+                type="button"
+                className="sidebar-ribbon-info is-act"
+                onClick={onShowPins}
+                title={`${pins} pinned — " spreads them side by side`}
+              >
+                <span className="sidebar-ribbon-icon is-pin">
+                  <PinIcon />
+                </span>
+                <span>{pins}</span>
+              </button>
+            )}
+          </div>
+        )}
       </nav>
     );
   }

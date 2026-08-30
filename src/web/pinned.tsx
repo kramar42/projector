@@ -9,23 +9,28 @@ import { createContext, useContext, useMemo } from 'react';
  * five signatures widened to carry a fact none of them acts on.
  *
  * The pins themselves still live in the URL (`?pins=`), and `App` still owns
- * every write. Passing its `onUnpin` down here lets the pin drawn on a card be a
- * truthful control without threading the URL setter through every view shape.
+ * every write. Passing its `onToggle` down here lets the mark drawn on a card be
+ * a truthful control without threading the URL setter through every view shape.
+ *
+ * A **toggle** rather than an unpin, and the widening is the point: the pin was
+ * drawn only once a note was already pinned, so a pointer could let one go and
+ * could never make one. `'` and the palette were the only ways in, and the
+ * palette itself opens only on a key.
  */
 interface PinnedValue {
   has(id: string): boolean;
-  unpin(id: string): void;
+  toggle(id: string): void;
 }
 
-const PinnedContext = createContext<PinnedValue>({ has: () => false, unpin: () => {} });
+const PinnedContext = createContext<PinnedValue>({ has: () => false, toggle: () => {} });
 
 export function PinnedProvider({
   pins,
-  onUnpin,
+  onToggle,
   children,
 }: {
   pins: string[];
-  onUnpin: (id: string) => void;
+  onToggle: (id: string) => void;
   children: React.ReactNode;
 }) {
   // On the joined string rather than the array, so the identity survives a
@@ -33,8 +38,8 @@ export function PinnedProvider({
   const key = pins.join(',');
   const value = useMemo<PinnedValue>(() => {
     const set = new Set(key ? key.split(',') : []);
-    return { has: (id) => set.has(id), unpin: onUnpin };
-  }, [key, onUnpin]);
+    return { has: (id) => set.has(id), toggle: onToggle };
+  }, [key, onToggle]);
   return <PinnedContext.Provider value={value}>{children}</PinnedContext.Provider>;
 }
 
@@ -43,7 +48,7 @@ export function useIsPinned(): (id: string) => boolean {
   return useContext(PinnedContext).has;
 }
 
-/** Release a pin through the provider's App-owned URL writer. */
-export function useUnpin(): (id: string) => void {
-  return useContext(PinnedContext).unpin;
+/** Pin this note, or let it go — through the provider's App-owned URL writer. */
+export function useTogglePin(): (id: string) => void {
+  return useContext(PinnedContext).toggle;
 }

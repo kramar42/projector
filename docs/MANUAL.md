@@ -30,7 +30,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
 | **shape** | how a query is drawn: `board`, `canvas`, `table` or `calendar` |
 | **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a canvas a **band**; a second grouping axis gives a board **lanes** |
-| **mark** | the glyph before a note's title: `▣` a project, `○` something references it, `•` neither |
+| **mark** | the glyph before a note's title. **Solid** means it is a project; **square** means something references it |
 
 # The model
 
@@ -159,14 +159,20 @@ Only `id` and `title` are required, and a note becomes work by acquiring a lifec
 being reclassified.
 
 Every note carries a mark before its title saying which it is. The number is drawn only in a table,
-after the title; a card face carries the same fact as the `○` glyph itself, with the number in the
+after the title; a card face carries the same fact as the square mark itself, with the number in the
 mark's tooltip:
 
 | | |
 |---|---|
-| `•` | a note — work |
-| `○` | a node — some other note names it, through any reference facet |
-| `▣` | a project — it owns configuration that its members inherit |
+| hollow circle | a note nothing else names |
+| hollow square | a **node** — some other note names it, through any reference facet |
+| solid circle | a **project** nothing names yet |
+| solid square | a project something names — the commonest project |
+
+The mark asks two questions and answers them independently: **fill** says whether it is a project,
+**shape** says whether anything references it. All four are drawn at one size, so the eye compares
+them on the two things that carry meaning rather than on how big they are. The short form: *fill is
+what you decided, shape is what happened around it.*
 | `12` | how many notes name this one, across every reference facet |
 
 ## Relations are facets
@@ -259,7 +265,7 @@ the vault, a note in `platform/` need not be a member, and a note belongs to as 
 names — which no single folder could express. Nesting is the same: a project inside a project is a
 `project:` value, not a folder inside a folder.
 
-**Making a note a project makes the folder.** The panel's `▣` toggle and `pj set <id> --set
+**Making a note a project makes the folder.** The panel's mark toggle and `pj set <id> --set
 'project={}'` both move `platform.md` to `platform/README.md` as part of the write — the folder is
 named for the **id**, never for the filename it may have drifted from, and the id does not change, so
 nothing pointing at the note breaks. A folder that already exists is joined rather than refused; only
@@ -462,6 +468,30 @@ moves a position without changing any facet.
 
 Full text is another predicate in the same query, live and debounced. The trailing word is matched as a
 prefix, so `keyc` finds `keycloak` while you are still typing.
+
+### The collapsed rail
+
+`,\` folds the rail to a 38px strip, and the strip answers three questions, hairline-separated:
+
+| group | rows |
+|---|---|
+| **what is on screen** | one row per mark state — the four glyphs above, with counts, in lifecycle order |
+| **what is waiting on you** | unjudged candidates, when a sweep has left any |
+| **what this view is doing** | how many notes the filter is hiding, and how many are pinned |
+
+The rows in the last two groups name the key that reaches them — `+` judges a candidate, `,F` opens
+the filter — because at that width a word will not fit and the key is the app's own way of saying
+*this is what reaches that*. The pinned row draws the thumbtack instead, because a pin has a mark
+already; pressing it spreads the pins, and pressing the filter's count is the same as opening the
+filter rail.
+
+**What is deliberately absent.** *Shown* — the four mark counts already sum to it. *The selection* —
+the bulk bar is its readout, floats over the view, and is drawn whether or not the rail is. *The
+declined pile* — it is a log of what a sweep already decided, read when something is missing and not
+otherwise, so a permanent number for an occasional question is the wrong trade at this width. The
+expanded rail carries it, and `,d` still opens it. A row whose count is zero is dropped from the last
+two groups; the mark counts are always all four, because they are a vocabulary and their shape should
+not change under you.
 
 ## Saved views
 
@@ -1402,7 +1432,7 @@ sight — the reading set beside the writing set, and the two never touch.
 
 | Keys | What |
 |---|---|
-| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A **filled yellow pin** appears at the trailing edge of its title wherever the note is drawn, so you can see what you are holding without leaving the board — and clicking that pin lets it go. Open a note and the pins appear beside its panel as navigable title spines |
+| `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A **yellow thumbtack** appears stuck into its record mark wherever the note is drawn, so you can see what you are holding without leaving the board — and clicking the mark is the same toggle, which is also the only way a pointer can make a pin. Open a note and the pins appear beside its panel as navigable title spines |
 | `g [` `g ]` | previous / next pinned note, opened in the panel — the keyboard's way to the folded spines. It wraps, and from a note that is not pinned it enters at the near end. In the spread it is `h` / `l`, which already walk the pages |
 | `"` | **spread** the pins side by side over the view, or fold them back |
 | `h` `l` | across the spread pages. The focused page **is** the cursor, so a facet write — a digit, an axis key — lands on it |
@@ -1411,11 +1441,11 @@ sight — the reading set beside the writing set, and the two never touch.
 | `⏎` | fold the spread onto the focused note's panel |
 | `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a pin control do, so no chain of Escapes can cost you the set |
 
-**One pin, one drawing, one meaning.** The filled yellow pin is the whole vocabulary: it says the note
-is held, and pressing it lets it go. It is a control rather than a decoration of the record mark, so
-what the note *is* (`·`, `▪`, `○`) and what *you* are doing with it stay two separate marks that cannot
-crowd or recolour one another. It sits at the end of the title on a card face, a table row, a calendar
-cell, a canvas node and a spread page alike.
+**One pin, one drawing, one meaning.** A yellow thumbtack pushed into the record mark from the top
+right is the whole vocabulary: it says the note is held, and pressing the mark lets it go. It is a control rather than a decoration of the record mark, so
+what the note *is* and what *you* are doing with it stay two facts that cannot crowd or recolour one
+another. It is drawn on every surface a mark is: a card face, a table row, a calendar cell, a canvas
+node, a spread page and the panel head.
 
 **A page draws the note exactly as the panel does** — the same facet rows, the same links, the same
 `Children`-style derived rows, the same workshop — because it is the same component. What a page
@@ -1436,9 +1466,9 @@ sidebar are inert: they cannot receive a stray click, Tab or screen-reader curso
 note is open, it is the full page at the far right while `h` and `l` move focus independently across
 the pages to its left. Press `o`—or use a page header's **`→`** control—to send a pin into that slot.
 
-**A page's two controls say which role it has.** Every pinned page carries `→` (send to the open slot)
-and the filled pin (let it go). The open slot at the right carries the corner the *panel* carries
-instead — start work, and delete — because it is the same note in the same role, and what you can do
+**A page's corner says which role it has.** Every pinned page carries `→` (send to the open slot) and
+nothing else; letting the pin go is the mark at the head of the title, as it is everywhere. The open
+slot at the right carries the corner the *panel* carries instead — start work, and delete — because it is the same note in the same role, and what you can do
 to the note you are reading may not depend on which surface happens to be drawing it.
 If the outgoing open note was unpinned it is replaced; if it was pinned, it returns to its original
 place in the pin run. A pin opened at the right stays a pin, so closing the open slot restores it rather

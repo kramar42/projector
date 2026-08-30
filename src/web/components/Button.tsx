@@ -181,12 +181,6 @@ const GLYPH = {
     px: 15,
     path: 'M2.8 8H12.5M8.7 4.2L12.5 8L8.7 11.8',
   },
-  /** A filled thumbtack: pinned state, and the control that removes it. */
-  pin: {
-    px: 15,
-    path: 'M8 8.5V13.5',
-    fill: 'M5.1 2.5H10.9L10.2 6.3L12.2 8.5H3.8L5.8 6.3Z',
-  },
   /**
    * The fifth drawing: reshape the view around what this row lists.
    *
@@ -284,9 +278,4 @@ export function IconButton({
       )}
     </button>
   );
-}
-
-/** The one drawing and state treatment used wherever a pin can be removed. */
-export function PinButton({ extra, size = 'tiny', ...rest }: Base & { extra?: string; size?: Size }) {
-  return <IconButton glyph="pin" on size={size} extra={cls('pin-button', extra)} {...rest} />;
 }

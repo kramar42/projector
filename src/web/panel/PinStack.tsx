@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { useLive } from '../useLive.ts';
-import { IconButton, PinButton } from '../components/Button.tsx';
+import { IconButton } from '../components/Button.tsx';
 import { KeyHints } from '../components/KeyHint.tsx';
-import { RecordMark } from '../components/CardBody.tsx';
+import { PinMark } from '../components/CardBody.tsx';
 import { NO_WRITES, usePanelWriter } from './usePanelWriter.ts';
 import { useWorkStarter } from './useWorkStarter.ts';
 import { NoteTiers } from './tiers.tsx';
@@ -382,6 +382,9 @@ function PinPage({
     onGone: isOpen ? onDelete : onUnpin,
   });
   const work = useWorkStarter({ id, title });
+  // Pinned already, so the mark's toggle can only be letting it go — which is
+  // the same call the live-page `onGone` makes when the note itself disappears.
+  const onTogglePin = onUnpin;
   /**
    * Only the focused page is handed the real one — see `NO_WRITES`. The hook is
    * called either way because it is a hook, and because the page it belongs to
@@ -418,7 +421,12 @@ function PinPage({
       */}
       <div className="pinpage-content" inert={isCompact}>
         <header className="pinpage-head">
-          {card && <RecordMark card={card} />}
+          {/* The mark is the pin control here too, so a page carries the fact
+              and its reversal in one place — which is what let the trailing
+              `unpin` button go: it was the same act drawn twice on one head. */}
+          {card && (
+            <PinMark card={card} title={title} pinned={isPinned} onToggle={onTogglePin} />
+          )}
           <h2 className="pinpage-title">{title}</h2>
           {(writer.busy ?? work.busy) && <span className="panel-busy">{writer.busy ?? work.busy}…</span>}
           {/*
@@ -458,27 +466,15 @@ function PinPage({
                 />
               </>
             ) : (
-              <>
-                <IconButton
-                  glyph="open"
-                  size="normal"
-                  extra="panel-x"
-                  data-act="open"
-                  title={`Open "${title}" at the right (o)`}
-                  aria-label={`Open ${title} at the right`}
-                  onClick={onMakeOpen}
-                />
-                {isPinned && (
-                  <PinButton
-                    size="normal"
-                    extra="panel-x"
-                    data-act="unpin"
-                    aria-label={`Unpin ${title}`}
-                    title={`Unpin "${title}" (')`}
-                    onClick={onUnpin}
-                  />
-                )}
-              </>
+              <IconButton
+                glyph="open"
+                size="normal"
+                extra="panel-x"
+                data-act="open"
+                title={`Open "${title}" at the right (o)`}
+                aria-label={`Open ${title} at the right`}
+                onClick={onMakeOpen}
+              />
             )}
           </div>
         </header>

@@ -457,19 +457,27 @@ shorthand resets every sub-property it does not name, so a counter that acquires
 re-declare the guard, and two of them do.
 
 **The Measured Glyph Rule.** A glyph placed in a text run is measured, not eyeballed. The note marks
-sit at `0.8em` with `line-height: 1`, baseline-aligned, plus a per-glyph `translateY` derived from
-where its ink actually centres: `•` centres at `0.3716em` of its own size, `○` and `▣` at `0.2598em`,
-and lowercase text at `0.254em` of *its* size, which is where `0.054em` and `-0.058em` come from.
+sit at `0.8em` with `line-height: 1`, baseline-aligned, plus one `translateY` that puts the drawn
+box's centre near the middle of the x-height rather than on the baseline its bottom sits on.
 
-The leaf mark is `•` and not the middle dot `·` because the rule cuts both ways: at 15px the middle
-dot's ink measures 1.85 × 2.23px against `○`'s 8.94 × 9.02, nearly five times smaller in each
-dimension, which reads as a speck rather than as the quietest of three marks. The bullet is 4.35 ×
-4.34 — legible, and still half the circle.
+**One** nudge, where there were three, and that is the dividend from drawing them. As characters they
+sat wherever the face's cut put the ink inside each advance — `•` low, `○` and `▣` high — so the rule
+was satisfied by three separate measurements of somebody else's font (`0.054em` and `-0.058em`,
+derived from ink centres of `0.3716em` and `0.2598em`). A drawn glyph's box is square and its centre
+is where we put it, so there is one question left and one answer.
 
-The panel header is the one place the mark is also a **control**: a note is a project by carrying a
-`project:` block, so clicking the glyph adds or removes it. It takes `--text-lg` there rather than a
-second relative size, and therefore its own pair of measured constants — same formula, different size
-pair, written down beside them.
+Drawing them also fixed what measuring could not. The plain note had already been moved from `·` to
+`•` because at 15px the middle dot's ink was 1.85 × 2.23px against `○`'s 8.94 × 9.02 — a speck rather
+than the quietest of three marks — and `•`'s 4.35 was still half the circle. Picking a better
+character is as far as that repair can go: the ladder belongs to whoever cut the face. There is no
+ladder now at all, which is the point — every mark reaches the same 4.4 half-width and differs only
+where it means to. The solid forms are inset (disc 4.0, square 3.8) because a solid shape reads
+heavier than an outline reaching the same distance, and a square heavier still than a disc; the
+numbers are unequal so the weights are not.
+
+The panel header is the one place the mark is also a **project** control: a note is a project by
+carrying a `project:` block, so clicking the glyph adds or removes it. Everywhere else the mark is the
+**pin** control — see The Pin Rule.
 
 The same applies to the icon glyphs, which keep equal 20px hit targets while their nominal sizes are
 tuned individually (14px check, 15px close, 16px revert, 17px add, and 15px for every drawn glyph —
@@ -791,20 +799,70 @@ popover of the axes this note carries nothing on.
 
 ### The Note Mark
 
-The signature component, and the one nothing else can substitute for. A mono glyph before every title
-saying what the note is — `•` a note, `○` a node, `▣` a project. The mark draws the glyph alone: how
-many notes name it is spelled out in its tooltip, and printed beside it only on a table row. It
-draws in `accent` — one colour in all of them, so the glyph is one vocabulary rather than whatever
-each surface paints; it was `ink-3` everywhere except a project's mark in the panel, which was
-`hue-purple`, so the signature component was the colour of a label with one invisible exception. `○`
-means named by **any** reference facet, which is what `nodesIn` has always meant
-by a node: being named by `parent` and being named by `project` make a note a node equally. It read
-the `parent` facet alone until this was settled, which is how the mark and the `type` axis came to
-disagree about the same note. It sits at `0.8em` of whatever type it precedes, so one rule serves
-the 12.5px table row, reference row and picker row, the 12px reference chip and focus pill, and the
-13px card face — and that `em` resolves against the type it sits beside, not against whatever its row
-inherited. The panel header is the one place it does not: there the mark is a control and names
-`--text-lg` outright. See **The Measured Glyph Rule**.
+The signature component, and the one nothing else can substitute for. A glyph before every title
+answering **two** questions, on two independent channels:
+
+| | |
+|---|---|
+| **fill** | solid is a **project** — it owns repos and instructions its members inherit. Hollow is not. |
+| **shape** | square means **something names it**, through any reference facet. A circle is self-contained; a square has corners for edges to arrive at. |
+
+All four combinations are drawn and all four mean something, at one 4.4 half-width — so the eye
+compares them on the two things that carry meaning rather than on how big they are. It is **drawn**,
+in one box on one centre; the marks were the characters `• ○ ▣` until two things they could not do
+came due at once — see The Measured Glyph Rule for the first and The Pin Rule for the second.
+
+**Why fill carries the project and shape the reference, and not the reverse.** The obvious assignment
+is the other one — shape is the nominal channel, so put the *kind* of thing on it — and it is wrong
+here for three reasons, none of which showed up until a realistic screen was drawn both ways.
+
+A project would have had **two glyphs**. With shape on the project and fill on references, a project
+nothing happens to name is a hollow square and one with members is a solid square: the same kind of
+thing drawn two ways, and which you get decided by a fact about *other* notes. The only escape is to
+exempt projects from the fill rule and always draw them solid — which is what an earlier build
+silently did, leaving not two channels but three hand-picked glyphs and a rule that did not hold. Fill
+on the project means every project is solid, always, and its identity is never diluted by churn.
+
+**Pop-out has to be precise.** At this size fill separates preattentively and a circle against a
+rounded square does not. Measured on the author's vault: 11% of notes are projects, 23% are
+referenced. Spending fill on references makes a quarter of the screen solid to mark a fact true of a
+quarter of the screen — a cue about 43% precise for "this is a project", which is the thing a reader
+scans for. Spending it on projects makes it exact.
+
+**Salience should track consequence.** A reference appears and disappears as links are made and
+broken, and nobody decided it about *this* note; being a project is an act that moves the file into a
+folder of its own. So: **fill is what you decided, shape is what happened around it.** The cost, taken
+knowingly, is that the better *metaphor* belonged to the other assignment — a square as a box holding
+its members is more derivable than a square as a shape with corners for edges. Metaphor is a one-time
+learning cost and salience is paid on every glance.
+
+**Why not a third shape.** A triangle, diamond or hexagon at 10px with a 1.5px stroke is mush, and its
+meaning is not derivable. Round and square are the two silhouettes that survive this size and are
+maximally unlike each other, and two channels already answer both questions — a third shape would
+spend a scarce, size-fragile resource on a distinction that has an answer.
+
+The mark draws the glyph alone: how many notes name it is spelled out in its tooltip, and printed
+beside it only on a table row. It draws in `accent` — one colour in all of them, so the glyph is one
+vocabulary rather than whatever each surface paints; it was `ink-3` everywhere except a project's mark
+in the panel, which was `hue-purple`, so the signature component was the colour of a label with one
+invisible exception. Square means named by **any** reference facet, which is what `nodesIn` has
+always meant by a node: being named by `parent` and being named by `project` make a note a node
+equally. It read the `parent` facet alone until this was settled, which is how the mark and the `type`
+axis came to disagree about the same note.
+
+The hollow square is a **squircle** on purpose — `rx` 1.7 against the solid's 1.2. An empty rounded
+rectangle at this size is the universal unchecked checkbox, and on a work app full of task lists that
+is a reading nobody wants; rounder is further from a checkbox and still plainly not a circle. It
+applies to 13% of notes, the second commonest state, so it is worth the tuning. It sits at `0.8em` of whatever type it precedes, so one
+rule serves the 12.5px table row, reference row and picker row, the 12px reference chip and focus
+pill, and the 13px card face — and that `em` resolves against the type it sits beside, not against
+whatever its row inherited. The panel header is the one place it does not: there the mark is a control
+and names `--text-lg` outright.
+
+The collapsed rail's tally draws the same component rather than spelling the marks itself, which it
+used to: that is how the ribbon came to count a *different* trichotomy from the one the board drew.
+It counts all four states, in the order a note passes through them — so reading the column top to
+bottom is reading how far along a vault's notes are.
 
 ### Progress
 
@@ -1228,10 +1286,12 @@ fade taking the hairlines and chip fills down with it. Nothing else on the surfa
 the App Voice Rule: a spread is a reading surface, and standing pins are standing facts.
 
 The rightmost page may carry a second role: the **open slot**, and the two roles are told apart by
-which pair of controls the head carries rather than by a label. A pinned page carries `→` — send me to
-the slot — and the filled pin that lets it go. The open slot carries the panel's own corner instead:
-start, then delete, in `.panel-acts`, at `normal` size, with the destructive control last so a reach
-for the corner that overshoots lands on nothing. It is the same component treatment `NotePanel` uses
+what the head's corner carries rather than by a label. A pinned page carries `→` alone — send me to
+the slot. The open slot carries the panel's own corner instead: start, then delete, in `.panel-acts`,
+at `normal` size, with the destructive control last so a reach for the corner that overshoots lands on
+nothing. Pinned-ness is not in either corner: it is on the mark at the head of the title, where The
+Pin Rule puts it on every other surface, which is what let the page's second pin control go — it had
+been the same act drawn twice on one head. It is the same component treatment `NotePanel` uses
 because it is the same note in the same role, and a head that answered differently on this surface
 would be the app disagreeing with itself about what you can do to what you are reading.
 
@@ -1246,35 +1306,56 @@ of the label rows they annotate.
 
 ### The Pin Rule
 
-**A pin is a filled control at the trailing edge of a title, never a treatment of the record mark.**
+**Pinned is drawn *on* the record mark — a tack pushed into the silhouette — and the mark is the
+control that puts it there and takes it away.**
 
-The record mark says what a note *is* — `markOf` derives its glyph from what names the record — and the
-app speaks it in `accent` everywhere (see `.recordmark`). Two earlier attempts made that one mark carry
-a second fact: recolouring it to `--pinned` left too little contrast at its smallest sizes and made the
-same glyph change meaning, and framing it in a key-like `--pinned` surround kept the contrast but put a
-box around a glyph whose optical centre is not its box's centre, so the pin sat visibly off-centre on
-every face it was drawn on. Both were the same mistake — one symbol answering two questions.
+Three attempts got here. Recolouring the mark to `--pinned` left too little contrast at its smallest
+sizes and made one glyph change meaning. Framing it in a key-like `--pinned` surround kept the
+contrast but boxed a glyph whose optical centre is not its box's, so the pin sat visibly off-centre on
+every face. Moving it off the mark entirely — a filled yellow key at the trailing edge of the title —
+fixed both and cost more than it fixed: the trailing edge is where a card's *acts* live, so a standing
+fact sat among them as the loudest thing on a quiet face, and there was nowhere to put it on a panel
+head without moving the title or changing the row's height.
 
-So pinned-ness is its own symbol and its own control. `.pin-button` is an `.icon-button` drawing a
-filled thumbtack, `--ground` on a solid `--pinned` field: the **filled** key treatment, which is what
-the cheatsheet already spends on a key that is currently matched, and the register that says *held, and
-you may release it* rather than *the app is telling you something*. It is drawn last on the title line
-— `.cardface-pin` on a face, `.table-pin` in a row, `.panel-acts` on a spread page — so the two facts
-read left to right in the order you ask them: what is this, what is it called, what am I doing with it.
-Because it is a real button, clicking it unpins, which is the whole reason a decoration was the wrong
-shape: the mark you look at to find a pin should be the thing you press to lose it.
+All three were the same mistake in different places: pinned-ness was treated as something that had to
+go *beside* the mark, because a character has no room in it. The mark is drawn now, so it has room.
+The tack is the same thumbtack the retired pin button drew, at `1.2` and turned `45°`, coming down out
+of the box's top-right corner — and its point stops **3.2 units** from the mark's centre, inside the
+outline and no further. That number is load-bearing: driven to the centre the needle fills a hollow
+mark, and a pinned plain note becomes indistinguishable from a pinned node. Fill is the meaning, so
+the tack may not paint over it; pulled back any further and the tack stops touching the mark and
+floats beside it.
 
-`--pinned` holds the yellow family's value in both themes and is deliberately not named for it: the
-same naming decision `--accent` makes over `--hue-purple`, and for the same reason — a pin is not a
-facet value, so it may not wear an axis's hue under an axis's name. It is the only token that reverses
-against `--ground`, and that is the point: nothing else on a reading surface is filled, so the one
-filled thing is the one thing you put there by hand.
+A tack that size does not fit the marks' 16-unit box, so the box is **23** when there is one — same
+unit size, seven units of room above and to the right, taken straight back out of the layout with two
+negative margins. A mark sits at the head of a title, so above it and before the text is empty on
+every surface this is drawn on; pinning a note therefore cannot move its own title or anything after
+it. With no tack the box is 16 and tight, which is what lets a mark be counted in the collapsed rail's
+38px ribbon at the same scale a card draws it.
 
-**The dock spine whose note is in the panel takes the focused page's accent top edge.** It is not a
-cursor — the cursor is on the board behind it — it is *correspondence*, the answer to which of these
-four am I reading, and it borrows the spread's mark because the folded dock and the spread are the same
-reading set at two scales. Like the spread's, it is an inset top edge: the one strip a spine's
-neighbours never cover.
+**Two colours, two facts.** The silhouette stays `accent` because it says what the note is; the tack is
+`--pinned` because it says you are holding it. `--pinned` holds the yellow family's value in both
+themes and is deliberately not named for it — the same naming decision `--accent` makes over
+`--hue-purple`, and for the same reason: a pin is not a facet value, so it may not wear an axis's hue
+under an axis's name.
+
+**The tack is always in the markup; only its paint changes.** That is what lets an *unpinned* mark
+answer a hover by showing the tack in `ink-3` — the annotation register, so it reads as a proposal
+rather than as state — without the box under it moving. Hovering a *pinned* mark mutes it the same
+way, which is the preview of letting go. It is one gesture read in both directions, and it is how a
+pointer can now make a pin at all: the pin used to be drawn only once a note was already pinned, so a
+reader working entirely by pointer could unpin and could never pin, with `'` and a palette that itself
+opens only on a key being the only ways in.
+
+The hit area is grown by a pseudo-element rather than by padding. The mark is about 10px, which is not
+a target; padding on a baseline-aligned flex item moves the title beside it, which is the negotiation
+the drawn glyph exists to end.
+
+**One exception, stated.** In the panel header the mark was already the *project* control — a note is a
+project by carrying a `project:` block, and clicking the glyph adds or removes it. There it draws the
+tack like every other mark and keeps its own act. A glyph that meant two different things on two
+surfaces would be worse than one surface being different, and the panel head is the only place the
+mark was spoken for.
 
 ## Do's and Don'ts
 

@@ -155,8 +155,8 @@ count written here.
   vault's; and a **link kind** draws its two-letter prefix in a family of its own (`jira` blue, `gh:`
   green, `claude` orange, `doc` yellow, `slack` pink) so a note's links tell themselves apart before
   you read them.
-- **The note marks are vocabulary, not decoration:** `•` a note, `○` a note something else
-  names, `▣` a project, plus a
+- **The note marks are vocabulary, not decoration:** solid means it is a project and square means
+  something names it — two facts on two channels, plus a
   count of how many notes name it through any reference facet.
 - **Voice:** lowercase, declarative, reasons-first. The docs state what a mechanism is and what it
   replaced; there is no marketing register anywhere in this project, and adding one would be

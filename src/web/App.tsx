@@ -352,9 +352,16 @@ export function App() {
     go(`${loc}${patchSearch(s, pinsPatch(ids))}`, { replace: true });
   }, []);
 
-  /** Release one pin through the same URL writer, wherever its pin control lives. */
-  const unpin = useCallback(
-    (id: string) => setPins(pinsOf(nav.current.search).filter((p) => p !== id)),
+  /**
+   * Hold this note, or let it go — through the same URL writer, wherever the
+   * control lives. The same act `'` performs, so a pointer and a key cannot
+   * disagree about what pinning is.
+   */
+  const togglePin = useCallback(
+    (id: string) => {
+      const held = pinsOf(nav.current.search);
+      setPins(held.includes(id) ? held.filter((p) => p !== id) : [...held, id]);
+    },
     [setPins],
   );
 
@@ -829,9 +836,9 @@ export function App() {
       {/* Every surface that *draws* a facet value reads its hue from here, so a
           chip on a card face, a table cell, a canvas node and the bulk bar
           cannot disagree about what colour an axis is. */}
-      {/* Every shape gets the same pin indicator and the same App-owned unpin
+      {/* Every shape gets the same pin indicator and the same App-owned toggle
           route, without each view learning how `?pins=` is stored. */}
-      <PinnedProvider pins={pins} onUnpin={unpin}>
+      <PinnedProvider pins={pins} onToggle={togglePin}>
       <VocabularyProvider facets={meta.facets}>
       {/*
         `panel-is-open` no longer reserves a track — the panel covers the view and
