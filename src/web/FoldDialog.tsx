@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from './components/Button.tsx';
+import { useDialogFocus } from './components/useDialogFocus.ts';
 import { api } from './api.ts';
 import { defaultSides, foldResult, type FoldRow, type Side } from '../schema/fold.ts';
 
@@ -37,6 +38,8 @@ export function FoldDialog({
   const [sides, setSides] = useState<Record<string, Side>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
 
   useEffect(() => {
     let alive = true;
@@ -82,7 +85,7 @@ export function FoldDialog({
   return (
     <>
       <div className="scrim cheatsheet-scrim" onClick={onClose} />
-      <div className="cheatsheet fold" aria-label={`Fold ${title}`}>
+      <div ref={dialog} className="cheatsheet fold" role="dialog" aria-modal="true" aria-label={`Fold ${title}`} tabIndex={-1}>
         <div className="declined-head">
           <h3>Fold in</h3>
           <span className="declined-count">

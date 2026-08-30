@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KEYMAP } from '../view/keys.ts';
+import { Button } from './components/Button.tsx';
+import { useDialogFocus } from './components/useDialogFocus.ts';
 import {
   cheatsheetKeyLabel,
   cheatsheetStrokeLabel,
@@ -32,6 +34,8 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
   const axisKeys = axes.map((axis) => axis.key);
   const [stroke, setStroke] = useState<CheatsheetStroke | null>(null);
   const [layout, setLayout] = useState<KeyboardLayout | null>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
 
   // `key` becomes a symbol under Option on macOS, so it cannot tell the sheet
   // whether a Dvorak reader pressed their labelled J. The browser's layout map
@@ -53,7 +57,9 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
    */
   useEffect(() => {
     const capture = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') return;
+      // Tab is navigation, not a stroke to rehearse. Let the dialog own its
+      // ordinary focus loop so the sheet remains usable without its shortcuts.
+      if (event.key === 'Escape' || event.key === 'Tab') return;
       if (/^(Shift|Control|Alt|Meta|CapsLock|AltGraph)$/.test(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -69,7 +75,7 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
           sheet is opened *from* wherever you are, including from an open card,
           and a shared `.scrim` at the panel's own depth left it half covered. */}
       <div className="scrim cheatsheet-scrim" onClick={onClose} />
-      <div className="cheatsheet" aria-label="Keyboard shortcuts">
+      <div ref={dialog} className="cheatsheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabIndex={-1}>
         <div className="cheatsheet-grid">
           {KEYMAP.map((section) => (
             <section key={section.section} className="cheatsheet-block">
@@ -137,7 +143,9 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
           <span className="cheatsheet-last-key" aria-live="polite">
             {stroke && <kbd className="is-match">{cheatsheetStrokeLabel(stroke)}</kbd>}
           </span>
-          <span className="cheatsheet-close">esc to close</span>
+          <Button tone="ghost" size="tiny" extra="cheatsheet-close" onClick={onClose}>
+            close
+          </Button>
         </div>
       </div>
     </>

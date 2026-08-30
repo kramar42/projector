@@ -94,6 +94,7 @@ export function SavedViews({
               <button
                 className="pop-action"
                 data-nav="pick"
+                data-act="view.save-as"
                 onClick={() => {
                   close();
                   setNaming(true);
@@ -104,6 +105,7 @@ export function SavedViews({
               <button
                 className="pop-action"
                 data-nav="pick"
+                data-act="view.blank"
                 onClick={() => {
                   close();
                   patch(blankQuery(spec, search));
@@ -125,6 +127,7 @@ export function SavedViews({
             />
             <IconButton
               glyph="revert"
+              data-act="view.revert"
               title="discard the overrides and go back to the saved view"
               aria-label="Revert changes to this view"
               onClick={() => patch(blankQuery(spec, search, current?.name ?? null))}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { paletteFor, type Command, type PaletteAxis } from '../view/keys.ts';
 import { fuzzy } from '../view/fuzzy.ts';
+import { useDialogFocus } from './components/useDialogFocus.ts';
 import type { Meta } from './types.ts';
 
 /**
@@ -11,10 +12,13 @@ import type { Meta } from './types.ts';
  * or because `ACTS` names an act with no stroke — there is no list to keep in
  * step, which was the standing objection to building this at all.
  *
- * Its actual job is the handful of controls that are real, rare, and reachable
- * only by Tab: renaming, the project toggle, re-fetching links, switching vault.
- * Everything else it lists is there to *teach* — each row shows the key that also
- * reaches it, so using the palette is how you stop needing it.
+ * Its actual job is every named action that does not earn a dedicated stroke:
+ * renaming, the project toggle, re-fetching links, switching vault, clearing a
+ * selection, calendar paging, canvas actions and saved-view changes. A command
+ * does not duplicate every *instance* of a control — every filter value, card and
+ * link already has to be chosen in the surface that gives it context. Everything
+ * else it lists is there to *teach* — each row shows the key that also reaches it,
+ * so using the palette is how you stop needing it.
  *
  * **The filter narrows and never reorders.** `fuzzy` matches letters in order and
  * returns no score, so the list is always in `PALETTE`'s declared order and a row
@@ -63,6 +67,8 @@ export function Palette({
    * makes in `cursor.ts`.
    */
   const list = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog);
   useEffect(() => {
     list.current?.querySelector('.is-here')?.scrollIntoView({ block: 'nearest' });
   }, [here, rows.length]);
@@ -78,7 +84,7 @@ export function Palette({
   return (
     <>
       <div className="scrim cheatsheet-scrim" onClick={onClose} />
-      <div className="cheatsheet palette" aria-label="Commands">
+      <div ref={dialog} className="cheatsheet palette" role="dialog" aria-modal="true" aria-label="Commands" tabIndex={-1}>
         <input
           className="palette-input"
           autoFocus
@@ -138,6 +144,10 @@ export function Palette({
           ))}
           {!rows.length && <div className="emptystate palette-empty">no command matches</div>}
         </div>
+        <button type="button" className="palette-row" onClick={onClose}>
+          <span className="palette-label">close commands</span>
+          <span className="palette-keys">esc</span>
+        </button>
       </div>
     </>
   );

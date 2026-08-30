@@ -210,13 +210,13 @@ export function CalendarView({
 
       <div className="calendar-head">
         <div className="calendar-nav">
-          <Button tone="ghost" size="tiny" title="previous page" aria-label="previous page" onClick={() => goTo(pagedTo(page, -1))}>
+          <Button data-act="calendar.previous" tone="ghost" size="tiny" title="previous page" aria-label="previous page" onClick={() => goTo(pagedTo(page, -1))}>
             ‹
           </Button>
-          <Button tone="ghost" size="tiny" title="the page with today on it" onClick={() => goTo(null)}>
+          <Button data-act="calendar.today" tone="ghost" size="tiny" title="the page with today on it" onClick={() => goTo(null)}>
             today
           </Button>
-          <Button tone="ghost" size="tiny" title="next page" aria-label="next page" onClick={() => goTo(pagedTo(page, 1))}>
+          <Button data-act="calendar.next" tone="ghost" size="tiny" title="next page" aria-label="next page" onClick={() => goTo(pagedTo(page, 1))}>
             ›
           </Button>
           <span className="calendar-range">{pageLabel(page)}</span>

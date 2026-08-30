@@ -670,13 +670,14 @@ export function CanvasView({
             </select>
           </label>
 
-          <Button size="small" data-nav="act" onClick={() => void addRecord()}>
+          <Button size="small" data-nav="act" data-act="canvas.note" onClick={() => void addRecord()}>
             + note
           </Button>
           {dirty && !naming && (
             <Button
               tone="primary" size="small"
               data-nav="act"
+              data-act="canvas.save"
               disabled={saving}
               onClick={() => {
                 const name = data.spec.name;
@@ -717,4 +718,3 @@ export function CanvasView({
  * meant a third implementation of it, and it also slugged the *title*, so
  * "Project A Portfolio" was saved as `project-a-portfolio`.
  */
-

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './components/Button.tsx';
+import { useDialogFocus } from './components/useDialogFocus.ts';
 import { focusSoon } from './cursor.ts';
 import { api } from './api.ts';
 import type { Declined } from './types.ts';
@@ -117,6 +118,7 @@ export function DeclinedPanel({
    * back out of the search field on the re-read that a keystroke there caused.
    */
   const box = useRef<HTMLDivElement>(null);
+  useDialogFocus(box);
   const landed = useRef(false);
   useEffect(() => {
     if (landed.current || rows === null || !rows.length) return;
@@ -161,7 +163,7 @@ export function DeclinedPanel({
   return (
     <>
       <div className="scrim cheatsheet-scrim" onClick={onClose} />
-      <div ref={box} className="cheatsheet declined" aria-label="Declined candidates">
+      <div ref={box} className="cheatsheet declined" role="dialog" aria-modal="true" aria-label="Declined candidates" tabIndex={-1}>
         <div className="declined-head">
           <h3>Declined</h3>
           {/*

@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ACTS,
   BINDINGS,
   CHEATSHEET_IDS,
   PALETTE,
@@ -290,6 +291,20 @@ test('⌥ letter commands follow the active keyboard layout, while ⌥ numbers r
 test('⌥0 is not a view, because saved views are counted from one', () => {
   const out = bind(null, stroke('º', { code: 'Digit0', altKey: true }), ctx());
   assert.equal(out.command, null);
+});
+
+test('the palette reaches every named action that has no key', () => {
+  const acts = new Set(ACTS.map((act) => act.command.kind));
+  for (const action of [
+    'clearSelection',
+    'calendarPage',
+    'canvasAction',
+    'saveAsView',
+    'revertView',
+    'blankView',
+  ] satisfies Command['kind'][]) {
+    assert.ok(acts.has(action), `${action} is clickable but absent from the command palette`);
+  }
 });
 
 // ---------------------------------------------------------------- the rail
@@ -1052,6 +1067,12 @@ test('every command is reachable, and how is written down', () => {
     toggleProject: 'the palette',
     enrich: 'the palette',
     switchVault: 'the palette',
+    clearSelection: 'the palette',
+    calendarPage: 'the palette',
+    canvasAction: 'the palette',
+    saveAsView: 'the palette',
+    revertView: 'the palette',
+    blankView: 'the palette',
   };
 
   // Widened: `commandKinds()` reads the union out of the source as plain strings,

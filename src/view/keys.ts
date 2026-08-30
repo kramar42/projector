@@ -360,6 +360,16 @@ export type Command =
   | { kind: 'search' }
   | { kind: 'help' }
   | { kind: 'palette' }
+  /** Dismiss the current bulk selection without closing another surface first. */
+  | { kind: 'clearSelection' }
+  /** The three explicit calendar pager buttons. */
+  | { kind: 'calendarPage'; page: 'previous' | 'today' | 'next' }
+  /** Canvas-only named actions; relation choice stays in its existing chooser. */
+  | { kind: 'canvasAction'; action: 'newNote' | 'saveLayout' }
+  /** The named saved-view actions that open or commit the existing controls. */
+  | { kind: 'saveAsView' }
+  | { kind: 'revertView' }
+  | { kind: 'blankView' }
   | { kind: 'newCard' }
   /** Move the cursor's card within its column's stored order. */
   | { kind: 'reorder'; delta: number };
@@ -921,6 +931,15 @@ export const ACTS: readonly Act[] = [
   { id: 'act.project', palette: 'Make / unmake a project', command: { kind: 'toggleProject' } },
   { id: 'act.enrich', palette: 'Re-fetch this note’s links', command: { kind: 'enrich' } },
   { id: 'act.vault', palette: 'Switch vault', command: { kind: 'switchVault' } },
+  { id: 'act.selection.clear', palette: 'Clear selection', command: { kind: 'clearSelection' } },
+  { id: 'act.calendar.previous', palette: 'Previous calendar page', command: { kind: 'calendarPage', page: 'previous' } },
+  { id: 'act.calendar.today', palette: 'Show today in calendar', command: { kind: 'calendarPage', page: 'today' } },
+  { id: 'act.calendar.next', palette: 'Next calendar page', command: { kind: 'calendarPage', page: 'next' } },
+  { id: 'act.canvas.note', palette: 'New canvas note', command: { kind: 'canvasAction', action: 'newNote' } },
+  { id: 'act.canvas.save', palette: 'Save canvas layout', command: { kind: 'canvasAction', action: 'saveLayout' } },
+  { id: 'act.view.saveAs', palette: 'Save current as a new view', command: { kind: 'saveAsView' } },
+  { id: 'act.view.revert', palette: 'Revert view changes', command: { kind: 'revertView' } },
+  { id: 'act.view.blank', palette: 'Start from an empty view', command: { kind: 'blankView' } },
 
   /* A sequence rather than a binding, so the keys are written out here — the
      same shape the `,` rows below take, and for the same reason. */

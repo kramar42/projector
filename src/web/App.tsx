@@ -2047,6 +2047,52 @@ function run(command: Command, s: KeyState): void {
     case 'palette':
       return s.setPaletteOpen(!s.paletteOpen);
 
+    case 'clearSelection':
+      if (!selection.ids.size) return s.notify({ tone: 'info', text: 'nothing is selected' });
+      selection.clear();
+      return;
+
+    case 'calendarPage': {
+      const button = document.querySelector<HTMLButtonElement>(`[data-act="calendar.${command.page}"]`);
+      if (!button) return s.notify({ tone: 'info', text: 'calendar paging is available in a calendar' });
+      button.click();
+      return;
+    }
+
+    case 'canvasAction': {
+      const target = command.action === 'newNote' ? 'canvas.note' : 'canvas.save';
+      const button = document.querySelector<HTMLButtonElement>(`[data-act="${target}"]`);
+      if (!button) {
+        return s.notify({
+          tone: 'info',
+          text: command.action === 'newNote' ? 'new canvas notes are available on a canvas' : 'there is no canvas layout to save',
+        });
+      }
+      button.click();
+      return;
+    }
+
+    case 'saveAsView':
+    case 'blankView': {
+      const view = document.querySelector<HTMLElement>('[data-rail="view"]');
+      if (!view) return s.notify({ tone: 'info', text: 'saved views are unavailable here' });
+      if (view.getAttribute('aria-expanded') === 'false') view.click();
+      const act = command.kind === 'saveAsView' ? 'view.save-as' : 'view.blank';
+      return focusSoon(() => {
+        const button = document.querySelector<HTMLButtonElement>(`[data-act="${act}"]`);
+        if (!button) return null;
+        button.click();
+        return button;
+      });
+    }
+
+    case 'revertView': {
+      const button = document.querySelector<HTMLButtonElement>('[data-act="view.revert"]');
+      if (!button) return s.notify({ tone: 'info', text: 'this view has no changes to revert' });
+      button.click();
+      return;
+    }
+
     /**
      * The rail, reached by attribute.
      *
