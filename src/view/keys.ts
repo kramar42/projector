@@ -1007,7 +1007,10 @@ const BY_ID = new Map(BINDINGS.map((b) => [b.id, b]));
  * longer one fails too.
  */
 export interface KeyRow {
+  /** Legacy/searchable spelling of every binding on the row. */
   keys: string;
+  /** Each item is exactly one binding; spaces inside it are successive strokes. */
+  bindings: readonly string[];
   does: string;
 }
 
@@ -1028,6 +1031,11 @@ interface RowSpec {
   does: string;
   /** Literal, when the row is more than its bindings. */
   keys?: string;
+  /**
+   * Visual binding boundaries. A space inside one item is a sequence; a second
+   * item is an alternative shortcut that does the same thing.
+   */
+  bindings?: readonly string[];
   /** Binding ids this row accounts for. */
   ids?: string[];
 }
@@ -1041,7 +1049,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { ids: ['lane.prev', 'lane.next'], does: 'across lanes / calendar pages' },
       // `gg` is a sequence and `G` a binding, so the keys are written and the
       // coverage is declared.
-      { keys: 'gg G', ids: ['cursor.last'], does: 'first / last' },
+      { keys: 'gg G', bindings: ['gg', 'G'], ids: ['cursor.last'], does: 'first / last' },
       { ids: ['open.enter', 'open.o'], does: 'open the note' },
       { ids: ['trail.back', 'trail.forward'], does: 'back / forward through visited cards' },
       // Escape is decided in `bind` before the registry is consulted — it has to
@@ -1076,8 +1084,8 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     // out follows how the list is drawn, and that is the whole rule.
     section: 'In a list',
     rows: [
-      { keys: 'j k', does: 'a stacked list — links, refs, filters' },
-      { keys: 'h l', does: 'a facet’s values; j k change axis' },
+      { keys: 'j k', bindings: ['j', 'k'], does: 'a stacked list — links, refs, filters' },
+      { keys: 'h l', bindings: ['h', 'l'], does: 'a facet’s values; j k change axis' },
       { keys: '⏎', does: 'take what is under the cursor' },
       { keys: 'esc', does: 'back to the cards' },
     ],
@@ -1099,11 +1107,15 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { ids: ['stack.toggle'], does: 'spread the pins side by side / fold them back' },
       // A sequence, so its keys are written out; `ACTS` carries it into the
       // palette, which is the only other place it can be found.
-      { keys: 'g [ g ]', does: 'previous / next pinned note — the folded spines, from the keyboard' },
+      {
+        keys: 'g [ g ]',
+        bindings: ['g [', 'g ]'],
+        does: 'previous / next pinned note — the folded spines, from the keyboard',
+      },
       // Sequences of keys the cursor rows already account for, re-read by the
       // spread the way a navlist re-reads them — so keys are written, not ids.
-      { keys: 'h l', does: 'across the spread pages — writes land on the focused one' },
-      { keys: 'j k', does: 'scroll the focused page' },
+      { keys: 'h l', bindings: ['h', 'l'], does: 'across the spread pages — writes land on the focused one' },
+      { keys: 'j k', bindings: ['j', 'k'], does: 'scroll the focused page' },
       { keys: 'o', does: 'send the focused page to the open slot at right' },
       { keys: '⏎', does: 'fold the spread onto the focused note' },
     ],
@@ -1117,7 +1129,11 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { ids: ['newCard'], does: 'new card in this column' },
       // `⌥` is read before the registry, so the two reorder strokes are not
       // bindings and their keys are written out.
-      { keys: '⌥j ⌥k', does: 'move this card down · up its column (a saved view)' },
+      {
+        keys: '⌥j ⌥k',
+        bindings: ['⌥j', '⌥k'],
+        does: 'move this card down · up its column (a saved view)',
+      },
       { ids: ['undo', 'redo'], does: 'undo · redo' },
     ],
   },
@@ -1160,10 +1176,15 @@ const glyphOf = (id: string): string => {
  */
 export const KEYMAP: { section: string; rows: KeyRow[] }[] = SPEC.map(({ section, rows }) => ({
   section,
-  rows: rows.map((r) => ({
-    does: r.does,
-    keys: r.keys ?? (r.ids ?? []).map(glyphOf).join(' '),
-  })),
+  rows: rows.map((r) => {
+    const derived = (r.ids ?? []).map(glyphOf);
+    const keys = r.keys ?? derived.join(' ');
+    return {
+      does: r.does,
+      keys,
+      bindings: r.bindings ?? (r.keys ? [r.keys] : derived),
+    };
+  }),
 }));
 
 /** Which binding ids the cheatsheet accounts for — `test/keys.test.ts` holds it. */

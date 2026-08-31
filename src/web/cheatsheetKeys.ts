@@ -126,17 +126,22 @@ export function matchesCheatsheetModifierToken(token: string, modifiers: Cheatsh
 
 /** Whether a row contains a binding in one of the held modifier families. */
 export function matchesCheatsheetModifierRow(
-  keys: string,
+  bindings: string | readonly string[],
   modifiers: CheatsheetModifiers,
 ): boolean {
-  return keys.split(' ').some((token) => matchesCheatsheetModifierToken(token, modifiers));
+  const rows = typeof bindings === 'string' ? [bindings] : bindings;
+  return rows.some((binding) =>
+    binding.split(' ').some((token) => matchesCheatsheetModifierToken(token, modifiers)),
+  );
 }
 
 /** Whether a row contains a literal or template key that could answer a stroke. */
 export function matchesCheatsheetRow(
-  keys: string,
+  bindings: string | readonly string[],
   stroke: CheatsheetStroke | null,
   axisKeys: readonly string[],
 ): boolean {
-  return stroke !== null && keys.split(' ').some((token) => matchesToken(token, stroke, axisKeys));
+  if (stroke === null) return false;
+  const rows = typeof bindings === 'string' ? [bindings] : bindings;
+  return rows.some((binding) => binding.split(' ').some((token) => matchesToken(token, stroke, axisKeys)));
 }

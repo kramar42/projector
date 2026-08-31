@@ -5025,6 +5025,13 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   box-shadow: 0 18px 48px rgba(20, 15, 35, 0.28);
 }
 
+/* The sheet owns focus so it can practice keys before a control is chosen. Its
+   neutral frame already says where that surface is; spending the accent on an
+   unfocused standing fact turns the whole dialog into a false selection. */
+.cheatsheet:focus-visible {
+  outline: none;
+}
+
 /*
  * The palette, which is the cheatsheet's shell at a different width.
  *
@@ -5155,13 +5162,11 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
  * A grid so the descriptions line up down a column — the keys vary in width and
  * a ragged second column is what makes a table of pairs hard to scan.
  *
- * **84px is measured, not chosen.** The widest key cell is `⟨axis⟩⟨axis⟩` at 78px
- * and `⟨axis⟩ 1–9` at 79px, both of them two or three `kbd`s and a 3px gap — so
- * at the 78px this used to be, the two rows that name an axis wrapped onto a
- * second line while every other row sat on one. 82px is the threshold and 84
- * costs nothing over it: the same single extra description wraps either way, and
- * the sheet grows 2px. The slack is for a machine whose mono font is wider than
- * this one's.
+ * **84px is measured, not chosen.** The widest binding is `g ⇧⟨axis⟩` at 81px.
+ * At the 78px this used to be, that one wrapped while every other row sat on one.
+ * 82px is the threshold and 84 costs nothing over it: the same single extra
+ * description wraps either way, and the sheet grows 2px. The slack is for a
+ * machine whose mono font is wider than this one's.
  *
  * Widening the *sheet* is the fix that looks obvious and is not: `columns: 4
  * 210px` fits as many columns as the width allows, so a wider frame becomes four
@@ -5216,6 +5221,7 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
   padding: 1px 5px;
   min-width: 18px;
   text-align: center;
+  white-space: nowrap;
   color: var(--ink);
   background: var(--surface-2);
   border: 1px solid var(--rule-2);
@@ -5225,15 +5231,6 @@ a.linkrow-label:hover { border-bottom-color: var(--accent); }
 .cheatsheet kbd.is-match {
   color: var(--ground);
   background: var(--accent);
-  border-color: var(--accent);
-}
-
-/* "then", between a prefix and what completes it. Not a `kbd`: it is not a key. */
-.cheatsheet-then {
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  color: var(--ink-3);
-  align-self: center;
 }
 
 /* Which verb a digit means on this axis — the one thing a reader has to know

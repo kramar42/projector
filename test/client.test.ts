@@ -531,6 +531,13 @@ test('a practice key lights every cheatsheet pattern it can complete', () => {
   assert.ok(!matchesCheatsheetRow('esc', { key: 'e', altKey: false }, axes), 'Escape is not the e prefix');
 });
 
+test('each cheatsheet keycap is one complete binding', () => {
+  const rows = KEYMAP.flatMap((section) => section.rows);
+  assert.deepEqual(rows.find((row) => row.keys === 'j k')?.bindings, ['j', 'k']);
+  assert.deepEqual(rows.find((row) => row.keys === 'g [ g ]')?.bindings, ['g [', 'g ]']);
+  assert.deepEqual(rows.find((row) => row.keys === '⟨axis⟩ 1–9')?.bindings, ['⟨axis⟩ 1–9']);
+});
+
 test('practice mode distinguishes held Shift bindings from their plain keys', () => {
   const shifted = { key: 'F', altKey: false, shiftKey: true };
   const plain = { key: 'f', altKey: false, shiftKey: false };

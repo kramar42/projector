@@ -8,7 +8,6 @@ import {
   cheatsheetStrokeLabel,
   cheatsheetStrokeOf,
   matchesCheatsheetModifierRow,
-  matchesCheatsheetModifierToken,
   matchesCheatsheetRow,
   type KeyboardLayout,
   type CheatsheetModifiers,
@@ -131,23 +130,23 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
               <dl>
                 {section.rows.map((row) => {
                   const matching = stroke
-                    ? matchesCheatsheetRow(row.keys, stroke, axisKeys)
-                    : matchesCheatsheetModifierRow(row.keys, heldModifiers);
+                    ? matchesCheatsheetRow(row.bindings, stroke, axisKeys)
+                    : matchesCheatsheetModifierRow(row.bindings, heldModifiers);
                   return (
                     <div key={row.keys} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
                       <dt>
-                        {row.keys.split(' ').map((k) => (
+                        {row.bindings.map((binding) => (
                           <kbd
-                            key={k}
+                            key={binding}
                             className={
                               (stroke
-                                ? matchesCheatsheetRow(k, stroke, axisKeys)
-                                : matchesCheatsheetModifierToken(k, heldModifiers))
+                                ? matchesCheatsheetRow(binding, stroke, axisKeys)
+                                : matchesCheatsheetModifierRow(binding, heldModifiers))
                                 ? 'is-match'
                                 : ''
                             }
                           >
-                            {cheatsheetKeyLabel(k)}
+                            {binding.split(' ').map(cheatsheetKeyLabel).join(' ')}
                           </kbd>
                         ))}
                       </dt>
@@ -175,8 +174,7 @@ export function Cheatsheet({ meta, onClose }: { meta: Meta; onClose: () => void 
                   return (
                     <div key={axis.key} className={`cheatsheet-row ${matching ? 'is-match' : ''}`}>
                       <dt>
-                        <kbd className={matching ? 'is-match' : ''}>{axis.key}</kbd>
-                        <span className="cheatsheet-then">1–9</span>
+                        <kbd className={matching ? 'is-match' : ''}>{axis.key} 1–9</kbd>
                       </dt>
                       <dd>
                         {axis.label}
