@@ -313,7 +313,7 @@ function ActiveStats({
    * It clears the filter and the search, and `filtered out` is the count those
    * two produce — so it sits tight against that clause while the rest of the
    * sentence keeps its `·` spacing. At the end it read as acting on whichever
-   * clause happened to be last, which on a canvas is a remark about drawing
+   * clause happened to be last, which on a graph is a remark about drawing
    * order. The fallback is for the case where there is nothing to sit beside: a
    * search matching everything hides nothing and still needs clearing.
    *
@@ -363,7 +363,7 @@ function ActiveStats({
         <> · <span title="unmatched ancestors kept so the graph stays connected">{data.context.length} for context</span></>
       )}
       {data.placements > data.total &&
-        (data.spec.shape === 'canvas' ? (
+        (data.spec.shape === 'graph' ? (
           <>
             {' '}
             ·{' '}

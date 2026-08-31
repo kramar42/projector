@@ -390,7 +390,7 @@ lists: [intake, needs-project, needs-status, needs-priority]
   {
     path: 'everything.yaml',
     body: `# Every note as a graph, laid out from the roots.
-shape: canvas
+shape: graph
 title: Everything
 show: [parent, blocked_by]
 `,

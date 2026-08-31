@@ -9,7 +9,7 @@ web
 ## Users
 
 **Primary: one person on their own machine.** Someone running the app locally against a folder of
-their own notes. They keep it **open all day on a second monitor** — the board or canvas
+their own notes. They keep it **open all day on a second monitor** — the board or graph
 is ambient, glanced at and dragged on continuously, not visited for a session and closed.
 
 **Second, and first-class: Claude agent sessions.** Notes are plain files, so an agent creates and
@@ -28,8 +28,8 @@ but no external user base is assumed.
 
 ## Product Purpose
 
-A personal work-management app. **One note database in markdown files, projected as a board, a
-mind-map canvas or a table** — whichever the current query asks for — with read-only inline views of
+A personal work-management app. **One note database in markdown files, projected as a table, board,
+calendar or graph** — whichever the current query asks for — with read-only inline views of
 Jira issues, GitHub PRs, branches and commits, Claude sessions and local docs.
 
 Success, in the user's own terms, all at once:
@@ -88,16 +88,15 @@ step. The mechanisms a neighbouring product could not truthfully copy:
 
 ## Capabilities and Constraints
 
-**The three shapes.** Board: columns from the primary grouping axis, lanes from a second, with drag
-semantics that make "a note in two columns" a gesture and never an accident (replace / ⌥ add / ⇧
-remove / drop into `(none)`). Canvas: a tree laid out from its roots plus free positioning once saved,
+**The four shapes.** Table is the default projection for scanning facts and roll-ups. Board: columns
+from the primary grouping axis, lanes from a second, with drag semantics that make "a note in two
+columns" a gesture and never an accident (replace / ⌥ add / ⇧ remove / drop into `(none)`). Calendar:
+dated notes in their days. Graph: a tree laid out from its roots plus free positioning once saved,
 bands when grouped, and filtering as match-plus-context so a filtered graph still reads as a graph.
-Table: the one thing the others cannot give — columns of numbers, with project roll-ups as
-`direct / total`, blocked, last activity.
 
-**Editing has two channels.** Structure is edited by gesture — drag, bulk bar, canvas handles — and
+**Editing has two channels.** Structure is edited by gesture — drag, bulk bar, graph handles — and
 content in the note panel. Creation is the exception, in two places: inline in a board column, which
-inherits that column's value for the grouped facet, and `+ note` on the canvas toolbar, which
+inherits that column's value for the grouped facet, and `+ note` on the graph toolbar, which
 prompts for a title and sets no facets at all.
 
 **Conflicts are refused, not merged.** If a file changed since the panel read it, the write is refused
@@ -150,7 +149,7 @@ count written here.
   hue toward the surface.
 - **Three things are drawn by what they are rather than by an axis**, and `src/web/hue.ts` is the one
   place that decides: a **reference** value draws as a note — the neutral register, no family,
-  because it is another note and not a value — with its axis's family reaching its canvas edge alone;
+  because it is another note and not a value — with its axis's family reaching its graph edge alone;
   the **built-in `project` axis** draws in the accent, since it is the app's axis rather than the
   vault's; and a **link kind** draws its two-letter prefix in a family of its own (`jira` blue, `gh:`
   green, `claude` orange, `doc` yellow, `slack` pink) so a note's links tell themselves apart before

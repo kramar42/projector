@@ -199,10 +199,10 @@ export function patchSearch(search: string, patch: Patch): string {
  * composition switches between these four like anything else.
  */
 const LABELS: Record<Shape, string> = {
-  board: 'Board',
-  canvas: 'Canvas',
   table: 'Table',
+  board: 'Board',
   calendar: 'Calendar',
+  graph: 'Graph',
 };
 
 export const SHAPES: { value: Shape; label: string }[] = ALL_SHAPES.map((value) => ({
@@ -226,7 +226,7 @@ export function relations(meta: Meta): string[] {
 
 /** A one-line reading of the query, for the sidebar footer and the page title. */
 export function describe(spec: ViewSpec, total: number): string {
-  const bits: string[] = [`${total} ${spec.shape === 'canvas' ? 'notes' : 'cards'}`];
+  const bits: string[] = [`${total} ${spec.shape === 'graph' ? 'notes' : 'cards'}`];
   const q = spec.query;
   const filters = Object.entries(q.filter ?? {}).filter(([, v]) => v.length);
   if (filters.length) bits.push(filters.map(([f, v]) => `${f}=${v.join('|')}`).join(' '));

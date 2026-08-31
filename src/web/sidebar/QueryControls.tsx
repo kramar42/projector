@@ -16,13 +16,13 @@ import type { Edit, Meta, QueryResponse, Shape } from '../types.ts';
  * why they live here once rather than twice.
  *
  * **Nothing here appears or disappears with the shape.** The three controls that
- * only a canvas can honour — which edges are drawn, whether context is kept, and
- * what a handle-drag creates — float over the canvas itself, so the rail is the
+ * only a graph can honour — which edges are drawn, whether context is kept, and
+ * what a handle-drag creates — float over the graph itself, so the rail is the
  * same rail in every shape and switching does not reflow it.
  */
 export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit: Edit }) {
   const spec = data?.spec;
-  const shape: Shape = spec?.shape ?? 'board';
+  const shape: Shape = spec?.shape ?? 'table';
   const composed = Boolean(spec?.lists?.length);
   const query = spec?.query ?? {};
   const group = query.groupBy ?? [];
@@ -33,12 +33,12 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
       <div className="rail-row">
         <label className="rail-label">
           Shape
-          <KeyHint keys="s" means="comma then s" />
+          <KeyHint keys="s" means="comma then s — then t, b, c or g chooses Table, Board, Calendar or Graph" />
         </label>
         {/*
           * Live on a composition too. It was disabled, on the reasoning that a
           * composition has no query to project — but the columns are the thing
-          * it does not project, and a board, a table and a canvas all draw
+          * it does not project, and a board, a table and a graph all draw
           * columns. What it cannot switch is its *grouping*, which is the
           * control below.
           */}
@@ -77,7 +77,7 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
            * A calendar keeps the value and cannot draw it — its cells are days,
            * from the date facet, and nothing else groups them. Said rather than
            * disabled, for the reason `then by` says the same thing about a
-           * canvas: switching shape back has to find the grouping you left, so
+           * graph: switching shape back has to find the grouping you left, so
            * the control that holds it must stay live and must stop implying it
            * is doing something here.
            */
@@ -115,7 +115,7 @@ export function ShapeSection({ data, edit }: { data: QueryResponse | null; edit:
               className="rail-select"
               data-rail="thenBy"
               value={group[1] ?? ''}
-              title="board lanes, table sub-sections. A canvas keeps the value but cannot draw it yet: a node has one position, so it cannot sit in two clusters"
+              title="board lanes, table sub-sections. A graph keeps the value but cannot draw it yet: a node has one position, so it cannot sit in two clusters"
               onChange={(e) => edit((spec) => setGroupBy(spec, 1, e.target.value || null))}
             >
               <option value="">—</option>
@@ -151,8 +151,8 @@ function SortRow({
   const [key = '', dirRaw = 'asc'] = (query.sort?.[0] ?? '').split(':');
   const dir: 'asc' | 'desc' = dirRaw === 'desc' ? 'desc' : 'asc';
   const note =
-    shape === 'canvas'
-      ? 'a canvas is arranged by dagre; this seeds the order within each rank'
+    shape === 'graph'
+      ? 'a graph is arranged by dagre; this seeds the order within each rank'
       : key && key !== 'updated' && key !== 'created' && key !== 'title'
         ? 'ranked by the order declared in facets.yaml'
         : '';
@@ -213,7 +213,7 @@ function SortRow({
  * Which facets show on a note. One row: the list is a popover so a long
  * selection cannot push the filter panel off screen.
  *
- * A board and a canvas draw them as chips, a table draws them as columns — one
+ * A board and a graph draw them as chips, a table draws them as columns — one
  * parameter, so switching shape never asks the same question twice.
  */
 export function FacetsSection({
@@ -250,7 +250,7 @@ export function FacetsSection({
     ...meta.computed.map((c) => ({ ...c, ref: false, computed: true })),
   ];
   const table = data?.spec.shape === 'table';
-  const canvas = data?.spec.shape === 'canvas';
+  const graph = data?.spec.shape === 'graph';
 
   return (
     <div className="rail-row">
@@ -262,7 +262,7 @@ export function FacetsSection({
         minWidth={210}
         rail="show"
         label={table ? columnsLabel(show) : chipsLabel(show)}
-        title="which facets this view surfaces — a reference facet also draws on a canvas, and the first one lays it out"
+        title="which facets this view surfaces — a reference facet also draws on a graph, and the first one lays it out"
         render={() => (
           <>
             <div className="pop-head">{table ? 'Columns' : 'Shown on a note'}</div>
@@ -292,9 +292,9 @@ export function FacetsSection({
                     ƒ
                   </span>
                 )}
-                {/* Only a canvas can act on the difference, so only a canvas
+                {/* Only a graph can act on the difference, so only a graph
                     says it: order decides which relation lays the graph out. */}
-                {f.ref && canvas && <span className="pop-note">drawn</span>}
+                {f.ref && graph && <span className="pop-note">drawn</span>}
               </label>
             ))}
           </>
@@ -312,4 +312,3 @@ function chipsLabel(chips: string[]): string {
 function columnsLabel(chips: string[]): string {
   return chips.length ? `${chips.length} columns` : 'title only';
 }
-

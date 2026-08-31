@@ -301,7 +301,7 @@ test('a view key the reader does not know is an error, not a line that does noth
   assert.deepEqual(
     validateViews(
       view({
-        shape: 'canvas',
+        shape: 'graph',
         title: 'T',
         filter: { status: ['planning'] },
         groupBy: ['status'],
@@ -536,7 +536,7 @@ test('a composition is a query like any other: shape, sort, filter and lanes all
     // `shape` is a live control again. It was pinned, on the reasoning that a
     // composition has no query to project — but columns are exactly what a
     // table draws as sections and a canvas as bands.
-    for (const shape of ['board', 'table', 'canvas'] as const) {
+    for (const shape of ['table', 'board', 'graph'] as const) {
       assert.equal(compose({ shape }).spec.shape, shape, `${shape} draws a composition`);
     }
 
@@ -593,7 +593,7 @@ test('a composition pins its columns and nothing else', () => {
   assert.deepEqual(url({}).query.groupBy, [LISTS_AXIS]);
 
   // Everything else the shapes share is live, shape included.
-  for (const shape of ['board', 'canvas', 'table', 'calendar'] as const) {
+  for (const shape of ['table', 'board', 'calendar', 'graph'] as const) {
     assert.equal(url({ shape }).shape, shape);
   }
   assert.deepEqual(url({ sort: 'title:desc' }).query.sort, ['title:desc']);
@@ -613,7 +613,7 @@ test('a composition pins its columns and nothing else', () => {
   // it decided where the columns came from.
   assert.deepEqual(
     SHAPES.map((s) => s.value),
-    ['board', 'canvas', 'table', 'calendar'],
+    ['table', 'board', 'calendar', 'graph'],
   );
 });
 

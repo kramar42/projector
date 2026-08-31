@@ -24,7 +24,7 @@ export { DIRS, LISTS_AXIS, NONE, SHAPES, type Dir, type Shape };
  *
  * One list, because there were three: this module's reader, the client's
  * "which params belong to the query" predicate, and the CLI's flag list — which
- * was short by `shape` and `show`, so `pj ls --shape canvas`
+ * was short by `shape` and `show`, so `pj ls --shape graph`
  * simply did not exist. Adding a key here is what makes every surface able to say
  * it.
  */
@@ -55,9 +55,9 @@ export interface ViewSpec {
    *
    * One list, because how each is drawn follows from what it is. A **label**
    * facet is a chip on a face and a column in a table; a **reference** facet is
-   * that *and* a line on a canvas, and the first reference in this list is what
-   * the canvas lays out by. There used to be two keys — `chips` and
-   * `edges.show` — asking the same question, and "why does my canvas draw
+   * that *and* a line on a graph, and the first reference in this list is what
+   * the graph lays out by. There used to be two keys — `chips` and
+   * `edges.show` — asking the same question, and "why does my graph draw
    * nothing" was answered by the one you forgot.
    */
   show: string[];
@@ -94,7 +94,7 @@ export interface ViewSpec {
    *
    * Naming any makes `LISTS_AXIS` this view's primary grouping — implicitly, so
    * a file need not spell `groupBy: [lists]`, though it may. Everything else
-   * stays a live control: `shape` draws it as a board, a table or a canvas, a
+   * stays a live control: `shape` draws it as a board, a table or a graph, a
    * second `groupBy` entry makes lanes, and `sort` and the filter apply across
    * every column. It was a *shape* once, which had to forbid the other three and
    * could not say why.
@@ -130,6 +130,17 @@ export interface ViewSpec {
 
 function one<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
   return value !== undefined && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+/**
+ * `canvas` was the original wire name for the graph projection. Keep old URLs
+ * and saved views legible, but resolve them immediately so every new write uses
+ * the name the reader sees.
+ */
+function shapeOf(raw: unknown): Shape {
+  const value = String(raw ?? '');
+  if (value === 'canvas') return 'graph';
+  return one(value, SHAPES) ?? 'table';
 }
 
 function list(value: string | undefined): string[] {
@@ -191,7 +202,7 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   const sort = list(params.sort);
   if (sort.length) query.sort = sort;
 
-  const shape = one(params.shape, SHAPES) ?? 'board';
+  const shape = shapeOf(params.shape);
 
   const calendar: CalendarConfig = {};
   const days = Number(params[CAL_COLS_PARAM]);
@@ -289,7 +300,7 @@ export const VIEW_KEYS: readonly string[] = [
 
 export function specFromFile(name: string, raw: Record<string, unknown>): ViewSpec {
   const params: Record<string, string> = {};
-  params.shape = one(String(raw.shape ?? ''), SHAPES) ?? 'board';
+  params.shape = shapeOf(raw.shape);
 
   for (const [facet, value] of Object.entries((raw.filter ?? {}) as Record<string, unknown>)) {
     const picked = Array.isArray(value) ? value.map(String) : [String(value)];
@@ -333,7 +344,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   // `pj ls --view`, `pj audit`, and every read of the view index. Without it a
   // composition drew its columns only when it arrived through the server.
   //
-  // `shape: lists` in an older file lands on `board` by itself — it is not in
+  // `shape: lists` in an older file lands on `table` by itself — it is not in
   // `SHAPES` any more, so `one()` falls through to the default — which is what
   // it always drew. `pj check` names it so the word can be dropped.
   if (spec.lists?.length) {

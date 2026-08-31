@@ -28,8 +28,8 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
 | **project folder** | a folder whose `README.md` carries a `project:` block. The folder name is the note's id; `AGENTS.md` beside it is what members inherit. Nothing else about the folder means anything — what is *in* it is not what belongs to it |
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
-| **shape** | how a query is drawn: `board`, `canvas`, `table` or `calendar` |
-| **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a canvas a **band**; a second grouping axis gives a board **lanes** |
+| **shape** | how a query is drawn: `table`, `board`, `calendar` or `graph` |
+| **group** | the notes sharing one value of the grouping axis. A board draws a **column**, a table a **section**, a graph a **band**; a second grouping axis gives a board **lanes** |
 | **mark** | the glyph before a note's title. **Solid** means it is a project; **square** means something references it |
 
 # The model
@@ -422,15 +422,15 @@ It applies to every shape: `via=blocked_by dir=in` is "what does finishing this 
 
 ## shape and show
 
-`shape` is `board`, `canvas`, `table` or `calendar` — explicit, never inferred.
+`shape` is `table`, `board`, `calendar` or `graph` — explicit, never inferred.
 
 `show` is which axes this view surfaces, and there is one list rather than two because how each is
 drawn follows from what it is:
 
 | | label facet | reference facet | computed axis |
 |---|---|---|---|
-| board / canvas / calendar face | a chip | a chip that opens the target | a chip |
-| canvas | — | a line between notes, and the **first** one lays the graph out | — |
+| board / graph / calendar face | a chip | a chip that opens the target | a chip |
+| graph | — | a line between notes, and the **first** one lays the graph out | — |
 | table | a column | a column of links | a column |
 
 A **computed axis** may be shown like any other, which is the same rule that lets one be filtered,
@@ -515,7 +515,7 @@ and auto-ordered, and *Save layout* on one asks for a name first: naming a query
 somewhere for its layout to live.
 
 ```yaml
-shape: board | canvas | table
+shape: table | board | calendar | graph
 title: Home
 filter: { status: [planning, active] }
 focus: { id: platform, via: parent, dir: in, depth: 2 }
@@ -598,7 +598,7 @@ may. Everything that follows from that is what follows from grouping anywhere el
 
 | control | on a composition |
 |---|---|
-| `shape` | board, table or canvas, like any view. Columns become sections and bands |
+| `shape` | table, board, calendar or graph, like any view. Columns become sections and bands |
 | `groupBy` | pinned to `lists` — the columns *are* the children, so there is nothing to switch it to |
 | `groupBy: [lists, priority]` | a second axis makes **lanes**: columns across, priority down |
 | `sort` | orders within each column |
@@ -641,7 +641,7 @@ bar.
 
 So "note in two columns" is always a gesture, never an accident.
 
-**Canvas.** A tree laid out from its roots, plus free positioning once saved — and bands when the query
+**Graph.** A tree laid out from its roots, plus free positioning once saved — and bands when the query
 is grouped. Every note draws the same face — how much of a note to show is a property of the view, which is what `show` is, so a note
 never changes shape because of a field it happens to carry. Drag handle-to-handle to create an edge,
 `+ node` for cheap capture, double-click to open. The tree follows whichever hierarchy
@@ -1552,7 +1552,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 |---|---|
 | `,v` | saved views |
 | `,V` | write the overrides into the view you are on. Reverting is `,v` and picking that view again — landing on a view replaces the query wholesale, which is what a revert is |
-| `,s` | shape |
+| `,s t` `,s b` `,s c` `,s g` | Table · Board · Calendar · Graph |
 | `,g` `,G` | group by · then by |
 | `,o` | sort. The same axis twice flips the direction |
 | `,O` | flip the direction alone, without touching what is sorted by |
@@ -1563,7 +1563,7 @@ several is **added to**. A digit never removes — `0` is the gesture that clear
 | `,\` | collapse the rail |
 | `,d` | what a sweep declined, and why — a page at a time, searchable. `j` `k` walk the rows, `[` `]` are the page before and after, `/` reaches the search box, `⏎` brings the row under the cursor back. `Esc` leaves the search box back into the rows, and from the rows it closes the pile |
 | `,b` | the bulk bar, once cards are selected. `h` `l` walk it, `⏎` takes what is under the cursor |
-| `,t` | the canvas toolbar — what drags create, `+ note`, Save layout |
+| `,t` | the graph toolbar — what drags create, `+ note`, Save layout |
 | `⌥1`–`⌥9` | the nth saved view, in the order `,v` lists them |
 | `⌥j` `⌥k` | move the cursor's card down / up its column. Card order is arrangement, so it needs a saved view — an ad-hoc query has no file to keep it in |
 | `/` | the search box. `Esc` leaves it without clearing it — the search is yours until `,c` |

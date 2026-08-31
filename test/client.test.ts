@@ -613,6 +613,16 @@ test('a keyed rail control has one phrase in its tooltip, palette and cheatsheet
     if (act.command.kind !== 'rail' || !act.keys) continue;
     const phrase = railControlDescription(act.command.control);
     assert.equal(act.palette, phrase, `${act.id} palette`);
+    // `,s` is now a selector prefix. The cheatsheet truthfully shows its four
+    // complete bindings rather than presenting a prefix as if it were an act.
+    if (act.command.control === 'shape') {
+      assert.equal(
+        rows.find((row) => row.bindings?.includes(', s t'))?.does,
+        'Table · Board · Calendar · Graph',
+        `${act.id} cheatsheet`,
+      );
+      continue;
+    }
     assert.equal(rows.find((row) => row.keys === act.keys)?.does, phrase, `${act.id} cheatsheet`);
   }
   assert.equal(railControlDescription('collapse'), 'collapse sidebar');

@@ -316,6 +316,8 @@ export type Command =
    * by `bind`, so a consumer never sees "the axis I happen to be grouped by".
    */
   | { kind: 'setAxisValue'; facet: string; ordinal: number }
+  /** Set the projection directly from the shape layer. */
+  | { kind: 'setShape'; shape: Shape }
   /** Open one axis's value control, whichever control its `type` picks. */
   | { kind: 'openAxisControl'; facet: string }
   /** Reach a rail row. With a `facet`, write it directly instead of focusing it. */
@@ -363,7 +365,7 @@ export type Command =
   | { kind: 'clearSelection' }
   /** The three explicit calendar pager buttons. */
   | { kind: 'calendarPage'; page: 'previous' | 'today' | 'next' }
-  /** Canvas-only named actions; relation choice stays in its existing chooser. */
+  /** Graph-only named actions; relation choice stays in its existing chooser. */
   | { kind: 'canvasAction'; action: 'newNote' | 'saveLayout' }
   /** The named saved-view actions that open or commit the existing controls. */
   | { kind: 'saveAsView' }
@@ -396,7 +398,9 @@ export type Pending =
    * there is nothing left for the prefix to mean on its own. A key that is not an
    * axis letter simply goes back to meaning what it normally means.
    */
-  | { kind: 'railAxis'; control: RailControl };
+  | { kind: 'railAxis'; control: RailControl }
+  /** `,s`, waiting for Table / Board / Calendar / Graph. */
+  | { kind: 'railShape' };
 
 /** What `bind` needs to know about the app to resolve a key. */
 export interface KeyContext {
@@ -542,6 +546,14 @@ const RAIL_LETTERS: Record<string, { control: RailControl; takesFacet: boolean }
   '\\': { control: 'collapse', takesFacet: false },
 };
 
+/** The final stroke after `,s`: one key per projection, in rail order. */
+const SHAPE_LETTERS: Record<string, Shape> = {
+  t: 'table',
+  b: 'board',
+  c: 'calendar',
+  g: 'graph',
+};
+
 /**
  * One keystroke, against the sequence so far.
  *
@@ -671,7 +683,12 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
       if (stroke.key === 't') return emit({ kind: 'reachList', list: 'toolbar' });
       const row = RAIL_LETTERS[stroke.key];
       if (!row) return emit(null);
-      if (!row.takesFacet) return emit({ kind: 'rail', control: row.control });
+      if (!row.takesFacet) {
+        if (row.control === 'shape') {
+          return emit({ kind: 'rail', control: 'shape' }, { kind: 'railShape' });
+        }
+        return emit({ kind: 'rail', control: row.control });
+      }
       /**
        * Reach the row *now*, and stay open for an axis letter.
        *
@@ -693,6 +710,14 @@ function resolve(pending: Pending, stroke: KeyStroke, ctx: KeyContext): Dispatch
       // Not an axis letter. The leader has already done its half, so this key is
       // the reader's — `j` steps the control that is now focused rather than
       // being eaten by a fallback that has nothing left to do.
+      return start(stroke, ctx);
+    }
+
+    case 'railShape': {
+      const shape = SHAPE_LETTERS[stroke.key];
+      if (shape) return emit({ kind: 'setShape', shape });
+      // The row is already focused, but this is not a shape key: let it retain
+      // its ordinary meaning rather than silently consuming a navigation key.
       return start(stroke, ctx);
     }
   }
@@ -934,8 +959,8 @@ export const ACTS: readonly Act[] = [
   { id: 'act.calendar.previous', palette: 'Previous calendar page', command: { kind: 'calendarPage', page: 'previous' } },
   { id: 'act.calendar.today', palette: 'Show today in calendar', command: { kind: 'calendarPage', page: 'today' } },
   { id: 'act.calendar.next', palette: 'Next calendar page', command: { kind: 'calendarPage', page: 'next' } },
-  { id: 'act.canvas.note', palette: 'New canvas note', command: { kind: 'canvasAction', action: 'newNote' } },
-  { id: 'act.canvas.save', palette: 'Save canvas layout', command: { kind: 'canvasAction', action: 'saveLayout' } },
+  { id: 'act.canvas.note', palette: 'New graph note', command: { kind: 'canvasAction', action: 'newNote' } },
+  { id: 'act.canvas.save', palette: 'Save graph layout', command: { kind: 'canvasAction', action: 'saveLayout' } },
   { id: 'act.view.saveAs', palette: 'Save current as a new view', command: { kind: 'saveAsView' } },
   { id: 'act.view.revert', palette: 'Revert view changes', command: { kind: 'revertView' } },
   { id: 'act.view.blank', palette: 'Start from an empty view', command: { kind: 'blankView' } },
@@ -955,7 +980,7 @@ export const ACTS: readonly Act[] = [
   { id: 'act.collapse', palette: railControlDescription('collapse'), keys: ', \\', command: { kind: 'rail', control: 'collapse' } },
   { id: 'act.declined', palette: 'What a sweep declined, and why', keys: ', d', command: { kind: 'declined' } },
   { id: 'act.bulk', palette: 'The bulk bar', keys: ', b', command: { kind: 'reachList', list: 'bulk' } },
-  { id: 'act.toolbar', palette: 'The canvas toolbar', keys: ', t', command: { kind: 'reachList', list: 'toolbar' } },
+  { id: 'act.toolbar', palette: 'The graph toolbar', keys: ', t', command: { kind: 'reachList', list: 'toolbar' } },
 ];
 
 /** What the palette lists: every act, keyed or not, in one declared order. */
@@ -1142,7 +1167,11 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     rows: [
       { keys: ', v', does: railControlDescription('view') },
       { keys: ', V', does: railControlDescription('save') },
-      { keys: ', s', does: railControlDescription('shape') },
+      {
+        keys: ', s t , s b , s c , s g',
+        bindings: [', s t', ', s b', ', s c', ', s g'],
+        does: 'Table · Board · Calendar · Graph',
+      },
       { keys: ', g', does: 'group by (+ axis key sets it)' },
       { keys: ', G', does: 'then by' },
       { keys: ', o', does: 'sort' },
@@ -1154,7 +1183,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { keys: ', \\', does: railControlDescription('collapse') },
       { keys: ', d', does: 'what a sweep declined, and why' },
       { keys: ', b', does: 'the bulk bar, when something is selected' },
-      { keys: ', t', does: 'the canvas toolbar' },
+      { keys: ', t', does: 'the graph toolbar' },
       { keys: '⌥1–9', does: 'the nth saved view' },
       { ids: ['search'], does: 'search' },
       { ids: ['help'], does: 'this' },
@@ -1315,5 +1344,5 @@ export const PALETTE: readonly PaletteEntry[] = [
   ...ACTS.map((a) => ({ id: a.id, label: a.palette, command: a.command, ...(a.keys ? { keys: a.keys } : {}) })),
 ];
 
-/** Which shapes offer motion. A canvas is a plane; `j` has no meaning on it. */
+/** Which shapes offer motion. A graph is a plane; `j` has no meaning on it. */
 export const MOVES: readonly Shape[] = ['board', 'table'];

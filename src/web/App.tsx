@@ -68,6 +68,7 @@ import {
   clearFilters,
   setFocus,
   setGroupBy,
+  setShape,
   setShow,
   setSort,
   specToPatch,
@@ -545,7 +546,7 @@ export function App() {
     [vault],
   );
 
-  const shape = data?.spec.shape ?? 'board';
+  const shape = data?.spec.shape ?? 'table';
   // Kept in a ref so `edit` can stay identity-stable; see `nav` above for why.
   editRef.current = data ? { spec: data.spec, savedSpec: data.savedSpec } : null;
 
@@ -741,7 +742,7 @@ export function App() {
     // First paint only. A change of query holds the previous payload, so nothing
     // that is already on screen ever passes back through here.
     if (!data || !meta) return <div className="pane-loading">loading…</div>;
-    if (shape === 'canvas')
+    if (shape === 'graph')
       return (
         // The canvas is a lazy chunk; the fallback is the same line first paint
         // shows, so a slow fetch and a slow chunk read as one thing.
@@ -1296,6 +1297,9 @@ function run(command: Command, s: KeyState): void {
   };
 
   switch (command.kind) {
+    case 'setShape':
+      return s.edit((spec) => setShape(spec, command.shape));
+
     case 'move': {
       /**
        * The spread re-reads the motion keys the way a navlist does, and for the
@@ -1908,7 +1912,7 @@ function run(command: Command, s: KeyState): void {
           text:
             command.list === 'bulk'
               ? 'the bulk bar appears once cards are selected — x picks one'
-              : 'the toolbar is a canvas',
+              : 'the toolbar is a graph',
         });
       }
       return first.focus();
@@ -2099,7 +2103,7 @@ function run(command: Command, s: KeyState): void {
       if (!button) {
         return s.notify({
           tone: 'info',
-          text: command.action === 'newNote' ? 'new canvas notes are available on a canvas' : 'there is no canvas layout to save',
+          text: command.action === 'newNote' ? 'new graph notes are available on a graph' : 'there is no graph layout to save',
         });
       }
       button.click();

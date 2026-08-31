@@ -173,12 +173,12 @@ export function splitSelection(selection: readonly string[]): {
  * `lists` used to be a shape here too. It never was one: a composition does not
  * *draw* differently, it decides where the columns come from — so it belongs
  * beside `groupBy`, not beside `board`. As a shape it had to forbid the others,
- * which cost a triage board its table and its canvas for no reason anyone could
+ * which cost a triage board its table and its graph for no reason anyone could
  * state. It is `LISTS_AXIS` now.
  */
-export type Shape = 'board' | 'canvas' | 'table' | 'calendar';
+export type Shape = 'table' | 'board' | 'calendar' | 'graph';
 
-export const SHAPES: readonly Shape[] = ['board', 'canvas', 'table', 'calendar'];
+export const SHAPES: readonly Shape[] = ['table', 'board', 'calendar', 'graph'];
 
 /**
  * The grouping axis whose values are other views.

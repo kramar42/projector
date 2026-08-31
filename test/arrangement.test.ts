@@ -42,7 +42,7 @@ const read = (root: string, name: string) =>
 
 test('saving positions merges, so a filtered canvas cannot discard the rest', () => {
   const { root, cleanup } = vault({
-    graph: 'shape: canvas\ntitle: Graph\nnodes:\n  a: {x: 10, y: 10}\n  b: {x: 20, y: 20}\n  c: {x: 30, y: 30}\n',
+    graph: 'shape: graph\ntitle: Graph\nnodes:\n  a: {x: 10, y: 10}\n  b: {x: 20, y: 20}\n  c: {x: 30, y: 30}\n',
   });
   try {
     // What a filtered canvas sends: only the node it is currently rendering.
@@ -59,7 +59,7 @@ test('saving positions merges, so a filtered canvas cannot discard the rest', ()
 
 test('a position is dropped only when its note is gone', () => {
   const { root, cleanup } = vault(
-    { graph: 'shape: canvas\nnodes:\n  a: {x: 1, y: 1}\n  ghost: {x: 2, y: 2}\n' },
+    { graph: 'shape: graph\nnodes:\n  a: {x: 1, y: 1}\n  ghost: {x: 2, y: 2}\n' },
     ['a'],
   );
   try {
@@ -97,7 +97,7 @@ test('an emptied column drops out rather than being stored empty', () => {
 
 test('saving over a view keeps the arrangement it already had', () => {
   const { root, cleanup } = vault({
-    graph: 'shape: canvas\ntitle: Graph\nnodes:\n  a: {x: 7, y: 7}\norder:\n  now: [a]\n',
+    graph: 'shape: graph\ntitle: Graph\nnodes:\n  a: {x: 7, y: 7}\norder:\n  now: [a]\n',
   });
   try {
     // *Save current as…* over an existing name: the query is replaced wholesale.

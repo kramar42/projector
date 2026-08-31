@@ -330,6 +330,17 @@ test('the leader reaches a rail row in two keystrokes', () => {
   assert.deepEqual(commandOf([',', 'c']), { kind: 'rail', control: 'clear' });
 });
 
+test('the shape layer sets a projection directly', () => {
+  const reached = press([',', 's']);
+  assert.deepEqual(reached.command, { kind: 'rail', control: 'shape' });
+  assert.deepEqual(reached.pending, { kind: 'railShape' });
+
+  assert.deepEqual(commandOf([',', 's', 't']), { kind: 'setShape', shape: 'table' });
+  assert.deepEqual(commandOf([',', 's', 'b']), { kind: 'setShape', shape: 'board' });
+  assert.deepEqual(commandOf([',', 's', 'c']), { kind: 'setShape', shape: 'calendar' });
+  assert.deepEqual(commandOf([',', 's', 'g']), { kind: 'setShape', shape: 'graph' });
+});
+
 test('a rail row that takes an axis writes it outright', () => {
   assert.deepEqual(commandOf([',', 'g', 'p']), {
     kind: 'rail',
@@ -1057,6 +1068,7 @@ test('every command is reachable, and how is written down', () => {
     pinStep: 'g [ and g ] — the folded dock, from the keyboard',
     openAxisControl: 'an axis letter, then anything that is not a digit',
     setAxisValue: 'a digit, or an axis letter then a digit',
+    setShape: ',s then t, b, c or g',
     rail: 'the , leader — RAIL_LETTERS',
     reachList: ',b and ,t',
     declined: ',d',

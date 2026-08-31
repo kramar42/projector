@@ -79,9 +79,9 @@ export function queryPayload(
   const { facets, db, notes, views } = deps;
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
 
-  // A graph has to stay connected to be readable; a column does not. Only a
-  // canvas honours it, and along the relation it is laid out by.
-  const layout = spec.shape === 'canvas' ? layoutRelation(spec.show, facets) : undefined;
+  // A graph has to stay connected to be readable; a column does not. It alone
+  // honours that, along the relation it is laid out by.
+  const layout = spec.shape === 'graph' ? layoutRelation(spec.show, facets) : undefined;
   // Resolved before the query rather than after it: `LISTS_AXIS` is a filter as
   // well as a grouping, so the notes a composition draws are decided inside
   // `runQuery` along with everything else rather than swapped in behind it.

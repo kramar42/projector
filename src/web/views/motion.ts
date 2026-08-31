@@ -75,7 +75,7 @@ export function gridOf(
   calendar?: { search: string; facets: Facets; today?: string },
 ): Grid {
   if (!data) return EMPTY;
-  if (data.spec.shape === 'canvas') return EMPTY;
+  if (data.spec.shape === 'graph') return EMPTY;
 
   /**
    * A calendar is a one-lane board whose columns are the page's days, in

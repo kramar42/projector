@@ -17,7 +17,7 @@ import {
 
 test('a spec survives the round trip through URL parameters', () => {
   const params = {
-    shape: 'canvas',
+    shape: 'graph',
     'f.project': 'project-a,(none)',
     'f.blocked': 'clear',
     q: 'keycloak',
@@ -120,12 +120,17 @@ test('an empty selection is a statement, not an absent key', () => {
 
 test('a stale bookmark opens rather than erroring', () => {
   const spec = parseSpec({ shape: 'mindmap', dir: 'sideways', size: 'expanded', show: 'parent,telepathy' });
-  assert.equal(spec.shape, 'board');
+  assert.equal(spec.shape, 'table');
   // Facet names are *not* checked against a list — one declared in facets.yaml
   // has to work without a second place enumerating what exists, so an unknown
   // one is carried through and simply draws nothing.
   assert.deepEqual(spec.show, ['parent', 'telepathy']);
   assert.equal(spec.query.focus, undefined);
+});
+
+test('the retired canvas wire name resolves to Graph', () => {
+  assert.equal(parseSpec({ shape: 'canvas' }).shape, 'graph');
+  assert.equal(specFromFile('old-graph', { shape: 'canvas' }).shape, 'graph');
 });
 
 test('a view file reads back as the query it was written from', () => {
@@ -150,7 +155,7 @@ test('a view file reads back as the query it was written from', () => {
 
 test('saving writes the complete effective view', () => {
   const spec = parseSpec({
-    shape: 'canvas',
+    shape: 'graph',
     'f.project': 'project-a',
     'f.status': '',
     group: 'priority',
@@ -164,7 +169,7 @@ test('saving writes the complete effective view', () => {
   spec.expect = 'empty';
   const file = specToFile(spec, 'Project A graph');
   assert.deepEqual(file, {
-    shape: 'canvas',
+    shape: 'graph',
     title: 'Project A graph',
     // The empty `status` selection is not written: a saved view states what it
     // filters on, and says nothing about what it does not.
@@ -234,7 +239,7 @@ test('a file round-trips through save and reload', () => {
 });
 
 test('an explicitly empty focus overrides a saved one', () => {
-  const saved = specFromFile('project-a', { shape: 'canvas', focus: { id: 'project-a', via: 'parent', dir: 'in' } });
+  const saved = specFromFile('project-a', { shape: 'graph', focus: { id: 'project-a', via: 'parent', dir: 'in' } });
   assert.deepEqual(saved.query.focus, { id: 'project-a', via: 'parent', dir: 'in', depth: undefined });
 
   // How the ✕ has to travel: deleting the key means "inherit", and the server
@@ -270,7 +275,7 @@ function paramsAfter(params: Record<string, string>, patch: Record<string, strin
  * kept `focus=ideas` and the focus came straight back.
  */
 test('the X clears a focus that lives only in the URL', () => {
-  const params = { shape: 'canvas', focus: 'ideas', via: 'parent', dir: 'in' };
+  const params = { shape: 'graph', focus: 'ideas', via: 'parent', dir: 'in' };
   const search = `?${new URLSearchParams(params).toString()}`;
   const spec = parseSpec(params);
   assert.deepEqual(spec.query.focus, { id: 'ideas', via: 'parent', dir: 'in', depth: undefined });
@@ -308,7 +313,7 @@ test('any override that lives only in the URL can be cleared', () => {
  * null both — closing the panel and dropping the view on every keystroke.
  */
 test('an edit leaves the open note and the named view alone', () => {
-  const spec = parseSpec({ shape: 'canvas', focus: 'ideas', via: 'parent', dir: 'in' });
+  const spec = parseSpec({ shape: 'graph', focus: 'ideas', via: 'parent', dir: 'in' });
   const patch = specToPatch(clearFocus(spec), null, '?view=focused&focus=ideas&note=every-facet');
   assert.ok(!('note' in patch), 'the panel stays open');
   assert.ok(!('view' in patch), 'the view stays named');
@@ -379,9 +384,9 @@ test('a patch against an unchanged spec says nothing at all', () => {
 });
 
 test('an ad-hoc query with no saved view writes every key it sets', () => {
-  const spec = setGroupBy(setShape(parseSpec({}), 'canvas'), 0, 'priority');
+  const spec = setGroupBy(setShape(parseSpec({}), 'graph'), 0, 'priority');
   const patch = specToPatch(spec, null);
-  assert.equal(patch.shape, 'canvas');
+  assert.equal(patch.shape, 'graph');
   assert.equal(patch.group, 'priority');
 });
 
@@ -403,7 +408,7 @@ test('every key the writer emits is a key the checker knows', () => {
   // makes `pj check` reject a working file, loudly, which is the failure that
   // announces itself.
   const spec = parseSpec({
-    shape: 'canvas',
+    shape: 'graph',
     'f.project': 'project-a',
     q: 'keycloak',
     focus: 'project-b',
