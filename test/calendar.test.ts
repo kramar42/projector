@@ -213,6 +213,37 @@ test('the cursor grid is one lane of the page’s days, the rail last, from the 
   // No date facet, no grid: the walk must not cross a screen that draws no cells.
   const bare = gridOf(data, { search: '', facets: {} as Facets, today: TODAY });
   assert.equal(bare.columns.length, 0);
+
+  // The unscheduled rail is a group, not permanent calendar chrome. Once the
+  // query excludes notes without a value, the drawing and cursor must both drop
+  // it — otherwise `l` can walk into a column the calendar does not render.
+  const filtered = gridOf(
+    {
+      ...data,
+      ids: ['a', 'b'],
+      spec: { ...data.spec, query: { filter: { due: ['-(none)'] } } },
+    } as unknown as QueryResponse,
+    { search: '?shape=calendar', facets, today: TODAY },
+  );
+  assert.equal(filtered.columns.length, 7);
+  assert.ok(!filtered.columns.includes(NONE));
+});
+
+test('the calendar grid follows the configured date facet when deciding unscheduled', () => {
+  const facets = { due: def('date'), review: def('date') } as unknown as Facets;
+  const data = {
+    spec: {
+      shape: 'calendar',
+      show: ['review'],
+      query: { filter: { review: ['-(none)'] } },
+    },
+    ids: ['dated'],
+    notes: { dated: { facets: { review: ['2026-08-24'] } } },
+  } as unknown as QueryResponse;
+
+  const grid = gridOf(data, { search: '?shape=calendar', facets, today: TODAY });
+  assert.equal(grid.columns.length, 7);
+  assert.ok(!grid.columns.includes(NONE));
 });
 
 test('the cursor grid includes saved calendar geometry, not just URL overrides', () => {

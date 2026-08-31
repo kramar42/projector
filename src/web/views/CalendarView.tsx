@@ -398,15 +398,17 @@ export function CalendarView({
           * value the card was dragged from, the board's own `(none)` rule —
           * and creating here is a card born unscheduled.
           */}
-        <DayColumn
-          day={NONE}
-          label="unscheduled"
-          isToday={false}
-          columnIndex={days.length}
-          ids={placed.unscheduled}
-          startAdding={newIn === NONE}
-          {...shared}
-        />
+        {placed.unscheduled.length > 0 && (
+          <DayColumn
+            day={NONE}
+            label="unscheduled"
+            isToday={false}
+            columnIndex={days.length}
+            ids={placed.unscheduled}
+            startAdding={newIn === NONE}
+            {...shared}
+          />
+        )}
       </div>
 
       {acting.length > 0 && (

@@ -109,9 +109,10 @@ export function gridOf(
       data.spec.order,
     );
     const days = page.days.flat();
+    const unscheduled = placed.unscheduled.length > 0 ? [placed.unscheduled] : [];
     return {
-      cells: [[...days.map((d) => placed.byDay.get(d) ?? []), placed.unscheduled]],
-      columns: [...days, NONE],
+      cells: [[...days.map((d) => placed.byDay.get(d) ?? []), ...unscheduled]],
+      columns: [...days, ...(unscheduled.length ? [NONE] : [])],
       continuous: false,
     };
   }
