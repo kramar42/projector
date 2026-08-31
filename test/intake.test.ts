@@ -130,7 +130,7 @@ test('a sweep writes no notes and moves no cursor', async () => {
     assert.equal(reindex(root).notes.size, before);
 
     // Proposing is not resolving. A sweep now *notes* where it would go, so the
-    // rows exist — but every cursor is still unset, and only `pj intake commit`
+    // rows exist — but every cursor is still unset, and only `pj intake advance`
     // promotes a proposal. Asserting the table is empty would be asserting the
     // storage rather than the invariant.
     const after = watermarks(root);

@@ -232,12 +232,12 @@ export const slackChannel = agentChannel(
   'slack',
   7,
   'no Slack tools named for this vault — set mcp.slack in .projector/config.yaml, ' +
-    'or fetch by hand and: pj intake commit --channel slack --cursor <ts>',
+    'or fetch by hand and: pj intake cursor set --channel slack --cursor <ts>',
 );
 
 export const gmailChannel = agentChannel(
   'gmail',
   14,
   'no Gmail tools named for this vault — set mcp.gmail in .projector/config.yaml, ' +
-    'or fetch by hand and: pj intake commit --channel gmail --cursor <iso>',
+    'or fetch by hand and: pj intake cursor set --channel gmail --cursor <iso>',
 );

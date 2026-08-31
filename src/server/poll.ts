@@ -30,7 +30,7 @@ import { count, info, tally, warn } from './log.ts';
  *
  * **A tick judges before it writes.** `classify` decides which candidates deserve
  * a note; the rest are recorded as declined, with the model's reason, so they stop
- * being offered and stay readable through `pj intake suppressed`. Without that step
+ * being offered and stay readable through `pj intake declined`. Without that step
  * every commit and every session on the machine would become a note, which is the
  * failure the queue exists to prevent rather than a milder version of it.
  *

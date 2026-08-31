@@ -613,10 +613,10 @@ resolved.
 yes and leaves a note carrying the candidate's fingerprint, so no later sweep offers it again. A no
 left nothing behind but a moved cursor — which made "seen and declined" indistinguishable from "never
 fetched", except that the first could never come back, and it meant a rejection could not inform
-anything afterwards. `pj intake suppress` is the missing half: a fingerprint, a reason, and a
-timestamp, dropped from the candidates of every later sweep. `unsuppress` puts it back.
+anything afterwards. `pj intake decline` is the missing half: a fingerprint, a reason, and a
+timestamp, dropped from the candidates of every later sweep. `restore` puts it back.
 
-**Un-declining is a re-offer, not an undo.** `unsuppress` removes the row *and forgets that channel's
+**Un-declining is a re-offer, not an undo.** `restore` removes the row *and forgets that channel's
 cursor*, because removing the row on its own repairs nothing: every channel fetches forward of its
 watermark, so an item behind the cursor stops being filtered and stays out of reach, and a repair that
 repairs nothing is worse than none because it reads as one. What comes back is a **fresh card**, written
@@ -1026,9 +1026,9 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST /api/note/:id/asset` | one file under `assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
-| `pj intake commit` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
-| `pj intake suppress` / `unsuppress` | one row in `.projector/intake.db`'s `suppressed` table — and on the way back, one in `rescued` plus that channel's `watermark` row removed | never a note; records a decline by fingerprint so a later sweep stops offering it, and un-declining walks the cursor back so a later sweep can still reach it |
-| the poller (`src/server/poll.ts`) and `pj intake poll` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
+| `pj intake advance` / `cursor set` / `cursor reset` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
+| `pj intake decline` / `restore` | one row in `.projector/intake.db`'s `suppressed` table — and on the way back, one in `rescued` plus that channel's `watermark` row removed | never a note; records a decline by fingerprint so a later sweep stops offering it, and un-declining walks the cursor back so a later sweep can still reach it |
+| the poller (`src/server/poll.ts`) and `pj intake apply` | one note per kept candidate through `createNote`, one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
 | `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
 | the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
@@ -1080,7 +1080,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to, and which candidates were declined | `pj intake commit` and `pj intake suppress`; gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to, and which candidates were declined | `pj intake advance`/`cursor` and `pj intake decline`; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 
@@ -1284,7 +1284,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `calendar.test.ts` | the calendar's page arithmetic: the default page being the week around today, the anchor snapping to the declared week start only at week width, paging by a whole page and coming back to the same start, bad parameters degrading to defaults with hostile counts capped, UTC day arithmetic across month, year and leap boundaries, page and cell labels where the month turns, the date axis read from `show` first and the vocabulary second, placement splitting the filter's notes into days / the unscheduled rail / per-note off-page counts, the cursor grid being one lane of the page's days with the rail as the last column — empty when the vault declares no date facet — and the page anchor outside `SPEC_PARAMS` while grid settings round-trip through saved view config |
 | `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated |
-| `cli.test.ts` | every command refusing an unknown flag, a flag shortening to any prefix that names one — with an ambiguous prefix naming the candidates rather than choosing, and `-v` the vault even on a command carrying `--view` and `--via` — `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one, `--json` being the payload the app receives, the registry, exit codes |
+| `cli.test.ts` | every command refusing an unknown flag; exact long flags with short aliases and prefixes refused; progressive root, command and advanced intake help; `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one; `--json` being the payload the app receives; the registry; exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, why a screen is empty — which of the filter, the search or an axis nobody has ever set is to blame, including the one hop from a computed blocking value to the axis underneath it — the task list a body checkbox writes back to — the ordinal a click carries must name the same line the renderer drew a box for, fenced look-alikes included — edge collapse and direction, clearing a URL-only override, and that only `vault=` is context — every other parameter is something the reader asked for, so the landing `home` view may not overwrite it |
 | `delegate.test.ts` | the CLI asking a live server instead of walking: a vouched stamp hydrates the persisted payload with lazy bodies intact, a stamp the payload was not built from is a fallback rather than an answer, and silence — no server, or `PROJECTOR_NO_DELEGATE` — is a quiet null that never even asks |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles |

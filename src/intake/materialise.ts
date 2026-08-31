@@ -14,7 +14,7 @@ import type { Candidate } from './types.ts';
  *
  * What lands is an ordinary note carrying `intake: unjudged`. Judging it is
  * removing that value; declining it is deleting the file and recording the
- * fingerprint with `pj intake suppress`. Nothing here decides which — this
+ * fingerprint with `pj intake decline`. Nothing here decides which — this
  * function has no opinion about whether the candidate was worth writing down, and
  * that is deliberate: **the poller proposes at whatever rate the channels
  * produce.** Making the queue quiet is a judgement, and there is not one here yet.

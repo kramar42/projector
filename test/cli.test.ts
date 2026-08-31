@@ -176,37 +176,24 @@ test('every command refuses a flag it does not know', () => {
 });
 
 /**
- * Every flag shortens to any prefix that names one of them, one dash or two. The
- * risk in that is a prefix quietly resolving to the wrong flag, so the two cases
- * asserted hardest are the ones that must not: an ambiguous prefix, and `-v`,
- * which is read before the command is and so is the vault even on a command with
- * `--view` and `--via` of its own.
+ * The command's printed spelling is its interface. Prefixes and short aliases
+ * used to be convenient until the root help had to teach punctuation instead of
+ * the workflow; exact long flags make both scripts and help unsurprising.
  */
-test('a flag shortens to any prefix that names exactly one', () => {
+test('flags use their exact long spelling', () => {
   const v = vault();
   try {
-    // One dash or two, whole or cut short: four spellings of the same flag.
-    for (const spelling of [['--vault'], ['-vault'], ['--vau'], ['-v']]) {
-      const r = run([...spelling, v.root, 'ls']);
-      assert.match(r.out, /2 note\(s\) of 2/, `${spelling[0]} should name the vault: ${r.out}`);
-    }
-    assert.match(run(['-v', v.root, 'ls', '-g', 'priority']).out, /## now \(1\)/);
-    assert.deepEqual(JSON.parse(run(['-v', v.root, 'ls', '-j']).out).ids.sort(), ['alpha', 'beta']);
+    assert.match(run(['--vault', v.root, 'ls', '--group', 'priority']).out, /## now \(1\)/);
+    assert.deepEqual(JSON.parse(run(['--vault', v.root, 'ls', '--json']).out).ids.sort(), ['alpha', 'beta']);
 
-    // `ls` takes --shape, --show and --sort, so `-s` is none of them, and saying
-    // which three it could have been is the whole point of refusing.
-    const ambiguous = run(['-v', v.root, 'ls', '-s', 'title']);
-    assert.equal(ambiguous.code, 1);
-    for (const flag of ['--shape', '--show', '--sort']) {
-      assert.match(ambiguous.out, new RegExp(flag), ambiguous.out);
+    for (const spelling of ['-v', '-g', '-j', '-h']) {
+      const r = run(['--vault', v.root, 'ls', spelling]);
+      assert.equal(r.code, 1, `${spelling} should fail`);
+      assert.match(r.out, /short flags are not supported/, r.out);
     }
-
-    // A prefix of nothing is still just an unknown flag.
-    assert.match(run(['-v', v.root, 'ls', '-z']).out, /unknown flag -z/);
-    // And the vault flag with no path is refused rather than eating the command.
-    const bare = run(['ls', '-v']);
-    assert.equal(bare.code, 1);
-    assert.match(bare.out, /-v needs a path/, bare.out);
+    const prefix = run(['--vault', v.root, 'ls', '--gro', 'priority']);
+    assert.equal(prefix.code, 1);
+    assert.match(prefix.out, /unknown flag --gro/, prefix.out);
   } finally {
     v.cleanup();
   }
@@ -225,14 +212,45 @@ test('a boolean flag does not swallow the argument after it', () => {
   }
 });
 
+test('canonical intake verbs reach the existing intake operations', () => {
+  const v = vault();
+  try {
+    const base = ['--vault', v.root, 'intake'];
+    const declined = run([...base, 'declined']);
+    assert.equal(declined.code, 0, declined.out);
+    assert.match(declined.out, /nothing declined/);
+
+    const decline = run([...base, 'decline', 'git:example', '--reason', 'not work']);
+    assert.equal(decline.code, 0, decline.out);
+    assert.match(decline.out, /declined git:example/);
+
+    const listed = run([...base, 'declined']);
+    assert.match(listed.out, /git:example/);
+
+    const restored = run([...base, 'restore', 'git:example']);
+    assert.equal(restored.code, 0, restored.out);
+    assert.match(restored.out, /back in the next sweep/);
+
+    const cursor = run([...base, 'cursor', 'set', '--channel', 'git', '--cursor', 'abc']);
+    assert.equal(cursor.code, 0, cursor.out);
+    assert.match(cursor.out, /git cursor abc/);
+
+    const reset = run([...base, 'cursor', 'reset', '--channel', 'git']);
+    assert.equal(reset.code, 0, reset.out);
+    assert.match(reset.out, /forgot 1 cursor/);
+  } finally {
+    v.cleanup();
+  }
+});
+
 // ---------------------------------------------------------------- dispatch
 
 /**
- * `--help` was missing from the set of commands that need no vault, so it
- * resolved one first — and died with "several vaults are registered" in exactly
- * the case the skills invoke it for.
+ * Help is a read of the CLI interface, never of a vault. The root is deliberately
+ * short, and each command grows its own details without requiring a configured
+ * vault or an accidental command run.
  */
-test('help prints without a vault, and says which one it would use', () => {
+test('help is progressive, and prints without a vault', () => {
   const v = vault();
   try {
     // Two registered and none named: resolution is ambiguous, help must still print.
@@ -242,18 +260,39 @@ test('help prints without a vault, and says which one it would use', () => {
     run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: v.registry });
     run(['vaults', 'add', two], { PROJECTOR_VAULTS: v.registry });
 
-    for (const form of ['help', '--help', '-h']) {
+    for (const form of ['help', '--help']) {
       const r = run([form], { PROJECTOR_VAULTS: v.registry });
       assert.equal(r.code, 0, `pj ${form} should exit 0`);
       assert.match(r.out, /pj — projector CLI/);
       assert.match(r.out, /no vault chosen/, 'it says why rather than dying');
-      assert.match(r.out, /pj ls/, 'and still lists the commands');
+      assert.match(r.out, /Work with notes/, 'and still groups the commands');
+      assert.match(r.out, /pj help intake/, 'and points to detailed help');
     }
+    assert.equal(
+      run(['help'], { PROJECTOR_VAULTS: v.registry }).out,
+      run(['--help'], { PROJECTOR_VAULTS: v.registry }).out,
+      'pj help and pj --help are the same help',
+    );
+
+    for (const form of [['help', 'intake'], ['--help', 'intake'], ['intake', '--help']]) {
+      const r = run(form, { PROJECTOR_VAULTS: v.registry });
+      assert.equal(r.code, 0, `pj ${form.join(' ')} should exit 0`);
+      assert.match(r.out, /Usage: pj intake/);
+      assert.match(r.out, /pj intake apply/);
+      assert.doesNotMatch(r.out, /Work with notes/, 'intake help does not repeat the root');
+    }
+    const advanced = run(['help', 'intake', 'advanced'], { PROJECTOR_VAULTS: v.registry });
+    assert.equal(advanced.code, 0);
+    assert.match(advanced.out, /pj intake cursor set/);
 
     // One registered: the header names it.
     const one = join(v.root, 'solo.json');
     run(['vaults', 'add', v.root], { PROJECTOR_VAULTS: one });
     assert.match(run(['--help'], { PROJECTOR_VAULTS: one }).out, /\(vault: /);
+
+    const short = run(['-h'], { PROJECTOR_VAULTS: one });
+    assert.equal(short.code, 1);
+    assert.match(short.out, /short flags are not supported/);
   } finally {
     v.cleanup();
   }
@@ -268,18 +307,18 @@ test('an unknown command prints help and fails; no command prints help and does 
     // help — and still exits 1, because a typo is not a request for help.
     const bogus = run(['--vault', v.root, 'nonsuch'], env);
     assert.equal(bogus.code, 1);
-    assert.match(bogus.out, /pj ls/, 'it shows what it does understand');
+    assert.match(bogus.out, /\n  ls\s+list notes/, 'it shows what it does understand');
 
     // Naming nothing at all is a request for help, and exits 0.
     const bare = run(['--vault', v.root], env);
     assert.equal(bare.code, 0, 'asking for nothing is not an error');
-    assert.match(bare.out, /pj ls/);
+    assert.match(bare.out, /\n  ls\s+list notes/);
 
     // Without a resolvable vault, a command that needs one fails on that first —
     // before dispatch, so no help is printed. That is the vault error's job.
     const noVault = run(['nonsuch'], env);
     assert.equal(noVault.code, 1);
-    assert.doesNotMatch(noVault.out, /pj ls/, 'the vault error stands alone');
+    assert.doesNotMatch(noVault.out, /\n  ls\s+list notes/, 'the vault error stands alone');
   } finally {
     v.cleanup();
   }
@@ -347,14 +386,14 @@ test('--vault takes a registered name, and a vault that is not there is refused'
     // A name that is deliberately not a directory relative to the test's working
     // directory: reaching the notes proves the registry answered, not the path.
     run(['vaults', 'add', v.root, '--name', 'by-name-only'], env);
-    assert.match(run(['-v', 'by-name-only', 'ls'], env).out, /2 note\(s\)/);
+    assert.match(run(['--vault', 'by-name-only', 'ls'], env).out, /2 note\(s\)/);
     assert.match(run(['--vault', 'by-name-only', 'search', 'first'], env).out, /1 match\(es\)/);
     // A path still works, for a vault the app has never opened.
-    assert.match(run(['-v', v.root, 'ls'], env).out, /2 note\(s\)/);
+    assert.match(run(['--vault', v.root, 'ls'], env).out, /2 note\(s\)/);
 
     // A near miss is not quietly resolved to the vault it resembles, and not
     // quietly resolved to nothing either.
-    const typo = run(['-v', 'by-name-onlyy', 'ls'], env);
+    const typo = run(['--vault', 'by-name-onlyy', 'ls'], env);
     assert.equal(typo.code, 1, typo.out);
     assert.match(typo.out, /no vault at/);
     assert.match(typo.out, /by-name-only/, 'the registered names are the hint');

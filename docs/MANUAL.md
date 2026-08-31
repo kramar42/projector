@@ -871,20 +871,20 @@ pj intake                    # every channel, each from where it last got to
 pj intake claude git --json
 pj intake status
 pj intake known claude:abc-123          # which notes already carry this
-pj intake commit --advance --captured 2 # promote what that sweep recorded
+pj intake advance --captured 2          # promote what that sweep recorded
 
-pj intake suppress git:abc --reason "my own commit"   # a no, recorded
-pj intake suppressed                                  # what a no hid, and why
-pj intake unsuppress git:abc                          # offer it again, cursor and all
+pj intake decline git:abc --reason "my own commit"    # a no, recorded
+pj intake declined                                    # what a judgement hid, and why
+pj intake restore git:abc                             # offer it again, cursor and all
 ```
 
 **`pj intake` creates no note and moves no cursor.** `pj add`/`pj link` do the first after a human
-agrees, and `pj intake commit` does the second once the proposal is resolved. A run that fetched is not
+agrees, and `pj intake advance` does the second once the proposal is resolved. A run that fetched is not
 a run that was resolved, and an abandoned sweep must not swallow what it listed.
 
 What a sweep *does* write is where it **would** move each cursor to, alongside how many items it
-examined. `--advance` promotes them. A pending proposal is inert until then, and promoting it
-spends it, so a second `--advance` re-commits nothing. `--captured` stays an argument: capture happens
+examined. `pj intake advance` promotes them. A pending proposal is inert until then, and promoting it
+spends it, so a second advance re-commits nothing. `--captured` stays an argument: capture happens
 between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
 
 **Sweeping without being asked.** A vault can have the server sweep on a timer and write what it finds
@@ -912,7 +912,7 @@ Gmail are skipped with a reason, having no credential here.
 Unlike `pj intake`, a poll **does** move each channel's cursor — it can, because everything behind the
 new boundary is a file rather than a line in a terminal you have already closed.
 
-Without a server, `pj intake poll` runs exactly the same tick once, by hand.
+Without a server, `pj intake apply` runs exactly the same tick once, by hand.
 
 **`pj intake rejudge` runs the pass again over what is still in the queue.** A card is written once, on
 the way in, so cards from before you changed `.projector/classify.md` — or from an earlier version of
@@ -1012,14 +1012,14 @@ to a candidate it drops, and it teaches the classifier the same way. Deleting a 
 accepted says something else: the work is finished with, not that it should never have been offered. Both
 stop the sweep re-proposing it; only the first is used as an example.
 
-**`pj intake suppress <fingerprint> --reason "…"`** says no to something that never became a note —
+**`pj intake decline <fingerprint> --reason "…"`** says no to something that never became a note —
 which is what the classifier itself does, for everything it drops.
 
 **Archive it** — keep the note and set `status: archived`. For one considered rejection you would like
 to find again; the note and its fingerprint both stay.
 
-Read the pile back with **`,d`** in the browser — or `pj intake suppressed` — and undo any of it with
-`bring back`, or `pj intake unsuppress`. Bringing one back does two things: it lifts the decline, and it
+Read the pile back with **`,d`** in the browser — or `pj intake declined` — and undo any of it with
+`bring back`, or `pj intake restore`. Bringing one back does two things: it lifts the decline, and it
 forgets that channel's cursor, so the next sweep can actually reach the item again rather than only
 stopping it being hidden. What arrives is a **new card**, written fresh from the commit or session or
 issue the source still holds — not the card you deleted, and not your edits to it. One limit worth
@@ -1119,7 +1119,7 @@ itself.
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
-now a queue you walk, and `pj intake poll` runs the same tick by hand when there is no server up.
+now a queue you walk, and `pj intake apply` runs the same tick by hand when there is no server up.
 
 `/pj-triage` still **proposes and stops**: it presents a table and applies nothing until it is approved.
 A wrong project assignment hides a note in a column nobody will look in, which is worse than leaving it
@@ -1198,24 +1198,26 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
-| `pj intake status [--json]` · `pj intake known <ref>…` | each channel's cursor and last run · which notes already carry these refs |
-| `pj intake commit --advance [--captured n]` · `pj intake reset [--channel c]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved · forget one. `--channel c --cursor v` still says it by hand |
-| `pj intake poll` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
+| `pj intake status [--json]` | each channel's cursor, last run and counts |
+| `pj intake advance [--captured n]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved |
+| `pj intake apply` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
-| `pj intake suppress <fp>… --reason <why>` · `pj intake suppressed [--q text] [--limit n] [--json]` · `pj intake unsuppress <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
+| `pj intake decline <fp>… --reason <why>` · `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
+| `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: inspect deduplication · set a raw cursor · forget one |
 | `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj audit [--json]` | run this vault's rules: every saved view declaring `expect: empty`. Exits non-zero if one is broken |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
-**Every flag shortens.** One dash or two, cut to any prefix that names exactly one flag of that
-command: `pj ls -j`, `pj ls -g status`, `pj set x -f status=done`, `pj intake commit -a`. A prefix that
-names two says which two rather than picking one, so `-s` on `pj ls` is refused with `--shape`,
-`--show` and `--sort` on the line and `-so` gets the sort. There is no table of letters to fall behind
-the flags — a flag added later can make an abbreviation ambiguous, never silently point it elsewhere.
-`-v` is `--vault` on every command, since the vault is read before the command is; `--view` and
-`--verbose` are `-vie` and `-ve`.
+**Flags use their full long spelling.** `pj ls --json`, `pj ls --group status` and
+`pj set x --facet status=done` are the interface; prefixes and one-dash aliases are refused. This
+makes a command's help a complete account of what it accepts.
+
+**Help is progressive.** `pj help` and `pj --help` print the same short command map. Add a command
+to expand it — `pj help intake`, `pj --help ls`, or `pj intake --help` — and
+`pj help intake advanced` exposes recovery and integration commands without making the root help a
+reference manual.
 
 `pj search` and `pj ls --q` match the same notes through the same sanitiser and differ only in order:
 search ranks by relevance, which belongs to a result set rather than to any note in it, so it cannot

@@ -103,11 +103,9 @@ export function vaultAbove(from: string): string | null {
  * say so. With several registered and no choice made, the caller is asked to pick
  * rather than guessing.
  *
- * It takes the value rather than argv because argv has one reader, in the CLI,
- * and the flag has more spellings than its own name: this used to scan for the
- * literal `--vault`, which `-v` and `--vau` walk straight past, leaving the CLI
- * acting on a vault nobody asked for while its own parse had already found the
- * right one.
+ * It takes the value rather than argv because argv has one reader, in the CLI.
+ * Keeping flag parsing there means this resolver has one unambiguous input rather
+ * than another copy of command-line syntax.
  *
  * **A registered name wins over a folder of that name.** `--vault` used to be a
  * path and only a path, so naming a vault the way its own registry entry names it

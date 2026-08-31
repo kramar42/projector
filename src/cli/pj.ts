@@ -59,39 +59,25 @@ function fail(message: string): never {
  * A token is a flag when it starts with a dash and then a letter.
  *
  * Not merely "starts with a dash": `--depth -1` has to keep its value, and a lone
- * `-` is a value too. How many dashes is not part of it — see `longName`.
+ * `-` is a value too. Single-dash tokens reach `longName`, which refuses them.
  */
 const FLAG = /^--?[a-z]/i;
 
-/** `--group`, `-g` and `--gro` alike, with the dashes taken off. */
-const typedName = (token: string): string => token.replace(/^--?/, '');
-
 /**
- * Which flag a token names, allowing any unambiguous shortening of it.
+ * Which long flag a token names.
  *
- * Two spellings, one rule: `-x` is `--x`, and a name may be cut to any prefix
- * that matches exactly one of the flags this command takes. So `-j`, `-js` and
- * `--json` are one flag, and every flag on every command shortens — including
- * the ones nobody thought to shorten.
- *
- * The alternative was a hand-kept table of letters, and a hand-kept copy of a
- * list the code already has is what `SPEC_PARAMS` exists to stop: there were
- * three of those, the CLI's was short by two entries, and `pj ls --shape graph`
- * simply did not exist for as long as nobody looked. A prefix needs no table and
- * cannot fall behind one.
- *
- * Adding a flag later cannot silently redirect an abbreviation that already
- * works: at worst it makes it ambiguous, which is an error naming both
- * candidates. An exact name always wins, so a flag can never be shadowed by
- * being a prefix of a longer one either.
+ * Flags used to accept every unambiguous prefix, with either one dash or two.
+ * That saved a handful of keystrokes but made the interface depend on the whole
+ * flag set and made help spend five lines explaining punctuation. Exact GNU-ish
+ * spelling is the smaller interface: a command accepts the flags it prints.
  */
 function longName(token: string, known: readonly string[]): string {
-  const typed = typedName(token);
+  if (!token.startsWith('--')) {
+    fail(`short flags are not supported: ${token}. Use one of: ${known.map((k) => '--' + k).join(' ')}`);
+  }
+  const typed = token.slice(2);
   if (known.includes(typed)) return typed;
-  const hits = known.filter((k) => k.startsWith(typed));
-  if (hits.length === 1) return hits[0]!;
   const spell = (names: readonly string[]) => names.map((k) => '--' + k).join(' ');
-  if (hits.length > 1) fail(`${token} could be ${spell(hits)} — type more of it`);
   return fail(
     known.length
       ? `unknown flag ${token}. This command takes: ${spell(known)}`
@@ -151,17 +137,14 @@ function argFlags(
  */
 /**
  * `--vault <path>` may appear anywhere, including before the command, so it is
- * read and removed from the argument list before the command is read.
- *
- * That makes it the one flag resolved without knowing the command, so it is
- * matched against itself alone: `-v` is the vault everywhere, and `ls --view` and
- * `intake --verbose` shorten to `-vie` and `-ve` instead. The value is read here
- * and handed on, rather than `resolveCliVault` scanning argv for `--vault` a
- * second time — an abbreviation would have walked straight past that scan and
- * quietly acted on a different vault than the one named.
+ * read and removed from the argument list before the command is read. It is the
+ * one flag resolved without knowing the command, and therefore deliberately has
+ * one exact spelling.
  */
 const rawArgs = process.argv.slice(2);
-const vaultAt = rawArgs.findIndex((a) => FLAG.test(a) && 'vault'.startsWith(typedName(a)));
+const shortFlag = rawArgs.find((a) => /^-[a-z]/i.test(a) && !a.startsWith('--'));
+if (shortFlag) fail(`short flags are not supported: ${shortFlag}. Use the command's full --flag spelling.`);
+const vaultAt = rawArgs.findIndex((a) => a === '--vault');
 const vaultGiven = vaultAt === -1 ? null : (rawArgs[vaultAt + 1] ?? null);
 if (vaultAt !== -1 && (vaultGiven === null || FLAG.test(vaultGiven))) {
   fail(`${rawArgs[vaultAt]} needs a path${vaultGiven ? `, and ${vaultGiven} is a flag` : ''}`);
@@ -212,8 +195,8 @@ const NO_VAULT_NEEDED = new Set(['vaults', '']);
  * Naming the vault is the useful half, so the header still does it when the
  * answer is unambiguous and says why when it is not.
  */
-const HELP_CMDS = new Set(['help', '--help', '-h']);
-const asking = HELP_CMDS.has(rawCmd ?? '');
+const HELP_CMDS = new Set(['help', '--help']);
+const asking = HELP_CMDS.has(rawCmd ?? '') || rawArgv.includes('--help');
 const soft = asking ? resolveCliVault(vaultGiven, listVaults().filter((v) => v.exists)) : null;
 const root = asking
   ? soft && 'root' in soft
@@ -230,66 +213,146 @@ const vaultNote = root
     ? `  (no vault chosen: ${soft.error.split('\n')[0]!.replace(/:$/, '')})`
     : '';
 
-const HELP = `pj — projector CLI${vaultNote}
+const ROOT_HELP = `pj — projector CLI${vaultNote}
 
-  pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
-     [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
-     --dir out|in|both --depth n] [--shape s]
-     [--show f,f]
-     [--json]                                      list notes, grouped
-  pj log [--since "1 week ago"]                        what changed, from git history
-  pj add <title> [--id slug] [--facet f=v ...]
-         [--link ref ...] [--fingerprint fp]
-         [--body text]                                 create a note
-  pj link <id> <ref> [...] [--remove]
-         [--session [id]] [--cwd dir]                       add or remove links; --session names the
-                                                       live Claude session working here
-  pj check                                             validate every note file and saved view
-  pj audit [--json]                                    run the views that assert expect: empty
-  pj reindex                                           rebuild the index, and report what it holds
-  pj search <query>                                    full-text search, most relevant first
-  pj enrich [<ref>...] [--all] [--force]               resolve link enrichment and print it
+Usage: pj [--vault <name|path>] <command>
 
-  pj intake [<channel>...] [--since iso] [--limit n]
-     [--json] [--verbose]                              what has happened elsewhere, since last time
-  pj intake status [--json]                            per channel: cursor, last run, counts
-  pj intake commit --advance [--channel c]
-     [--captured n]                                    move the cursor(s) the last sweep proposed
-  pj intake commit --channel c --cursor v
-     [--seen n] [--captured n]                         or say where by hand
-  pj intake known <fingerprint>...                     which notes already carry these refs
-  pj intake poll                                       sweep, judge, and write what deserves a note
-  pj intake rejudge [--limit n]                        run the pass again over what is still unjudged
-  pj intake suppress <fp>... --reason <why>             record a "not a note", so sweeps stop offering it
-  pj intake suppressed [--channel c] [--q text] [--limit n] [--json]
-                                                       what a judgement hid, and why
-  pj intake unsuppress <fp>...                         offer it again
-  pj intake reset [--channel c]                        forget a cursor, back to the default window
+Work with notes
+  ls                 list notes; saved views and query flags included
+  search             full-text search, most relevant first
+  log                what changed, from git history
+  context            everything known about one note
+  add, set, link     create or change notes
+  mv, merge, rm      rename, combine, or remove notes
+  work               prepare a worktree workspace and briefing
+  enrich             resolve links
 
-  pj context <id> [--json]                             everything known about a note, assembled
-  pj set <id>... [--title t] [--facet f=v] [--add f=v]
-         [--remove f=v] [--set path=yaml ...]          scripted edits, for skills
-  pj merge <id>... --into <id>                         fold notes into one, keeping its facets
-  pj mv <id> <new-id>                                  rename a note, repointing references
-  pj rm <id>...                                        delete, dropping references to it
-  pj work <id> [--dry-run] [--no-open] [--new]         multi-repo worktree workspace + briefing;
-                                                       reopens a session already working there
+Intake
+  intake             preview what happened elsewhere; writes nothing
+  intake apply       fetch, judge, file, and advance
+  intake status      inspect channels and cursors
+  intake declined    inspect declined candidates
 
-  pj setup [--json]                                    what this vault can reach, and what is missing
-  pj setup --init                                      write .projector/config.yaml and gitignore it
+Vault and maintenance
+  setup              inspect or initialise vault integration
+  check              validate notes and saved views
+  audit              run saved views that assert \`expect: empty\`
+  reindex            rebuild the derived index
+  vaults             list and manage known vaults
 
-  pj vaults                                            list known vaults
-  pj vaults add <path> [--name n] [--create]           open a folder as a vault
-  pj vaults forget <path>                              stop tracking it (folder untouched)
+Run \`pj help <command>\` (or \`pj --help <command>\`) for usage and flags.
+Run \`pj help intake\` for the intake workflow, or \`pj help intake advanced\`
+for recovery and integration commands.`;
 
-  --vault <path>                                       act on a specific vault
+const COMMAND_HELP: Record<string, string> = {
+  ls: `Usage: pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
+             [--sort key:dir] [--q text] [--focus <id> --via <reference facet>
+             --dir out|in|both --depth n] [--shape s] [--show f,f] [--json]
 
-Every flag shortens. One dash or two, cut to any prefix that names one flag of
-the command: -j is --json, -g is --group, -fi and -fo separate --filter from
---focus, and an ambiguous one says which flags it could have meant. -v is
---vault everywhere, since that one is read before the command is — so --view
-is -vie and --verbose is -ve.
-`;
+List notes through the same query compiler and payload builder as the app.
+\`--json\` prints the payload the web app receives.`,
+  log: `Usage: pj log [--since "1 week ago"]
+
+Read status transitions, deadlines, and creations from this vault's git history.`,
+  add: `Usage: pj add <title> [--id slug] [--facet f=v ...] [--link ref ...]
+                   [--fingerprint fp] [--body text]
+
+Create one note.`,
+  link: `Usage: pj link <id> <ref>... [--remove] [--fingerprint fp]
+                    [--session [id]] [--cwd dir]
+
+Add or remove links. \`--session\` names a live Claude session.`,
+  context: `Usage: pj context <id> [--json]
+
+Print everything projector knows about one note.`,
+  set: `Usage: pj set <id>... [--title t] [--facet f=v] [--add f=v]
+                 [--remove f=v] [--set path=yaml ...]
+
+Apply the same scripted edit to one or more notes.`,
+  mv: `Usage: pj mv <id> <new-id>
+
+Rename a note and repoint references and saved views.`,
+  merge: `Usage: pj merge <id>... --into <id>
+
+Fold notes into a survivor, keeping the survivor's facets.`,
+  rm: `Usage: pj rm <id>...
+
+Remove notes and every reference pointing at them.`,
+  work: `Usage: pj work <id> [--dry-run] [--no-open] [--new]
+
+Prepare the worktree workspace and briefing for a note.`,
+  enrich: `Usage: pj enrich [<ref>...] [--all] [--force]
+
+Resolve link enrichment and print it.`,
+  check: `Usage: pj check
+
+Validate every note file and saved view.`,
+  audit: `Usage: pj audit [--json]
+
+Run saved views that declare \`expect: empty\`. Exits non-zero when a rule is broken.`,
+  reindex: `Usage: pj reindex
+
+Rebuild the derived index and report what it holds.`,
+  setup: `Usage: pj setup [--json]
+       pj setup --init [--channels a,b] [--no-enrich]
+
+Inspect what this vault can reach, or write its initial configuration.`,
+  vaults: `Usage: pj vaults [list] [--exact]
+       pj vaults add <path> [--name n] [--create]
+       pj vaults forget <path>
+
+List and manage the local vault registry.`,
+  intake: `Usage: pj intake [<channel>...] [--since iso] [--limit n] [--json] [--verbose]
+       pj intake apply
+       pj intake status [--json]
+       pj intake advance [--channel c] [--captured n]
+       pj intake declined [--channel c] [--q text] [--limit n] [--json]
+       pj intake restore <fingerprint>...
+       pj intake rejudge [--limit n]
+
+\`pj intake\` previews candidates and records no note or cursor movement. \`apply\`
+runs the automatic path: fetch, judge, write what deserves a note, decline the
+rest, and advance fetched cursors. \`advance\` promotes the last preview after
+you resolve it. \`restore\` makes a declined candidate eligible again.
+
+Run \`pj help intake advanced\` for raw cursor, deduplication, and manual-decline
+commands.`,
+  'intake advanced': `Advanced intake commands
+
+  pj intake known <fingerprint-or-ref>...
+      Check which notes already carry refs; useful to integrations before capture.
+  pj intake decline <fingerprint>... --reason <why> [--channel c] [--title t]
+      Record a candidate that never became a note as declined.
+  pj intake cursor set --channel <c> --cursor <value> [--seen n] [--captured n]
+      Set a channel watermark manually.
+  pj intake cursor reset [--channel c]
+      Forget cursor state so the next sweep uses its default window.
+
+The old \`poll\`, \`commit\`, \`suppress\`, \`suppressed\`, \`unsuppress\`, and
+\`reset\` spellings remain compatibility aliases, but are intentionally omitted
+from normal help.`,
+};
+
+function printHelp(topic: string[]): void {
+  const key =
+    topic[0] === 'intake' && topic[1] !== 'advanced'
+      ? 'intake'
+      : topic[0] === 'vaults'
+        ? 'vaults'
+        : topic.join(' ');
+  if (!key) {
+    console.log(ROOT_HELP);
+    return;
+  }
+  const text = COMMAND_HELP[key];
+  if (text) {
+    console.log(`pj — projector CLI${vaultNote}\n\n${text}`);
+    return;
+  }
+  console.error(`unknown help topic: ${key}`);
+  console.log(ROOT_HELP);
+  process.exitCode = 1;
+}
 
 function ensureData(): void {
   mkdirSync(p.notes, { recursive: true });
@@ -674,8 +737,16 @@ async function cmdSearch(argv: string[]): Promise<void> {
 
 const cmd = rawCmd;
 const argv = rawArgv;
-try {
-  switch (cmd) {
+if (asking) {
+  const topic = HELP_CMDS.has(cmd ?? '')
+    ? argv
+    : cmd
+      ? [cmd, ...argv.filter((a) => a !== '--help')]
+      : [];
+  printHelp(topic);
+} else {
+  try {
+    switch (cmd) {
     case 'ls':
       await cmdLs(argv);
       break;
@@ -815,29 +886,45 @@ try {
         break;
       }
 
-      if (sub === 'commit') {
+      if (sub === 'advance' || (sub === 'commit' && flags.has('advance'))) {
         const channel = flags.get('channel')?.[0];
         if (channel && !channelNames().includes(channel)) {
           fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
         }
 
-        // `--advance` promotes what the sweep recorded, for every channel that has
-        // something to promote. The cursor and `seen` were pj's own numbers; the
-        // agent was copying them between two processes by hand.
-        if (flags.has('advance')) {
-          const capturedRaw = flags.get('captured')?.[0];
-          const res = advance(root, {
-            ...(channel ? { channel } : {}),
-            ...(capturedRaw && capturedRaw !== 'true' ? { captured: Number(capturedRaw) } : {}),
-          });
-          console.log(renderAdvance(res));
-          // Nothing to promote anywhere is a mistake worth noticing — a sweep was
-          // meant to come first.
-          if (!res.moved.length) process.exit(1);
+        const capturedRaw = flags.get('captured')?.[0];
+        const res = advance(root, {
+          ...(channel ? { channel } : {}),
+          ...(capturedRaw && capturedRaw !== 'true' ? { captured: Number(capturedRaw) } : {}),
+        });
+        console.log(renderAdvance(res));
+        // Nothing to promote anywhere is a mistake worth noticing — a sweep was
+        // meant to come first.
+        if (!res.moved.length) process.exit(1);
+        break;
+      }
+
+      if (sub === 'cursor' || sub === 'commit') {
+        const action = sub === 'cursor' ? channels.shift() : 'set';
+        if (action === 'reset') {
+          const channel = flags.get('channel')?.[0];
+          const n = resetWatermark(root, channel);
+          console.log(
+            n
+              ? `forgot ${n} cursor(s)${channel ? ` for ${channel}` : ''} — the next sweep uses the default window`
+              : 'nothing to forget',
+          );
           break;
         }
-
-        if (!channel) fail('pj intake commit --advance | --channel <c> [--cursor <v>]');
+        if (action !== 'set') fail('pj intake cursor set --channel <c> --cursor <value>');
+        const channel = flags.get('channel')?.[0];
+        if (!channel) fail('pj intake cursor set --channel <c> --cursor <value>');
+        if (!channelNames().includes(channel)) {
+          fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
+        }
+        if (sub === 'cursor' && !flags.get('cursor')?.[0]) {
+          fail('pj intake cursor set --channel <c> --cursor <value>');
+        }
         const w = commitWatermark(root, channel, flags.get('cursor')?.[0] ?? null, {
           seen: Number(flags.get('seen')?.[0] ?? 0),
           captured: Number(flags.get('captured')?.[0] ?? 0),
@@ -866,7 +953,7 @@ try {
        * suppressions, same cursor rule — so a vault that does not want a server
        * running is not a vault that has to do this by conversation instead.
        */
-      if (sub === 'poll') {
+      if (sub === 'apply' || sub === 'poll') {
         const res = await pollOnce(root);
         if (res.held) {
           console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
@@ -910,10 +997,10 @@ try {
         break;
       }
 
-      if (sub === 'suppress') {
+      if (sub === 'decline' || sub === 'suppress') {
         const reason = flags.get('reason')?.[0];
         if (!channels.length || !reason) {
-          fail('pj intake suppress <fingerprint>... --reason <why> [--channel c] [--title t]');
+          fail('pj intake decline <fingerprint>... --reason <why> [--channel c] [--title t]');
         }
         for (const fp of channels) {
           const s = suppress(root, {
@@ -922,7 +1009,7 @@ try {
             ...(flags.get('channel')?.[0] ? { channel: flags.get('channel')![0]! } : {}),
             ...(flags.get('title')?.[0] ? { title: flags.get('title')![0]! } : {}),
           });
-          console.log(`suppressed ${s.fingerprint} — ${s.reason}`);
+          console.log(`declined ${s.fingerprint} — ${s.reason}`);
         }
         break;
       }
@@ -933,7 +1020,7 @@ try {
        * only thing that makes a threshold safe to raise is being able to read what
        * it swallowed.
        */
-      if (sub === 'suppressed') {
+      if (sub === 'declined' || sub === 'suppressed') {
         const page = suppressions(root, {
           ...(flags.get('channel')?.[0] ? { channel: flags.get('channel')![0]! } : {}),
           ...(flags.get('q')?.[0] ? { q: flags.get('q')![0]! } : {}),
@@ -945,7 +1032,7 @@ try {
           break;
         }
         if (!rows.length) {
-          console.log(page.total ? 'nothing matching' : 'nothing suppressed');
+          console.log(page.total ? 'nothing matching' : 'nothing declined');
           break;
         }
         for (const r of rows) {
@@ -963,8 +1050,8 @@ try {
         break;
       }
 
-      if (sub === 'unsuppress') {
-        if (!channels.length) fail('pj intake unsuppress <fingerprint>...');
+      if (sub === 'restore' || sub === 'unsuppress') {
+        if (!channels.length) fail('pj intake restore <fingerprint>...');
         for (const fp of channels) {
           const back = unsuppress(root, fp);
           console.log(
@@ -974,7 +1061,7 @@ try {
                   // than the one the command is about, and because it is what
                   // makes the first half of the sentence true.
                   (back.rewound ? ` (${back.rewound}'s cursor reset, so it is in reach again)` : '')
-              : `${fp} — was not suppressed`,
+              : `${fp} — was not declined`,
           );
         }
         break;
@@ -1254,17 +1341,12 @@ try {
       break;
     }
 
-    // Asking for help is not a failed command, so it exits 0; a typo still does not.
-    case 'help':
-    case '--help':
-    case '-h':
-      console.log(HELP);
-      break;
     default:
-      console.log(HELP);
+      console.log(ROOT_HELP);
       if (cmd) process.exitCode = 1;
+    }
+  } catch (err) {
+    console.error(`pj ${cmd}: ${(err as Error).message}`);
+    process.exit(1);
   }
-} catch (err) {
-  console.error(`pj ${cmd}: ${(err as Error).message}`);
-  process.exit(1);
 }

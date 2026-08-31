@@ -124,7 +124,7 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
       nextCursor: report.truncated ? null : report.nextCursor,
     };
     reports.push(resolved);
-    // Recorded, not advanced. `pj intake commit --advance` promotes this once the
+    // Recorded, not advanced. `pj intake advance` promotes this once the
     // proposal is resolved; until then nothing reads it.
     recordPending(root, channel.name, resolved.nextCursor, seenIn(resolved));
   }
@@ -319,7 +319,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   }
   L.push(
     `${candidateCount(s)} candidate(s). Nothing is captured and no cursor has moved — ` +
-      `create what is worth a note, then: pj intake commit --advance [--captured n]`,
+      `create what is worth a note, then: pj intake advance [--captured n]`,
   );
   return L.join('\n');
 }
