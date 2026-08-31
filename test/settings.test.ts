@@ -59,6 +59,14 @@ test('a vault with no config file behaves exactly as one did before there was on
     assert.equal(s.channels, null, 'null, not an empty list — absent means all');
     assert.equal(s.enrich, null);
     assert.equal(s.jira, null);
+    assert.deepEqual(s.classify, {
+      enabled: true,
+      provider: 'ollama',
+      url: 'http://127.0.0.1:11434',
+      command: 'claude',
+      model: 'qwen3.5:9b-q4_K_M',
+    });
+    assert.deepEqual(s.gmail, { command: 'gog', account: null });
     for (const c of ['claude', 'git', 'jira', 'slack', 'gmail']) {
       assert.equal(channelEnabled(root, c), true, c);
     }
@@ -75,6 +83,35 @@ test('a vault with no config file behaves exactly as one did before there was on
     ]);
   } finally {
     cleanup();
+  }
+});
+
+test('old classifier settings keep using Claude until a provider is named', () => {
+  for (const config of [
+    'classify:\n  model: sonnet\n',
+    'classify:\n  command: /opt/local/bin/claude\n',
+  ]) {
+    const { root, cleanup } = vault(config);
+    try {
+      assert.equal(settingsFor(root).classify.provider, 'claude');
+    } finally {
+      cleanup();
+    }
+  }
+
+  const local = vault(
+    'classify:\n  provider: ollama\n  url: http://localhost:11434/\n  model: local-test\n',
+  );
+  try {
+    assert.deepEqual(settingsFor(local.root).classify, {
+      enabled: true,
+      provider: 'ollama',
+      url: 'http://localhost:11434',
+      command: 'claude',
+      model: 'local-test',
+    });
+  } finally {
+    local.cleanup();
   }
 });
 

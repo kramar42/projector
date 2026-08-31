@@ -71,9 +71,9 @@ export interface ChannelReport {
   /** Where the cursor should move to once the proposal is resolved. */
   nextCursor: string | null;
   /**
-   * False when `pj` has no way to reach this channel — Slack and Gmail have no
-   * credential here and are fetched by an agent through MCP. The cursor is still
-   * ours: one store for "where we got to", whoever did the fetching.
+   * False when `pj` has no way to reach this channel — an absent Slack MCP or an
+   * unavailable Gmail CLI, for example. The cursor is still ours: one store for
+   * "where we got to", whichever transport did the fetching.
    */
   fetched: boolean;
   /** Why it was not fetched, or what to do instead. */

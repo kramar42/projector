@@ -27,7 +27,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS watermark (
   channel   TEXT PRIMARY KEY,
   -- Channel-defined and opaque: an ISO timestamp for the ones pj fetches, a
-  -- Slack ts or a Gmail date for the ones an agent fetches through MCP.
+  -- Slack ts or a Gmail date for externally fetched channels.
   cursor    TEXT,
   ran_at    TEXT NOT NULL,
   -- What the run saw and what came of it, for intake status. Advisory.

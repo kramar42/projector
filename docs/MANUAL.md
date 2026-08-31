@@ -857,7 +857,7 @@ channel and a cursor and answers *which refs nobody has filed*. Same Jira token,
 | `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` | `gh:branch:<slug>@<branch>` / `gh:commit:` — none without a GitHub remote |
 | `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` | the same |
 | `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` | `slack:<permalink>` |
-| `gmail` | **not fetched here** — an agent, through MCP | a thread | `gmail:<message-id>` | the thread URL, as a plain `url` |
+| `gmail` | `gog gmail search`, forced read-only | a thread | `gmail:<message-id>` | the thread URL, as a plain `url` |
 
 **A fingerprint is not a link**, and the last two columns differ for three of the five channels. A
 fingerprint is a dedup key: it never has to resolve, it is never drawn, and `<channel>/<ts>` is a
@@ -954,13 +954,17 @@ and on an open axis it is shown the values your notes already use and asked to p
 of cards does not sprawl your vocabulary.
 
 Tune it for your vault by writing `.projector/classify.md`, which replaces the built-in instructions
-entirely. Change the model or the command if you want something other than a small one:
+entirely. The default is a local Ollama model; naming `provider: claude` keeps the older CLI transport:
 
 ```yaml
 classify:
   enabled: true       # the default; `false` means "write everything down and let me sort it"
-  model: haiku
-  command: claude
+  provider: ollama
+  url: http://127.0.0.1:11434
+  model: qwen3.5:9b-q4_K_M
+# provider: claude
+# model: haiku
+# command: claude
 ```
 
 **It learns from what you decide.** Every decline you take back is the strongest example there is —
@@ -968,17 +972,29 @@ it says the judgement was wrong in the direction that costs you the item, where 
 alone only says you agreed. Recent rescues, recent declines and recently kept notes go into the prompt,
 rescues first. Nothing is configured for this; using the queue is what trains it.
 
-**Slack and Gmail are fetched by an agent**, because `pj` has no credential for either. They are also
-the two channels where a mistake would be visible to other people, so nothing is enabled by default and
-there is no wildcard: you name the tools, and everything else is refused.
+**Gmail is fetched through `gogcli`, not through the model.** Authorize `gog` once with read-only
+Gmail scopes; every unattended invocation also passes `--readonly`, `--gmail-no-send` and
+`--no-input`. The account is optional when `gog` has a single/default account:
+
+```yaml
+gmail:
+  command: gog
+  account: you@example.com
+```
+
+**Slack is still fetched by an MCP agent.** It is a shared channel where a mistake would be visible to
+other people, so there is no wildcard: name only read tools and everything else is refused. A legacy
+Gmail MCP configuration remains a fallback when `gog` cannot run.
 
 ```yaml
 mcp:
+  command: claude
+  model: haiku
   slack: [mcp__yourserver__slack_search_public, mcp__yourserver__slack_read_channel]
-  gmail: [mcp__yourserver__search_threads, mcp__yourserver__get_thread]
+# gmail: [mcp__yourserver__search_threads, mcp__yourserver__get_thread]
 ```
 
-Leave either out and that channel is not fetched, which is exactly what it did before it could be.
+Leave Slack out and that channel is not fetched.
 
 **A secret's value never enters a note.** A scratchpad DM is exactly where a token or a password ends
 up, and this pipeline writes notes from what it swept with nobody watching. So both prompts that reach
@@ -1055,9 +1071,9 @@ this useless is a confident wrong one — a session linked to the wrong note put
 nobody will look. Choosing between note, extension and neither is the classifier's job, on the evidence
 this hands it.
 
-Slack and Gmail are fetched by an agent through MCP rather than by `pj` — a second token in a second
-place to rotate buys nothing — but `pj` keeps their cursors either way, because a watermark is a
-property of where the sweep got to, not of who fetched.
+Slack is fetched by an agent through MCP; Gmail is fetched by `gog` under runtime read-only guards.
+`pj` keeps both cursors, because a watermark is a property of where the sweep got to, not of which
+transport fetched it.
 
 ---
 
@@ -1204,7 +1220,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
 | `pj intake decline <fp>… --reason <why>` · `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
 | `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: inspect deduplication · set a raw cursor · forget one |
-| `poll:` · `classify:` · `mcp:` in `.projector/config.yaml` | sweep on a timer and write what deserves a note into the queue · who judges that, and with which model · which MCP tools the Slack and Gmail channels may call. `.projector/classify.md` replaces the instructions |
+| `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |
 | `pj audit [--json]` | run this vault's rules: every saved view declaring `expect: empty`. Exits non-zero if one is broken |

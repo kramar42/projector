@@ -66,17 +66,26 @@ export interface Settings {
    * than the feature not working. `enabled: false` is the explicit way to say
    * "write everything down and let me sort it".
    */
-  classify: { enabled: boolean; command: string; model: string };
+  classify: {
+    enabled: boolean;
+    /** Local by default. `claude` remains an explicit compatibility transport. */
+    provider: 'ollama' | 'claude';
+    /** Ollama's native API root; unused by the Claude transport. */
+    url: string;
+    command: string;
+    model: string;
+  };
+  /** Read-only Gmail access through gogcli, with MCP kept as a compatibility path. */
+  gmail: { command: string; account: string | null };
   /**
    * Which MCP tools the agent-fetched channels may call, per channel.
    *
-   * Empty is the default and means the channel is not fetched — which is exactly
-   * what it did before it could be. Slack and Gmail are the shared channels C2
-   * names, so an agent loose in them could post or send; nothing here can tell a
-   * read tool from a write one by its name, so nothing guesses. The vault lists
-   * the tools and Claude Code refuses everything else.
+   * Empty is the default. Slack is then not fetched; Gmail uses its constrained
+   * CLI and consults this list only as a compatibility fallback. Nothing here
+   * can tell a read tool from a write one by its name, so nothing guesses. The
+   * vault lists tools explicitly and Claude Code refuses everything else.
    */
-  mcp: { slack: string[]; gmail: string[] };
+  mcp: { slack: string[]; gmail: string[]; command: string; model: string };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -94,8 +103,15 @@ interface Raw {
   doc?: { url?: unknown };
   workspaces?: unknown;
   poll?: { enabled?: unknown; every?: unknown };
-  classify?: { enabled?: unknown; command?: unknown; model?: unknown };
-  mcp?: { slack?: unknown; gmail?: unknown };
+  classify?: {
+    enabled?: unknown;
+    provider?: unknown;
+    url?: unknown;
+    command?: unknown;
+    model?: unknown;
+  };
+  gmail?: { command?: unknown; account?: unknown };
+  mcp?: { slack?: unknown; gmail?: unknown; command?: unknown; model?: unknown };
 }
 
 const str = (v: unknown): string | null => {
@@ -174,6 +190,16 @@ export function settingsFor(root: string): Settings {
   const email = str(env.PROJECTOR_JIRA_EMAIL) ?? str(raw.jira?.email);
   const token = str(env.PROJECTOR_JIRA_TOKEN) ?? str(raw.jira?.token);
 
+  /**
+   * Before providers were named, either `command` or `model` meant Claude.
+   * Preserve that spelling for existing vaults; an untouched vault gets the new
+   * local default, and an edited one switches deliberately with `provider`.
+   */
+  const namedProvider = str(raw.classify?.provider);
+  const legacyClaude = !namedProvider && (str(raw.classify?.command) || str(raw.classify?.model));
+  const provider: 'ollama' | 'claude' =
+    namedProvider === 'claude' || legacyClaude ? 'claude' : 'ollama';
+
   const value: Settings = {
     channels: list(raw.channels),
     enrich: list(raw.enrich),
@@ -194,14 +220,22 @@ export function settingsFor(root: string): Settings {
     },
     classify: {
       enabled: raw.classify?.enabled !== false,
+      provider,
+      url: (str(raw.classify?.url) ?? 'http://127.0.0.1:11434').replace(/\/+$/, ''),
       command: str(raw.classify?.command) ?? 'claude',
-      // Small on purpose: the question is narrow and the run is on a timer, so
-      // the cost of the judgement should not exceed the cost of reading it.
-      model: str(raw.classify?.model) ?? 'haiku',
+      // 9B Q4 leaves useful headroom on a 16 GB Apple Silicon machine while
+      // being large enough to follow the classifier's structured contract.
+      model: str(raw.classify?.model) ?? (provider === 'ollama' ? 'qwen3.5:9b-q4_K_M' : 'haiku'),
+    },
+    gmail: {
+      command: str(raw.gmail?.command) ?? 'gog',
+      account: str(raw.gmail?.account),
     },
     mcp: {
       slack: list(raw.mcp?.slack) ?? [],
       gmail: list(raw.mcp?.gmail) ?? [],
+      command: str(raw.mcp?.command) ?? 'claude',
+      model: str(raw.mcp?.model) ?? 'haiku',
     },
   };
 
@@ -262,6 +296,18 @@ enrich: ${enrich ? 'true' : 'false'}
 #   url: 'cursor://file{path}'   # how a doc: ref opens; defaults to the OS
 
 # workspaces: ~/Code/wt   # where \`pj work\` puts worktrees
+#
+# The unattended classifier is local by default. Ollama must be running and the
+# model downloaded; set provider: claude to keep the older Claude CLI transport.
+# classify:
+#   provider: ollama
+#   url: http://127.0.0.1:11434
+#   model: qwen3.5:9b-q4_K_M
+#
+# Gmail is read through gogcli with its runtime read-only guard enabled.
+# gmail:
+#   command: gog
+#   account: you@example.com   # optional when gog has one/default account
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so
 # it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.

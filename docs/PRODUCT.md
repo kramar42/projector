@@ -71,8 +71,8 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   under `.projector/` — opened the way Obsidian opens one. It is a git repository, which is where
   `pj log` reads history from. Two ship in this one: `vaults/tutorial`, which a fresh clone opens
   onto, and `vaults/coverage`, the fixture.
-- **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL — plus Slack and
-  Gmail, which have no fetcher here and are read by an agent through MCP. Sweeps propose and stop;
+- **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL, Gmail through a
+  read-only CLI — plus Slack, which is read by an agent through MCP. Sweeps propose and stop;
   `pj intake` creates no note and moves no cursor.
 - **`pj work`** prepares a multi-repo git worktree workspace, a briefing with the note's full context,
   and a terminal running a Claude session in it.

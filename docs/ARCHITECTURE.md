@@ -627,7 +627,7 @@ since it was turned down.
 
 **The rewind is the whole cursor, not a step back to the item.** Rewinding precisely would mean
 comparing the item's own timestamp against the cursor, and a cursor is channel-defined and opaque — an
-ISO date for the channels `pj` fetches, a Slack `ts` or a Gmail date for the ones an agent does — so
+ISO date for direct channels, a Slack `ts`, or a Gmail date — so
 there is frequently nothing to compare it with. Recording the time on the row would answer for a
 candidate the classifier dropped and not for a card somebody deleted, because a card records its
 fingerprint and its links and never the source's own clock. So the channel falls back to its default
@@ -705,9 +705,10 @@ fixing them first.
 
 One call per run, not per candidate. A sweep's candidates arrive together and are frequently *one
 thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
-alone cannot. The transport is a stripped `claude -p`: the default system prompt replaced, the tools
-disallowed, MCP off. What is left is a classification rather than an agent, which is both cheaper and
-more predictable, since a classifier able to read files would eventually read them.
+alone cannot. The default transport is Ollama's local chat API in JSON mode, with thinking disabled,
+temperature zero and no tools. The compatibility transport is a stripped `claude -p`: default system
+prompt replaced, tools disallowed, MCP off. In either case what is left is classification rather than
+an agent, since a classifier able to read files would eventually read them.
 
 **It fails closed.** A tick that cannot reach the classifier, or cannot parse what came back, writes
 nothing and advances nothing; the next tick sees exactly what it saw. Materialising everything instead
@@ -808,11 +809,12 @@ not become a facet, and it may not render as a badge beside computed ones, becau
 a badge can be trusted. Its durable form is prose — a reason on a suppression, which is the shape
 `Skipped.why` already had.
 
-**Slack and Gmail are fetched by an agent, and the safety story is one flag.** `pj` has no credential
-for either and is not getting one — a second token in a second place to rotate buys nothing when an
-agent already has both through MCP. So those channels shell out to the same `claude -p` the classifier
-uses, with MCP left on, and return candidates in the shape every other channel returns. Fetch stays
-separate from judgement, so one policy still covers every channel.
+**Gmail is fetched through a constrained CLI; Slack remains agent-fetched.** `gogcli` owns Gmail OAuth
+and returns thread JSON. Every invocation carries `--readonly`, `--gmail-no-send` and `--no-input`, so
+the safety boundary is enforced by the transport rather than requested from a model. Jira already has
+this shape through its GET-only REST client. Slack still shells out to the Claude CLI with only the
+MCP tools the vault names. Both return candidates in the shape every other channel returns, so fetch
+stays separate from judgement and one classification policy still covers every channel.
 
 **The agent is asked for an id and a permalink, and they are two fields because they answer two
 questions.** A fingerprint is a dedup key — never resolved, never drawn — and a link is a place a
@@ -825,13 +827,12 @@ gets no link rather than a broken one — the `source` facet already records pro
 `source_fingerprint` still dedups it. `gmail` deliberately stays out of `LINK_KINDS` for the reason
 that list gives: nothing fetches a thread, so the URL travels as a plain `url`.
 
-These are exactly the shared channels C2 names, and an agent holding Slack tools could post. Nothing
-here can tell a read tool from a write one by its name, so nothing tries: **the vault lists the tools
-the channel may call** (`mcp.slack`, `mcp.gmail`) and `--allowedTools` makes Claude Code refuse the
-rest. No wildcard, because a wildcard over a server's tools is a wildcard over its write tools. Unset
-means no tools, which means the channel reports itself unfetched exactly as it did before it could be
-fetched at all — so the failure of omission is the old behaviour, and enabling a write is something a
-person has to spell out.
+An agent holding Slack tools could post. Nothing here can tell a read tool from a write one by its
+name, so nothing tries: **the vault lists the tools the Slack channel may call** (`mcp.slack`) and
+`--allowedTools` makes Claude Code refuse the rest. No wildcard, because a wildcard over a server's
+tools is a wildcard over its write tools. `mcp.gmail` remains only as a compatibility fallback when
+`gog` cannot answer; new setups do not need it. Its command and model live under `mcp:` rather than
+borrowing the local classifier's model name.
 
 **A rescue is the signal worth keeping.** `unsuppress` writes the row it removes into `rescued`,
 because an un-suppression says the judgement was wrong in the direction that costs the item, and a
@@ -857,9 +858,9 @@ refusal costs nothing, the note being on the board either way.
 answers how to display it; intake is given a channel and a cursor and answers which refs nobody has
 filed. Same Jira token, same `~/.claude/projects`, opposite question. `src/sources/` holds what is
 genuinely common — the credential, the subprocess, the transcript parser — and neither directory
-imports the other. Two of the five intake channels have no fetcher here at all: Slack and Gmail are
-read by an agent through MCP, and `pj` keeps their cursors anyway, because a watermark is a property of
-where the sweep got to and not of who did the fetching.
+imports the other. Gmail is read through `gogcli`, Jira through GET-only HTTP, and Slack by an agent
+through MCP. `pj` keeps every cursor, because a watermark is a property of where the sweep got to and
+not of which transport did the fetching.
 
 **Instructions are configuration, not prose.** They live in the `project:` block. They were once a
 `## Instructions` heading in the body matched by regex — the only place where renaming a heading
@@ -1052,13 +1053,12 @@ who is listening.
 view`, `gh api` GETs, Jira GETs. Those modules export no mutation functions, so there is no code path
 to write back.
 
-Two calls are not fetches and are worth naming rather than leaving to the sentence above. The
-classifier sends candidate text to a model, and the Slack and Gmail channels send a *request to search*
-to an agent that holds those tools. Neither writes anywhere: the classifier has no tools at all, and
-the agent has only the tools the vault named — no wildcard, so a write tool is reachable only by being
-listed. What C2 forbids is writing where somebody else reads, and asking a model a question is not
-that. What it would forbid is a channel that could reply, and the allowlist is the thing standing
-between here and there.
+Two calls are not ordinary fetches and are worth naming rather than leaving to the sentence above. The
+classifier sends candidate text to a local model, and Slack sends a *request to search* to an agent
+that holds only the tools the vault named. Gmail invokes a CLI whose runtime refuses mutations. The
+classifier has no tools at all; the Slack agent has no wildcard, so a write tool is reachable only by
+being listed. What C2 forbids is writing where somebody else reads, and each boundary prevents that in
+the mechanism native to its transport.
 
 The one thing this app raises that is not a read is a **local** notification: the server tells a tab it
 is already talking to, and the tab tells the operating system. Nothing is sent, so there is nowhere for
@@ -1124,9 +1124,10 @@ holds several vaults open and none of them may answer with another's token. `pj 
 making the request rather than checking that a value is present: configured-and-wrong and
 never-configured look identical otherwise.
 
-It also holds `poll:` and `classify:` — the keys that let the app write notes nobody asked for, and
-the judgement that decides which. Polling is off unless a vault sets it; classification is on unless a
-vault turns it off, which is the asymmetry the two failure modes deserve.
+It also holds `poll:`, `classify:` and `gmail:` — the keys that let the app write notes nobody asked
+for, choose the local or compatibility model transport, and select the read-only Gmail CLI account.
+Polling is off unless a vault sets it; classification is on unless a vault turns it off, which is the
+asymmetry the two failure modes deserve.
 
 The registry beside the app stays what it was — a list of paths, holding nothing secret.
 

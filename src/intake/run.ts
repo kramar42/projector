@@ -10,7 +10,8 @@ import {
 } from './db.ts';
 import { gitChannel } from './git.ts';
 import { jiraChannel } from './jira.ts';
-import { gmailChannel, slackChannel } from './mcp.ts';
+import { slackChannel } from './mcp.ts';
+import { gmailChannel } from './gmail.ts';
 import { channelEnabled } from '../settings.ts';
 import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 
@@ -256,9 +257,8 @@ export function renderAdvance(a: { moved: Advanced[]; withoutPending: string[] }
 /**
  * Which notes already carry each of these fingerprints or links.
  *
- * The fetched channels dedupe themselves, but Slack and Gmail are fetched by an
- * agent through MCP — so without this the one channel pair that cannot check
- * would be the one guessing. `pj add --fingerprint` refuses a duplicate anyway;
+ * The direct fetchers dedupe themselves, while an agent-fetched channel may not
+ * be able to check. `pj add --fingerprint` refuses a duplicate anyway;
  * this is what lets a proposal be honest before it gets that far.
  */
 export function known(root: string, refs: string[]): { ref: string; cards: string[] }[] {

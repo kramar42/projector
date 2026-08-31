@@ -4,7 +4,7 @@ import { settingsFor } from '../settings.ts';
 import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.ts';
 
 /**
- * Slack and Gmail: fetched by an agent, because `pj` has no credential for either.
+ * Slack, plus the legacy Gmail fallback: fetched by an agent through MCP.
  *
  * A second token in a second place to rotate buys nothing when an agent already
  * has both through MCP. What `pj` keeps is the *watermark* — where the last sweep
@@ -136,12 +136,12 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
       }
 
       const res = await run(
-        cfg.classify.command,
+        cfg.mcp.command,
         [
           '-p',
           instructions(kind, ctx.cursor, defaultDays),
           '--model',
-          cfg.classify.model,
+          cfg.mcp.model,
           // The whole safety story in one flag: only the tools the vault named,
           // and Claude Code refuses the rest. No wildcard, because a wildcard over
           // an MCP server's tools is a wildcard over its write tools too.
@@ -235,7 +235,8 @@ export const slackChannel = agentChannel(
     'or fetch by hand and: pj intake cursor set --channel slack --cursor <ts>',
 );
 
-export const gmailChannel = agentChannel(
+/** Compatibility path for vaults that still name Claude MCP tools. */
+export const gmailMcpChannel = agentChannel(
   'gmail',
   14,
   'no Gmail tools named for this vault — set mcp.gmail in .projector/config.yaml, ' +

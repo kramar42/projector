@@ -101,9 +101,9 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
 
   for (const report of reports) {
     if (!report.fetched) {
-      // Slack and Gmail every tick, by design — they have no credential here and
-      // are fetched by an agent through MCP. A failing channel lands here too,
-      // since `collectSafely` gives a thrown collect the same shape.
+      // Slack without MCP lands here by design. A failing Gmail CLI or any other
+      // channel lands here too, since `collectSafely` gives a thrown collect the
+      // same shape.
       const reason = report.reason ?? 'not fetched here';
       out.unreachable.push({ channel: report.channel, reason });
       out.channels.push({
@@ -224,9 +224,9 @@ export function startPolling(
       // are the two readings this log exists to separate.
       for (const c of res.channels) {
         if (c.unreachable) {
-          // Not an error. Slack and Gmail land here every tick by design: they
-          // have no credential on this side and are fetched by an agent through
-          // MCP. A channel that has been unreachable for a week is still worth
+          // A missing Slack MCP is expected; a failing Gmail CLI is actionable.
+          // Either is channel-local rather than fatal. A channel that has been
+          // unreachable for a week is still worth
           // seeing, which is why it is a line and not a shrug.
           warn('intake', `${name}/${c.channel} not fetched — ${c.unreachable}`);
           continue;

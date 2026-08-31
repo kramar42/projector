@@ -5,7 +5,7 @@ import { paths, resolvePath } from './config.ts';
 import { readAll } from './index/indexer.ts';
 import { channelNames } from './intake/run.ts';
 import { CONFIG_FILE, settingsFor, settingsPath, settingsTemplate } from './settings.ts';
-import { gh } from './sources/run.ts';
+import { gh, run } from './sources/run.ts';
 import { jiraGet } from './sources/jira.ts';
 
 /**
@@ -134,17 +134,44 @@ function probeGit(root: string): { status: Status; detail: string; fix?: string 
 }
 
 /**
- * Slack and Gmail.
+ * Slack.
  *
- * Deliberately never `ready` or `unconfigured`: `pj` has no credential for
- * either and is not going to grow one. The agent fetches them over MCP and hands
- * the results back, so the only thing to verify is whether the agent has those
- * MCP servers — which the agent can see and `pj` cannot.
+ * Deliberately never `ready` or `unconfigured`: `pj` has no Slack credential
+ * and is not going to grow one. The agent fetches it over MCP and hands the
+ * results back, so only the agent can verify the MCP server.
  */
 const AGENT_FETCHED: Record<string, string> = {
   slack: 'fetched by the agent over the Slack MCP; pj holds no Slack credential',
-  gmail: 'fetched by the agent over the Gmail MCP; pj holds no Gmail credential',
 };
+
+async function probeGmail(root: string): Promise<{ status: Status; detail: string; fix?: string }> {
+  const cfg = settingsFor(root).gmail;
+  const res = await run(
+    cfg.command,
+    [
+      '--readonly',
+      '--gmail-no-send',
+      '--no-input',
+      '--json',
+      ...(cfg.account ? ['--account', cfg.account] : []),
+      'gmail',
+      'search',
+      'after:0',
+      '--max',
+      '1',
+    ],
+    { timeoutMs: 15_000 },
+  );
+  if (res.ok) return { status: 'ready', detail: `read-only through ${cfg.command}` };
+  const missing = /spawn failed|ENOENT|not found/i.test(res.stderr);
+  return {
+    status: missing ? 'unconfigured' : 'failing',
+    detail: missing ? `${cfg.command} is not installed` : `${cfg.command} could not read Gmail`,
+    fix: missing
+      ? 'install gogcli, then authorize Gmail with read-only scopes'
+      : 'run `gog auth list`, then authorize the account with read-only Gmail access',
+  };
+}
 
 export async function probe(root: string): Promise<Report> {
   const s = settingsFor(root);
@@ -162,11 +189,13 @@ export async function probe(root: string): Promise<Report> {
 
   // Channels, in the order `pj intake` sweeps them.
   const jira = await probeJira(root);
+  const gmail = await probeGmail(root);
   const claude = probeClaude();
   for (const name of channelNames()) {
     if (name === 'claude') add(name, 'channel', on(name), claude);
     else if (name === 'git') add(name, 'channel', on(name), probeGit(root));
     else if (name === 'jira') add(name, 'channel', on(name), jira);
+    else if (name === 'gmail') add(name, 'channel', on(name), gmail);
     else add(name, 'channel', on(name), { status: 'agent', detail: AGENT_FETCHED[name] ?? '' });
   }
 

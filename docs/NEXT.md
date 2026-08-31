@@ -245,11 +245,11 @@ things it still does better.
   GET. One test, and C2 is checked rather than trusted.
 
   **The stakes went up after this was filed.** When it was written, the worst a mistake could do was a
-  `POST` in a fetcher nobody would notice. The agent-fetched channels now hand an agent real tools in
-  Slack and Gmail — the two services C2 names — and the only thing between that and a write is a list in
-  a config file. Nothing checks that the listed tools are reads, nothing checks that the list is a list
-  rather than a wildcard, and nothing fails a build if either changes. A grep over the adapters no
-  longer covers the whole rule; the allowlist wants a check of its own.
+  `POST` in a fetcher nobody would notice. Slack now hands an agent real tools, and the only thing
+  between that and a write is a list in a config file. Gmail moved to `gogcli`, whose runtime
+  `--readonly` and `--gmail-no-send` guards make it amenable to an adapter check. Nothing checks that
+  Slack's listed tools are reads or that the list is not a wildcard. A grep over adapters therefore
+  still does not cover the whole rule; the MCP allowlist wants a check of its own.
 
 - **A verb allow-list checked before the subprocess spawns.** A frozen set of safe git verbs, plus the
   flags that are writes wearing one — `branch -D`, `remote add`, `config --global` — refused before

@@ -13,10 +13,11 @@ import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderSta
 import { materialise } from '../src/intake/materialise.ts';
 import { rejudge } from '../src/intake/rejudge.ts';
 import { instructions, linkFor } from '../src/intake/mcp.ts';
+import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { deleteNote } from '../src/server/mutate.ts';
 import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
-import { classify, type Ask, type Verdict } from '../src/intake/classify.ts';
+import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
@@ -1172,6 +1173,34 @@ test('an unreachable or unparseable classifier holds the whole tick', async () =
   }
 });
 
+test('the local classifier uses Ollama without exposing tools', async () => {
+  const original = globalThis.fetch;
+  let request: { url: string; body: Record<string, unknown> } | null = null;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    request = {
+      url: String(input),
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    };
+    return new Response(JSON.stringify({ message: { content: '[{"fp":"x","decision":"keep","reason":"wanted"}]' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+  try {
+    const reply = await ollamaAsk('http://127.0.0.1:11434/', 'local-model')('rules', '[{"fp":"x"}]');
+    assert.match(reply ?? '', /"decision":"keep"/);
+    assert.ok(request);
+    const seen = request as unknown as { url: string; body: Record<string, unknown> };
+    assert.equal(seen.url, 'http://127.0.0.1:11434/api/chat');
+    assert.equal(seen.body.model, 'local-model');
+    assert.equal(seen.body.think, false);
+    assert.equal(seen.body.format, 'json');
+    assert.equal('tools' in seen.body, false, 'classification has no tool surface');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('a held tick writes nothing and moves no cursor', async () => {
   const root = vault({ a: card('a') });
   const fake: Channel = {
@@ -1314,6 +1343,49 @@ test('the fetching agent is asked for an id and a permalink as two fields', () =
   assert.match(text, /"url":"<permalink>"/, 'the schema asks for it');
   assert.match(text, /never the id in another costume/, 'and says it is not the id');
   assert.match(instructions('gmail', null, 14), /mail\.google\.com/);
+});
+
+test('the Gmail CLI boundary is read-only and its JSON becomes factual candidates', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const args = gogSearchArgs(
+      context(root, { since: new Date('2026-08-30T00:00:00.000Z') }),
+      'me@example.com',
+    );
+    assert.ok(args.includes('--readonly'));
+    assert.ok(args.includes('--gmail-no-send'));
+    assert.ok(args.includes('--no-input'));
+    assert.deepEqual(args.slice(-4), ['gmail', 'search', 'in:inbox after:1788048000', '--all']);
+    assert.ok(!args.some((arg) => /send|modify|delete/.test(arg) && arg !== '--gmail-no-send'));
+
+    assert.deepEqual(
+      parseGogSearch(
+        JSON.stringify({
+          threads: [
+            {
+              id: 'abc123',
+              subject: 'Can you review this?',
+              from: 'Ada <ada@example.com>',
+              date: '2026-08-30T10:00:00Z',
+              snippet: 'The change is ready.',
+            },
+          ],
+        }),
+      ),
+      [
+        {
+          id: 'abc123',
+          title: 'Can you review this?',
+          detail: 'Ada <ada@example.com> — The change is ready.',
+          when: '2026-08-30T10:00:00.000Z',
+        },
+      ],
+    );
+    assert.equal(parseGogSearch('not json'), null);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('deleting a captured note is a decline, so the sweep stops offering it', () => {

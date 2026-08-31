@@ -279,8 +279,8 @@ const NO_TOOLS =
   'Bash Read Write Edit Glob Grep WebFetch WebSearch Task TodoWrite NotebookEdit BashOutput KillShell SlashCommand Skill';
 
 /**
- * The default transport: the Claude CLI, through the same read-only subprocess
- * runner everything else outside the vault goes through.
+ * The compatibility transport: the Claude CLI, through the same read-only
+ * subprocess runner everything else outside the vault goes through.
  *
  * Deliberately stripped. `--system-prompt` replaces the default one,
  * `--disallowedTools` drops the tool definitions, and `--strict-mcp-config` with
@@ -312,6 +312,42 @@ export function claudeAsk(command: string, model: string): Ask {
       const env = JSON.parse(res.stdout) as { result?: unknown; is_error?: boolean };
       if (env.is_error) return null;
       return typeof env.result === 'string' ? env.result : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * The local transport: Ollama's native chat endpoint with JSON mode enabled.
+ *
+ * The application still validates every verdict itself. JSON mode only makes
+ * the transport deterministic about syntax; it does not grant the model any
+ * authority over facets or merge targets, and there are no tools to call.
+ */
+export function ollamaAsk(url: string, model: string): Ask {
+  return async (system, user) => {
+    try {
+      const response = await fetch(`${url.replace(/\/+$/, '')}/api/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          stream: false,
+          think: false,
+          format: 'json',
+          keep_alive: '10m',
+          options: { temperature: 0, num_ctx: 16_384 },
+        }),
+        signal: AbortSignal.timeout(180_000),
+      });
+      if (!response.ok) return null;
+      const env = (await response.json()) as { message?: { content?: unknown } };
+      return typeof env.message?.content === 'string' ? env.message.content : null;
     } catch {
       return null;
     }
@@ -446,5 +482,7 @@ export async function classify(
 
 export function defaultAsk(root: string): Ask {
   const { classify: cfg } = settingsFor(root);
-  return claudeAsk(cfg.command, cfg.model);
+  return cfg.provider === 'ollama'
+    ? ollamaAsk(cfg.url, cfg.model)
+    : claudeAsk(cfg.command, cfg.model);
 }
