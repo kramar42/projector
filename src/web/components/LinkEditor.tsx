@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useEnrichment } from '../enrichment.tsx';
 import { IconButton } from './Button.tsx';
 import { linkHue } from '../links.ts';
@@ -86,7 +86,7 @@ function LinkRow({ link, onRemove }: { link: NoteDTO['links'][number]; onRemove:
             stale
           </span>
         )}
-        <IconButton glyph="close" title="remove this link" onClick={onRemove} />
+        <IconButton glyph="close" data-nav="remove" title="remove this link" onClick={onRemove} />
       </div>
 
       {d?.title && <div className="linkrow-title">{d.title}</div>}
@@ -134,8 +134,31 @@ export function LinkEditor({
   onChange: (next: string[]) => void;
 }) {
   const [adding, setAdding] = useState('');
+  const [addingOpen, setAddingOpen] = useState(false);
   const [all, setAll] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const addInput = useRef<HTMLInputElement>(null);
   const shown = all ? links : links.slice(0, LINK_CUTOFF);
+
+  const startAdding = () => {
+    setAddingOpen(true);
+    requestAnimationFrame(() => addInput.current?.focus());
+  };
+
+  const stopAdding = () => {
+    setAddingOpen(false);
+    requestAnimationFrame(() => addButton.current?.focus());
+  };
+
+  const addLink = () => {
+    const v = adding.trim();
+    if (!v || links.some((l) => l.raw === v)) return;
+    setAdding('');
+    setAddingOpen(false);
+    onChange([...links.map((l) => l.raw), v]);
+    requestAnimationFrame(() => addButton.current?.focus());
+  };
+
   return (
     <div className="linkedit">
       {shown.map((l) => (
@@ -150,28 +173,34 @@ export function LinkEditor({
           {all ? 'less' : `${links.length - LINK_CUTOFF} more`}
         </button>
       )}
-      <input
-        value={adding}
-        placeholder="jira:PROJ-303 · gh:pr:Org/repo#4 · claude:local_… · doc:path.md · https://…"
-        onChange={(e) => setAdding(e.target.value)}
-        onKeyDown={(e) => {
-          // Escape stops here, as it does at the title editor, the facet's
-          // `+ new` field and the note picker. It did not, and this was the one
-          // silent data-loss path in the panel: the panel's guard is a `window`
-          // listener, a typed-but-uncommitted link sets no dirty flag, so Escape
-          // closed the whole card and took the text with it without asking.
-          if (e.key === 'Escape') {
+      {addingOpen ? (
+        <input
+          ref={addInput}
+          value={adding}
+          placeholder="jira:PROJ-303 · gh:pr:Org/repo#4 · claude:local_… · doc:path.md · https://…"
+          aria-label="add a link"
+          onChange={(e) => setAdding(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') return addLink();
+            if (e.key !== 'Escape') return;
             e.stopPropagation();
-            setAdding('');
-            return;
-          }
-          if (e.key !== 'Enter') return;
-          const v = adding.trim();
-          if (!v || links.some((l) => l.raw === v)) return;
-          setAdding('');
-          onChange([...links.map((l) => l.raw), v]);
-        }}
-      />
+            // The first Escape clears the draft; the second returns to the
+            // action, so neither draft nor keyboard focus disappears silently.
+            if (adding) return setAdding('');
+            stopAdding();
+          }}
+        />
+      ) : (
+        <button
+          ref={addButton}
+          type="button"
+          className="linkedit-add-action"
+          data-nav="new"
+          onClick={startAdding}
+        >
+          + link
+        </button>
+      )}
     </div>
   );
 }

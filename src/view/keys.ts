@@ -211,7 +211,10 @@ export type Command =
    * additionally open their editor, which is the only way "go to the body" can
    * mean anything: reading it needs no cursor.
    */
-  | { kind: 'gotoRegion'; region: 'links' | 'facets' | 'body' | 'frontmatter' | 'addFacet' }
+  | {
+      kind: 'gotoRegion';
+      region: 'links' | 'facets' | 'body' | 'frontmatter' | 'addFacet' | 'addRef';
+    }
   /**
    * Start work on the note under the cursor: a worktree workspace, a briefing,
    * and a Claude session opened on it.
@@ -410,6 +413,8 @@ export interface KeyContext {
   groupedAxis: string | null;
   /** Something is being typed into, so the keyboard is not ours. */
   inField: boolean;
+  /** A field deliberately included in a note's directional walk. */
+  navField?: boolean;
 }
 
 /**
@@ -600,7 +605,10 @@ export function bind(pending: Pending | null, stroke: KeyStroke, ctx: KeyContext
    * `stopPropagation` on a key it is handling itself; one predicate in one place
    * is what lets that come out.
    */
-  if (ctx.inField) return nothing;
+  // A note's add fields are steps in its local walk. Their ordinary letters still
+  // belong to text entry; only the four motion letters belong to the walk, which
+  // is what lets `j`/`k` remain one rule through chips, buttons and `+ new`.
+  if (ctx.inField && !(ctx.navField && /^[hjkl]$/.test(stroke.key))) return nothing;
 
   // Escape ends a sequence before it can mean anything else.
   if (stroke.key === 'Escape') {
@@ -953,6 +961,11 @@ export interface Act {
 export const ACTS: readonly Act[] = [
   { id: 'act.rename', palette: 'Rename this note', command: { kind: 'rename' } },
   { id: 'act.project', palette: 'Make / unmake a project', command: { kind: 'toggleProject' } },
+  {
+    id: 'act.ref.add',
+    palette: 'Add a reference to this note',
+    command: { kind: 'gotoRegion', region: 'addRef' },
+  },
   { id: 'act.enrich', palette: 'Re-fetch this note’s links', command: { kind: 'enrich' } },
   { id: 'act.vault', palette: 'Switch vault', command: { kind: 'switchVault' } },
   { id: 'act.selection.clear', palette: 'Clear selection', command: { kind: 'clearSelection' } },
@@ -1092,7 +1105,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       // one, this one always makes it the view.
       { keys: '⇧⟨axis⟩', does: 'show everything that names this note there' },
       { keys: 'g f', does: 'its facet rows' },
-      { keys: 'g ⇧F', does: 'add an axis it lacks' },
+      { keys: 'g ⇧F', does: 'add a property it lacks' },
       { keys: 'g l', does: 'its links' },
       { keys: 'g c', does: 'edit the body' },
       { keys: 'g y', does: 'edit the frontmatter' },
@@ -1109,8 +1122,8 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     // out follows how the list is drawn, and that is the whole rule.
     section: 'In a list',
     rows: [
-      { keys: 'j k', bindings: ['j', 'k'], does: 'a stacked list — links, refs, filters' },
-      { keys: 'h l', bindings: ['h', 'l'], does: 'a facet’s values; j k change axis' },
+      { keys: 'j k', bindings: ['j', 'k'], does: 'within the current note group' },
+      { keys: 'h l', bindings: ['h', 'l'], does: 'between note groups' },
       { keys: '⏎', does: 'take what is under the cursor' },
       { keys: 'esc', does: 'back to the cards' },
     ],

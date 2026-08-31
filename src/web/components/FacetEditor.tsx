@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RecordPicker } from './RecordPicker.tsx';
 import { PopoverButton } from './Popover.tsx';
 import type { NoteDetail, FacetDef } from '../types.ts';
@@ -81,6 +81,9 @@ export function FacetEditor({
   onOpen?: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
 }) {
   const [adding, setAdding] = useState('');
+  const [addingOpen, setAddingOpen] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const addInput = useRef<HTMLInputElement>(null);
 
   /**
    * Taking a value on. A single-valued axis genuinely replaces, so it is the one
@@ -97,6 +100,19 @@ export function FacetEditor({
     if (!v || values.includes(v)) return;
     take(v);
     setAdding('');
+    setAddingOpen(false);
+    requestAnimationFrame(() => addButton.current?.focus());
+  };
+
+  /** A focused add action identifies itself; it does not capture text until taken. */
+  const startAdding = () => {
+    setAddingOpen(true);
+    requestAnimationFrame(() => addInput.current?.focus());
+  };
+
+  const stopAdding = () => {
+    setAddingOpen(false);
+    requestAnimationFrame(() => addButton.current?.focus());
   };
 
   // Values already on the note that the vocabulary does not declare — shown so
@@ -144,7 +160,12 @@ export function FacetEditor({
                 <RecordMark card={refs?.[v] ?? { isProject: false, refCount: 0 }} />
                 <span className="truncate refchip-title">{refs?.[v]?.title ?? v}</span>
               </button>
-              <IconButton glyph="close" title={`remove ${refs?.[v]?.title ?? v}`} onClick={() => drop(v)} />
+              <IconButton
+                glyph="close"
+                data-nav="remove"
+                title={`remove ${refs?.[v]?.title ?? v}`}
+                onClick={() => drop(v)}
+              />
             </span>
           ))}
           {/*
@@ -163,6 +184,7 @@ export function FacetEditor({
           */}
           <PopoverButton
             className="addbtn"
+            nav="add"
             minWidth={320}
             fitContent
             label="+ note"
@@ -192,8 +214,14 @@ export function FacetEditor({
           <input
             type="date"
             className="dateinput"
+            data-nav="value"
             value={values[0] ?? ''}
             onChange={(e) => onChange(e.target.value ? [e.target.value] : [], 'set')}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.stopPropagation();
+              e.currentTarget.blur();
+            }}
           />
           {values[0] && (
             // `small`, and measured rather than assumed: against the date input's
@@ -202,7 +230,7 @@ export function FacetEditor({
             // centred and this is the one row with no chips in it to disagree
             // with — the date input's height is a native control's, not a step of
             // ours, which is the actual reason nothing here lines up exactly.
-            <Button tone="ghost" size="small" onClick={() => onChange([], 'set')}>
+            <Button tone="ghost" size="small" data-nav="clear" onClick={() => onChange([], 'set')}>
               clear
             </Button>
           )}
@@ -232,37 +260,35 @@ export function FacetEditor({
         ))}
         {def.open && (
           <span className="facetrow-add">
-            <input
-              value={adding}
-              placeholder="+ new"
-              /**
-               * Walkable **only when it is the row's only control.**
-               *
-               * An axis that declares no values and accepts new ones — `owner`, in
-               * the shipped vault — draws no chips at all, so without this the row
-               * held nothing to land on: `gf` and `j` could not reach it, and
-               * adding it with `gF` left focus nowhere.
-               *
-               * Not when there are chips beside it, and that is the whole of the
-               * restraint. It is a text field, so it owns every key it is given —
-               * `j` typed at it is a `j` — and putting one in the middle of a walk
-               * that is otherwise all buttons would be a stop you have to press
-               * Escape to get out of, on rows that have a perfectly good chip to
-               * land on instead.
-               */
-              data-nav={[...def.values, ...extras].length ? undefined : 'new'}
-              onChange={(e) => setAdding(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addNew();
-                if (e.key !== 'Escape') return;
-                e.stopPropagation();
-                // Clear, then leave — the rail's search box's rule, for the same
-                // reason: a field the app cannot take keys back from has to hand
-                // focus back itself, or the walk ends here.
-                if (adding) return setAdding('');
-                e.currentTarget.blur();
-              }}
-            />
+            {addingOpen ? (
+              <input
+                ref={addInput}
+                value={adding}
+                placeholder="+ new"
+                aria-label={`add a ${def.label} value`}
+                onChange={(e) => setAdding(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') return addNew();
+                  if (e.key !== 'Escape') return;
+                  e.stopPropagation();
+                  // Clear a draft first; a second Escape returns to the focused
+                  // action that opened this field.
+                  if (adding) return setAdding('');
+                  stopAdding();
+                }}
+              />
+            ) : (
+              <button
+                ref={addButton}
+                type="button"
+                className="facetrow-add-action"
+                data-nav="new"
+                title={`add a ${def.label} value`}
+                onClick={startAdding}
+              >
+                + new
+              </button>
+            )}
           </span>
         )}
       </>
@@ -273,8 +299,8 @@ export function FacetEditor({
     // `data-axis` is how `g⟨key⟩` finds this row's chips. The keyboard addresses
     // an axis by the letter the *vault* declared, and this is where that letter
     // lands in the DOM — the client still names no facet.
-    /* `row`: a facet's values are chips laid across the row, so `h`/`l` walk them
-       and `j`/`k` step to the axis above or below — which is how they are drawn. */
+    /* One note grammar, even when the row wraps: `j`/`k` walk its controls and
+       `h`/`l` move to the neighbouring group. */
     <div
       className={`facetrow ${lit ? 'is-touched' : ''}`}
       data-navlist="axis"

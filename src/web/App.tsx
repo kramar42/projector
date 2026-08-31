@@ -714,6 +714,7 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const s = keys.current;
       if (!s) return;
+      const target = e.target as HTMLElement | null;
       const out = bind(pending.at, {
         key: e.key,
         code: e.code,
@@ -725,7 +726,8 @@ export function App() {
       }, {
         facetKeys: s.facetKeys,
         groupedAxis: s.groupedAxis,
-        inField: inField(e.target as HTMLElement | null),
+        inField: inField(target),
+        navField: !!target?.matches?.('input[data-nav], textarea[data-nav]'),
       });
       pending.at = out.pending;
       if (!out.handled) return;
@@ -1204,7 +1206,9 @@ function navChips(within?: Element | null): HTMLElement[] {
  */
 function rowChips(facet: string, inverse: boolean): HTMLElement[] {
   const row = axisRow(facet, inverse);
-  return row ? navChips(row) : [];
+  // A reference row also has remove and add controls. Traversal means a note it
+  // names, not any action drawn beside that note, so only ref chips answer it.
+  return row ? [...row.querySelectorAll<HTMLElement>('[data-nav="ref"]')] : [];
 }
 
 /**
@@ -1234,8 +1238,19 @@ function stepSelect(el: HTMLSelectElement, delta: number): void {
  * into whatever axis happens to be drawn beneath it.
  */
 function listOf(el: Element | null): Element | null {
-  if (!el || !(el instanceof HTMLElement) || !el.dataset.nav) return null;
+  if (
+    !el ||
+    !(el instanceof HTMLElement) ||
+    (!el.dataset.nav && el.dataset.navMore === undefined)
+  ) {
+    return null;
+  }
   return el.closest('[data-navlist]');
+}
+
+/** Every keyboard step in a list, including the control that reveals a capped tail. */
+function listSteps(list: Element): HTMLElement[] {
+  return [...list.querySelectorAll<HTMLElement>('[data-nav], [data-nav-more]')];
 }
 
 /** The row a `g⟨key⟩` addresses: one axis, forward or inverted. */
@@ -1313,27 +1328,6 @@ function run(command: Command, s: KeyState): void {
        * focused page. The cursor remains the one write target; the open slot is
        * context, not a second pointer.
        */
-      if (s.stackOpen) {
-        const pages = stackPages(s.pins, s.openNote);
-        if (!pages.length) return;
-        if (command.along === 'row') {
-          const at = cursor.id ?? openNote ?? pages[0]!;
-          document
-            .querySelector(`.pinstack [data-page="${CSS.escape(at)}"] .pinpage-scroll`)
-            ?.scrollBy({ top: command.delta * PAGE_SCROLL });
-          return;
-        }
-        const at = pages.indexOf(cursor.id ?? openNote ?? '');
-        const to = at === -1 ? 0 : Math.min(pages.length - 1, Math.max(0, at + command.delta));
-        const next = pages[to]!;
-        if (next !== cursor.id) cursor.step(next);
-        return;
-      }
-      // Brackets name the third visible dimension. On a board or canvas that is
-      // a lane; on a calendar it is the next or previous page of time.
-      if (command.along === 'lane' && s.spec?.shape === 'calendar') {
-        return run({ kind: 'calendarPage', page: command.delta < 0 ? 'previous' : 'next' }, s);
-      }
       /**
        * `j` means "the next one" — of whatever you are currently in.
        *
@@ -1345,20 +1339,21 @@ function run(command: Command, s: KeyState): void {
       const list = listOf(at);
       if (list) {
         /**
-         * Which key walks a list, and which steps to the next one, follows how the
-         * list is *drawn*.
+         * Within a note, the command is independent of geometry.
          *
-         * A facet's values are chips laid across the row, and the axes stack down
-         * the panel — so `h`/`l` walk the values and `j`/`k` change axis. A link
-         * list and an inbound list are full-width rows stacked downward, so there
-         * `j`/`k` walk and `h`/`l` step between lists. One rule, read off the
-         * layout, rather than a convention the reader has to hold per surface.
+         * A facet, its references, and links are three groups in one reading
+         * surface, whether their controls happen to wrap or stack. `j`/`k` stay
+         * inside the group; `h`/`l` enter its neighbour. The previous
+         * geometry-sensitive rule made the same key leave a facet but stop in a
+         * link list, which is not a discoverable distinction.
          *
-         * It is also what the board already says with the same two keys: `j` goes
-         * down what is stacked and `l` goes across what is laid out.
+         * Rails and popovers are not note groups, so their existing geometry rule
+         * remains useful there: the reader can see a filter wrap or a picker
+         * stack, and no note-level grammar is being carried between them.
          */
+        const isNoteList = !!noteRoot()?.contains(list);
         const flow = (list as HTMLElement).dataset.navFlow ?? 'column';
-        const walks = flow === 'row' ? 'column' : 'row';
+        const walks = isNoteList ? 'row' : flow === 'row' ? 'column' : 'row';
         if (command.along === walks) return run({ kind: 'listMove', delta: command.delta }, s);
         /**
          * The next list that has something to land on.
@@ -1380,6 +1375,27 @@ function run(command: Command, s: KeyState): void {
       // A rail select is a list too, just one the browser insists on drawing.
       if (command.along === 'row' && at instanceof HTMLSelectElement && at.dataset.rail) {
         return stepSelect(at, command.delta);
+      }
+      if (s.stackOpen) {
+        const pages = stackPages(s.pins, s.openNote);
+        if (!pages.length) return;
+        if (command.along === 'row') {
+          const page = cursor.id ?? openNote ?? pages[0]!;
+          document
+            .querySelector(`.pinstack [data-page="${CSS.escape(page)}"] .pinpage-scroll`)
+            ?.scrollBy({ top: command.delta * PAGE_SCROLL });
+          return;
+        }
+        const at = pages.indexOf(cursor.id ?? openNote ?? '');
+        const to = at === -1 ? 0 : Math.min(pages.length - 1, Math.max(0, at + command.delta));
+        const next = pages[to]!;
+        if (next !== cursor.id) cursor.step(next);
+        return;
+      }
+      // Brackets name the third visible dimension. On a board or canvas that is
+      // a lane; on a calendar it is the next or previous page of time.
+      if (command.along === 'lane' && s.spec?.shape === 'calendar') {
+        return run({ kind: 'calendarPage', page: command.delta < 0 ? 'previous' : 'next' }, s);
       }
       return goToSpot(steppedTo(grid, s.cursorSpot, command.along, command.delta));
     }
@@ -1403,7 +1419,7 @@ function run(command: Command, s: KeyState): void {
       const list = listOf(document.activeElement);
       if (!list) return;
       const current = document.activeElement as HTMLElement;
-      const steps = [...list.querySelectorAll<HTMLElement>('[data-nav], [data-nav-more]')];
+      const steps = listSteps(list);
       const at = steps.indexOf(current);
       if (at === -1) return;
 
@@ -1713,9 +1729,12 @@ function run(command: Command, s: KeyState): void {
        * reason: reaching a list of choices and then having to press one more key
        * to be *in* it is the step the shortcut was supposed to remove.
        */
-      if (command.region === 'addFacet') {
+      if (command.region === 'addFacet' || command.region === 'addRef') {
         return focusSoon(() => {
-          const door = noteRoot()?.querySelector<HTMLElement>('[data-nav="add"]');
+          const kind = command.region === 'addRef' ? 'ref' : 'facet';
+          const door = noteRoot()?.querySelector<HTMLElement>(
+            `[data-add-axis="${kind}"] [data-nav="add"]`,
+          );
           if (!door) return null;
           if (door.getAttribute('aria-expanded') === 'false') {
             door.click();
@@ -2033,20 +2052,29 @@ function run(command: Command, s: KeyState): void {
       /**
        * Then whatever control focus is *in*, as distinct from what is on screen.
        *
-       * A chip list and a rail control are the same case: the reader stepped into
-       * something, and Escape steps out. The rail half was missing, and it was the
-       * worse of the two — after `,s` the shape select kept focus, so `j` and `k`
-       * went on changing the shape and there was no way back to the cards at all
-       * short of clicking one.
+       * `data-nav` is the keyboard's deliberate route into a note, but Tab still
+       * reaches ordinary buttons beside it — unlink, refresh, work — and Escape
+       * has to leave either kind. Otherwise focus can become a one-way door: the
+       * reader sees the note but `j`/`k` still belong to a stale control. A text
+       * editor handles its own Escape before the key chain sees it; this is every
+       * non-editor control in the current note.
        */
-      const inControl = listOf(document.activeElement) ||
-        (document.activeElement as HTMLElement | null)?.closest?.('[data-rail]');
+      const active = document.activeElement as HTMLElement | null;
+      const inNote = !!active && !!noteRoot()?.contains(active);
+      const inControl = inNote || listOf(active) || active?.closest?.('[data-rail]');
       if (inControl) {
+        // A spread has no usable card behind it — the main view is inert — so
+        // blurring is the honest return to its reading mode. The ordinary panel
+        // returns to the cursor's card, where the next motion already belongs.
+        if (inNote && s.stackOpen) {
+          active!.blur();
+          return;
+        }
         const card = cursor.id
           ? document.querySelector<HTMLElement>(`[data-card="${CSS.escape(cursor.id)}"]`)
           : null;
         if (card) card.focus();
-        else (document.activeElement as HTMLElement).blur();
+        else active?.blur();
         return;
       }
       if (s.notice) return s.notify(null);
@@ -2337,22 +2365,32 @@ function run(command: Command, s: KeyState): void {
      * prefix's own rule ("never leaves you with nothing") false for exactly the
      * case it was written about.
      *
-     * The same reach `gf` makes, narrowed to one axis. A note that carries nothing
-     * on it draws no row, so this says so rather than opening a note to nothing.
+     * The same reach `gf` makes, narrowed to one axis. When it is absent, the
+     * axis's own door reveals it and the same retry lands on its first control.
      */
     case 'openAxisControl': {
       if (!s.stackOpen && !openNote && cursor.id) s.setOpenNote(cursor.id);
       const def = s.facets[command.facet];
-      return focusSoon(
-        () => axisRow(command.facet, false)?.querySelector<HTMLElement>('[data-nav]'),
-        8,
-        // The note draws no row for this axis, which is what "carries nothing on
-        // it" looks like in the DOM. Say so, and say where the door is.
-        () =>
-          s.notify({
-            tone: 'info',
-            text: `nothing on ${def?.label ?? command.facet} — g⇧F adds an axis`,
-          }),
+      const kind = def?.type === 'ref' ? 'ref' : 'facet';
+      return focusSoon(() => {
+        const row = axisRow(command.facet, false);
+        if (row) return row.querySelector<HTMLElement>('[data-nav]');
+        const door = noteRoot()?.querySelector<HTMLElement>(
+          `[data-add-axis="${kind}"] [data-nav="add"]`,
+        );
+        if (!door) return null;
+        if (door.getAttribute('aria-expanded') === 'false') {
+          door.click();
+          return null;
+        }
+        const pick = document.querySelector<HTMLElement>(
+          `[data-axis-pick="${CSS.escape(command.facet)}"]`,
+        );
+        if (!pick) return null;
+        pick.click();
+        return null;
+      }, 12, () =>
+        s.notify({ tone: 'info', text: `cannot find ${def?.label ?? command.facet}` }),
       );
     }
 

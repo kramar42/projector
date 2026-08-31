@@ -91,6 +91,7 @@ function useRevealed(pick: string[], carried: (name: string) => boolean) {
 function AddAxis({
   label,
   title,
+  kind,
   hidden,
   defs,
   onPick,
@@ -99,6 +100,8 @@ function AddAxis({
   /** Distinct per section: two doors sharing one sentence are two doors a screen
       reader cannot tell apart, and the label is the only other thing it has. */
   title: string;
+  /** Which half of the vocabulary this door reveals. */
+  kind: 'facet' | 'ref';
   hidden: string[];
   defs: Meta['facets'];
   onPick: (name: string) => void;
@@ -108,58 +111,60 @@ function AddAxis({
     /*
      * A navlist of one, so the walk can reach the door.
      *
-     * `gf` enters the facet grid and `j` steps down the axes; the last step lands
-     * here, which is where it should land — the door is the bottom of that list in
-     * every sense but the DOM's. Without this the only keyboard path to an axis
-     * the note carries nothing on was Tab, which is the gap the hints were
-     * supposed to make visible rather than leave.
+     * `gf` enters the facet grid and `h`/`l` step between its groups; the last step
+     * lands here, which is where it should land — the door is the bottom of that
+     * list in every sense but the DOM's. It holds one control: `j`/`k` stay on the
+     * door and `h`/`l` move to its neighbouring note group. Without this the only
+     * keyboard path to an axis the note carries nothing on was Tab, which is the
+     * gap the hints were supposed to make visible rather than leave.
      */
-    <div data-navlist="add" data-nav-flow="column">
-    <PopoverButton
-      className="addbtn"
-      nav="add"
-      minWidth={180}
-      fitContent
-      label={label}
-      title={title}
-      render={(close) => (
-        <>
-          {hidden.map((n) => (
-            <button
-              key={n}
-              className="pop-pick"
-              data-nav="pick"
-              onClick={() => {
-                onPick(n);
-                close();
-                /**
-                 * And land on the row that just appeared.
-                 *
-                 * Revealing an axis is never the thing you wanted — giving it a
-                 * value is, and it is the very next move every time. Leaving focus
-                 * on a popover that has just unmounted drops it to the body, so
-                 * the keyboard had to find its way back to a row it had only just
-                 * asked for.
-                 *
-                 * Not only for the keyboard: a pointer has nothing else holding
-                 * focus at this moment either, so the same landing is right.
-                 */
-                focusSoon(() => {
-                  const root =
-                    document.querySelector<HTMLElement>('.pinstack .pinpage.is-focus') ??
-                    document.querySelector<HTMLElement>('.panel');
-                  return root?.querySelector<HTMLElement>(
-                    `[data-axis="${CSS.escape(n)}"]:not([data-inverse]) [data-nav]`,
-                  ) ?? null;
-                });
-              }}
-            >
-              <span className="truncate pop-pick-name">{defs[n]!.label}</span>
-            </button>
-          ))}
-        </>
-      )}
-    />
+    <div data-navlist="add" data-nav-flow="row" data-add-axis={kind}>
+      <PopoverButton
+        className="addbtn"
+        nav="add"
+        minWidth={180}
+        fitContent
+        label={label}
+        title={title}
+        render={(close) => (
+          <>
+            {hidden.map((n) => (
+              <button
+                key={n}
+                className="pop-pick"
+                data-nav="pick"
+                data-axis-pick={n}
+                onClick={() => {
+                  onPick(n);
+                  close();
+                  /**
+                   * And land on the row that just appeared.
+                   *
+                   * Revealing an axis is never the thing you wanted — giving it a
+                   * value is, and it is the very next move every time. Leaving focus
+                   * on a popover that has just unmounted drops it to the body, so
+                   * the keyboard had to find its way back to a row it had only just
+                   * asked for.
+                   *
+                   * Not only for the keyboard: a pointer has nothing else holding
+                   * focus at this moment either, so the same landing is right.
+                   */
+                  focusSoon(() => {
+                    const root =
+                      document.querySelector<HTMLElement>('.pinstack .pinpage.is-focus') ??
+                      document.querySelector<HTMLElement>('.panel');
+                    return root?.querySelector<HTMLElement>(
+                      `[data-axis="${CSS.escape(n)}"]:not([data-inverse]) [data-nav]`,
+                    ) ?? null;
+                  });
+                }}
+              >
+                <span className="truncate pop-pick-name">{defs[n]!.label}</span>
+              </button>
+            ))}
+          </>
+        )}
+      />
     </div>
   );
 }
@@ -252,6 +257,7 @@ function InboundRow({
         */}
         <IconButton
           glyph="focus"
+          data-nav="focus"
           title={`show every note that names this one on "${label}" — a view focus you can filter and group`}
           aria-label={`focus the view on ${label}`}
           onClick={onFocus}
@@ -340,6 +346,7 @@ export function Facets({
       <AddAxis
         label="+ facet"
         title="a property this note carries nothing on"
+        kind="facet"
         hidden={hidden}
         defs={defs}
         onPick={reveal}
@@ -421,6 +428,7 @@ export function Refs({
       <AddAxis
         label="+ ref"
         title="a reference this note names nothing on"
+        kind="ref"
         hidden={hidden}
         defs={defs}
         onPick={reveal}

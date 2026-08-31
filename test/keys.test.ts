@@ -153,6 +153,13 @@ test('a field owns every key it is given, Escape included', () => {
   assert.deepEqual(bind(null, stroke('Escape'), ctx()).command, { kind: 'escape' });
 });
 
+test('a note-navigation field gives only motion keys back to the note', () => {
+  const navField = ctx({ inField: true, navField: true });
+  assert.deepEqual(commandOf(['j'], navField), { kind: 'move', along: 'row', delta: 1 });
+  assert.deepEqual(commandOf(['h'], navField), { kind: 'move', along: 'column', delta: -1 });
+  assert.equal(commandOf(['a'], navField), null, 'ordinary text remains with the field');
+});
+
 test('a field is a field however it says so', () => {
   assert.ok(inField({ tagName: 'INPUT' }));
   assert.ok(inField({ tagName: 'TEXTAREA' }));
@@ -1144,6 +1151,13 @@ test('a letterless axis is offered, and offered without a key', () => {
 
   // One that does declare a letter says so, so the palette teaches the key.
   assert.equal(rows.find((r) => r.label === 'Group by Status')?.keys, ', g s');
+});
+
+test('the palette reaches the reference door', () => {
+  const addRef = PALETTE.find((row) => row.id === 'act.ref.add');
+  assert.ok(addRef, 'adding a reference is not a Tab-only panel control');
+  assert.deepEqual(addRef.command, { kind: 'gotoRegion', region: 'addRef' });
+  assert.equal(addRef.keys, undefined, 'the palette is honest that this generic door has no stroke');
 });
 
 test('a computed axis is grouped and sorted by, never walked from', () => {
