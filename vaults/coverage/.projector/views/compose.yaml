@@ -6,7 +6,7 @@
 # one reaches a computed axis (`staleness`) as a column, which that one does not.
 #
 # `shape` is an ordinary control on it: switch to a table for sections, or to a
-# canvas for bands. The columns stay the columns.
+# graph for bands. The columns stay the columns.
 shape: board
 title: Compose
 lists: [rule-no-project, rule-no-priority, rule-stale]

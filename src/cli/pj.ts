@@ -76,7 +76,7 @@ const typedName = (token: string): string => token.replace(/^--?/, '');
  *
  * The alternative was a hand-kept table of letters, and a hand-kept copy of a
  * list the code already has is what `SPEC_PARAMS` exists to stop: there were
- * three of those, the CLI's was short by two entries, and `pj ls --shape canvas`
+ * three of those, the CLI's was short by two entries, and `pj ls --shape graph`
  * simply did not exist for as long as nobody looked. A prefix needs no table and
  * cannot fall behind one.
  *

@@ -103,7 +103,7 @@ The rest of the vocabulary is built out of these.
 | **facet** | an axis a note carries values on (`status`, `priority`, `parent`), declared in `facets.yaml`. Every value is an array |
 | **project** | a note carrying a block of configuration that its members inherit |
 | **view** | a saved query, and how it is drawn |
-| **shape** | `board`, `canvas` or `table`. A view is a query; the shape is one field of it |
+| **shape** | `table`, `board`, `calendar` or `graph`. A view is a query; the shape is one field of it |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
 
 An axis labelled `ƒ` is *computed* from the notes rather than stored on them: `blocked`, `triage`,
@@ -116,7 +116,7 @@ the docs and the CLI use.
 
 **Everything is a query.** A view is `filter × search × focus × group × sort × shape`. Grouping a
 board by project and grouping it by priority are the same board with one control moved, so there is
-only ever one board to keep in step. Change the shape and the same notes are drawn as a canvas.
+only ever one board to keep in step. Change the shape and the same notes are drawn as a graph.
 
 **Relations are ordinary facets.** `parent`, `blocked_by` and `project` are facets whose values happen
 to be note ids, so they filter, group and sort like every other axis. That is what makes a mind-map

@@ -372,7 +372,7 @@ show: [project, status]
 #
 # Naming any children groups this view by \`lists\` — the one axis whose values
 # are other views rather than something read off a note. Everything else is an
-# ordinary view: \`shape\` below draws it as a board, and \`table\` and \`canvas\`
+# ordinary view: \`shape\` below draws it as a board, and \`table\` and \`graph\`
 # draw the same columns as sections and as bands.
 #
 # Drop \`groupBy\` in and the columns gain lanes:

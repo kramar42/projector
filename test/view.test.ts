@@ -648,10 +648,10 @@ test('a composition is checked: children exist, stay flat, nest never, and own o
   assert.match(issues({ unlisted: 'yes' })[0]!.message, /true or it is absent/);
 
   // `shape: lists` was the fourth shape. An older file saying it still draws —
-  // it falls through to `board`, which is what it drew — so it is named rather
+  // it falls through to the default table — so it is named rather
   // than refused, because the word now claims something untrue.
   assert.match(issues({ shape: 'lists', lists: ['leaf'] })[0]!.message, /no longer a shape/);
-  assert.match(issues({ shape: 'lists' })[0]!.message, /draws as a board/);
+  assert.match(issues({ shape: 'lists' })[0]!.message, /draws as a table/);
 
   // The columns are the children, so nothing else may claim the first grouping
   // position — and the message says how to keep both.

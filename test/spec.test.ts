@@ -128,11 +128,6 @@ test('a stale bookmark opens rather than erroring', () => {
   assert.equal(spec.query.focus, undefined);
 });
 
-test('the retired canvas wire name resolves to Graph', () => {
-  assert.equal(parseSpec({ shape: 'canvas' }).shape, 'graph');
-  assert.equal(specFromFile('old-graph', { shape: 'canvas' }).shape, 'graph');
-});
-
 test('a view file reads back as the query it was written from', () => {
   const spec = specFromFile('due', {
     shape: 'board',

@@ -14,9 +14,9 @@ number.
 | C2 | Nothing is written where somebody else reads | no code path writes to Jira, GitHub, Trello or Slack. A sink only you read — a notification to yourself — is not one of those |
 | C3 | Notes stay agent-editable | an agent edits them with plain file writes — no API, no app running |
 | C4 | No facet is privileged | every axis, relations included, is stored, filtered, grouped and written the same way |
-| C5 | Every shape a query projects into is equally first-class | board, canvas, table and calendar are editable, not just viewable — and there are exactly four. A composition is not a fifth: it decides where the columns come from, not how they are drawn, so it is the `lists` grouping axis and every shape draws it |
+| C5 | Every shape a query projects into is equally first-class | table, board, calendar and graph are editable, not just viewable — and there are exactly four. A composition is not a fifth: it decides where the columns come from, not how they are drawn, so it is the `lists` grouping axis and every shape draws it |
 | C6 | The note body is free-form | description, links, files, images — no template |
-| C7 | No freehand drawing | the canvas is notes and their references. This is what settles the canvas library |
+| C7 | No freehand drawing | the graph is notes and their references. This is what settles the graph implementation |
 | C8 | Derived signals are deterministic | every count and badge is computed, never inferred by a model |
 | C11 | Nothing derivable is also stored | one answer per question, so there is never a disagreement to arbitrate |
 | C9 | A view is a query, not a place | `view = filter × search × focus × group × sort × shape × show`. Everything derivable is a live control; everything hand-curated is a saved-view-only key |
@@ -915,13 +915,13 @@ frontmatter root and they cannot, and it is what leaves `staleness` a computed a
 **One face, for every note**, and one list saying what it shows. `chips` and `edges.show` asked the
 same question — *which facets does this view surface* — and how each is drawn follows from what it is:
 a label is a chip and a column, a reference is those *and* a line, and the first reference in `show`
-lays the canvas out. Two keys meant "why does my canvas draw nothing" was answered by the one you
+lays the graph out. Two keys meant "why does my graph draw nothing" was answered by the one you
 forgot.
 
-**`connect` follows the shape *and* the relation drawn.** Only a canvas honours it, so it is not a
+**`connect` follows the shape *and* the relation drawn.** Only a graph honours it, so it is not a
 query key — it is a run option carrying the relation to walk, decided by the shape and the vocabulary
 together, which the query half knows nothing about. Passing the relation rather than a flag is what
-stops a canvas laying out along one hierarchy and pulling context from another. `layoutRelation` is the
+stops a graph laying out along one hierarchy and pulling context from another. `layoutRelation` is the
 single answer to *which relation*, computed server-side and sent as `layout`, so the client never
 recomputes it.
 

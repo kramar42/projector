@@ -1,5 +1,5 @@
-# A grouped canvas: bands behind the nodes, drawn from the grouping axis.
-shape: canvas
+# A grouped graph: bands behind the nodes, drawn from the grouping axis.
+shape: graph
 title: Bands
 groupBy: [priority]
 show: [parent]

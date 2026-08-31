@@ -132,17 +132,6 @@ function one<T extends string>(value: string | undefined, allowed: readonly T[])
   return value !== undefined && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
 }
 
-/**
- * `canvas` was the original wire name for the graph projection. Keep old URLs
- * and saved views legible, but resolve them immediately so every new write uses
- * the name the reader sees.
- */
-function shapeOf(raw: unknown): Shape {
-  const value = String(raw ?? '');
-  if (value === 'canvas') return 'graph';
-  return one(value, SHAPES) ?? 'table';
-}
-
 function list(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
@@ -202,7 +191,7 @@ export function parseSpec(params: Record<string, string>): ViewSpec {
   const sort = list(params.sort);
   if (sort.length) query.sort = sort;
 
-  const shape = shapeOf(params.shape);
+  const shape = one(params.shape, SHAPES) ?? 'table';
 
   const calendar: CalendarConfig = {};
   const days = Number(params[CAL_COLS_PARAM]);
@@ -300,7 +289,7 @@ export const VIEW_KEYS: readonly string[] = [
 
 export function specFromFile(name: string, raw: Record<string, unknown>): ViewSpec {
   const params: Record<string, string> = {};
-  params.shape = shapeOf(raw.shape);
+  params.shape = one(String(raw.shape ?? ''), SHAPES) ?? 'table';
 
   for (const [facet, value] of Object.entries((raw.filter ?? {}) as Record<string, unknown>)) {
     const picked = Array.isArray(value) ? value.map(String) : [String(value)];

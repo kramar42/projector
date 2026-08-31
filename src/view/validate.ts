@@ -273,14 +273,14 @@ export function validateViews(
 
     // `shape: lists` was the fourth shape and is now the `lists:` key plus an
     // ordinary shape. An older file saying it still draws — `specFromFile` falls
-    // through to `board`, which is what it drew — so this is a nudge and not an
+    // through to the default table — so this is a nudge and not an
     // error, and it is worth one because the word now claims something untrue.
     if (raw?.shape === 'lists') {
       at(
         'shape',
         spec.lists?.length
-          ? '"lists" is no longer a shape — the "lists:" key makes this a composition, and the shape is how it is drawn ("board", "table" or "canvas"). Drop this line or name one of the three'
-          : '"lists" is no longer a shape, and no "lists:" key names any children — this view draws as a board',
+          ? '"lists" is no longer a shape — the "lists:" key makes this a composition, and the shape is how it is drawn ("table", "board", "calendar" or "graph"). Drop this line or name one of the four'
+          : '"lists" is no longer a shape, and no "lists:" key names any children — this view draws as a table',
       );
     }
 

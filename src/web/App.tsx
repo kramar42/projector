@@ -1298,6 +1298,11 @@ function run(command: Command, s: KeyState): void {
 
   switch (command.kind) {
     case 'setShape':
+      // `,s` intentionally parks on the selector so `j`/`k` can browse it.
+      // Its completed forms — `,s t/b/c/g` — are answers, though: leaving the
+      // select focused after one would make the next plain key mutate a control
+      // the reader has already left.
+      document.querySelector<HTMLSelectElement>('[data-rail="shape"]')?.blur();
       return s.edit((spec) => setShape(spec, command.shape));
 
     case 'move': {
