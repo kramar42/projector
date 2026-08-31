@@ -1843,7 +1843,9 @@ side, one row per axis where the candidate says something the note does not alre
 Click a **heading** to answer its whole column, a **cell** to answer one row, and the two compose in the
 order you click them — take all, then keep the status, is two clicks. **The left column is chosen to
 begin with**, which is exactly what folding did before the dialog existed, so you can dismiss it unread
-and nothing about the note changes. Only what you take is written. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
+and nothing about the note changes. A multi-value axis is marked **many**: its two cells toggle
+independently, so leaving both selected writes their deduplicated union. Single-value axes remain one
+choice. Only what differs from the note is written. It is deliberately not `parent`: `parent` means *part of* and is walked, so a candidate parented
 to a real note would sit in that note's children and roll-ups while it waited. Nothing walks
 `extends`.
 

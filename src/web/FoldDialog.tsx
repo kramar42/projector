@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from './components/Button.tsx';
 import { useDialogFocus } from './components/useDialogFocus.ts';
 import { api } from './api.ts';
-import { defaultSides, foldResult, type FoldRow, type Side } from '../schema/fold.ts';
+import { defaultSides, foldResult, type FoldRow, type FoldSides, type Side } from '../schema/fold.ts';
 
 /**
  * What folding this candidate into the note it extends would change.
@@ -11,7 +11,8 @@ import { defaultSides, foldResult, type FoldRow, type Side } from '../schema/fol
  * blocked, a branch merged, a thread that made it urgent — and a merge refuses to
  * touch the survivor's labels, correctly, because combining two `status` values
  * would be a guess about which note you meant. So the guess is not made: the two
- * values are put side by side and the person picks.
+ * values are put side by side and the person picks. Multi-value facets are the
+ * truthful exception: both sources can stay selected, which writes their union.
  *
  * **The left column is selected to begin with**, which is exactly what folding did
  * before this dialog existed. That is the point of the default rather than
@@ -20,7 +21,9 @@ import { defaultSides, foldResult, type FoldRow, type Side } from '../schema/fol
  * Taking every proposal is then one click on the other heading.
  *
  * A heading sets its whole column; a cell sets its own row; the two compose in the
- * order clicked, so "all theirs, except the status" is two clicks.
+ * order clicked, so "all theirs, except the status" is two clicks. On an axis
+ * that admits many values, each cell toggles independently instead of pretending
+ * the two sets are mutually exclusive.
  */
 export function FoldDialog({
   id,
@@ -35,7 +38,7 @@ export function FoldDialog({
   onFolded: (into: string) => void;
 }) {
   const [plan, setPlan] = useState<{ into: string; title: string; rows: FoldRow[] } | null>(null);
-  const [sides, setSides] = useState<Record<string, Side>>({});
+  const [sides, setSides] = useState<FoldSides>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
@@ -65,7 +68,22 @@ export function FoldDialog({
   }, [onClose]);
 
   const setAll = (side: Side) =>
-    setSides(Object.fromEntries((plan?.rows ?? []).map((r) => [r.facet, side])));
+    setSides(Object.fromEntries((plan?.rows ?? []).map((r) => [r.facet, [side] as const])));
+
+  const chosen = (row: FoldRow, side: Side) => (sides[row.facet] ?? ['before']).includes(side);
+
+  const choose = (row: FoldRow, side: Side) => {
+    setSides((current) => {
+      if (!row.multi) return { ...current, [row.facet]: [side] };
+      const existing = current[row.facet] ?? ['before'];
+      return {
+        ...current,
+        [row.facet]: existing.includes(side)
+          ? existing.filter((picked) => picked !== side)
+          : [...existing, side],
+      };
+    });
+  };
 
   async function confirm() {
     if (!plan) return;
@@ -79,7 +97,8 @@ export function FoldDialog({
     }
   }
 
-  const taken = (plan?.rows ?? []).filter((r) => sides[r.facet] === 'after').length;
+  const adopted = (plan?.rows ?? []).filter((r) => chosen(r, 'after')).length;
+  const merged = (plan?.rows ?? []).filter((r) => r.multi && chosen(r, 'before') && chosen(r, 'after')).length;
   const rows = plan?.rows ?? [];
 
   return (
@@ -127,13 +146,17 @@ export function FoldDialog({
             <tbody>
               {rows.map((r) => (
                 <tr key={r.facet}>
-                  <td className="fold-axis">{r.facet}</td>
+                  <td className="fold-axis">
+                    {r.facet}
+                    {r.multi && <span className="fold-many" title="both value sets may stay selected">many</span>}
+                  </td>
                   <td>
                     <button
                       type="button"
-                      className={`fold-cell ${sides[r.facet] === 'before' ? 'is-chosen' : ''}`}
-                      aria-pressed={sides[r.facet] === 'before'}
-                      onClick={() => setSides((s) => ({ ...s, [r.facet]: 'before' }))}
+                      className={`fold-cell ${chosen(r, 'before') ? 'is-chosen' : ''}`}
+                      aria-pressed={chosen(r, 'before')}
+                      aria-label={`${r.multi ? 'Toggle' : 'Choose'} existing ${r.facet} values`}
+                      onClick={() => choose(r, 'before')}
                     >
                       {/* An axis the note does not carry has nothing to keep, and
                           saying so is clearer than an empty cell that reads as a
@@ -144,9 +167,10 @@ export function FoldDialog({
                   <td>
                     <button
                       type="button"
-                      className={`fold-cell ${sides[r.facet] === 'after' ? 'is-chosen' : ''}`}
-                      aria-pressed={sides[r.facet] === 'after'}
-                      onClick={() => setSides((s) => ({ ...s, [r.facet]: 'after' }))}
+                      className={`fold-cell ${chosen(r, 'after') ? 'is-chosen' : ''}`}
+                      aria-pressed={chosen(r, 'after')}
+                      aria-label={`${r.multi ? 'Toggle' : 'Choose'} proposed ${r.facet} values`}
+                      onClick={() => choose(r, 'after')}
                     >
                       {r.after.join(', ')}
                     </button>
@@ -162,7 +186,7 @@ export function FoldDialog({
             <span className="declined-count">
               {rows.length === 0
                 ? 'body, links and provenance move across'
-                : `${taken} of ${rows.length} taken · body, links and provenance move across either way`}
+                : `${adopted} of ${rows.length} proposals selected${merged ? ` · ${merged} merged` : ''} · body, links and provenance move across either way`}
             </span>
             <Button tone="primary" size="small" disabled={busy} onClick={() => void confirm()}>
               {busy ? 'folding…' : 'fold in'}

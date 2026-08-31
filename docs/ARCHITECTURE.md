@@ -777,7 +777,8 @@ meant — and that left a sweep unable to say that something already tracked had
 is not to teach merge to overwrite, which would cost the property that makes it safe. It is that **a
 reference facet is merge's to union and everything else is a question**: `schema/fold.ts` states it, one
 row per axis where the candidate proposes something the note does not already say, and the person
-answers before either write happens.
+answers before either write happens. A single-value row chooses one side; a multi-value row can retain
+both, and writes their deduplicated union.
 
 The default answer is the note as it stands, which is exactly what folding did before the dialog
 existed — so it can be dismissed unread and behave as it always did, and taking every proposal is one

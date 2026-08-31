@@ -1217,6 +1217,7 @@ const noteWith = (id: string, facets: Record<string, string[]>) =>
 const FOLD_DEFS = {
   status: { type: 'label', values: ['active', 'blocked'], single: true },
   priority: { type: 'label', values: ['now', 'month'], single: true },
+  tag: { type: 'label', values: ['client', 'urgent'], single: false },
   project: { type: 'ref', values: [], open: true },
   parent: { type: 'ref', values: [], open: true, single: true },
 } as unknown as Facets;
@@ -1240,7 +1241,7 @@ test('a fold asks about the axes a merge refuses to touch, and no others', () =>
     'status differs so it is asked; priority already agrees; project is merge’s to union; ' +
       'intake and extends are the pipeline’s',
   );
-  assert.deepEqual(rows[0], { facet: 'status', before: ['active'], after: ['blocked'] });
+  assert.deepEqual(rows[0], { facet: 'status', multi: false, before: ['active'], after: ['blocked'] });
 });
 
 test('an axis the note lacks is a row too, and says it holds nothing', () => {
@@ -1250,7 +1251,7 @@ test('an axis the note lacks is a row too, and says it holds nothing', () => {
     FOLD_DEFS,
   );
   // A clean addition is still a decision — taking it is a change to the note.
-  assert.deepEqual(rows, [{ facet: 'priority', before: [], after: ['now'] }]);
+  assert.deepEqual(rows, [{ facet: 'priority', multi: false, before: [], after: ['now'] }]);
 });
 
 test('the default keeps the note exactly as it is', () => {
@@ -1272,11 +1273,23 @@ test('only the axes taken are written, so keeping one writes nothing for it', ()
     noteWith('target', { status: ['active'], priority: ['month'] }),
     FOLD_DEFS,
   );
-  const sides = { ...defaultSides(rows), status: 'after' as const };
+  const sides = { ...defaultSides(rows), status: ['after'] as const };
 
   // `priority` stays on the note's own value, and is absent rather than written
   // back — a write that changes nothing still moves the file's stamp.
   assert.deepEqual(foldResult(rows, sides), { status: ['blocked'] });
+});
+
+test('a multi-value facet can keep both sides as a union', () => {
+  const rows = foldRows(
+    noteWith('cand', { tag: ['urgent', 'client'] }),
+    noteWith('target', { tag: ['client'] }),
+    FOLD_DEFS,
+  );
+  assert.deepEqual(rows, [{ facet: 'tag', multi: true, before: ['client'], after: ['urgent', 'client'] }]);
+
+  const sides = { ...defaultSides(rows), tag: ['before', 'after'] as const };
+  assert.deepEqual(foldResult(rows, sides), { tag: ['client', 'urgent'] });
 });
 
 test('a fold applies what was taken and merges the rest, in that order', () => {

@@ -5629,6 +5629,13 @@ input[data-nav]:focus + .checkbox {
   font-size: var(--text-sm);
   color: var(--ink-3);
 }
+.fold-many {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+}
 /* A column heading that is a control. Underlined so it reads as pressable in a
    row of headings that are not. */
 .fold-col {

@@ -13,9 +13,10 @@ import type { Facets, Note } from './types.ts';
  *
  * So the division is exact rather than approximate. **A reference facet is
  * merge's**, which unions both ends and needs no decision — a note is a member of
- * both projects, part of both parents. **Everything else is a question**, because
- * one value has to win, and the person is the only one who can say which. This
- * module states the question; it decides nothing.
+ * both projects, part of both parents. **Everything else is a question**: a
+ * single-value axis needs one value to win, while a multi-value axis can
+ * truthfully retain both sets. This module states that question; it decides
+ * nothing.
  *
  * Pure, so every rule below is asserted directly rather than through a vault.
  */
@@ -23,6 +24,8 @@ import type { Facets, Note } from './types.ts';
 /** An axis where the candidate proposes something the note does not already say. */
 export interface FoldRow {
   facet: string;
+  /** Multi-value rows may retain either set, neither, or both as a real union. */
+  multi: boolean;
   /** What the note holds now. Empty when it holds nothing — a clean addition. */
   before: string[];
   /** What the candidate proposes. Never empty; a row exists because there is one. */
@@ -31,6 +34,9 @@ export interface FoldRow {
 
 /** Which side of a row was chosen. `before` keeps the note as it is. */
 export type Side = 'before' | 'after';
+
+/** The selected sources for one row. Single-value rows always carry one side. */
+export type FoldSides = Record<string, readonly Side[]>;
 
 /**
  * The app's own bookkeeping, which a fold never asks about.
@@ -62,7 +68,7 @@ export function foldRows(candidate: Note, target: Note, defs: Facets): FoldRow[]
     if (!after.length) continue;
     const before = target.facets[facet] ?? [];
     if (same(before, after)) continue;
-    rows.push({ facet, before, after });
+    rows.push({ facet, multi: !defs[facet]!.single, before, after });
   }
   return rows;
 }
@@ -76,24 +82,34 @@ export function foldRows(candidate: Note, target: Note, defs: Facets): FoldRow[]
  * it always did, so the cost of adding it to the path is zero for anyone who does
  * not want it. Taking every proposal is then one click on the other column.
  */
-export function defaultSides(rows: readonly FoldRow[]): Record<string, Side> {
-  return Object.fromEntries(rows.map((r) => [r.facet, 'before' as Side]));
+export function defaultSides(rows: readonly FoldRow[]): FoldSides {
+  return Object.fromEntries(rows.map((r) => [r.facet, ['before'] as const]));
 }
 
 /**
  * The facets to write, given what was chosen.
  *
- * Only the axes where the proposal won: an axis left on `before` is one the note
- * already answers for, and writing its current value back would be a write that
- * changes nothing while touching the file's `updated` stamp.
+ * Only axes whose selected values differ from the note: a row left on `before`
+ * is one the note already answers for, and writing its current value back would
+ * be a write that changes nothing while touching the file's `updated` stamp.
  */
 export function foldResult(
   rows: readonly FoldRow[],
-  sides: Record<string, Side>,
+  sides: FoldSides,
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const row of rows) {
-    if (sides[row.facet] === 'after') out[row.facet] = row.after;
+    const picked = sides[row.facet] ?? ['before'];
+    // The wire is not trusted to make a single-value facet contradictory. The
+    // dialog never offers two choices there; this keeps that invariant true for
+    // any other caller too.
+    const chosen = row.multi
+      ? picked
+      : picked.includes('after')
+        ? ['after']
+        : ['before'];
+    const values = [...new Set(chosen.flatMap((side) => side === 'before' ? row.before : row.after))];
+    if (!same(row.before, values)) out[row.facet] = values;
   }
   return out;
 }
