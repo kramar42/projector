@@ -1,10 +1,25 @@
 import { evidenceFor } from './match.ts';
-import { run } from '../sources/run.ts';
+import { run, ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
-import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.ts';
+import {
+  conversationsFrom,
+  costFromEnvelope,
+  knownFor,
+  parseGmailRelay,
+  parseSlackRelay,
+  relayInstructions,
+  searchToolIn,
+  slackBoundary,
+  trackedBy,
+  transcribedAll,
+  transcript,
+  type Conversation,
+  type RelayKind,
+} from './relay.ts';
+import type { Candidate, Channel, ChannelReport, IntakeContext, Match } from './types.ts';
 
 /**
- * Slack, plus the legacy Gmail fallback: fetched by an agent through MCP.
+ * Slack and Gmail: fetched by an agent through MCP, as a relay.
  *
  * A second token in a second place to rotate buys nothing when an agent already
  * has both through MCP. What `pj` keeps is the *watermark* — where the last sweep
@@ -20,126 +35,138 @@ import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.t
  * did. So the failure of omission is the old behaviour, and enabling a write is
  * something a person has to spell out.
  *
- * The fetch and the judgement stay separate. This returns candidates in the same
- * shape `git` and `claude` return, and `classify` then judges every channel by
- * one policy — rather than each channel arriving with its own opinion.
+ * **The agent copies; this file computes; the classifier judges.** What the
+ * agent is asked for, and what is made of it, is `relay.ts`. What is left here is
+ * the channel: the unit is a conversation rather than a message, a conversation
+ * the vault already tracks arrives as an update, and the exchange itself — with
+ * the owner's lines marked — is what the classifier is shown. That is the whole
+ * difference between "Vivek asks about AWS contracts" as a card and knowing the
+ * owner answered eleven minutes later.
  */
 
-/** What the agent is told to produce. Deliberately the smallest useful shape. */
-const SCHEMA = `[{"id":"<stable id>","url":"<permalink>","when":"<ISO 8601>","title":"<one line, the sender's words>","detail":"<one line of context: who, where>"}]`;
-
-/** Exported for the test that pins the secrets rule; nothing else calls it. */
-export function instructions(kind: 'slack' | 'gmail', cursor: string | null, days: number): string {
-  const window = cursor ? `since ${cursor}` : `from the last ${days} days`;
-  const what =
-    kind === 'slack'
-      ? 'messages addressed to the user, mentions, and threads they are part of'
-      : 'threads where a person is asking the user something, or waiting on them';
-  // Two fields because they answer two questions, which `linkFor` sets out.
-  const permalink =
-    kind === 'slack'
-      ? 'the message permalink, the https://…slack.com/archives/… form'
-      : 'the thread URL, the https://mail.google.com/… form';
-  return [
-    `Search ${kind} for ${what}, ${window}.`,
-    '',
-    'READ ONLY. Do not post, reply, send, draft, archive, label, or modify anything.',
-    'You are gathering, not answering, and not deciding what matters — something',
-    'else does that. Return everything you find that a person might want to act on.',
-    '',
-    '`id` is a stable identifier, used only to recognise this item again — a',
-    `channel and timestamp is a fine one. \`url\` is ${permalink}, and it is what a`,
-    'person opens, so it must be a real URL and never the id in another costume.',
-    'Omit `url` when you genuinely cannot get one; never invent or assemble one.',
-    '',
-    'Never reproduce a secret. When a message contains a token, an API key or a',
-    'password, say that it does — "contains an API token" — and leave the value out',
-    'of both title and detail. A scratchpad message is exactly where one turns up.',
-    '',
-    `Reply with ONLY a JSON array, no prose and no code fences:\n${SCHEMA}`,
-    '',
-    'An empty array is a valid and common answer. Never invent an item.',
-  ].join('\n');
-}
-
-interface Item {
-  id?: unknown;
-  url?: unknown;
-  when?: unknown;
-  title?: unknown;
-  detail?: unknown;
-}
-
-/** The first balanced array in the reply, for the reason `classify` gives. */
-function parseItems(text: string): Item[] | null {
-  const start = text.indexOf('[');
-  const end = text.lastIndexOf(']');
-  if (start === -1 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1)) as unknown;
-    if (!Array.isArray(parsed)) return null;
-    return parsed.filter((x): x is Item => Boolean(x) && typeof x === 'object');
-  } catch {
-    return null;
-  }
-}
-
-const str = (v: unknown, max: number): string =>
-  (typeof v === 'string' ? v.trim() : '').slice(0, max);
-
-/**
- * The link a captured message carries, which is not its fingerprint.
- *
- * These two channels used to write `links: [fingerprint]`, and `git` is the one
- * that never did — it builds a `gh:branch:` ref and lets the fingerprint be a
- * fingerprint. The difference showed: a fingerprint is a dedup key, so the id a
- * Slack tool volunteers is a channel and a timestamp, and `fallbackHref` answers
- * `null` for it because there is nowhere to go. The panel then drew the row it
- * draws for any unclickable link — the opaque id as dead text under a `slack`
- * chip. Nothing was wrong with the widget; it was rendering a link that was
- * never one.
- *
- * A url that is not a url buys nothing, so it is dropped rather than written: a
- * note with no link and a `source` facet is honest, and `source_fingerprint`
- * still dedups it.
- *
- * `slack` is a declared kind and keeps its prefix. `gmail` is not one and must
- * not become one — a kind earns its place by being resolvable (see
- * `src/schema/links.ts`), nothing fetches a Gmail thread, and import provenance
- * is the `source` facet's job. So a thread travels as the plain URL it is, which
- * `parseLink` reads as `url` and the panel opens.
- */
-export function linkFor(kind: 'slack' | 'gmail', url: string): string[] {
+/** The link a captured conversation carries, which is not its fingerprint. */
+export function linkFor(kind: RelayKind, url: string): string[] {
   if (!/^https?:\/\//.test(url)) return [];
   return [kind === 'slack' ? `slack:${url}` : url];
 }
 
-function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: string): Channel {
+function held(kind: RelayKind, ctx: IntakeContext, reason: string, cost?: ChannelReport['cost']): ChannelReport {
+  return {
+    channel: kind,
+    cursor: ctx.cursor,
+    // A run that fetched nothing has no boundary to move to.
+    nextCursor: null,
+    fetched: false,
+    reason,
+    candidates: [],
+    skipped: [],
+    ...(cost ? { cost } : {}),
+  };
+}
+
+/**
+ * The candidates one conversation produces: one, or none.
+ *
+ * Nothing new from anyone else since the cursor means nothing to react to, so it
+ * is skipped with that reason — the owner's own messages are not news to them,
+ * and a thread the day-granular Gmail search returned from before the cursor has
+ * already been answered for.
+ * Otherwise it is an **update** when an open note already tracks the
+ * conversation, and a discovery when none does. The two differ in fingerprint —
+ * an update is keyed by the newest message, so each new exchange is its own
+ * offer and its own decline — and in evidence: an update names the notes it may
+ * extend, first among its matches, and `classify` will let it do nothing else.
+ */
+export function candidateFor(
+  kind: RelayKind,
+  ctx: IntakeContext,
+  conv: Conversation,
+  tracked: string[],
+): Candidate | null {
+  // An ask with no words — an app posting an attachment-only card, a Jira bot's
+  // empty DM — gives a reader nothing to read and a classifier nothing to judge.
+  if (!conv.asks.some((m) => m.text.trim())) return null;
+  const ask = conv.asks.find((m) => m.text.trim()) ?? conv.asks[0]!;
+  const newest = conv.asks.at(-1)!;
+  const anchor = tracked.length ? newest : ask;
+  const fingerprint =
+    kind === 'slack'
+      ? `slack:${conv.channel}/${anchor.id}`
+      : tracked.length
+        ? `gmail:${conv.channel}@${anchor.id}`
+        : `gmail:${conv.channel}`;
+  const links = linkFor(kind, anchor.url ?? '');
+  const text = [conv.name, ...conv.asks.map((m) => m.text)].join(' ');
+  const mechanical = evidenceFor(ctx, { fingerprint, links, text });
+
+  const others = [...new Set(conv.asks.map((m) => m.from))];
+  const who = others.length > 2 ? `${others.slice(0, 2).join(', ')} and others` : others.join(' and ');
+  // Slack labels a DM with the other person's name, which the sentence already
+  // says; a channel or a thread is worth naming.
+  const where =
+    kind === 'gmail'
+      ? `email “${conv.name.slice(0, 60)}”`
+      : others.includes(conv.name) || /^[DG]/.test(conv.channel) && others.length === 1
+        ? 'a DM'
+        : conv.name;
+  const lastBy = conv.last.mine ? 'you' : conv.last.from;
+  const detail =
+    `${who} in ${where} — ${conv.asks.length} new message(s), last word ${lastBy} ${ago(conv.last.at)}` +
+    (tracked.length ? `; already on ${tracked.join(', ')}` : '');
+
+  const trackedMatches: Match[] = tracked.map((id) => ({
+    id,
+    title: ctx.notes.get(id)?.title ?? id,
+    why: 'tracked',
+  }));
+  const matches = [...trackedMatches];
+  for (const m of mechanical.matches ?? []) if (!matches.some((x) => x.id === m.id)) matches.push(m);
+
+  return {
+    channel: kind,
+    fingerprint,
+    title: (ask.text || conv.name).replace(/\s+/g, ' ').slice(0, 300),
+    links,
+    when: newest.at,
+    detail,
+    fields: [
+      { k: 'conversation', v: transcript(conv) },
+      { k: 'ball', v: conv.ball === 'mine' ? 'theirs was the last word, so it is with you' : 'you had the last word' },
+      ...(conv.myLastAt ? [{ k: 'you last wrote', v: ago(conv.myLastAt) }] : []),
+      ...(tracked.length ? [{ k: 'tracked_as', v: tracked.join(', ') }] : []),
+    ],
+    evidence: {
+      ...(tracked.length ? { linkedTo: tracked } : mechanical.linkedTo ? { linkedTo: mechanical.linkedTo } : {}),
+      ...(mechanical.capturedAs ? { capturedAs: mechanical.capturedAs } : {}),
+      ...(matches.length ? { matches } : {}),
+    },
+  };
+}
+
+function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string): Channel {
   return {
     name: kind,
     defaultDays,
     async collect(ctx: IntakeContext): Promise<ChannelReport> {
       const cfg = settingsFor(ctx.root);
       const tools = cfg.mcp[kind];
-      const held: ChannelReport = {
-        channel: kind,
-        cursor: ctx.cursor,
-        // A run that fetched nothing has no boundary to move to.
-        nextCursor: null,
-        fetched: false,
-        candidates: [],
-        skipped: [],
-      };
-
-      if (!tools.length) {
-        return { ...held, reason: manualHint };
+      if (!tools.length) return held(kind, ctx, manualHint);
+      const searchTool = searchToolIn(kind, tools);
+      if (!searchTool) {
+        return held(
+          kind,
+          ctx,
+          `mcp.${kind} names no search tool — the relay needs ` +
+            (kind === 'slack' ? 'slack_search_public_and_private' : 'search_threads'),
+        );
       }
 
+      const started = Date.now();
       const res = await run(
         cfg.mcp.command,
         [
           '-p',
-          instructions(kind, ctx.cursor, defaultDays),
+          relayInstructions(kind, { since: ctx.since, pages: cfg.mcp.pages, searchTool }),
           '--model',
           cfg.mcp.model,
           // The whole safety story in one flag: only the tools the vault named,
@@ -150,93 +177,122 @@ function agentChannel(kind: 'slack' | 'gmail', defaultDays: number, manualHint: 
           '--output-format',
           'json',
         ],
-        { timeoutMs: 300_000 },
+        { timeoutMs: cfg.mcp.timeoutSeconds * 1000 },
       );
+      const elapsed = Date.now() - started;
       if (!res.ok) {
-        return { ...held, reason: `the ${kind} agent could not be run: ${res.stderr.slice(0, 200)}` };
+        return held(kind, ctx, `the ${kind} relay could not be run: ${res.stderr.slice(0, 200)}`, { ms: elapsed });
       }
 
       let reply: string;
+      let env: Record<string, unknown>;
       try {
-        const env = JSON.parse(res.stdout) as { result?: unknown; is_error?: boolean };
+        env = JSON.parse(res.stdout) as Record<string, unknown>;
         if (env.is_error || typeof env.result !== 'string') {
-          return { ...held, reason: `the ${kind} agent reported an error` };
+          return held(kind, ctx, `the ${kind} relay reported an error`, costFromEnvelope(env, elapsed));
         }
         reply = env.result;
       } catch {
-        return { ...held, reason: `the ${kind} agent did not answer in JSON` };
+        return held(kind, ctx, `the ${kind} relay did not answer in JSON`, { ms: elapsed });
+      }
+      const cost = costFromEnvelope(env, elapsed);
+
+      const parsed = kind === 'slack' ? parseSlackRelay(reply) : parseGmailRelay(reply);
+      if (!parsed) return held(kind, ctx, `the ${kind} relay's answer could not be read`, cost);
+
+      const known = knownFor(kind, ctx);
+      const candidates: Candidate[] = [];
+      const skipped: ChannelReport['skipped'] = [];
+      let newest = ctx.cursor;
+      let truncated = parsed.more;
+
+      for (const conv of conversationsFrom(kind, parsed.messages, ctx.cursor)) {
+        if (!newest || conv.last.at > newest) newest = conv.last.at;
+        const tracked = trackedBy(conv, known);
+        const c = candidateFor(kind, ctx, conv, tracked);
+        if (!c) {
+          skipped.push({
+            fingerprint: `${kind}:${conv.key}/${conv.last.id}`,
+            title: conv.name,
+            why: conv.asks.length ? 'nothing said in words since the cursor' : 'nothing new from anyone else since the cursor',
+          });
+          continue;
+        }
+        if (candidates.length >= ctx.limit) {
+          truncated = true;
+          break;
+        }
+        // The same convergence every other channel has: a conversation already
+        // answered for is not new, whatever the relay returned.
+        if (c.evidence?.capturedAs?.length) {
+          skipped.push({ fingerprint: c.fingerprint, title: c.title, why: `already captured as ${c.evidence.capturedAs.join(', ')}` });
+          continue;
+        }
+        candidates.push(c);
       }
 
-      const items = parseItems(reply);
-      if (!items) return { ...held, reason: `the ${kind} agent's answer could not be read` };
+      const notes: string[] = [];
+      if (parsed.dropped) notes.push(`${parsed.dropped} relay record(s) failed validation and were dropped`);
 
-      const candidates: Candidate[] = [];
-      let newest = ctx.cursor;
-      for (const item of items) {
-        const id = str(item.id, 200);
-        if (!id) continue;
-        const fingerprint = `${kind}:${id}`;
-        const links = linkFor(kind, str(item.url, 500));
-        // The same convergence every other channel has: something the vault
-        // already answers for is not new, whatever the agent thinks. Two ways in
-        // now that the two are different strings — the fingerprint of a card this
-        // sweep wrote before, and the permalink of one somebody linked by hand,
-        // which used to be the same check by accident and is now the point of it.
-        if (ctx.fingerprints.has(fingerprint) || links.some((l) => ctx.links.has(l))) continue;
-        const when = str(item.when, 40);
-        if (when && (!newest || when > newest)) newest = when;
-        const title = str(item.title, 300) || id;
-        const detail = str(item.detail, 400);
-        candidates.push({
-          channel: kind,
-          fingerprint,
-          title,
-          links,
-          ...(when ? { when } : {}),
-          ...(detail ? { detail } : {}),
-          /**
-           * The same evidence every other channel attaches, and it is not a
-           * nicety: `classify` may only name a merge target that appears in
-           * `matches`, so a candidate with no evidence can never be judged
-           * `extend` — the verdict is demoted to a new note. Without this a Slack
-           * message that says a ticket has moved could only ever become a second
-           * card beside the one it was about.
-           *
-           * No `cwd` or `branch` to offer — a message has neither — so the match
-           * is on the text: a Jira key it mentions, or vocabulary it shares with
-           * a note.
-           */
-          evidence: evidenceFor(ctx, {
-            fingerprint,
-            links,
-            text: [title, detail].filter(Boolean).join(' — '),
-          }),
-        });
+      /**
+       * A relay that ran out of pages did not examine the whole window, and what
+       * that means for the cursor depends on the order the pages came in. Slack's
+       * are oldest-first and contiguous, so the run moves the cursor to the last
+       * point both searches reached and says so — the rest arrives next run, and
+       * holding instead would make an agent that stops early an agent that never
+       * gets past the same first pages (see `slackBoundary`). Gmail's pages are
+       * newest-first, so a cut-short run holds, as every other truncated run does.
+       */
+      let nextCursor = newest === ctx.cursor ? null : newest;
+      if (parsed.more && kind === 'slack') {
+        const boundary = slackBoundary(parsed.messages);
+        nextCursor = boundary && boundary !== ctx.cursor ? boundary : null;
+        truncated = false;
+        notes.push(`more pages behind ${boundary ?? 'the cursor'} — the next run resumes there`);
+      }
+      /**
+       * A model transcribing pages can leave records out without failing any
+       * validation, and a cursor moved past them loses them for good. The relay
+       * copies each page's own result count; when the records do not add up to
+       * it, the candidates it did produce are still offered, but the cursor
+       * holds and the run says why. The next run pays the fetch again — the
+       * price of not trusting a copy, and cheaper than the alternative.
+       */
+      const complete = transcribedAll(parsed);
+      if (complete === false) {
+        nextCursor = null;
+        truncated = true;
+        notes.push(
+          `the relay reported ${parsed.reported} result(s) and transcribed ${parsed.transcribed} — cursor held`,
+        );
+      } else if (complete === null) {
+        notes.push('the relay reported no page counts, so completeness could not be checked');
       }
 
       return {
         channel: kind,
         cursor: ctx.cursor,
-        // Only when the run actually completed. An agent that answered is a
-        // channel that was read, and the boundary is the newest thing it saw.
-        nextCursor: newest === ctx.cursor ? null : newest,
+        nextCursor,
         fetched: true,
+        truncated,
+        ...(notes.length ? { reason: notes.join('; ') } : {}),
         candidates,
-        skipped: [],
+        skipped,
+        cost,
       };
     },
   };
 }
 
-export const slackChannel = agentChannel(
+export const slackChannel = relayChannel(
   'slack',
   7,
   'no Slack tools named for this vault — set mcp.slack in .projector/config.yaml, ' +
-    'or fetch by hand and: pj intake cursor set --channel slack --cursor <ts>',
+    'or fetch by hand and: pj intake cursor set --channel slack --cursor <iso>',
 );
 
-/** Compatibility path for vaults that still name Claude MCP tools. */
-export const gmailMcpChannel = agentChannel(
+/** Gmail through the relay. `gmail.ts` chooses between this and gogcli. */
+export const gmailMcpChannel = relayChannel(
   'gmail',
   14,
   'no Gmail tools named for this vault — set mcp.gmail in .projector/config.yaml, ' +

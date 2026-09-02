@@ -5,13 +5,17 @@ import { settingsFor } from '../settings.ts';
 import type { Candidate, Channel, ChannelReport, IntakeContext } from './types.ts';
 
 /**
- * Gmail without an agent in the fetch path.
+ * Gmail: through gogcli when a vault chose that, through the MCP relay otherwise.
  *
  * gogcli owns OAuth and emits JSON. Projector invokes it with both of its
  * runtime write guards, then gives the factual thread records to the same local
- * classifier as every other channel. Jira already follows this shape through
- * its REST client; Gmail no longer needs a general-purpose MCP host merely to
- * perform a read-only search.
+ * classifier as every other channel. It is the deterministic transport — but it
+ * needs a Google OAuth client registered for the account, which is a real cost
+ * for one read-only search a day, and a vault that has already named Gmail MCP
+ * tools has said how it wants this fetched. So `gmail.transport` decides, and
+ * its default follows the tools: named means `mcp`, unnamed means `gog`.
+ * Neither is tried as a fallback for the other any more; a transport that fails
+ * says so, rather than a second one quietly answering in its place.
  */
 
 interface GogMessage {
@@ -120,16 +124,15 @@ export const gmailChannel: Channel = {
   defaultDays: 14,
   async collect(ctx): Promise<ChannelReport> {
     const cfg = settingsFor(ctx.root);
+    if (cfg.gmail.transport === 'mcp') return gmailMcpChannel.collect(ctx);
     const result = await run(cfg.gmail.command, gogSearchArgs(ctx, cfg.gmail.account), {
       timeoutMs: 120_000,
     });
     if (!result.ok) {
-      // A configured MCP path is a compatibility fallback, not a second fetch:
-      // it is reached only when the CLI could not answer at all.
-      if (cfg.mcp.gmail.length) return gmailMcpChannel.collect(ctx);
       return held(
         ctx,
-        `gog could not read Gmail: ${result.stderr.slice(0, 200) || 'install and authorize gogcli'}`,
+        `gog could not read Gmail: ${result.stderr.slice(0, 200) || 'install and authorize gogcli'}` +
+          (cfg.mcp.gmail.length ? ' — or set gmail.transport: mcp to use the named MCP tools instead' : ''),
       );
     }
 

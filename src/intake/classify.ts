@@ -7,7 +7,8 @@ import { run } from '../sources/run.ts';
 import { rescues, suppressions } from './db.ts';
 import { settingsFor } from '../settings.ts';
 import type { Facets, Note } from '../schema/types.ts';
-import type { Candidate } from './types.ts';
+import { addCost, costFromEnvelope } from './relay.ts';
+import type { Candidate, Cost } from './types.ts';
 
 /**
  * What a candidate is, and whether it deserves a note.
@@ -42,6 +43,15 @@ import type { Candidate } from './types.ts';
  * the run writes nothing and holds its cursor. An unjudged pile of your own
  * commits is the failure this exists to prevent, so arriving at it by accident
  * would be worse than an empty board and a line in the log.
+ *
+ * **A tracked candidate can only extend or drop.** `evidence.linkedTo` is the
+ * mechanical fact that the vault already has a note for this — the same thread,
+ * the same issue — and that fact outranks the verdict's spelling: `keep` on a
+ * tracked candidate becomes `extend` onto the note that tracks it, because a
+ * second note about the same work is the duplicate the tracking exists to
+ * prevent. The model is shown the tracked note as it stands, so what it proposes
+ * is a delta — the axes that should change, and what changed — which the fold
+ * dialog then asks about, one row per axis.
  */
 
 export type Decision = 'keep' | 'extend' | 'drop';
@@ -79,7 +89,18 @@ The tracker answers "what should I pick up next". A candidate earns a note only 
 - "extend" — it is more of something already tracked. The candidate's "matches" name the notes it might belong to; pick one as "target". Use this whenever a match is clearly the same piece of work.
 - "drop" — the owner's own routine progress: their commits, their coding sessions, refactors, formatting, test runs. They did it on purpose and do not need telling. Also mechanical noise: dependency bumps, generated files, merge commits, CI chatter.
 
+A candidate whose context carries a "conversation" shows the whole exchange, oldest first, with the owner's own lines marked "you". Read it to the end before deciding. If the owner already answered and nothing is left open, drop it: the answer was the resolution. If the owner promised something ("will do", "I'll send it"), keep it and say what they owe. Greetings, thanks, acknowledgements, reactions and scheduling chatter are drop.
+
 When genuinely torn between keep and drop, keep: a note too many costs a glance, a note too few costs the thing itself.
+
+# Tracked items
+
+A candidate carrying "tracked" is about something the tracker already has a note for, and "tracked" shows that note as it stands. It is not new work; it is news about tracked work. Decide only between:
+
+- "extend" — the news changes what the note should say: the question was answered, the issue moved to done or blocked, a deadline appeared, somebody is now waiting, a new ask arrived on the same thread. "target" is the tracked note's id. In "facets" propose only the axes that should change, with their new value, and leave the rest out. "title" names the change and "body" says what changed, in one or two sentences.
+- "drop" — nothing about the work changed: chatter, a comment that asks nothing, a field edit.
+
+Never "keep" a tracked item. A second note about the same work is the mistake this exists to prevent.
 
 # Job two: write the note
 
@@ -250,8 +271,22 @@ function vocabularyFor(root: string): {
   return { text: lines.join('\n'), defs, projects, notes };
 }
 
+/**
+ * The note a tracked candidate is news about, as the model needs to see it: what
+ * it is called, which axes it sits on, and the head of its body. Two at most —
+ * a conversation on two open notes is rare and a third would be padding.
+ */
+function trackedFor(ids: string[], notes: Map<string, Note>) {
+  return ids.slice(0, 2).map((id) => {
+    const n = notes.get(id);
+    return n
+      ? { id, title: n.title, facets: n.facets, body: n.body.trim().slice(0, 500) }
+      : { id };
+  });
+}
+
 /** What the model is shown: every scrap the channel gathered, and nothing else. */
-function payloadFor(candidates: Candidate[]): string {
+function payloadFor(candidates: Candidate[], notes: Map<string, Note>): string {
   return JSON.stringify(
     candidates.map((c) => ({
       fp: c.fingerprint,
@@ -259,10 +294,12 @@ function payloadFor(candidates: Candidate[]): string {
       raw_title: c.title.slice(0, 300),
       ...(c.detail ? { detail: c.detail.slice(0, 400) } : {}),
       // `fields` is where the channels put what they actually learned — repo,
-      // branch, cwd, turn count, session state, every commit subject. It was
-      // being thrown away, and it is most of what makes a readable body possible.
+      // branch, cwd, turn count, session state, every commit subject, the whole
+      // exchange of a conversation. It was being thrown away, and it is most of
+      // what makes a readable body possible.
       ...(c.fields?.length ? { context: c.fields.map((f) => `${f.k}: ${f.v}`) } : {}),
       ...(c.when ? { when: c.when } : {}),
+      ...(c.evidence?.linkedTo?.length ? { tracked: trackedFor(c.evidence.linkedTo, notes) } : {}),
       ...(c.evidence?.matches?.length
         ? { matches: c.evidence.matches.map((m) => `${m.id} — ${m.title} (matched by ${m.why})`) }
         : {}),
@@ -272,8 +309,16 @@ function payloadFor(candidates: Candidate[]): string {
   );
 }
 
+/**
+ * What a model answered, and what answering cost when the transport can say.
+ *
+ * A bare string is still accepted, because every test and every vault-side fake
+ * answers with one, and a fake that has to invent a cost is a fake that lies.
+ */
+export type AskReply = string | { text: string; cost?: Cost };
+
 /** Asks a model and returns its raw text, or null when it could not be reached. */
-export type Ask = (system: string, user: string) => Promise<string | null>;
+export type Ask = (system: string, user: string) => Promise<AskReply | null>;
 
 const NO_TOOLS =
   'Bash Read Write Edit Glob Grep WebFetch WebSearch Task TodoWrite NotebookEdit BashOutput KillShell SlashCommand Skill';
@@ -288,8 +333,9 @@ const NO_TOOLS =
  * rather than an agent, which is both cheaper and more predictable — a classifier
  * able to read files would eventually read them.
  */
-export function claudeAsk(command: string, model: string): Ask {
+export function claudeAsk(command: string, model: string, timeoutMs = 180_000): Ask {
   return async (system, user) => {
+    const started = Date.now();
     const res = await run(
       command,
       [
@@ -305,13 +351,15 @@ export function claudeAsk(command: string, model: string): Ask {
         '--output-format',
         'json',
       ],
-      { timeoutMs: 180_000 },
+      { timeoutMs },
     );
     if (!res.ok) return null;
     try {
-      const env = JSON.parse(res.stdout) as { result?: unknown; is_error?: boolean };
+      const env = JSON.parse(res.stdout) as Record<string, unknown>;
       if (env.is_error) return null;
-      return typeof env.result === 'string' ? env.result : null;
+      return typeof env.result === 'string'
+        ? { text: env.result, cost: costFromEnvelope(env, Date.now() - started) }
+        : null;
     } catch {
       return null;
     }
@@ -325,8 +373,9 @@ export function claudeAsk(command: string, model: string): Ask {
  * the transport deterministic about syntax; it does not grant the model any
  * authority over facets or merge targets, and there are no tools to call.
  */
-export function ollamaAsk(url: string, model: string): Ask {
+export function ollamaAsk(url: string, model: string, timeoutMs = 180_000): Ask {
   return async (system, user) => {
+    const started = Date.now();
     try {
       const response = await fetch(`${url.replace(/\/+$/, '')}/api/chat`, {
         method: 'POST',
@@ -343,11 +392,24 @@ export function ollamaAsk(url: string, model: string): Ask {
           keep_alive: '10m',
           options: { temperature: 0, num_ctx: 16_384 },
         }),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) return null;
-      const env = (await response.json()) as { message?: { content?: unknown } };
-      return typeof env.message?.content === 'string' ? env.message.content : null;
+      const env = (await response.json()) as {
+        message?: { content?: unknown };
+        prompt_eval_count?: unknown;
+        eval_count?: unknown;
+        total_duration?: unknown;
+      };
+      if (typeof env.message?.content !== 'string') return null;
+      // Ollama reports its own wall time in nanoseconds and its token counts by
+      // name; the fallback clock covers a build that reports neither.
+      const cost: Cost = {
+        ms: typeof env.total_duration === 'number' ? Math.round(env.total_duration / 1e6) : Date.now() - started,
+      };
+      if (typeof env.prompt_eval_count === 'number') cost.inputTokens = env.prompt_eval_count;
+      if (typeof env.eval_count === 'number') cost.outputTokens = env.eval_count;
+      return { text: env.message.content, cost };
     } catch {
       return null;
     }
@@ -411,17 +473,25 @@ function validFacets(proposed: unknown, defs: Facets, projects: Set<string>): Re
 export interface Classified {
   keep: { candidate: Candidate; verdict: Verdict }[];
   drop: { candidate: Candidate; reason: string }[];
+  /** What the call cost, when the transport said. */
+  cost?: Cost;
 }
 
 /**
- * Judge and describe a run's candidates in one call.
+ * Judge and describe a run's candidates, a batch at a time.
  *
- * One call rather than one per candidate, which is not only cheaper: a sweep's
- * candidates arrive together and are frequently *one thing* — an afternoon's
- * commits on a branch — and a model shown all of them can say so, where a model
- * shown each in isolation cannot.
+ * One call per batch rather than one per candidate, which is not only cheaper: a
+ * sweep's candidates arrive together and are frequently *one thing* — an
+ * afternoon's commits on a branch — and a model shown all of them can say so,
+ * where a model shown each in isolation cannot. It used to be one call per
+ * channel, and a local model generating at six tokens a second cannot answer for
+ * eighteen conversations inside any timeout a tick can afford — so a channel's
+ * candidates are split into batches of `classify.batch`, judged in order, and
+ * the verdicts merged. Cost is summed across the calls.
  *
- * Returns null when the classifier could not be reached at all. A candidate the
+ * Returns null when the classifier could not be reached for any batch: the tick
+ * holds, and the batches already answered are not written, because a half-judged
+ * channel would advance its cursor past candidates nobody judged. A candidate the
  * model failed to mention is **kept**, which is the safe direction of the two:
  * keeping costs a glance, dropping costs the item.
  */
@@ -429,14 +499,39 @@ export async function classify(
   root: string,
   candidates: Candidate[],
   ask: Ask = defaultAsk(root),
+  batch = settingsFor(root).classify.batch,
 ): Promise<Classified | null> {
   if (!candidates.length) return { keep: [], drop: [] };
 
   const { text: vocab, defs, projects, notes } = vocabularyFor(root);
   const system = `${promptFor(root)}\n\n${vocab}\n${calibrationFor(root, notes)}`;
-  const reply = await ask(system, payloadFor(candidates));
+  const size = Math.max(1, Math.floor(batch));
+  const out: Classified = { keep: [], drop: [] };
+  for (let at = 0; at < candidates.length; at += size) {
+    const slice = candidates.slice(at, at + size);
+    const judged = await classifyBatch(slice, system, notes, defs, projects, ask);
+    if (!judged) return null;
+    out.keep.push(...judged.keep);
+    out.drop.push(...judged.drop);
+    const cost = addCost(out.cost, judged.cost);
+    if (cost) out.cost = cost;
+  }
+  return out;
+}
+
+async function classifyBatch(
+  candidates: Candidate[],
+  system: string,
+  notes: Map<string, Note>,
+  defs: Facets,
+  projects: Set<string>,
+  ask: Ask,
+): Promise<Classified | null> {
+  const reply = await ask(system, payloadFor(candidates, notes));
   if (reply === null) return null;
-  const raw = rawVerdicts(reply);
+  const text = typeof reply === 'string' ? reply : reply.text;
+  const cost = typeof reply === 'string' ? undefined : reply.cost;
+  const raw = rawVerdicts(text);
   if (!raw) return null;
 
   const byFp = new Map<string, Record<string, unknown>>();
@@ -445,7 +540,7 @@ export async function classify(
     if (fp) byFp.set(fp, r);
   }
 
-  const out: Classified = { keep: [], drop: [] };
+  const out: Classified = { keep: [], drop: [], ...(cost ? { cost } : {}) };
   for (const c of candidates) {
     const r = byFp.get(c.fingerprint);
     const reason = str(r?.reason, 200) ?? 'no reason given';
@@ -460,19 +555,30 @@ export async function classify(
     // inventing a note id, and it costs nothing real: `matches` is computed from
     // the vault, so anything outside it was never a candidate for merging.
     const matched = new Set((c.evidence?.matches ?? []).map((m) => m.id));
-    const target = str(r?.target, 200);
-    const extend = decision === 'extend' && target && matched.has(target);
+    const named = str(r?.target, 200);
+    const tracked = c.evidence?.linkedTo ?? [];
+    // A tracked candidate lands on what tracks it whatever the verdict said —
+    // the model's own choice among those notes when it made one, the first of
+    // them otherwise. Anything else may only extend a match it actually named.
+    const target =
+      decision === 'extend' && named && matched.has(named)
+        ? named
+        : tracked.length
+          ? named && tracked.includes(named)
+            ? named
+            : tracked[0]!
+          : null;
 
     out.keep.push({
       candidate: c,
       verdict: {
         fingerprint: c.fingerprint,
-        decision: extend ? 'extend' : 'keep',
+        decision: target ? 'extend' : 'keep',
         reason,
         ...(str(r?.title, 200) ? { title: str(r?.title, 200)! } : {}),
         ...(str(r?.body, 2000) ? { body: str(r?.body, 2000)! } : {}),
         facets: validFacets(r?.facets, defs, projects),
-        ...(extend ? { target } : {}),
+        ...(target ? { target } : {}),
         ...(r?.notify === true ? { notify: true } : {}),
       },
     });
@@ -482,7 +588,8 @@ export async function classify(
 
 export function defaultAsk(root: string): Ask {
   const { classify: cfg } = settingsFor(root);
+  const timeoutMs = cfg.timeoutSeconds * 1000;
   return cfg.provider === 'ollama'
-    ? ollamaAsk(cfg.url, cfg.model)
-    : claudeAsk(cfg.command, cfg.model);
+    ? ollamaAsk(cfg.url, cfg.model, timeoutMs)
+    : claudeAsk(cfg.command, cfg.model, timeoutMs);
 }

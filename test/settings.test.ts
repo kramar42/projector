@@ -65,8 +65,12 @@ test('a vault with no config file behaves exactly as one did before there was on
       url: 'http://127.0.0.1:11434',
       command: 'claude',
       model: 'qwen3.5:9b-q4_K_M',
+      batch: 8,
+      timeoutSeconds: 300,
     });
-    assert.deepEqual(s.gmail, { command: 'gog', account: null });
+    assert.deepEqual(s.gmail, { command: 'gog', account: null, transport: 'gog' }, 'no tools named, so gog');
+    assert.deepEqual(s.mcp, { slack: [], gmail: [], command: 'claude', model: 'haiku', pages: 5, timeoutSeconds: 600 });
+    assert.deepEqual(s.poll, { enabled: false, everySeconds: 900, hours: null }, 'off, and any hour, until a vault says otherwise');
     for (const c of ['claude', 'git', 'jira', 'slack', 'gmail']) {
       assert.equal(channelEnabled(root, c), true, c);
     }
@@ -109,6 +113,8 @@ test('old classifier settings keep using Claude until a provider is named', () =
       url: 'http://localhost:11434',
       command: 'claude',
       model: 'local-test',
+      batch: 8,
+      timeoutSeconds: 300,
     });
   } finally {
     local.cleanup();
@@ -248,5 +254,25 @@ test('the ignore line is added once, and never twice', () => {
     assert.match(readFileSync(join(root, '.gitignore'), 'utf8'), /\.projector\/\*\.db\*/);
   } finally {
     cleanup();
+  }
+});
+
+
+test('polling hours are a local window, and a malformed one means always', () => {
+  const cases: [string, unknown][] = [
+    ['poll:\n  hours: [8, 20]\n', { from: 8, until: 20 }],
+    ['poll:\n  hours: [22, 6]\n', { from: 22, until: 6 }],
+    ['poll:\n  hours: [8]\n', null],
+    ['poll:\n  hours: [8, 8]\n', null],
+    ['poll:\n  hours: [-1, 30]\n', null],
+    ['poll:\n  hours: office\n', null],
+  ];
+  for (const [config, expected] of cases) {
+    const { root, cleanup } = vault(config);
+    try {
+      assert.deepEqual(settingsFor(root).poll.hours, expected, config);
+    } finally {
+      cleanup();
+    }
   }
 });

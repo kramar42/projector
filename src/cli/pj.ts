@@ -32,7 +32,7 @@ import {
   renderSweep,
   sweep,
 } from '../intake/run.ts';
-import { pollOnce } from '../server/poll.ts';
+import { channelLine, pollOnce, tickLine } from '../server/poll.ts';
 import { rejudge } from '../intake/rejudge.ts';
 import {
   resetWatermark,
@@ -954,15 +954,21 @@ if (asking) {
        * running is not a vault that has to do this by conversation instead.
        */
       if (sub === 'apply' || sub === 'poll') {
+        const started = Date.now();
         const res = await pollOnce(root);
         if (res.held) {
           console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
           process.exit(1);
         }
-        for (const u of res.unreachable) console.log(`${pad(u.channel, 10)} not fetched — ${u.reason}`);
+        // The same lines the poller logs, so a tick reads the same by hand and
+        // on the timer — including what each channel cost to fetch and judge.
+        for (const c of res.channels) {
+          console.log(`${pad(c.channel, 10)} ${c.unreachable ? `not fetched — ${c.unreachable}` : channelLine(c)}`);
+        }
         for (const id of res.created) console.log(`${pad('new', 10)} ${id}`);
         console.log(
-          `${res.created.length} note(s), ${res.declined} declined, ${res.skipped} already known` +
+          tickLine(res, Date.now() - started) +
+            `, ${res.skipped} already known` +
             (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
         );
         break;

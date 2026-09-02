@@ -12,11 +12,30 @@ import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts'
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
 import { materialise } from '../src/intake/materialise.ts';
 import { rejudge } from '../src/intake/rejudge.ts';
-import { instructions, linkFor } from '../src/intake/mcp.ts';
+import { candidateFor, linkFor } from '../src/intake/mcp.ts';
+import {
+  conversationsFrom,
+  costFromEnvelope,
+  knownFor,
+  parseGmailRelay,
+  parseSlackRelay,
+  relayInstructions,
+  renderCost,
+  scrubSecrets,
+  searchToolIn,
+  slackBoundary,
+  slackPermalinkParts,
+  trackedBy,
+  transcribedAll,
+  transcript as exchangeOf,
+} from '../src/intake/relay.ts';
+import { markSeen, seenState } from '../src/intake/db.ts';
+import { claudeChannel } from '../src/intake/claude.ts';
+import { jiraChannel } from '../src/intake/jira.ts';
 import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { deleteNote } from '../src/server/mutate.ts';
-import { pollOnce, startPolling, stopPolling } from '../src/server/poll.ts';
+import { pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
 import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
@@ -1181,14 +1200,22 @@ test('the local classifier uses Ollama without exposing tools', async () => {
       url: String(input),
       body: JSON.parse(String(init?.body)) as Record<string, unknown>,
     };
-    return new Response(JSON.stringify({ message: { content: '[{"fp":"x","decision":"keep","reason":"wanted"}]' } }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        message: { content: '[{"fp":"x","decision":"keep","reason":"wanted"}]' },
+        prompt_eval_count: 1200,
+        eval_count: 40,
+        total_duration: 2_500_000_000,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
   }) as typeof fetch;
   try {
     const reply = await ollamaAsk('http://127.0.0.1:11434/', 'local-model')('rules', '[{"fp":"x"}]');
-    assert.match(reply ?? '', /"decision":"keep"/);
+    assert.ok(reply && typeof reply === 'object', 'the answer carries what it cost');
+    assert.match(reply.text, /"decision":"keep"/);
+    // Ollama's own clock and counts, so a tick can say what judging cost.
+    assert.deepEqual(reply.cost, { ms: 2500, inputTokens: 1200, outputTokens: 40 });
     assert.ok(request);
     const seen = request as unknown as { url: string; body: Record<string, unknown> };
     assert.equal(seen.url, 'http://127.0.0.1:11434/api/chat');
@@ -1300,11 +1327,16 @@ test('both prompts that reach a model carry the secrets rule', async () => {
     };
     await classify(root, [candidate('git:1', 'a')], spy);
     assert.match(seen, /value was withheld/, 'the classifier is told to withhold a secret’s value');
-    assert.match(
-      instructions('slack', null, 7),
-      /leave the value out/,
-      'and the fetching agent is told not to carry one in',
+    // The fetching agent is a relay now and copies verbatim on purpose, so the
+    // rule moved from its prompt into code: known shapes are redacted before any
+    // text leaves the parser. The maxim from NEXT.md — never ask a model to
+    // honour a rule code can apply.
+    const scrubbed = scrubSecrets(
+      'token ghp_abcdefghijklmnopqrstuvwxyz0123456789 and AKIAIOSFODNN7EXAMPLE and xoxb-1234567890-abcdefghij, commit 3f2a9c1d',
     );
+    assert.doesNotMatch(scrubbed, /ghp_|AKIA|xoxb-/, 'the values are gone');
+    assert.match(scrubbed, /\[redacted github token\].*\[redacted aws key id\].*\[redacted slack token\]/, 'and say what they were');
+    assert.match(scrubbed, /3f2a9c1d/, 'a commit hash is not a secret');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1336,13 +1368,34 @@ test('a fetched message links its permalink, never its fingerprint', () => {
   assert.deepEqual(linkFor('gmail', '18f2c0a1b2c3d4e5'), []);
 });
 
-test('the fetching agent is asked for an id and a permalink as two fields', () => {
-  // One field got whichever the tool volunteered, which for Slack is a channel
-  // and a timestamp. Pinned as wording for the same reason the secrets rule is.
-  const text = instructions('slack', null, 7);
-  assert.match(text, /"url":"<permalink>"/, 'the schema asks for it');
-  assert.match(text, /never the id in another costume/, 'and says it is not the id');
-  assert.match(instructions('gmail', null, 14), /mail\.google\.com/);
+test('the relay is told exactly what to call, to copy verbatim, and never to write', () => {
+  // Pinned as wording for the same reason the secrets rule was: the read-only
+  // line and the verbatim rule are the whole safety story of an agent in the
+  // fetch path, and a later edit must not drop either silently.
+  const since = new Date('2026-08-29T01:11:25+02:00');
+  const slack = relayInstructions('slack', { since, pages: 5, searchTool: 'mcp__x__slack_search_public_and_private' });
+  assert.match(slack, /READ ONLY/);
+  assert.match(slack, /Do not filter, summarise, judge/, 'a relay, not a summariser');
+  assert.match(slack, /mcp__x__slack_search_public_and_private/, 'the tool the vault named, by its exact id');
+  assert.match(slack, /"to:me"/);
+  assert.match(slack, /"from:me"/, 'both directions, so whose move it is can be computed');
+  assert.match(slack, new RegExp(`after "${Math.floor(since.getTime() / 1000)}"`), 'the cursor as an epoch the tool understands');
+  assert.match(slack, /up to 5 pages/);
+  assert.match(slack, /"permalink"/, 'a link a person can open');
+  assert.match(slack, /"ts"/, 'and the id a fingerprint is made of, as two fields');
+
+  // Gmail's `after:` is a day in the account's own timezone, so the relay is
+  // given the UTC day before the cursor and the parser applies the cursor
+  // exactly. A day of overlap costs a few known threads; a day of gap costs mail.
+  const gmail = relayInstructions('gmail', { since: new Date('2026-08-29T12:00:00Z'), pages: 3, searchTool: 'mcp__x__search_threads' });
+  assert.match(gmail, /in:inbox after:2026\/08\/28/);
+  assert.match(gmail, /in:sent after:2026\/08\/28/);
+  assert.match(gmail, /"labels"/, 'SENT is how the owner’s own mail is told apart');
+
+  // The relay needs one tool per source, found in the allowlist by suffix; a
+  // list without it is a configuration error the channel reports, not a guess.
+  assert.equal(searchToolIn('slack', ['mcp__x__slack_read_channel', 'mcp__x__slack_search_public_and_private']), 'mcp__x__slack_search_public_and_private');
+  assert.equal(searchToolIn('gmail', ['mcp__x__get_thread']), null);
 });
 
 test('the Gmail CLI boundary is read-only and its JSON becomes factual candidates', () => {
@@ -2034,6 +2087,681 @@ test('a rejudge that keeps the body does not grow it a line at a time', async ()
     const text = readFileSync(join(paths(root).notes, 'raw.md'), 'utf8');
     assert.match(text, /---\n\nkeep me\n$/);
   } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+// ------------------------------------------------------------------- the relay
+
+/**
+ * The relay: an agent copies tool results into one shape, and everything that is
+ * decided about them — conversations, whose move it is, whether the vault tracks
+ * them — is computed here. These are the tests of the computing half, on records
+ * shaped the way the relay is told to shape them.
+ */
+
+const P = (channel: string, ts: string) => `https://acme.slack.com/archives/${channel}/p${ts.replace('.', '')}`;
+const slackRecord = (
+  channel: string,
+  ts: string,
+  user: string,
+  text: string,
+  mine = false,
+  over: Record<string, unknown> = {},
+) => ({
+  channel_id: channel,
+  channel: `DM with ${user === 'me' ? 'Someone' : user}`,
+  ts,
+  thread_ts: null,
+  user_id: mine ? 'U0ME' : `U0${user.toUpperCase()}`,
+  user: mine ? 'Me' : user,
+  mine,
+  text,
+  permalink: P(channel, ts),
+  ...over,
+});
+
+test('the relay’s Slack records become conversations that say whose move it is', () => {
+  const env = JSON.stringify({
+    messages: [
+      // An ask nobody answered.
+      slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'do you have time this week to check the submissions?'),
+      // An ask, answered eleven minutes later — the case a summariser could not see.
+      slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'can you help me pull the AWS contract?'),
+      slackRecord('D0BBBBBBB', '1788340789.000001', 'me', 'never seen one, finance maybe?', true),
+      // Only the owner spoke: nothing to react to.
+      slackRecord('D0CCCCCCC', '1788340000.000001', 'me', 'sent you the link', true),
+      // A record the relay got wrong, and one in a thread.
+      slackRecord('not-a-channel', '1788340000.000002', 'x', 'garbage'),
+      slackRecord('C0DDDDDDD', '1788350000.000002', 'Gerard', 'metadata on each definition?', false, { thread_ts: '1788349000.000001' }),
+    ],
+    more: false,
+  });
+  const parsed = parseSlackRelay(env)!;
+  assert.equal(parsed.dropped, 1, 'a bad record is counted, not smuggled through');
+  assert.equal(parsed.more, false);
+
+  const convs = conversationsFrom('slack', parsed.messages, '2026-08-29T00:00:00Z');
+  const byKey = new Map(convs.map((c) => [c.key, c]));
+  assert.deepEqual([...byKey.keys()].sort(), ['C0DDDDDDD/1788349000.000001', 'D0AAAAAAA', 'D0BBBBBBB', 'D0CCCCCCC']);
+
+  const marthe = byKey.get('D0AAAAAAA')!;
+  assert.equal(marthe.ball, 'mine', 'she spoke last, so it is with the owner');
+  assert.equal(marthe.asks.length, 1);
+
+  const vivek = byKey.get('D0BBBBBBB')!;
+  assert.equal(vivek.ball, 'theirs', 'the owner answered');
+  assert.equal(vivek.asks.length, 1, 'but the ask is still an ask — the classifier reads the exchange and decides');
+  assert.match(exchangeOf(vivek), /Vivek: can you help.*\n.*you: never seen one/s, 'the exchange, oldest first, the owner marked');
+
+  assert.equal(byKey.get('D0CCCCCCC')!.asks.length, 0, 'only the owner’s own words: nothing to react to');
+  assert.equal(byKey.get('C0DDDDDDD/1788349000.000001')!.thread, '1788349000.000001', 'a thread is its own conversation');
+
+  assert.deepEqual(slackPermalinkParts(P('D0AAAAAAA', '1788344704.998749')), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
+});
+
+test('a conversation on an open note is an update; on a closed one, or none, it is not', () => {
+  const root = vault({
+    open: `---\nid: open\ntitle: Check the submissions\nfacets: { status: [active] }\nlinks: ['slack:${P('D0AAAAAAA', '1788000000.000001')}']\n---\n\nb\n`,
+    closed: `---\nid: closed\ntitle: Old AWS thing\nfacets: { status: [done] }\nlinks: ['slack:${P('D0BBBBBBB', '1788000000.000002')}']\n---\n\nb\n`,
+    swept: `---\nid: swept\ntitle: A swept thread reply\nsource_fingerprint: slack:C0DDDDDDD/1788349000.000001\n---\n\nb\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
+  try {
+    const ctx = context(root, { cursor: '2026-08-29T00:00:00Z' });
+    const parsed = parseSlackRelay(
+      JSON.stringify({
+        messages: [
+          slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any news?'),
+          slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'one more thing'),
+          slackRecord('C0DDDDDDD', '1788350000.000002', 'Gerard', 'and the sequence?', false, { thread_ts: '1788349000.000001' }),
+          slackRecord('D0EEEEEEE', '1788350000.000003', 'Oliver', 'got an issue with the thing'),
+        ],
+        more: false,
+      }),
+    )!;
+    const known = knownFor('slack', ctx);
+    const convs = new Map(conversationsFrom('slack', parsed.messages, ctx.cursor).map((c) => [c.key, c]));
+
+    // Same DM as a message an open note links: tracked, by container.
+    const marthe = convs.get('D0AAAAAAA')!;
+    assert.deepEqual(trackedBy(marthe, known), ['open']);
+    const update = candidateFor('slack', ctx, marthe, ['open'])!;
+    assert.equal(update.fingerprint, 'slack:D0AAAAAAA/1788344704.998749', 'keyed by the newest ask, so each exchange is its own offer');
+    assert.deepEqual(update.evidence?.linkedTo, ['open'], 'and it says which note it is news about');
+    assert.equal(update.evidence?.matches?.[0]?.why, 'tracked', 'first among its matches, so extend may name it');
+    assert.match(update.detail ?? '', /already on open/);
+
+    // Same DM as a message a *closed* note links: not tracked — finished work
+    // does not hear about later chatter.
+    assert.deepEqual(trackedBy(convs.get('D0BBBBBBB')!, known), []);
+
+    // A thread whose root a swept note answers for, by fingerprint.
+    assert.deepEqual(trackedBy(convs.get('C0DDDDDDD/1788349000.000001')!, known), ['swept']);
+
+    // Nothing tracks Oliver: a discovery, fingerprinted by its first ask.
+    const oliver = convs.get('D0EEEEEEE')!;
+    assert.deepEqual(trackedBy(oliver, known), []);
+    const fresh = candidateFor('slack', ctx, oliver, [])!;
+    assert.equal(fresh.fingerprint, 'slack:D0EEEEEEE/1788350000.000003');
+    assert.deepEqual(fresh.links, [`slack:${P('D0EEEEEEE', '1788350000.000003')}`], 'the permalink, never the fingerprint');
+    assert.equal(fresh.evidence?.linkedTo, undefined);
+    assert.ok(fresh.fields?.some((f) => f.k === 'conversation'), 'the classifier is handed the exchange');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the relay’s Gmail threads become conversations, and SENT marks the owner’s mail', () => {
+  const env = JSON.stringify({
+    threads: [
+      {
+        id: '1a05c9cf17367981',
+        subject: 'Weekly report',
+        messages: [
+          { id: '1a05c9cf17367981', date: '2026-09-01T10:56:12Z', from: 't@example.com', to: ['me@example.com'], labels: ['INBOX', 'UNREAD'], snippet: 'could you help with the weekly report' },
+        ],
+      },
+      {
+        id: '1a060d74b08da162',
+        subject: 'Product version',
+        messages: [
+          { id: '1a060d74b08da162', date: '2026-09-02T06:38:36Z', from: 's@example.com', to: ['me@example.com'], labels: ['INBOX'], snippet: 'please create the product version' },
+          { id: '1a060d74b08da163', date: '2026-09-02T07:00:00Z', from: 'me@example.com', to: ['s@example.com'], labels: ['SENT'], snippet: 'done, see the release page' },
+          // The same message again, from the in:sent search: one message, not two.
+          { id: '1a060d74b08da163', date: '2026-09-02T07:00:00Z', from: 'me@example.com', to: ['s@example.com'], labels: ['SENT'], snippet: 'done, see the release page', mine: true },
+        ],
+      },
+      { id: 'bad id', subject: 'x', messages: [] },
+    ],
+    more: true,
+  });
+  const parsed = parseGmailRelay(env)!;
+  assert.equal(parsed.dropped, 1);
+  assert.equal(parsed.more, true, 'pages were left: Gmail pages newest-first, so the run is truncated and the cursor holds');
+  const convs = new Map(conversationsFrom('gmail', parsed.messages, null).map((c) => [c.key, c]));
+
+  const report = convs.get('1a05c9cf17367981')!;
+  assert.equal(report.ball, 'mine');
+  assert.equal(report.name, 'Weekly report');
+  assert.equal(report.last.url, 'https://mail.google.com/mail/u/0/#all/1a05c9cf17367981', 'the thread URL Gmail opens, from the id the API gave');
+
+  const version = convs.get('1a060d74b08da162')!;
+  assert.equal(version.messages.length, 2, 'the overlap of the two searches is one message');
+  assert.equal(version.ball, 'theirs', 'the owner answered — SENT says so');
+  assert.equal(version.asks.length, 1);
+});
+
+test('a Gmail thread an open note links is an update keyed by the new message', () => {
+  const root = vault({
+    a: `---\nid: a\ntitle: Weekly report\nfacets: { status: [active] }\nlinks: ['https://mail.google.com/mail/u/0/#inbox/1a05c9cf17367981']\n---\n\nb\n`,
+  });
+  try {
+    const ctx = context(root);
+    const parsed = parseGmailRelay(
+      JSON.stringify({
+        threads: [
+          {
+            id: '1a05c9cf17367981',
+            subject: 'Weekly report',
+            messages: [{ id: '1a05c9cf17367999', date: '2026-09-03T10:00:00Z', from: 't@example.com', labels: ['INBOX'], snippet: 'any update?' }],
+          },
+        ],
+        more: false,
+      }),
+    )!;
+    const [conv] = conversationsFrom('gmail', parsed.messages, null);
+    const tracked = trackedBy(conv!, knownFor('gmail', ctx));
+    assert.deepEqual(tracked, ['a'], 'either URL shape a note carries names the thread');
+    const c = candidateFor('gmail', ctx, conv!, tracked)!;
+    assert.equal(c.fingerprint, 'gmail:1a05c9cf17367981@1a05c9cf17367999');
+    assert.deepEqual(c.evidence?.linkedTo, ['a']);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a relay channel end to end: a fake agent’s envelope becomes candidates, with what it cost', async () => {
+  const root = vault({ a: card('a') });
+  // A stand-in for `claude -p`: prints the JSON envelope the CLI prints, with the
+  // relay's answer in `result`. Executable, because `run` execs it directly.
+  const agent = join(root, 'fake-agent.mjs');
+  writeFileSync(
+    agent,
+    `#!/usr/bin/env node
+const answer = ${JSON.stringify(JSON.stringify({ messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any time this week?')], more: false }))};
+process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: answer, duration_ms: 43210, num_turns: 4, total_cost_usd: 0.0412, usage: { input_tokens: 120, cache_creation_input_tokens: 20000, cache_read_input_tokens: 3000, output_tokens: 900 } }));
+`,
+    { encoding: 'utf8', mode: 0o755 },
+  );
+  writeFileSync(
+    settingsPath(root),
+    `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`,
+    'utf8',
+  );
+  try {
+    const { reports } = await sweep(root, { only: ['slack'] });
+    const r = reports[0]!;
+    assert.equal(r.fetched, true);
+    assert.equal(r.candidates.length, 1);
+    assert.equal(r.candidates[0]!.fingerprint, 'slack:D0AAAAAAA/1788344704.998749');
+    assert.equal(r.nextCursor, '2026-09-02T10:25:04.998Z', 'the newest thing seen, as an ISO the next `after` is computed from');
+    // Every field the envelope offers, so the log can say what a tick spent.
+    assert.deepEqual(r.cost, { ms: 43210, inputTokens: 23120, outputTokens: 900, costUsd: 0.0412, turns: 4 });
+    assert.match(renderSweep({ reports, unknown: [] }), /fetch 43\.2s · 23k in \/ 900 out tok · 4 turns · \$0\.041/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a vault naming a tool list without the search tool is told so, not guessed for', async () => {
+  const root = vault({ a: card('a') });
+  writeFileSync(settingsPath(root), 'channels: [slack]\nmcp:\n  slack: [mcp__x__slack_read_channel]\n', 'utf8');
+  try {
+    const { reports } = await sweep(root, { only: ['slack'] });
+    assert.equal(reports[0]!.fetched, false);
+    assert.match(reports[0]!.reason ?? '', /names no search tool/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a `claude -p` envelope’s cost is read defensively', () => {
+  assert.deepEqual(costFromEnvelope({}, 1500), { ms: 1500 }, 'nothing but the caller’s clock');
+  assert.deepEqual(
+    costFromEnvelope({ duration_ms: 20, num_turns: 1, total_cost_usd: 0.001, usage: { input_tokens: 5, output_tokens: 7 } }, 99),
+    { ms: 20, inputTokens: 5, outputTokens: 7, costUsd: 0.001, turns: 1 },
+  );
+  assert.equal(renderCost(undefined), '');
+  assert.equal(renderCost({ ms: 2500 }), '2.5s');
+});
+
+// -------------------------------------------------------------------- the sync
+
+test('a tracked candidate can only extend or drop, whatever the verdict says', async () => {
+  const root = vault({ a: `---\nid: a\ntitle: The tracked note\nfacets: { status: [active] }\n---\n\nwhere it got to\n` });
+  let payload = '';
+  const judge: Ask = async (_system, user) => {
+    payload = user;
+    return '[{"fp":"slack:D1/1","decision":"keep","reason":"a new ask on the thread","title":"They asked again","facets":{"status":["active"]}}]';
+  };
+  try {
+    const res = await classify(
+      root,
+      [
+        candidate('slack:D1/1', 'any news?', {
+          evidence: { linkedTo: ['a'], matches: [{ id: 'a', title: 'The tracked note', why: 'tracked' }] },
+        }),
+      ],
+      judge,
+    );
+    const v = res!.keep[0]!.verdict;
+    assert.equal(v.decision, 'extend', '`keep` on tracked news is coerced');
+    assert.equal(v.target, 'a', 'onto the note that tracks it');
+    // The model was shown the note as it stands, so what it proposes is a delta.
+    assert.match(payload, /"tracked":\[\{"id":"a","title":"The tracked note"/);
+    assert.match(payload, /"body":"where it got to"/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an update lands as an extension of the note that tracks it, never beside it', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const tracked = candidate('slack:D1/2', 'Any news?', { evidence: { linkedTo: ['a'] } });
+    // With a target: a delta card pointing at the note, counted as an update.
+    const withTarget = materialise(root, 'slack', [
+      { candidate: tracked, verdict: { fingerprint: tracked.fingerprint, decision: 'extend', reason: 'moved', target: 'a', title: 'They asked again' } },
+    ]);
+    assert.equal(withTarget.created.length, 1);
+    assert.equal(withTarget.updates, 1);
+    const rec = reindex(root).notes.get(withTarget.created[0]!)!;
+    assert.deepEqual(rec.facets.extends, ['a']);
+    assert.deepEqual(rec.facets.intake, ['unjudged']);
+
+    // Without one — the classifier switched off — nothing is written: a second
+    // note about tracked work is the duplicate the tracking exists to prevent.
+    const bare = candidate('slack:D1/3', 'And again?', { evidence: { linkedTo: ['a'] } });
+    const without = materialise(root, 'slack', asKept([bare]));
+    assert.deepEqual(without.created, []);
+    assert.equal(without.skipped, 1);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a tracked Jira issue is offered when it moved and skipped when it did not', async () => {
+  const root = vault({
+    a: `---\nid: a\ntitle: Fix the thing\nfacets: { status: [active] }\nlinks: ['jira:PROJ-1']\n---\n\nb\n`,
+    z: `---\nid: z\ntitle: Old thing\nfacets: { status: [done] }\nlinks: ['jira:PROJ-2']\n---\n\nb\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
+  const env = { ...process.env };
+  process.env.PROJECTOR_JIRA_URL = 'https://acme.atlassian.net';
+  process.env.PROJECTOR_JIRA_EMAIL = 'me@acme.test';
+  process.env.PROJECTOR_JIRA_TOKEN = 'not-a-real-token';
+  const original = globalThis.fetch;
+  let status = 'In Progress';
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        issues: [
+          { key: 'PROJ-1', fields: { summary: 'Fix the thing', status: { name: status }, issuetype: { name: 'Bug' }, updated: '2026-09-01T10:00:00.000+0000' } },
+          { key: 'PROJ-2', fields: { summary: 'Old thing', status: { name: 'Done' }, updated: '2026-09-01T11:00:00.000+0000' } },
+          { key: 'PROJ-3', fields: { summary: 'Brand new', status: { name: 'Open' }, updated: '2026-09-01T12:00:00.000+0000' } },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )) as typeof fetch;
+  try {
+    const first = await jiraChannel.collect(context(root));
+    const fps = first.candidates.map((c) => c.fingerprint);
+    // First look at a tracked issue: nothing to compare against, so it is offered
+    // as an update — the classifier drops it if nothing meaningful moved.
+    assert.ok(fps.includes('jira:PROJ-1@2026-09-01T10:00:00.000+0000'), `per update, not per issue: ${fps}`);
+    const update = first.candidates.find((c) => c.fingerprint.startsWith('jira:PROJ-1@'))!;
+    assert.deepEqual(update.evidence?.linkedTo, ['a']);
+    assert.deepEqual(update.state, { key: 'jira:PROJ-1', value: 'In Progress · unassigned' });
+    assert.ok(fps.includes('jira:PROJ-3'), 'a discovery keeps its plain fingerprint');
+    assert.ok(
+      first.skipped.some((s) => s.fingerprint === 'jira:PROJ-2' && /closed/.test(s.why)),
+      'an issue only a finished note tracks is skipped, and says why',
+    );
+
+    // Judged: the tick records the state. The same state next time is not news.
+    markSeen(root, 'jira:PROJ-1', 'In Progress · unassigned');
+    const second = await jiraChannel.collect(context(root));
+    assert.ok(!second.candidates.some((c) => c.fingerprint.startsWith('jira:PROJ-1')));
+    assert.ok(second.skipped.some((s) => s.fingerprint === 'jira:PROJ-1' && /unchanged/.test(s.why)));
+
+    // It moved: offered again, saying what it was.
+    status = 'Done';
+    const third = await jiraChannel.collect(context(root));
+    const moved = third.candidates.find((c) => c.fingerprint.startsWith('jira:PROJ-1@'))!;
+    assert.ok(moved, 'a status change is news');
+    assert.match(moved.detail ?? '', /was In Progress/);
+    assert.equal(seenState(root, 'jira:PROJ-1'), 'In Progress · unassigned', 'collecting never marks anything seen');
+  } finally {
+    globalThis.fetch = original;
+    for (const k of ['PROJECTOR_JIRA_URL', 'PROJECTOR_JIRA_EMAIL', 'PROJECTOR_JIRA_TOKEN']) {
+      if (env[k] === undefined) delete process.env[k];
+      else process.env[k] = env[k];
+    }
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a tick records the state it judged in, a held tick does not, and both say what they cost', async () => {
+  const root = vault({ a: card('a') });
+  const fake: Channel = {
+    name: 'fake',
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: 'fake',
+      cursor: ctx.cursor,
+      nextCursor: '2026-04-04T00:00:00.000Z',
+      fetched: true,
+      candidates: [candidate('fake:1', 'Something', { channel: 'fake', state: { key: 'fake:thing', value: 'v1' } })],
+      skipped: [],
+      cost: { ms: 1000, inputTokens: 10, outputTokens: 2 },
+    }),
+  };
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
+  try {
+    const held = await pollOnce(root, async () => null);
+    assert.ok(held.held);
+    assert.equal(seenState(root, 'fake:thing'), null, 'a held tick must see the same change again');
+
+    const judged = await pollOnce(root, async () => ({
+      text: '[{"fp":"fake:1","decision":"keep","reason":"wanted","title":"A thing"}]',
+      cost: { ms: 500, inputTokens: 300, outputTokens: 20 },
+    }));
+    assert.equal(judged.created.length, 1);
+    assert.equal(seenState(root, 'fake:thing'), 'v1', 'judged, so the state is a fact now');
+    assert.deepEqual(judged.cost, { ms: 1500, inputTokens: 310, outputTokens: 22 }, 'fetching plus judging');
+    const line = judged.channels[0]!;
+    assert.deepEqual(line.fetch, { ms: 1000, inputTokens: 10, outputTokens: 2 });
+    assert.deepEqual(line.judge, { ms: 500, inputTokens: 300, outputTokens: 20 });
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('declined sessions do not count against the claude channel’s limit', () => {
+  const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
+  const prev = process.env.PROJECTOR_CLAUDE_HOME;
+  process.env.PROJECTOR_CLAUDE_HOME = home;
+  const root = vault({ a: card('a') });
+  try {
+    const dir = join(home, 'projects', '-Users-x-repo');
+    mkdirSync(dir, { recursive: true });
+    const uuids = ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000003'];
+    uuids.forEach((uuid, i) => {
+      const lines: string[] = [];
+      for (let t = 0; t < 4; t++) {
+        lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: `turn ${t} of session ${i}` }, cwd: '/Users/x/repo', timestamp: `2026-08-2${i}T10:0${t}:00Z` }));
+        lines.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ok' }, timestamp: `2026-08-2${i}T10:0${t}:30Z` }));
+      }
+      writeFileSync(join(dir, `${uuid}.jsonl`), lines.join('\n') + '\n', 'utf8');
+    });
+    // Two of three declined, and a limit of two. Before the fix the declined pair
+    // filled the limit, the run was truncated, the third was never offered and
+    // the cursor never moved.
+    const ctx = context(root, {
+      since: new Date('2026-01-01'),
+      limit: 2,
+      suppressed: new Set([`claude:${uuids[0]}`, `claude:${uuids[1]}`]),
+    });
+    const r = claudeChannel.collect(ctx) as ReturnType<typeof claudeChannel.collect> & { candidates: Candidate[] };
+    const report = r as Awaited<typeof r>;
+    assert.deepEqual(report.candidates.map((c) => c.fingerprint), [`claude:${uuids[2]}`]);
+    assert.equal(report.truncated, false, 'not truncated: the declined ones were not counted');
+    assert.equal(report.skipped.filter((s) => s.why === 'suppressed earlier').length, 2);
+    assert.ok(report.nextCursor, 'so the cursor can move');
+  } finally {
+    if (prev === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = prev;
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+
+test('a channel’s candidates are judged in batches, and the verdicts and cost merge', async () => {
+  const root = vault({ a: card('a') });
+  const calls: number[] = [];
+  const judge: Ask = async (_system, user) => {
+    const batch = JSON.parse(user) as { fp: string }[];
+    calls.push(batch.length);
+    return {
+      text: JSON.stringify(batch.map((c) => ({ fp: c.fp, decision: c.fp.endsWith('0') ? 'drop' : 'keep', reason: 'r', title: `T ${c.fp}` }))),
+      cost: { ms: 100, inputTokens: 50, outputTokens: 10 },
+    };
+  };
+  try {
+    const many = Array.from({ length: 20 }, (_, i) => candidate(`git:${i}`, `thing ${i}`));
+    const res = await classify(root, many, judge, 8);
+    // A slow local model cannot answer for twenty in one breath; three calls of
+    // eight, eight and four, and nothing about the verdicts says which call.
+    assert.deepEqual(calls, [8, 8, 4]);
+    assert.equal(res!.keep.length + res!.drop.length, 20);
+    assert.deepEqual(res!.drop.map((d) => d.candidate.fingerprint), ['git:0', 'git:10']);
+    assert.deepEqual(res!.cost, { ms: 300, inputTokens: 150, outputTokens: 30 }, 'summed across the calls');
+
+    // One batch the model cannot answer holds the whole channel: a half-judged
+    // channel would advance its cursor past candidates nobody judged.
+    let n = 0;
+    const flaky: Ask = async () => (++n === 2 ? null : '[]');
+    assert.equal(await classify(root, many, flaky, 8), null);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a channel judged before a hold keeps its notes and its cursor', async () => {
+  const root = vault({ a: card('a') });
+  const mk = (name: string): Channel => ({
+    name,
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: name,
+      cursor: ctx.cursor,
+      nextCursor: `2026-05-05T00:00:00.000Z`,
+      fetched: true,
+      candidates: [candidate(`${name}:1`, `From ${name}`, { channel: name })],
+      skipped: [],
+    }),
+  });
+  const first = mk('fakeA');
+  const second = mk('fakeB');
+  CHANNELS.push(first, second);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeA, fakeB]\n', 'utf8');
+  try {
+    // The classifier answers for A and dies on B — a relay fetch that cost two
+    // minutes must not be paid again next tick because the *other* channel held.
+    const judge: Ask = async (_s, user) =>
+      user.includes('fakeB:1') ? null : '[{"fp":"fakeA:1","decision":"keep","reason":"wanted","title":"A thing"}]';
+    const res = await pollOnce(root, judge);
+    assert.match(res.held ?? '', /fakeB/, 'the hold names the channel');
+    assert.equal(res.created.length, 1, 'A was written');
+    assert.deepEqual(res.advanced, ['fakeA'], 'and advanced');
+    assert.equal(watermarkFor(root, 'fakeA')?.cursor, '2026-05-05T00:00:00.000Z');
+    assert.equal(watermarkFor(root, 'fakeB')?.cursor ?? null, null, 'B holds where it was');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(first), 1);
+    CHANNELS.splice(CHANNELS.indexOf(second), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('a Slack run that ran out of pages moves the cursor to where both searches reached', () => {
+  const at = (ts: string) => new Date(Number(ts) * 1000).toISOString();
+  const msg = (ts: string, mine: boolean) => parseSlackRelay(JSON.stringify({ messages: [slackRecord('D0AAAAAAA', ts, mine ? 'me' : 'X', 't', mine)], more: true }))!.messages[0]!;
+  // `to:me` reached further than `from:me`: the safe boundary is the earlier one,
+  // because the pages of each search are contiguous from the cursor and the one
+  // cut short is the one that decides.
+  assert.equal(
+    slackBoundary([msg('1788340000.000001', false), msg('1788350000.000001', false), msg('1788345000.000001', true)]),
+    at('1788345000.000001'),
+  );
+  // One direction empty: the other's newest is the boundary.
+  assert.equal(slackBoundary([msg('1788340000.000001', false)]), at('1788340000.000001'));
+  assert.equal(slackBoundary([]), null);
+
+  // Told to paginate to the end, and told why.
+  const text = relayInstructions('slack', { since: new Date('2026-08-29T00:00:00Z'), pages: 5, searchTool: 't' });
+  assert.match(text, /Do not stop early/);
+});
+
+
+test('a relay that transcribed fewer records than it read holds the cursor', async () => {
+  // The page headers say how many results came back; the records are what the
+  // model wrote down. A model can leave one out without failing any validation,
+  // and a cursor moved past it loses it for good.
+  const short = parseSlackRelay(
+    JSON.stringify({
+      pages: [{ query: 'to:me', results: 3 }, { query: 'from:me', results: 1 }],
+      messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a'), slackRecord('D0AAAAAAA', '1788344800.000001', 'me', 'b', true)],
+      more: false,
+    }),
+  )!;
+  assert.equal(short.reported, 4);
+  assert.equal(short.transcribed, 2);
+  assert.equal(transcribedAll(short), false);
+  const full = parseSlackRelay(JSON.stringify({ pages: [{ query: 'to:me', results: 1 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a')], more: false }))!;
+  assert.equal(transcribedAll(full), true);
+  // More records than pages reported loses nothing: the relay listed fewer pages
+  // than it read, not fewer records. One direction only.
+  const under = parseSlackRelay(JSON.stringify({ pages: [{ query: 'to:me', results: 1 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a'), slackRecord('D0AAAAAAA', '1788344800.000001', 'me', 'b', true)], more: false }))!;
+  assert.equal(transcribedAll(under), true);
+  // Gmail counts threads, and a thread both searches listed is two records.
+  const gm = parseGmailRelay(JSON.stringify({
+    pages: [{ query: 'in:inbox', results: 1 }, { query: 'in:sent', results: 1 }],
+    threads: [
+      { id: '1a05c9cf17367981', subject: 's', messages: [{ id: '1a05c9cf17367981', date: '2026-09-01T10:00:00Z', from: 'x', labels: ['INBOX'], snippet: 'q' }] },
+      { id: '1a05c9cf17367981', subject: 's', messages: [{ id: '1a05c9cf17367982', date: '2026-09-01T11:00:00Z', from: 'me', labels: ['SENT'], snippet: 'a' }] },
+    ],
+    more: false,
+  }))!;
+  assert.equal(gm.transcribed, 2);
+  assert.equal(transcribedAll(gm), true);
+  assert.equal(transcribedAll(parseSlackRelay(JSON.stringify({ messages: [], more: false }))!), null, 'no pages reported: nothing to check against');
+
+  // Through the channel: the candidates are still offered, the cursor is not moved.
+  const root = vault({ a: card('a') });
+  const agent = join(root, 'short-agent.mjs');
+  writeFileSync(
+    agent,
+    `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: ${JSON.stringify(JSON.stringify({ pages: [{ query: 'to:me', results: 2 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any time?')], more: false }))}, duration_ms: 10, num_turns: 2 }));
+`,
+    { encoding: 'utf8', mode: 0o755 },
+  );
+  writeFileSync(settingsPath(root), `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`, 'utf8');
+  try {
+    const { reports } = await sweep(root, { only: ['slack'] });
+    const r = reports[0]!;
+    assert.equal(r.fetched, true);
+    assert.equal(r.candidates.length, 1, 'what was transcribed is still offered');
+    assert.equal(r.nextCursor, null, 'but the cursor does not move past what was not');
+    assert.equal(r.truncated, true);
+    assert.match(r.reason ?? '', /reported 2 result\(s\) and transcribed 1 — cursor held/);
+    assert.match(relayInstructions('slack', { since: new Date(), pages: 1, searchTool: 't' }), /"pages"/, 'the relay is asked for the counts');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('an unjudged card tracks nothing itself; one that extends a note stands in for it', () => {
+  const root = vault({
+    real: `---\nid: real\ntitle: The real note\nfacets: { status: [active] }\n---\n\nb\n`,
+    // Last tick's card: a proposal pointing at the note, still in the queue.
+    card: `---\nid: card\ntitle: A delta card\nfacets: { status: [active], intake: [unjudged], extends: [real] }\nlinks: ['slack:${P('D0AAAAAAA', '1788000000.000001')}']\nsource_fingerprint: slack:D0AAAAAAA/1788000000.000001\n---\n\nb\n`,
+    // A proposal extending nothing, in another DM.
+    loose: `---\nid: loose\ntitle: A loose card\nfacets: { status: [active], intake: [unjudged] }\nlinks: ['slack:${P('D0BBBBBBB', '1788000000.000002')}']\n---\n\nb\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
+  try {
+    const ctx = context(root, { cursor: '2026-08-29T00:00:00Z' });
+    const known = knownFor('slack', ctx);
+    const parsed = parseSlackRelay(JSON.stringify({ messages: [
+      slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'and now?'),
+      slackRecord('D0BBBBBBB', '1788344704.998750', 'Vivek', 'one more'),
+    ], more: false }))!;
+    const convs = new Map(conversationsFrom('slack', parsed.messages, ctx.cursor).map((c) => [c.key, c]));
+    // The conversation the card came from is news about the *note*, not about
+    // the card: an update onto a proposal would chain proposals.
+    assert.deepEqual(trackedBy(convs.get('D0AAAAAAA')!, known), ['real']);
+    // A proposal that extends nothing tracks nothing until somebody accepts it.
+    assert.deepEqual(trackedBy(convs.get('D0BBBBBBB')!, known), []);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('a tick outside the polling hours stays home, and the timer keeps its cadence', async () => {
+  // The window arithmetic, including the one that wraps midnight.
+  assert.equal(withinHours(9, { from: 8, until: 20 }), true);
+  assert.equal(withinHours(20, { from: 8, until: 20 }), false, 'until is exclusive');
+  assert.equal(withinHours(7, { from: 8, until: 20 }), false);
+  assert.equal(withinHours(23, { from: 22, until: 6 }), true);
+  assert.equal(withinHours(3, { from: 22, until: 6 }), true);
+  assert.equal(withinHours(12, { from: 22, until: 6 }), false);
+  assert.equal(withinHours(3, null), true, 'no window means always');
+
+  // A vault whose window excludes this very hour: the loop starts, the first
+  // tick is skipped, and nothing is fetched or advanced.
+  const root = vault({ a: card('a') });
+  const fake: Channel = {
+    name: 'fakeH',
+    defaultDays: 1,
+    collect: (ctx) => ({
+      channel: 'fakeH',
+      cursor: ctx.cursor,
+      nextCursor: '2026-06-06T00:00:00.000Z',
+      fetched: true,
+      candidates: [candidate('fakeH:1', 'Something', { channel: 'fakeH' })],
+      skipped: [],
+    }),
+  };
+  CHANNELS.push(fake);
+  const h = new Date().getHours();
+  writeFileSync(
+    settingsPath(root),
+    `poll:\n  enabled: true\n  hours: [${(h + 1) % 24}, ${(h + 2) % 24}]\nchannels: [fakeH]\n`,
+    'utf8',
+  );
+  try {
+    assert.equal(startPolling(root), true, 'the loop is running');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(watermarkFor(root, 'fakeH'), null, 'but the tick did not run');
+    assert.deepEqual([...reindex(root).notes.keys()].filter((id) => id !== 'a'), [], 'and wrote nothing');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }

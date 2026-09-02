@@ -21,6 +21,12 @@ import { paths } from '../config.ts';
  *
  * Nothing here is note data, so C1 is untouched: no question about the work has
  * two answers.
+ *
+ * A third table, `seen`, arrived with the sync: the state each tracked source
+ * item was last examined in, so a channel can tell "updated again" from "moved".
+ * Same lifecycle, same argument — lose it and the next sweep offers every tracked
+ * issue in the window as a possible update once, and the classifier drops the
+ * ones where nothing changed. Noisier, never wrong.
  */
 
 const SCHEMA = `
@@ -101,6 +107,23 @@ CREATE TABLE IF NOT EXISTS rescued (
   -- fact that a person disagreed with it.
   reason      TEXT NOT NULL,
   at          TEXT NOT NULL
+);
+
+-- The state a tracked source item was last examined in.
+--
+-- Keyed by the item's stable identity (\`jira:KEY\`), not by the per-update
+-- fingerprint a candidate carries, because the question it answers is "has this
+-- moved since I last looked" and the answer has to survive the fingerprint
+-- changing. \`state\` is channel-defined and opaque: the channel that wrote it is
+-- the only reader, and it compares for equality and nothing else.
+--
+-- Written only after a candidate has been judged (see \`server/poll.ts\`), never
+-- at fetch time: a tick that held on the classifier must see the same change
+-- again next time, or the change is lost to a table nobody reads.
+CREATE TABLE IF NOT EXISTS seen (
+  key    TEXT PRIMARY KEY,
+  state  TEXT NOT NULL,
+  at     TEXT NOT NULL
 );
 `;
 
@@ -658,4 +681,24 @@ export function suppressedFingerprints(dataRoot: string): Set<string> {
     .prepare('SELECT fingerprint FROM suppressed')
     .all() as unknown as { fingerprint: string }[];
   return new Set(rows.map((r) => r.fingerprint));
+}
+
+// ---------------------------------------------------------------------- seen
+
+/** The state `key` was last examined in, or null when it never was. */
+export function seenState(dataRoot: string, key: string): string | null {
+  const row = openIntakeDb(dataRoot)
+    .prepare('SELECT state FROM seen WHERE key = ?')
+    .get(key) as { state: string } | undefined;
+  return row?.state ?? null;
+}
+
+/** Record the state `key` was examined in. Replaces: the latest look is the one that counts. */
+export function markSeen(dataRoot: string, key: string, state: string): void {
+  openIntakeDb(dataRoot)
+    .prepare(
+      `INSERT INTO seen (key, state, at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET state = excluded.state, at = excluded.at`,
+    )
+    .run(key, state, new Date().toISOString());
 }

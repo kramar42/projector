@@ -581,10 +581,13 @@ migration. `.projector/enrich.db` is a cache: TTL'd, clearable, and losing it co
 data that took a second to fetch. `.projector/intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
 the last three months, so it cannot be rebuilt from anything and cannot be thrown away casually.
 
-It holds two tables, and they are the two halves of resolving a sweep: `watermark` is how far each
-channel has been read, and `suppressed` is which candidates somebody judged not to deserve a note.
-Same lifecycle, so the same file — both are answers a person gave that no note records, and both
-degrade a sweep rather than breaking it when lost. It is in WAL mode, so it is three files on disk;
+It holds three tables. Two are the halves of resolving a sweep: `watermark` is how far each channel
+has been read, and `suppressed` is which candidates somebody judged not to deserve a note. The third,
+`seen`, is the sync's memory: the state — status and assignee, for Jira — each tracked source item was
+last judged in, so the next tick can tell *moved* from *updated again*. Same lifecycle, so the same
+file — all three are answers no note records, and all three degrade a sweep rather than breaking it
+when lost: without `seen`, every tracked issue in the window is offered as an update once and the
+classifier drops the ones where nothing changed. It is in WAL mode, so it is three files on disk;
 deleting the database and leaving the sidecars used to fail the next open outright, which is why
 `openIntakeDb` clears an orphaned log before opening (see `dropOrphanedWal`). A property that only
 holds when you delete the right three files is not the property the paragraph above claims.
@@ -703,23 +706,105 @@ Which is what makes `intake: unjudged` mean something stronger than "new": **not
 been confirmed by a human.** Title, body and facets are all proposals, and judging is accepting them or
 fixing them first.
 
-One call per run, not per candidate. A sweep's candidates arrive together and are frequently *one
+One call per batch, not per candidate. A sweep's candidates arrive together and are frequently *one
 thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
-alone cannot. The default transport is Ollama's local chat API in JSON mode, with thinking disabled,
-temperature zero and no tools. The compatibility transport is a stripped `claude -p`: default system
-prompt replaced, tools disallowed, MCP off. In either case what is left is classification rather than
-an agent, since a classifier able to read files would eventually read them.
+alone cannot. It was one call per channel until a channel of eighteen conversations met a local model
+generating at six tokens a second and no timeout a tick can afford was long enough; a channel's
+candidates are now judged `classify.batch` at a time and the verdicts merged, with the cost summed. One
+batch the model cannot answer holds the whole channel, because a half-judged channel would advance its
+cursor past candidates nobody judged. The default transport is Ollama's local chat API in JSON mode,
+with thinking disabled, temperature zero and no tools. The compatibility transport is a stripped
+`claude -p`: default system prompt replaced, tools disallowed, MCP off. In either case what is left is
+classification rather than an agent, since a classifier able to read files would eventually read them.
 
-**It fails closed.** A tick that cannot reach the classifier, or cannot parse what came back, writes
-nothing and advances nothing; the next tick sees exactly what it saw. Materialising everything instead
-would reach the bad outcome by accident, and no reading of "the judge is down" makes writing down
-everything the right answer. `classify.enabled: false` is how a vault asks for that on purpose —
+**It fails closed, per channel.** A tick that cannot reach the classifier for a channel, or cannot
+parse what came back, writes nothing for that channel or those after it and advances neither; the next
+tick sees exactly what it saw there. Channels judged before the hold keep their notes, their declines
+and their cursors, because each was resolved on its own terms — everything behind its boundary is a
+file or answered for — and the two relay fetches a tick pays for must not be paid again because the
+*last* channel's judgement timed out. Materialising everything instead would reach the bad outcome by
+accident, and no reading of "the judge is down" makes writing down everything the right answer. `classify.enabled: false` is how a vault asks for that on purpose —
 reachable by decision, never by omission. A candidate the model simply failed to mention is **kept**,
 which is the safe direction of the two: keeping costs a glance and dropping costs the item.
 
-`materialise` still judges nothing. It acts only on facts about the vault — already linked, already
-captured — and the separation is worth keeping: one file decides what is *true*, another decides what
-*matters*.
+`materialise` still judges nothing. It acts only on facts about the vault — already captured, or
+tracked and handed no target — and the separation is worth keeping: one file decides what is *true*,
+another decides what *matters*.
+
+**Intake is a sync, and three mechanisms make it one.** A sweep used to discover and nothing else: a
+candidate whose link was already on a note was skipped at the channel or at `materialise`, so the vault
+could learn that a ticket existed and never that it had moved, and the agent fetching Slack saw one
+message at a time and reported a question without knowing it had been answered.
+
+*The agent-fetched channels are fed by a relay, not a summariser* (`src/intake/relay.ts`). The headless
+`claude -p` is told which tool to call, with which arguments — a search for what was said to the owner
+and one for what the owner said, since the cursor, paged to a bound — and to copy every field of every
+result into one JSON shape. It filters nothing and decides nothing, which is what makes a model in the
+fetch path tolerable: a model copying a tool result is close to deterministic where a model
+characterising one is a judge with no evidence. Every record it returns is validated — a Slack ts, a
+channel id, a permalink, an ISO date — and a record that fails is counted and named, never smuggled
+through. Known credential shapes are redacted in the parser, which is the deterministic floor the
+secrets rule was waiting for (NEXT.md): the relay copies verbatim on purpose, so the rule cannot be
+asked of it. An agent also stops paginating when it feels like it, whatever it is told, and reports
+`more`. For Slack, whose pages come oldest-first and contiguous from the cursor, that is not a hold:
+the run moves the cursor to the earlier of the two searches' newest messages (`slackBoundary`) and says
+the rest is behind it — holding would make an agent that stops early an agent that never gets past the
+same first pages, re-paying them every tick. Gmail's pages come newest-first, so a cut-short run there
+holds like every other truncated run. And a model can leave records out without failing any
+validation — one run transcribed six conversations from pages that had held twenty-four — so the relay
+copies each page's own result count and `transcribedAll` compares, in one direction: fewer records than
+the pages held means something was left out, so what was transcribed is still offered and the cursor
+holds, with the reason on the channel's log line, and the next run pays the fetch again — the price of
+not trusting a copy. More records than pages reported loses nothing and passes; a rule that held on that
+too held a real Gmail run that had transcribed every thread.
+
+*The unit is a conversation*: a Slack channel or thread, a Gmail thread. `conversationsFrom` groups the
+records, marks the owner's messages (the `from:me` search, or Gmail's `SENT` label), and computes what
+the classifier used to be unable to see — whose move it is, when the owner last spoke, and the exchange
+itself, oldest first with the owner's lines marked `you`. `ball` is a fact handed to the model, not a
+gate: the same last word from the owner is an answer in one thread and a promise in the next, and only
+reading tells which (C8 says compute what is computable; this is where it stops being computable). A
+conversation with nothing new from anyone else since the cursor is skipped with that reason.
+
+*Anything the vault already tracks arrives as an update.* `knownFor` reads the notes' own links and
+fingerprints — a Slack permalink, a `slack:<channel>/<ts>` fingerprint, a Gmail thread URL, a `jira:`
+key — and a conversation that shares a DM, a thread or a message with one of them, or an issue a note
+links, is tracked. `evidence.linkedTo` names the notes; it used to mean *nothing to do* and now means
+*this is news about that*. Such a candidate may only **extend** one of those notes or be dropped:
+`classify` coerces `keep` to `extend` onto the tracking note, because the vault already tracking the
+thing is a mechanical fact that outranks the verdict's spelling, and `materialise` refuses to write a
+tracked candidate that arrives with no target — which is what one looks like with the classifier
+switched off. The model is shown the tracked note as it stands (title, facets, the head of its body) so
+what it proposes is a delta, and the delta lands as the `extends` card the fold dialog already turns
+into one question per axis. Closed notes are excluded from tracking on purpose: finished work does not
+reopen because a DM got chatty or Jira ticked. So are cards still in the queue: a proposal must not
+collect further proposals — one live run chained an update onto the previous tick's card instead of onto
+the note — so a card that `extends` a note stands in for that note, and a card that extends nothing
+tracks nothing until somebody accepts it.
+
+For Jira the change signal is the `seen` table rather than the cursor, because `updated` moves on every
+comment and comments are not fetched: the channel compares status and assignee with the state the last
+tick judged the issue in, skips an unchanged one with that reason, and fingerprints a moved one per
+update (`jira:KEY@<updated>`) so each move is its own offer and its own decline while the stable key
+travels as the link and in `state`. **The state is recorded only after judgement**, by the automatic
+path (`pollOnce`) and for every candidate that carries one — a held tick must see the same change
+again, and a discovery that becomes a note is tracked from then on, so its first update should be a
+change rather than the state it was filed in. The manual path never marks anything seen; it cannot know
+what the person did with the proposal.
+
+**The claude channel counts declined sessions as skipped before the limit, not after.** `sweep` moves
+suppressed candidates to `skipped` centrally, which is right — but the channel had already counted them
+against `ctx.limit`, so twenty-five declined sessions filled the limit, every run reported itself
+truncated with nothing to show, and the cursor never moved. Declining is what a reader does most; it
+must not be what stalls the channel. The skip now happens before the transcript is opened.
+
+**A tick says what it cost.** Two channels run an agent and the classifier runs a model, and from the
+board a tick that took two minutes and forty thousand tokens is indistinguishable from one that took two
+seconds. `Cost` travels on the channel report (read off the `claude -p` envelope: duration, turns,
+token counts, dollars) and on the classifier's reply (Ollama's own counts and clock; the same envelope
+for the compatibility transport), and `pollOnce` sums them per channel and per tick. `pj intake apply`
+prints the same lines the poller logs, through the same two functions, so the two surfaces cannot
+describe one tick differently.
 
 **The declined pile is a surface, not a view.** A declined candidate never became a file, so there is
 nothing for the query compiler to answer about it and no shape to draw it in — C9 is about views over
@@ -1080,7 +1165,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to, and which candidates were declined | `pj intake advance`/`cursor` and `pj intake decline`; gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in | `pj intake advance`/`cursor`, `pj intake decline`, and a judging tick — `pj intake apply` or the poller; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 
@@ -1109,8 +1194,11 @@ pick a folder. Neither reads anything you have not named.
 **Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `pj log`, and
 `log`/`branch`/`config`/`remote` in declared repos for `pj intake git`),
 `gh` (`pr view`, `api` GETs), `open` (handing one `claude://` deep link to the desktop app, `pj work`
-only), and `ps` (one `ppid`
-read per level, walking up the process tree to find which live Claude session is asking). No shell —
+only), `ps` (one `ppid`
+read per level, walking up the process tree to find which live Claude session is asking), `claude -p`
+(the Slack and Gmail relay, allowed exactly the MCP tools the vault named and nothing else; and the
+compatibility classifier, with every tool disallowed and MCP off), and `gog` (Gmail, only under
+`gmail.transport: gog`, always with `--readonly --gmail-no-send --no-input`). No shell —
 `execFile`/`execFileSync`/`spawnSync`, always with an argument array, so
 nothing is interpolated into a command line. There is no quoting layer left in the launch path: the
 workspace and the prompt travel as URL parameters, and the one shell string — the `cd … && claude …`
@@ -1292,14 +1380,14 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
-| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; that the pile pages over rows sharing one instant without losing any of them, and that a filtered read counts what matches as well as the whole pile; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators |
+| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; that the pile pages over rows sharing one instant without losing any of them, and that a filtered read counts what matches as well as the whole pile; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators; the relay — its records validated and counted rather than trusted, conversations that say whose move it is and show the exchange with the owner marked, a conversation on an open note being an update and on a closed one nothing, Gmail's `SENT` telling the owner's mail apart and the two searches' overlap collapsing to one message, a fake agent's envelope becoming candidates with what it cost, a tool list without the search tool being reported rather than guessed for, and known secret shapes redacted in code; the sync — a tracked candidate coerced to extend the note that tracks it, an update landing as an extension and never beside the note, a tracked Jira issue offered when it moved and skipped when it did not, the seen state recorded by a judged tick and not by a held one, a tick's cost summed from fetching and judging; and declined sessions not counting against the claude channel's limit; a channel's candidates judged in batches with the verdicts and cost merged and one unanswerable batch holding the channel; and a channel judged before a hold keeping its notes and its cursor; and a Slack run that ran out of pages moving its cursor to where both searches reached; and a relay that transcribed fewer records than the pages held offering what it has and holding the cursor; and an unjudged card tracking nothing itself while one that extends a note stands in for it; and a tick outside the polling hours staying home while the timer keeps its cadence |
 | `keys.test.ts` | the trail's two stacks — a jump from nowhere recording nothing (the shared-link case, where a cold `?note=` left the cursor unset and `H` did nothing), landing where you already are not being a jump, a new jump abandoning forward, and the cap dropping the oldest — the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed |
 | `panel.test.ts` | the panel's write plans, which base mtime each carries, and how a conflict is reported |
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead; plus vault-wide axis population, the fact that tells an over-tight filter apart from an axis nobody has ever set, absent for an unused axis and never present for a computed one |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
-| `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials |
+| `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials, and polling hours parsed as a local window with anything malformed meaning always |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, no rule about the canvas library sharing a bare selector *and* a property with the library's own stylesheet — which is bundled after ours, so a tie is decided by order and the losing declaration reads as though it worked — and this table naming the tests that exist — plus **contrast**, which was the last rule prose guarded alone: both themes' tokens are resolved and every text colour is measured against every surface it can land on, and every hue against the tinted fill a chip actually gets rather than the `-bg` token it is mixed from |

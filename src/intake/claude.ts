@@ -73,6 +73,17 @@ export const claudeChannel: Channel = {
         continue;
       }
 
+      // Before the transcript is opened and before it counts against the limit.
+      // `sweep` would move a suppressed candidate to `skipped` anyway — but only
+      // after this loop had counted it, so twenty-five declined sessions filled
+      // the limit, every run reported itself truncated with nothing to show, and
+      // the cursor never moved. Declining is what a reader does most; it must
+      // not be what stalls the channel.
+      if (ctx.suppressed.has(fingerprint)) {
+        skipped.push({ fingerprint, title: s?.name ?? t.uuid.slice(0, 8), why: 'suppressed earlier' });
+        continue;
+      }
+
       // One read of the transcript, and the state comes with it. This used to be
       // `summarise` here and `sessionState(alive ?? false, lastTurn(file), …)`
       // below — the same assembly the enrichment fetcher also wrote out, each

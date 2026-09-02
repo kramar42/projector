@@ -2,11 +2,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Note } from '../schema/types.ts';
 
 /**
- * Intake: what has happened elsewhere that the vault does not know about.
+ * Intake: what has happened elsewhere that the vault does not know about — and,
+ * since it became a sync, what has moved on the things it does know about.
  *
  * The mirror image of enrichment. Enrichment is given a ref and returns how to
  * display it; intake is given a channel and a cursor and returns refs nobody has
- * filed yet. Neither imports the other, and they share only `src/sources/`.
+ * filed yet, plus refs somebody has filed whose source has changed since. Neither
+ * imports the other, and they share only `src/sources/`.
  *
  * A channel **gathers; it never judges and never writes a note.** Everything a
  * channel emits is deterministic fact or provenance. Whether a candidate deserves
@@ -20,7 +22,7 @@ import type { Note } from '../schema/types.ts';
 export interface Match {
   id: string;
   title: string;
-  /** `cwd`, `worktree`, `branch`, `jira` or `text` — how it was matched, not how sure we are. */
+  /** `cwd`, `worktree`, `branch`, `jira`, `text` or `tracked` — how it was matched, not how sure we are. */
   why: string;
 }
 
@@ -30,12 +32,36 @@ export interface Match {
  * the evidence it decides from.
  */
 export interface Evidence {
-  /** Notes already carrying this exact link. Non-empty means there is nothing to do. */
+  /**
+   * Notes that already track the thing this candidate is about — carrying its
+   * link, or a message of the same conversation, or the issue it reports on.
+   *
+   * Non-empty means the candidate is an **update**, not a discovery: it may only
+   * extend one of these notes or be dropped, never stand alone. That is the sync
+   * half of intake. It used to mean "nothing to do", back when a sweep could only
+   * discover.
+   */
   linkedTo?: string[];
-  /** Notes whose `source_fingerprint` is this candidate's. */
+  /** Notes whose `source_fingerprint` is this candidate's. Nothing to do. */
   capturedAs?: string[];
   /** Notes this might be more work on, most likely first. */
   matches?: Match[];
+}
+
+/**
+ * What a fetch or a judgement cost, when the transport can say.
+ *
+ * Recorded because an unattended tick that spends two minutes and forty thousand
+ * tokens looks exactly like one that spent two seconds, and the poller is the one
+ * thing here that runs whether or not anyone is watching the bill.
+ */
+export interface Cost {
+  ms: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  /** Agent turns — tool calls, for a relay. */
+  turns?: number;
 }
 
 export interface Candidate {
@@ -55,6 +81,15 @@ export interface Candidate {
   detail?: string;
   fields?: { k: string; v: string }[];
   evidence?: Evidence;
+  /**
+   * The source's state this candidate was examined in, for the `seen` table.
+   *
+   * `key` is the stable identity — `jira:KEY`, whatever the fingerprint says —
+   * and `value` is what the channel compares next time to decide whether the
+   * thing moved. Recorded by the automatic path only after the candidate was
+   * judged, so a held tick never marks a change as seen.
+   */
+  state?: { key: string; value: string };
 }
 
 /** Something the channel saw and is deliberately not proposing, with the reason. */
@@ -90,6 +125,8 @@ export interface ChannelReport {
   truncated?: boolean;
   candidates: Candidate[];
   skipped: Skipped[];
+  /** What fetching cost, when the transport says — an agent relay does, `git log` does not. */
+  cost?: Cost;
 }
 
 /**
@@ -109,7 +146,9 @@ export interface IntakeContext {
    *
    * Handed to channels for completeness — `sweep` drops these centrally, so a
    * channel needs no code to honour it and cannot forget to. A channel that wants
-   * to stop *fetching* something it knows is suppressed may still read it.
+   * to stop *fetching* something it knows is suppressed may still read it — and a
+   * channel that counts candidates against a limit must, or the suppressed ones
+   * fill the limit and the run truncates on nothing (see `claude.ts`).
    */
   suppressed: Set<string>;
   since: Date;

@@ -141,7 +141,7 @@ function probeGit(root: string): { status: Status; detail: string; fix?: string 
  * results back, so only the agent can verify the MCP server.
  */
 const AGENT_FETCHED: Record<string, string> = {
-  slack: 'fetched by the agent over the Slack MCP; pj holds no Slack credential',
+  slack: 'fetched by the relay agent over the Slack MCP tools named in mcp.slack; pj holds no Slack credential',
 };
 
 async function probeGmail(root: string): Promise<{ status: Status; detail: string; fix?: string }> {
@@ -195,7 +195,9 @@ export async function probe(root: string): Promise<Report> {
     if (name === 'claude') add(name, 'channel', on(name), claude);
     else if (name === 'git') add(name, 'channel', on(name), probeGit(root));
     else if (name === 'jira') add(name, 'channel', on(name), jira);
-    else if (name === 'gmail') add(name, 'channel', on(name), gmail);
+    else if (name === 'gmail' && s.gmail.transport === 'mcp') {
+      add(name, 'channel', on(name), { status: 'agent', detail: 'fetched by the relay agent over the Gmail MCP tools named in mcp.gmail' });
+    } else if (name === 'gmail') add(name, 'channel', on(name), gmail);
     else add(name, 'channel', on(name), { status: 'agent', detail: AGENT_FETCHED[name] ?? '' });
   }
 

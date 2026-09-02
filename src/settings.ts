@@ -57,7 +57,17 @@ export interface Settings {
    * with its owner's own progress and the first thing anyone would do is turn it
    * off — which is a worse outcome than never having offered it.
    */
-  poll: { enabled: boolean; everySeconds: number };
+  poll: {
+    enabled: boolean;
+    everySeconds: number;
+    /**
+     * Local hours a tick may run in, `[from, until)`, or null for always. A
+     * window that wraps midnight is written `[22, 6]`. Outside it the timer
+     * still fires and the tick says it skipped — a colleague's evening reply
+     * is still there at eight.
+     */
+    hours: { from: number; until: number } | null;
+  };
   /**
    * Who judges the candidates a sweep found.
    *
@@ -74,18 +84,41 @@ export interface Settings {
     url: string;
     command: string;
     model: string;
+    /**
+     * How many candidates one call judges. A local model generating at a few
+     * tokens a second cannot answer for twenty conversations inside any sane
+     * timeout, so a channel's candidates are judged in batches of this many;
+     * a batch is still the unit that arrives together, so a model can still say
+     * that six commits are one afternoon.
+     */
+    batch: number;
+    /** How long one call may take before the tick holds. */
+    timeoutSeconds: number;
   };
-  /** Read-only Gmail access through gogcli, with MCP kept as a compatibility path. */
-  gmail: { command: string; account: string | null };
   /**
-   * Which MCP tools the agent-fetched channels may call, per channel.
-   *
-   * Empty is the default. Slack is then not fetched; Gmail uses its constrained
-   * CLI and consults this list only as a compatibility fallback. Nothing here
-   * can tell a read tool from a write one by its name, so nothing guesses. The
-   * vault lists tools explicitly and Claude Code refuses everything else.
+   * How Gmail is read. `mcp` is the relay agent over the tools named below;
+   * `gog` is gogcli under its runtime read-only guards. Unset, it follows the
+   * tools: named means `mcp`, unnamed means `gog`.
    */
-  mcp: { slack: string[]; gmail: string[]; command: string; model: string };
+  gmail: { command: string; account: string | null; transport: 'mcp' | 'gog' };
+  /**
+   * Which MCP tools the relay may call, per channel, and how far it may page.
+   *
+   * Empty is the default, and a channel with no tools is not fetched. Nothing
+   * here can tell a read tool from a write one by its name, so nothing guesses.
+   * The vault lists tools explicitly and Claude Code refuses everything else.
+   * `pages` bounds each search the relay runs; a run that hits it reports itself
+   * truncated and holds its cursor, so nothing is skipped — only deferred.
+   */
+  mcp: {
+    slack: string[];
+    gmail: string[];
+    command: string;
+    model: string;
+    pages: number;
+    /** How long one relay run may take before the channel reports itself unfetched. */
+    timeoutSeconds: number;
+  };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -102,16 +135,25 @@ interface Raw {
   git?: { author?: unknown };
   doc?: { url?: unknown };
   workspaces?: unknown;
-  poll?: { enabled?: unknown; every?: unknown };
+  poll?: { enabled?: unknown; every?: unknown; hours?: unknown };
   classify?: {
     enabled?: unknown;
     provider?: unknown;
     url?: unknown;
     command?: unknown;
     model?: unknown;
+    batch?: unknown;
+    timeout?: unknown;
   };
-  gmail?: { command?: unknown; account?: unknown };
-  mcp?: { slack?: unknown; gmail?: unknown; command?: unknown; model?: unknown };
+  gmail?: { command?: unknown; account?: unknown; transport?: unknown };
+  mcp?: {
+    slack?: unknown;
+    gmail?: unknown;
+    command?: unknown;
+    model?: unknown;
+    pages?: unknown;
+    timeout?: unknown;
+  };
 }
 
 const str = (v: unknown): string | null => {
@@ -217,6 +259,13 @@ export function settingsFor(root: string): Settings {
       // fifteen minutes: a sweep reads `git log` and a Jira search, and the
       // things it looks for do not happen faster than that.
       everySeconds: Math.max(60, Number(raw.poll?.every ?? 900) || 900),
+      hours: (() => {
+        const h = raw.poll?.hours;
+        if (!Array.isArray(h) || h.length !== 2) return null;
+        const [from, until] = h.map((x) => Number(x));
+        const ok = (n: number | undefined) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 24;
+        return ok(from) && ok(until) && from !== until ? { from: from!, until: until! } : null;
+      })(),
     },
     classify: {
       enabled: raw.classify?.enabled !== false,
@@ -226,16 +275,32 @@ export function settingsFor(root: string): Settings {
       // 9B Q4 leaves useful headroom on a 16 GB Apple Silicon machine while
       // being large enough to follow the classifier's structured contract.
       model: str(raw.classify?.model) ?? (provider === 'ollama' ? 'qwen3.5:9b-q4_K_M' : 'haiku'),
+      // Eight verdicts at ~70 tokens each, behind a 6k-token prompt, is about
+      // 160 s for a 9B model generating at 6 tok/s — inside the timeout with
+      // room. Floored at one and capped so a typo cannot ask for a thousand.
+      batch: Math.max(1, Math.min(100, Number(raw.classify?.batch ?? 8) || 8)),
+      timeoutSeconds: Math.max(30, Number(raw.classify?.timeout ?? 300) || 300),
     },
     gmail: {
       command: str(raw.gmail?.command) ?? 'gog',
       account: str(raw.gmail?.account),
+      transport: (() => {
+        const named = str(raw.gmail?.transport);
+        if (named === 'mcp' || named === 'gog') return named;
+        return (list(raw.mcp?.gmail) ?? []).length ? 'mcp' : 'gog';
+      })(),
     },
     mcp: {
       slack: list(raw.mcp?.slack) ?? [],
       gmail: list(raw.mcp?.gmail) ?? [],
       command: str(raw.mcp?.command) ?? 'claude',
       model: str(raw.mcp?.model) ?? 'haiku',
+      // Five pages of twenty is a hundred messages per search per tick. Past
+      // that the run reports itself truncated and the next tick resumes.
+      pages: Math.max(1, Math.min(20, Number(raw.mcp?.pages ?? 5) || 5)),
+      // Four days of one busy person's DMs took the relay four minutes; ten is
+      // the ceiling before the channel gives up and says so.
+      timeoutSeconds: Math.max(60, Number(raw.mcp?.timeout ?? 600) || 600),
     },
   };
 
@@ -279,6 +344,12 @@ export function settingsTemplate(channels: string[], enrich: boolean): string {
 # \`channels: false\` sweeps none.
 channels: [${channels.join(', ')}]
 
+# Sweep on a timer, in the server, and write what deserves a note.
+# poll:
+#   enabled: true
+#   every: 7200               # seconds between ticks
+#   hours: [8, 20]            # local hours a tick may run in, from inclusive to until exclusive
+
 # Link kinds to resolve for display. \`false\` turns enrichment off entirely and
 # every link renders as its raw ref.
 enrich: ${enrich ? 'true' : 'false'}
@@ -303,9 +374,21 @@ enrich: ${enrich ? 'true' : 'false'}
 #   provider: ollama
 #   url: http://127.0.0.1:11434
 #   model: qwen3.5:9b-q4_K_M
+#   batch: 8                   # candidates per call; a slow local model wants fewer
+#   timeout: 300               # seconds one call may take before the tick holds
 #
-# Gmail is read through gogcli with its runtime read-only guard enabled.
+# Slack and Gmail are fetched by a relay agent over the MCP tools named here — a
+# headless \`claude -p\` that may call only these and copies what they return.
+# mcp:
+#   slack: [mcp__yourserver__slack_search_public_and_private]
+#   gmail: [mcp__yourserver__search_threads]
+#   model: haiku
+#   pages: 5                   # pages per search per tick
+#   timeout: 600               # seconds one relay run may take
+#
+# Gmail may be read through gogcli instead, under its runtime read-only guards.
 # gmail:
+#   transport: gog             # default: mcp when mcp.gmail names tools, gog otherwise
 #   command: gog
 #   account: you@example.com   # optional when gog has one/default account
 #

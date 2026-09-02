@@ -146,13 +146,39 @@ things.
   says so. Filed rather than done because it is a schema change for one call site, and worth doing when
   a second one wants the same thing.
 
-- **The secrets rule is asked of a model, not applied by code.** Both prompts that reach one — the
-  classifier's and the fetching agent's — say a credential's value must never be reproduced, and a test
-  pins the wording. But the maxim under *Ideas from elsewhere* applies: never ask a model to honour a
-  rule that can be applied deterministically. Full secret detection is not deterministic; the common
-  shapes are — an AWS key id, a `ghp_` token, a PEM header — and a scrub at `materialise` time would
-  sit on the one seam every unattended write crosses, catching the model that forgot. Known shapes
-  only: redacting anything that merely looks entropic would eat commit hashes.
+- **The secrets rule is applied by code where the model copies, and asked of it where it writes.**
+  The relay copies verbatim, so `scrubSecrets` in `src/intake/relay.ts` redacts the recognisable
+  shapes — an AWS key id, GitHub and Slack tokens, a PEM block, a JWT — before any text is parsed;
+  that is the deterministic floor this entry used to ask for. What is still asked of a model is the
+  classifier's own prose, and full secret detection stays non-deterministic: redacting anything that
+  merely looks entropic would eat commit hashes, so the scrub knows shapes and nothing else. Extend the
+  list when a shape turns up in a card; do not widen it to entropy.
+
+- **Slack through a user token instead of the relay.** The relay is the honest answer while the only
+  authorized transport is the MCP server an agent holds, and it is deterministic in what it is asked
+  for — but it is still a model in the fetch path, it costs an agent run per tick, and read-only rests
+  on the tool allowlist rather than on scopes. A Slack app installed in the workspace with read scopes
+  would make the channel look like Jira: a GET, JSON, `C2` by construction. Parked until unattended
+  polling is on and either the tick's cost or the relay's fidelity is what hurts; the channel contract
+  (`RelayMessage` → `conversationsFrom`) is transport-neutral, so the swap touches `collect` alone.
+
+- **A DM is one conversation, however many things it is about.** Tracking is by container for DMs and
+  group DMs — a message an open note links makes the whole DM tracked — and fingerprints are by the
+  first new ask since the cursor. Two unrelated asks in one DM inside one tick become one candidate;
+  an ask in a DM where an unrelated open note links an old message is offered as an update to that
+  note, and the classifier has to drop it. Splitting a DM into episodes needs a gap threshold nobody
+  can defend yet; do it when a real DM produces the wrong card, with that DM as the test.
+
+- **Jira's change signal is status and assignee.** Comments move `updated` and are not fetched, so a
+  question asked in a comment on a tracked issue is not news to the sync — it reaches the vault only if
+  it also reaches a mailbox or a mention. Fetching comments is one more field and a bigger payload;
+  worth it the first time a comment is the thing that was missed.
+
+- **The manual path never marks anything seen.** `pj intake` proposes and `pj intake advance`
+  promotes, and neither knows what the person did with a tracked candidate in between, so `seen` is
+  written only by a judging tick. A person who resolves a preview by hand will be offered the same
+  Jira change once more by the next `apply`, and the classifier drops it. Recording on `advance` would
+  be a guess about what was applied.
 
 - **`pj work` does not resume a *finished* session in the workspace.** It reopens a live one and
   starts a new one otherwise, and a closed transcript in that directory stays history rather than

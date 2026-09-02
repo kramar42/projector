@@ -13,6 +13,7 @@ import { jiraChannel } from './jira.ts';
 import { slackChannel } from './mcp.ts';
 import { gmailChannel } from './gmail.ts';
 import { channelEnabled } from '../settings.ts';
+import { renderCost } from './relay.ts';
 import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 
 /**
@@ -290,7 +291,8 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     else if (r.reason) L.push(`   ${r.reason}`);
 
     for (const c of r.candidates) {
-      L.push(`   ${line(c.title, 66)}  ${c.fingerprint}`);
+      const mark = c.evidence?.linkedTo?.length ? 'update ' : '';
+      L.push(`   ${mark}${line(c.title, mark ? 59 : 66)}  ${c.fingerprint}`);
       if (c.detail) L.push(`      ${c.detail}`);
       const ev = c.evidence;
       if (ev?.matches?.length) {
@@ -306,6 +308,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     if (r.skipped.length) tail.push(`${r.skipped.length} skipped`);
     if (r.truncated) tail.push('truncated — cursor held, more behind it');
     if (r.nextCursor) tail.push(`cursor would move to ${r.nextCursor}`);
+    if (r.cost) tail.push(`fetch ${renderCost(r.cost)}`);
     if (tail.length) L.push(`   (${tail.join('; ')})`);
 
     if (opts.verbose) {

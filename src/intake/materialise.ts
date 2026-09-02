@@ -20,14 +20,22 @@ import type { Candidate } from './types.ts';
  * produce.** Making the queue quiet is a judgement, and there is not one here yet.
  */
 
-/** A candidate the sweep already knows there is nothing to do about. */
-function alreadyAnswered(c: Candidate): boolean {
+/**
+ * A candidate the sweep already knows there is nothing to write for.
+ *
+ * `capturedAs` means a note already answers for this fingerprint: written before,
+ * nothing to do. `linkedTo` means the vault tracks the thing this candidate is
+ * news about — and news is written only as an extension of the note that tracks
+ * it. Without a target, which is what a tracked candidate looks like when the
+ * classifier is switched off, writing it would stand a second note beside the
+ * first, which is the duplicate the tracking exists to prevent. Both are
+ * mechanical facts about the vault rather than judgements, so acting on them
+ * costs nothing and breaks no principle.
+ */
+function alreadyAnswered(c: Candidate, v: Verdict): boolean {
   const e = c.evidence;
-  // `linkedTo` means a note already carries this exact link and `capturedAs`
-  // means one already answers for this fingerprint. Both are mechanical facts
-  // about the vault rather than judgements, so acting on them costs nothing and
-  // breaks no principle — unlike deciding that a candidate does not matter.
-  return Boolean(e?.linkedTo?.length || e?.capturedAs?.length);
+  if (e?.capturedAs?.length) return true;
+  return Boolean(e?.linkedTo?.length && !v.target);
 }
 
 export interface Materialised {
@@ -37,6 +45,11 @@ export interface Materialised {
   skipped: number;
   /** Notes created carrying `extends`, i.e. waiting to be merged into a target. */
   extending: number;
+  /**
+   * Of `extending`, those that are news about a note the vault already tracked —
+   * the sync half — rather than a discovery that happened to match one.
+   */
+  updates: number;
   /** The ones the classifier judged worth interrupting for: `{id, title}`. */
   notify: { id: string; title: string }[];
 }
@@ -96,9 +109,9 @@ export function materialise(
   const canTagSource =
     Boolean(defs.source) && (defs.source?.open || (defs.source?.values ?? []).includes(channel));
 
-  const out: Materialised = { created: [], skipped: 0, extending: 0, notify: [] };
+  const out: Materialised = { created: [], skipped: 0, extending: 0, updates: 0, notify: [] };
   for (const { candidate: c, verdict: v } of kept) {
-    if (alreadyAnswered(c)) {
+    if (alreadyAnswered(c, v)) {
       out.skipped++;
       continue;
     }
@@ -121,6 +134,7 @@ export function materialise(
     else {
       out.created.push(res.id);
       if (v.target) out.extending++;
+      if (v.target && c.evidence?.linkedTo?.length) out.updates++;
       // Only a note that was actually written. Interrupting somebody about
       // something that turned out to be a duplicate is the fastest way to have
       // notifications turned off.

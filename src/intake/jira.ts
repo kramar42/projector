@@ -1,8 +1,12 @@
 import { ISSUE_FIELDS, jiraBrowse, jiraGet, jqlDate, type IssueJson } from '../sources/jira.ts';
 import { ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
+import { loadFacets } from '../schema/facets.ts';
+import { paths } from '../config.ts';
+import { isClosed } from '../index/blocking.ts';
+import { seenState } from './db.ts';
 import { evidenceFor } from './match.ts';
-import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
+import type { Candidate, Channel, ChannelReport, Match, Skipped } from './types.ts';
 
 /**
  * Issues that moved and have something to do with you.
@@ -12,6 +16,15 @@ import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
  * often still needs something — verify it in prod, tell someone, close the loop —
  * so status arrives as a field and the skill decides. Filtering here would be
  * deciding, quietly.
+ *
+ * **An issue a note already tracks is not skipped; it is an update.** It used to
+ * be, which left the vault unable to hear that a ticket it was waiting on had
+ * moved to Done. Now the channel compares the issue's status and assignee with
+ * the state it was last examined in (`seen`, in `db.ts`) and offers the change
+ * as a candidate that can only extend the tracking note — the classifier decides
+ * whether the move means anything for the note, and the fold dialog asks before
+ * a facet changes. An issue tracked only by a closed note is skipped for good:
+ * finished work does not reopen because Jira ticked.
  */
 
 /**
@@ -68,6 +81,7 @@ export const jiraChannel: Channel = {
     const skipped: Skipped[] = [];
     let examinedTo: string | null = null;
     let truncated = false;
+    const defs = loadFacets(paths(ctx.root).facets);
 
     for (const issue of res.data.issues ?? []) {
       if (candidates.length >= ctx.limit) {
@@ -79,17 +93,66 @@ export const jiraChannel: Channel = {
       const updated = issue.fields.updated;
       if (updated && (!examinedTo || updated > examinedTo)) examinedTo = updated;
 
+      const summary = issue.fields.summary ?? '';
+      const status = issue.fields.status?.name ?? '';
+      const assignee = issue.fields.assignee?.displayName ?? 'unassigned';
+      // What "moved" means for an issue. Comments and description edits bump
+      // `updated` too, and are not fetched, so they cannot count.
+      const state = { key: fingerprint, value: `${status} · ${assignee}` };
       const evidence = evidenceFor(ctx, {
         fingerprint,
         links: [fingerprint],
-        text: `${key} ${issue.fields.summary ?? ''}`,
+        text: `${key} ${summary}`,
       });
-      const already = evidence.linkedTo ?? evidence.capturedAs;
-      if (already?.length) {
+      const fields = [
+        { k: 'key', v: key },
+        { k: 'status', v: status },
+        { k: 'assignee', v: assignee },
+        { k: 'updated', v: ago(updated) },
+        { k: 'epic', v: issue.fields.parent?.key ?? '' },
+        { k: 'url', v: jiraBrowse(ctx.root, key) ?? '' },
+      ].filter((f) => f.v);
+
+      const tracking = [...new Set([...(evidence.linkedTo ?? []), ...(evidence.capturedAs ?? [])])];
+      const tracked = tracking.filter((id) => !isClosed(ctx.notes.get(id), defs));
+      if (tracked.length) {
+        const before = seenState(ctx.root, state.key);
+        if (before === state.value) {
+          skipped.push({
+            fingerprint,
+            title: `${key} ${summary}`.trim(),
+            why: `already on ${tracked.join(', ')}; unchanged since last seen (${state.value})`,
+          });
+          continue;
+        }
+        const matches: Match[] = tracked.map((id) => ({ id, title: ctx.notes.get(id)?.title ?? id, why: 'tracked' }));
+        for (const m of evidence.matches ?? []) if (!matches.some((x) => x.id === m.id)) matches.push(m);
+        candidates.push({
+          channel: 'jira',
+          // Per update, so each move is its own offer and its own decline; the
+          // stable key travels in `state` and as the link.
+          fingerprint: `${fingerprint}@${updated ?? state.value}`,
+          title: summary || key,
+          links: [fingerprint],
+          when: updated,
+          detail:
+            `${[key, status, issue.fields.issuetype?.name].filter(Boolean).join(' · ')} — tracked by ${tracked.join(', ')}` +
+            (before ? `, was ${before}` : ', first look since it was filed'),
+          fields: [
+            ...fields,
+            { k: 'tracked_as', v: tracked.join(', ') },
+            ...(before ? [{ k: 'was', v: before }] : []),
+          ],
+          evidence: { linkedTo: tracked, matches },
+          state,
+        });
+        continue;
+      }
+      if (tracking.length) {
         skipped.push({
           fingerprint,
-          title: `${key} ${issue.fields.summary ?? ''}`.trim(),
-          why: `already on ${already.join(', ')}`,
+          title: `${key} ${summary}`.trim(),
+          why: `already on ${tracking.join(', ')}, which is closed`,
         });
         continue;
       }
@@ -97,21 +160,13 @@ export const jiraChannel: Channel = {
       candidates.push({
         channel: 'jira',
         fingerprint,
-        title: issue.fields.summary ?? key,
+        title: summary || key,
         links: [fingerprint],
         when: updated,
-        detail: [key, issue.fields.status?.name, issue.fields.issuetype?.name]
-          .filter(Boolean)
-          .join(' · '),
-        fields: [
-          { k: 'key', v: key },
-          { k: 'status', v: issue.fields.status?.name ?? '' },
-          { k: 'assignee', v: issue.fields.assignee?.displayName ?? 'unassigned' },
-          { k: 'updated', v: ago(updated) },
-          { k: 'epic', v: issue.fields.parent?.key ?? '' },
-          { k: 'url', v: jiraBrowse(ctx.root, key) ?? '' },
-        ].filter((f) => f.v),
+        detail: [key, status, issue.fields.issuetype?.name].filter(Boolean).join(' · '),
+        fields,
         evidence,
+        state,
       });
     }
 

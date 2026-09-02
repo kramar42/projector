@@ -39,10 +39,15 @@ export function run(
         env: { ...process.env, ...opts.env },
       },
       (err, stdout, stderr) => {
+        // A child killed by the timeout reports a signal and no exit code, and
+        // whatever it had printed to stderr — for `claude -p`, a warning about
+        // stdin. The reason a caller shows has to say what actually happened.
+        const timedOut = Boolean(err && (err as { killed?: boolean }).killed && (err as { signal?: string }).signal);
+        const why = timedOut ? `timed out after ${Math.round((opts.timeoutMs ?? 12_000) / 1000)}s` : '';
         resolve({
           ok: !err,
           stdout: String(stdout ?? ''),
-          stderr: String(stderr ?? ''),
+          stderr: [why, String(stderr ?? '').trim()].filter(Boolean).join('; '),
           code: err && typeof (err as { code?: number }).code === 'number'
             ? (err as { code?: number }).code!
             : err
@@ -52,6 +57,10 @@ export function run(
       },
     );
     child.on('error', () => resolve({ ok: false, stdout: '', stderr: 'spawn failed', code: null }));
+    // Nothing here ever feeds a child; say so. `claude -p` otherwise waits three
+    // seconds for piped input, warns that none came, and that warning is then
+    // the only thing in stderr when the run fails for some other reason.
+    child.stdin?.end();
   });
 }
 

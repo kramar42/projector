@@ -856,8 +856,8 @@ channel and a cursor and answers *which refs nobody has filed*. Same Jira token,
 | `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` | the same |
 | `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` | `gh:branch:<slug>@<branch>` / `gh:commit:` — none without a GitHub remote |
 | `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` | the same |
-| `slack` | **not fetched here** — an agent, through MCP | a message | `slack:<channel>/<ts>` | `slack:<permalink>` |
-| `gmail` | `gog gmail search`, forced read-only | a thread | `gmail:<message-id>` | the thread URL, as a plain `url` |
+| `slack` | a relay agent over the MCP tools named in `mcp.slack` | a **conversation** — a DM, or a thread — with new messages from someone else | `slack:<channel>/<ts>` of the first new ask; for an update to a tracked conversation, of the newest | `slack:<permalink>` of that message |
+| `gmail` | a relay agent over `mcp.gmail`, or `gog gmail search` under `gmail.transport: gog` | a thread with new messages from someone else | `gmail:<thread-id>`; for an update, `gmail:<thread-id>@<message-id>` | the thread URL, as a plain `url` |
 
 **A fingerprint is not a link**, and the last two columns differ for three of the five channels. A
 fingerprint is a dedup key: it never has to resolve, it is never drawn, and `<channel>/<ts>` is a
@@ -895,8 +895,14 @@ straight into the queue, so the intake board fills on its own:
 poll:
   enabled: true
   every: 900        # seconds; floored at 60, and 900 is the default
+  hours: [8, 20]    # local hours a tick may run in, from inclusive to until exclusive; omit for always
 channels: [git, claude, jira]
 ```
+
+`hours` is a working-day window in the machine's local time. The timer keeps its cadence through the
+night and each tick outside the window logs that it skipped — a colleague's evening reply is still there
+at eight, and two relay runs at three in the morning are two relay runs nobody asked for. A window that
+wraps midnight is written `[22, 6]`.
 
 **It is off unless the file says so.** `poll.enabled` is `true` only when written `true` — an absent
 `poll:` block is not a default of "yes, sweep my vault on a timer", because a server that started
@@ -947,6 +953,31 @@ longer. The rule it applies: your own routine progress is not news to you; what 
 reply, or is unfinished and untracked, is. A candidate that is *more of something already tracked*
 lands pointing at that note through `extends`, to be merged rather than filed.
 
+**Intake is a sync, not only an inbox.** A sweep used to discover and nothing else: an issue a note
+already linked was skipped, a Slack message in a thread a note already pointed at became a second
+card beside the first, and a question you had answered eleven minutes later still arrived as a card,
+because the agent saw one message at a time. Three things changed.
+
+- **The unit is the conversation.** For Slack that is a DM, a group DM or a thread; for Gmail, a
+  thread. A conversation is offered only when someone *else* said something new since the cursor,
+  and what the classifier is shown is the whole exchange, oldest first, with your own lines marked
+  `you` — so "they asked, you answered, nothing followed" is a `drop` it can actually see, and
+  "you said *will do*" is a `keep` that says what you owe. Whose move it is is computed beside it
+  (`ball`), as a fact for the model rather than a gate: the same last word from you can be an answer
+  or a promise, and only reading tells which.
+- **Anything the vault already tracks arrives as an update.** A conversation sharing a DM or a thread
+  with a message an *open* note links, a Gmail thread an open note links, a Jira issue an open note
+  links — each comes as a candidate that can only **extend** that note or be **dropped**, never stand
+  alone. The classifier is shown the note as it stands and proposes the delta: the axes that should
+  change and one or two sentences on what moved. It lands as an `extends` card, and the fold dialog asks
+  about each axis before anything on your note changes. Notes that are closed hear nothing: finished
+  work does not reopen because a DM got chatty or Jira ticked.
+- **Jira offers a change, not an update.** An issue's `updated` moves on every comment; what the sync
+  compares is status and assignee, against the state the last tick judged it in. Unchanged is skipped
+  with that reason. The state is recorded only by a tick that judged — the automatic path — so a tick
+  that held on the classifier sees the same change again, and `pj intake` alone never marks anything
+  seen.
+
 **The model proposes; your vocabulary disposes.** Every facet value and every merge target is checked
 against the vault before anything is written — an invented value is dropped and the rest of the card
 kept, an invented target makes the candidate stand alone. It cannot set `intake` or `extends` itself,
@@ -962,47 +993,68 @@ classify:
   provider: ollama
   url: http://127.0.0.1:11434
   model: qwen3.5:9b-q4_K_M
+  batch: 8            # candidates per call — a local model generating at a few tokens a second wants fewer
+  timeout: 300        # seconds one call may take before the tick holds
 # provider: claude
 # model: haiku
 # command: claude
 ```
+
+A channel's candidates are judged in batches of `batch`, so a slow model answers for eight at a time
+rather than for eighteen in one breath, and the tick line shows what judging cost. If a tick still
+holds on the classifier, the channels judged before the hold keep their notes and their cursors —
+only the one that held, and those after it, are seen again next tick.
 
 **It learns from what you decide.** Every decline you take back is the strongest example there is —
 it says the judgement was wrong in the direction that costs you the item, where a decline you leave
 alone only says you agreed. Recent rescues, recent declines and recently kept notes go into the prompt,
 rescues first. Nothing is configured for this; using the queue is what trains it.
 
-**Gmail is fetched through `gogcli`, not through the model.** Authorize `gog` once with read-only
-Gmail scopes; every unattended invocation also passes `--readonly`, `--gmail-no-send` and
-`--no-input`. The account is optional when `gog` has a single/default account:
-
-```yaml
-gmail:
-  command: gog
-  account: you@example.com
-```
-
-**Slack is still fetched by an MCP agent.** It is a shared channel where a mistake would be visible to
-other people, so there is no wildcard: name only read tools and everything else is refused. A legacy
-Gmail MCP configuration remains a fallback when `gog` cannot run.
+**Slack and Gmail are fetched by a relay, not a summariser.** `pj` holds no credential for either;
+a headless `claude -p` does, through the MCP servers your Claude Code already has. What it is asked to
+be is the whole design: it makes a fixed set of tool calls — a search for what was said *to* you and
+one for what you said, since the cursor — and copies every field of every result into one JSON shape.
+It filters nothing, summarises nothing and decides nothing. Everything that follows is computed in
+`pj`: conversations, whose move it is, whether the vault tracks it, the fingerprint. It is a shared
+channel where a mistake would be visible to other people, so there is no wildcard: name only read tools
+and everything else is refused, and the relay is told to call only the search tool. `pages` bounds
+each search per tick. A Slack run that runs out of pages moves its cursor to the last message both
+searches reached and picks up the rest next tick; a Gmail run that does holds its cursor, because Gmail
+pages newest-first. The relay also copies each page's result count, and a run whose records do not add
+up to it offers what it transcribed and holds its cursor — the channel's log line says so — rather than
+moving past messages nobody examined.
 
 ```yaml
 mcp:
   command: claude
   model: haiku
-  slack: [mcp__yourserver__slack_search_public, mcp__yourserver__slack_read_channel]
-# gmail: [mcp__yourserver__search_threads, mcp__yourserver__get_thread]
+  pages: 5            # pages per search per tick
+  timeout: 600        # seconds one relay run may take before the channel reports itself unfetched
+  slack: [mcp__yourserver__slack_search_public_and_private]
+  gmail: [mcp__yourserver__search_threads]
 ```
 
-Leave Slack out and that channel is not fetched.
+Leave a channel's tools out and that channel is not fetched. Gmail may be read through `gogcli`
+instead, under its runtime read-only guards, for a vault that would rather register a Google OAuth
+client than run an agent — set `gmail.transport: gog`, or name no Gmail tools. Neither transport is
+tried as a fallback for the other: one that fails says so.
+
+```yaml
+gmail:
+  transport: gog          # default: mcp when mcp.gmail names tools, gog otherwise
+  command: gog
+  account: you@example.com
+```
 
 **A secret's value never enters a note.** A scratchpad DM is exactly where a token or a password ends
-up, and this pipeline writes notes from what it swept with nobody watching. So both prompts that reach
-a model — the classifier's and the fetching agent's — carry the same rule: say that a credential is
-there and what it is for, and leave the value out of everything that gets written. A note about a token
-is about rotating it, never a place to keep it. If you replace the instructions with
-`.projector/classify.md`, that rule is yours to restate — the built-in wording is pinned by a test, a
-replacement is not.
+up, and this pipeline writes notes from what it swept with nobody watching. The relay copies verbatim
+on purpose, so for it the rule is applied in code rather than asked for: credential shapes that can be
+recognised without reading — an AWS key id, a GitHub or Slack token, a private key block, a JWT — are
+redacted before any text is parsed, and say what they were. The classifier's prompt still carries the
+rule in words for everything else: say that a credential is there and what it is for, and leave the
+value out of everything that gets written. A note about a token is about rotating it, never a place to
+keep it. If you replace the instructions with `.projector/classify.md`, that rule is yours to restate —
+the built-in wording is pinned by a test, a replacement is not.
 
 **Being told, for the few things that cannot wait.** The same pass answers a second, higher question:
 is this worth interrupting for? Most things that deserve a note are not. When one is, a browser tab you
@@ -1011,10 +1063,11 @@ server tells the tab and the tab tells your operating system — so there is no 
 nothing leaves the machine. Permission is asked the first time there is something to say, and refusing
 costs you nothing: the note is on the board either way.
 
-**If it cannot judge, it does not write.** A tick that cannot reach the classifier holds — nothing
-written, no cursor moved — and the next one tries again. That is deliberate: falling back to writing
-everything down would hand you the pile the judgement exists to prevent, and you would find out by
-looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
+**If it cannot judge, it does not write.** A tick that cannot reach the classifier holds the channel
+it was judging and every one after it — nothing more written, those cursors not moved — and the next
+one tries again; what earlier channels wrote and advanced stands. That is deliberate: falling back to
+writing everything down would hand you the pile the judgement exists to prevent, and you would find
+out by looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
 **Saying no is a step too, and there are three ways to do it.**
 
@@ -1071,9 +1124,9 @@ this useless is a confident wrong one — a session linked to the wrong note put
 nobody will look. Choosing between note, extension and neither is the classifier's job, on the evidence
 this hands it.
 
-Slack is fetched by an agent through MCP; Gmail is fetched by `gog` under runtime read-only guards.
-`pj` keeps both cursors, because a watermark is a property of where the sweep got to, not of which
-transport fetched it.
+Slack and Gmail are fetched by the relay agent through MCP, or Gmail by `gog` under runtime read-only
+guards when a vault chose that. `pj` keeps every cursor, because a watermark is a property of where
+the sweep got to, not of which transport fetched it.
 
 ---
 
@@ -1925,10 +1978,11 @@ things that happen with nobody watching, which are the things you cannot otherwi
 server that is doing nothing at all:
 
 ```
-[INFO] 2026-08-28 13:52:02 intake pollvault/claude saw 25  new:25
+[INFO] 2026-08-28 13:52:02 intake pollvault/claude saw 25  new:25  [judge 6.1s · 4.0k in / 610 out tok]
 [INFO] 2026-08-28 13:52:02 intake pollvault/git saw 0
-[WARN] 2026-08-28 13:52:02 intake pollvault/slack not fetched — no Slack tools named for this vault…
-[INFO] 2026-08-28 13:52:02 intake pollvault tick in 1127ms  29 notes written, 0 declined, 3 cursors advanced
+[INFO] 2026-08-28 13:52:02 intake pollvault/slack saw 3  declined:2 updates:1  [fetch 48.2s · 31k in / 2.9k out tok · 6 turns · $0.052, judge 4.4s · 3.1k in / 240 out tok]
+[WARN] 2026-08-28 13:52:02 intake pollvault/gmail not fetched — no Gmail tools named for this vault…
+[INFO] 2026-08-28 13:52:02 intake pollvault tick in 59.3s  26 notes written (1 update), 2 declined, 3 cursors advanced  [58.7s · 38k in / 3.8k out tok · 6 turns · $0.052]
 [INFO] 2026-08-28 13:51:01 watch  coverage new note  log-probe.md
 [INFO] 2026-08-28 13:51:26 enrich 3 links in 478ms  doc:1 gh:branch:1 gh:pr:1
 [INFO] 2026-08-28 13:50:50 index  coverage rebuilt in 52ms
@@ -1938,7 +1992,7 @@ Four areas, and each line is an **event** rather than progress:
 
 | area | one line when |
 |---|---|
-| `intake` | a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate |
+| `intake` | a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
 | `watch` | a note, a view or a vocabulary file **arrives**. Edits are deliberately silent: a vault under an editor changes on every save, and a log that said so is one nobody reads |
 | `enrich` | a batch of links resolves, counted by kind — `gh:0 jira:7` says which integration is down, where a single total cannot |
 | `index` | the vault is reloaded after a change, with how long it took |
