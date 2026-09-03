@@ -95,10 +95,19 @@ export async function rejudge(
     const note = byFingerprint.get(d.candidate.fingerprint);
     if (note) out.wouldDrop.push({ id: note.id, title: note.title, reason: d.reason });
   }
+  // No verdict twice over is left exactly as it is: this pass rewrites on a
+  // judgement and there was none.
+  out.same += judged.unjudged.length;
 
   for (const { candidate, verdict } of judged.keep) {
     const note = byFingerprint.get(candidate.fingerprint);
     if (!note) continue;
+    // A card the pass would now merely *link* is a card it would not keep: the
+    // branch belongs on the note, not in the queue. Named, like a drop.
+    if (verdict.decision === 'link') {
+      out.wouldDrop.push({ id: note.id, title: note.title, reason: verdict.reason });
+      continue;
+    }
 
     /**
      * `intake` and `extends` are carried forward rather than re-proposed. The

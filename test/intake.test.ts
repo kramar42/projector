@@ -30,7 +30,7 @@ import {
   transcript as exchangeOf,
 } from '../src/intake/relay.ts';
 import { markSeen, seenState } from '../src/intake/db.ts';
-import { claudeChannel } from '../src/intake/claude.ts';
+import { claudeChannel, placeOf } from '../src/intake/claude.ts';
 import { jiraChannel } from '../src/intake/jira.ts';
 import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
@@ -1154,13 +1154,16 @@ test('a declined candidate is recorded with its reason, not dropped', async () =
   }
 });
 
-test('a candidate the model forgot to mention is kept', async () => {
+test('a candidate the model forgot to mention is not kept by default', async () => {
   const root = vault({ a: card('a') });
-  // Keeping costs a glance; dropping costs the item. So silence means keep.
+  // Silence used to mean keep — keeping costs a glance, dropping costs the item —
+  // and it wrote raw cards. The pile made that argument obsolete: the second ask
+  // is here, and what it still does not answer for is handed back unjudged.
   const forgetful: Ask = async () => '[{"fp":"git:1","decision":"drop","reason":"noise"}]';
   try {
     const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b')], forgetful);
-    assert.deepEqual(res!.keep.map((k) => k.candidate.fingerprint), ['git:2']);
+    assert.deepEqual(res!.keep, []);
+    assert.deepEqual(res!.unjudged.map((c) => c.fingerprint), ['git:2']);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2362,7 +2365,7 @@ test('a tracked candidate can only extend or drop, whatever the verdict says', a
       judge,
     );
     const v = res!.keep[0]!.verdict;
-    assert.equal(v.decision, 'extend', '`keep` on tracked news is coerced');
+    assert.equal(v.decision, 'extend', 'the older `keep` on tracked news is coerced');
     assert.equal(v.target, 'a', 'onto the note that tracks it');
     // The model was shown the note as it stands, so what it proposes is a delta.
     assert.match(payload, /"tracked":\[\{"id":"a","title":"The tracked note"/);
@@ -2505,7 +2508,9 @@ test('declined sessions do not count against the claude channel’s limit', () =
   const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
   const prev = process.env.PROJECTOR_CLAUDE_HOME;
   process.env.PROJECTOR_CLAUDE_HOME = home;
-  const root = vault({ a: card('a') });
+  // The sessions run in `/Users/x/repo`; a project has to declare it or they are
+  // not this vault's work at all.
+  const root = vault({ a: card('a'), proj: `---\nid: proj\ntitle: P\nproject:\n  repos:\n    - path: /Users/x/repo\n---\n\nb\n` });
   try {
     const dir = join(home, 'projects', '-Users-x-repo');
     mkdirSync(dir, { recursive: true });
@@ -2764,5 +2769,246 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
     stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+// ---------------------------------------------------------------- the contract
+
+/**
+ * The model names what a candidate *is*; the code decides the write from the
+ * kind and the evidence. These pin the mapping, case by case, because the whole
+ * complaint it answers was cards that narrated activity or duplicated what the
+ * source already showed.
+ */
+const judgeSaying = (rows: Record<string, unknown>[]): Ask => async () => JSON.stringify(rows);
+const firm = (id: string, why = 'branch') => ({ id, title: id, why });
+const loose = (id: string) => ({ id, title: id, why: 'text' });
+
+test('an ask or a promise becomes a card, carrying who waits or when', async () => {
+  const root = vault({ a: card('a') });
+  writeFileSync(paths(root).facets, 'waiting_on:\n  values: []\n  open: true\ndue:\n  type: date\n  single: true\n', 'utf8');
+  try {
+    const res = await classify(
+      root,
+      [candidate('slack:D1/1', 'can you review?'), candidate('slack:D2/1', 'will do tomorrow')],
+      judgeSaying([
+        { fp: 'slack:D1/1', decision: 'ask', reason: 'review wanted', title: 'Review the PR for X', body: 'Y asked.', facets: { waiting_on: ['y'] } },
+        { fp: 'slack:D2/1', decision: 'promise', reason: 'owner committed', title: 'Send the summary', body: 'Promised for tomorrow.', facets: { due: ['2026-09-04'] } },
+      ]),
+    );
+    const [ask, promise] = res!.keep.map((k) => k.verdict);
+    assert.equal(ask!.decision, 'keep');
+    assert.equal(ask!.kind, 'ask');
+    assert.deepEqual(ask!.facets, { waiting_on: ['y'] });
+    assert.match(ask!.reason, /^ask: review wanted/, 'the kind leads the reason, so the card says what it is');
+    assert.equal(promise!.decision, 'keep');
+    assert.deepEqual(promise!.facets, { due: ['2026-09-04'] });
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('information attaches to a note or a project, or it is not information', async () => {
+  const root = vault({
+    a: card('a'),
+    proj: `---\nid: proj\ntitle: A project\nproject: {}\n---\n\nb\n`,
+  });
+  try {
+    const res = await classify(
+      root,
+      [
+        candidate('gmail:1', 'a finding', { evidence: { matches: [firm('a')] } }),
+        candidate('gmail:2', 'a filed finding'),
+        candidate('gmail:3', 'a finding about nothing'),
+      ],
+      judgeSaying([
+        { fp: 'gmail:1', decision: 'info', reason: 'decision recorded', title: 'T', body: 'B', target: 'a' },
+        { fp: 'gmail:2', decision: 'info', reason: 'decision recorded', title: 'T', body: 'B', facets: { project: ['proj'] } },
+        { fp: 'gmail:3', decision: 'info', reason: 'decision recorded', title: 'T', body: 'B' },
+      ]),
+    );
+    const by = new Map(res!.keep.map((k) => [k.candidate.fingerprint, k.verdict]));
+    assert.equal(by.get('gmail:1')!.decision, 'extend', 'onto the note it names');
+    assert.equal(by.get('gmail:1')!.target, 'a');
+    assert.equal(by.get('gmail:2')!.decision, 'keep', 'filed under a project is attached');
+    assert.deepEqual(res!.drop.map((d) => d.candidate.fingerprint), ['gmail:3']);
+    assert.match(res!.drop[0]!.reason, /attaches to no note or project/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the owner’s own progress is a link onto the note it belongs to, never a card', async () => {
+  const root = vault({ a: card('a') });
+  try {
+    const res = await classify(
+      root,
+      [
+        // A branch whose directory and name resolve to a note: link it there.
+        candidate('git:repo@feat', '52 commits', { channel: 'git', evidence: { matches: [firm('a', 'cwd'), loose('zzz')] } }),
+        // A branch that only shares words with a note: a guess, so a drop.
+        candidate('git:repo@other', 'fix: things', { channel: 'git', evidence: { matches: [loose('a')] } }),
+        // Progress in a Slack thread the note already links: the note has the
+        // thread; a link per message would be noise.
+        candidate('slack:D1/9', 'pushed it', { channel: 'slack', evidence: { linkedTo: ['a'], matches: [firm('a', 'tracked')] } }),
+        // "A new area" that a directory already maps is progress, not an area.
+        candidate('claude:s1', 'a big session', { channel: 'claude', evidence: { matches: [firm('a', 'workspace')] } }),
+        // A new area nothing maps: a card.
+        candidate('claude:s2', 'a new thing', { channel: 'claude' }),
+      ],
+      judgeSaying([
+        { fp: 'git:repo@feat', decision: 'progress', reason: 'own commits', title: 'T' },
+        { fp: 'git:repo@other', decision: 'progress', reason: 'own commits' },
+        { fp: 'slack:D1/9', decision: 'progress', reason: 'owner reporting' },
+        { fp: 'claude:s1', decision: 'area', reason: 'looks new', title: 'T', body: 'B' },
+        { fp: 'claude:s2', decision: 'area', reason: 'new work', title: 'A new area', body: 'Substantial.' },
+      ]),
+    );
+    const by = new Map(res!.keep.map((k) => [k.candidate.fingerprint, k.verdict]));
+    assert.equal(by.get('git:repo@feat')!.decision, 'link');
+    assert.equal(by.get('git:repo@feat')!.target, 'a');
+    assert.equal(by.get('claude:s1')!.decision, 'link', 'mapped after all, so a link');
+    assert.equal(by.get('claude:s2')!.decision, 'keep', 'unmapped, so a card');
+    const dropped = new Map(res!.drop.map((d) => [d.candidate.fingerprint, d.reason]));
+    assert.match(dropped.get('git:repo@other')!, /own progress/);
+    assert.match(dropped.get('slack:D1/9')!, /already tracked; nothing to add/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a change has to change something, and a tracked ask still lands as an extension', async () => {
+  const root = vault({ a: card('a') });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  single: true\n', 'utf8');
+  try {
+    const res = await classify(
+      root,
+      [
+        candidate('jira:X-1@t', 'moved', { evidence: { linkedTo: ['a'], matches: [firm('a', 'tracked')] } }),
+        candidate('jira:X-2@t', 'edited', { evidence: { linkedTo: ['a'], matches: [firm('a', 'tracked')] } }),
+        candidate('slack:D1/5', 'one more question', { evidence: { linkedTo: ['a'], matches: [firm('a', 'tracked')] } }),
+      ],
+      judgeSaying([
+        { fp: 'jira:X-1@t', decision: 'change', reason: 'done', title: 'X-1 is done', body: 'Moved to Done.', facets: { status: ['done'] } },
+        { fp: 'jira:X-2@t', decision: 'change', reason: 'field edited' },
+        { fp: 'slack:D1/5', decision: 'ask', reason: 'follow-up question', title: 'Y asks again', body: 'What about Z?' },
+      ]),
+    );
+    const by = new Map(res!.keep.map((k) => [k.candidate.fingerprint, k.verdict]));
+    assert.equal(by.get('jira:X-1@t')!.decision, 'extend');
+    assert.deepEqual(by.get('jira:X-1@t')!.facets, { status: ['done'] });
+    assert.equal(by.get('slack:D1/5')!.decision, 'extend', 'a new ask on a tracked thread is news about that note');
+    assert.deepEqual(res!.drop.map((d) => d.candidate.fingerprint), ['jira:X-2@t']);
+    assert.match(res!.drop[0]!.reason, /nothing on the note changes/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a candidate the judge leaves out is asked again, and then declined rather than written raw', async () => {
+  const root = vault({ a: card('a') });
+  const asks: string[][] = [];
+  const forgetful: Ask = async (_s, user) => {
+    const fps = (JSON.parse(user) as { fp: string }[]).map((c) => c.fp);
+    asks.push(fps);
+    // Answers for every candidate but `git:2`, every time.
+    return JSON.stringify(fps.filter((fp) => fp !== 'git:2').map((fp) => ({ fp, decision: 'drop', reason: 'noise' })));
+  };
+  try {
+    const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b'), candidate('git:3', 'c')], forgetful, 8);
+    assert.deepEqual(asks, [['git:1', 'git:2', 'git:3'], ['git:2']], 'the one left out is asked about once more, alone');
+    assert.deepEqual(res!.unjudged.map((c) => c.fingerprint), ['git:2']);
+    assert.equal(res!.keep.length, 0, 'and it is not kept by default');
+
+    // Through a tick: declined with that reason, visible in the pile, nothing written.
+    const fake: Channel = {
+      name: 'fakeU',
+      defaultDays: 1,
+      collect: (ctx) => ({ channel: 'fakeU', cursor: ctx.cursor, nextCursor: '2026-07-07T00:00:00.000Z', fetched: true, candidates: [candidate('git:2', 'b', { channel: 'fakeU' })], skipped: [] }),
+    };
+    CHANNELS.push(fake);
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeU]\n', 'utf8');
+    try {
+      const tick = await pollOnce(root, forgetful);
+      assert.equal(tick.created.length, 0);
+      assert.equal(tick.unanswered, 1);
+      const row = suppressions(root).rows.find((r) => r.fingerprint === 'git:2')!;
+      assert.match(row.reason, /no verdict from the judge after two asks/);
+      assert.equal(row.decidedBy, 'model');
+    } finally {
+      CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+      stopPolling(root);
+    }
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a link attaches the branch to the note and writes no card', () => {
+  const root = vault({ a: `---\nid: a\ntitle: The note\nlinks: ['jira:PROJ-1']\n---\n\nb\n` });
+  try {
+    const c = candidate('git:repo@feat', 'work', { channel: 'git', links: ['gh:branch:org/repo@feat'] });
+    const res = materialise(root, 'git', [{ candidate: c, verdict: { fingerprint: c.fingerprint, decision: 'link', reason: 'progress: own commits', target: 'a' } }]);
+    assert.deepEqual(res.created, []);
+    assert.deepEqual(res.linked, [{ id: 'a', fingerprint: 'git:repo@feat' }]);
+    const a = reindex(root).notes.get('a')!;
+    assert.deepEqual(a.links.map((l) => l.raw), ['jira:PROJ-1', 'gh:branch:org/repo@feat'], 'the branch joins the note’s links');
+    assert.deepEqual(a.absorbed_fingerprints, ['git:repo@feat'], 'and the note answers for the fingerprint from now on');
+
+    // Twice attaches nothing twice.
+    const again = materialise(root, 'git', [{ candidate: c, verdict: { fingerprint: c.fingerprint, decision: 'link', reason: 'r', target: 'a' } }]);
+    assert.equal(again.linked.length + again.skipped, 1);
+    assert.deepEqual(reindex(root).notes.get('a')!.absorbed_fingerprints, ['git:repo@feat']);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a session counts as this vault’s work only inside a declared repo or a recorded workspace', () => {
+  const repos = ['/Users/x/repo'];
+  const workspaces = ['/Users/x/wt/thing'];
+  assert.equal(placeOf('/Users/x/repo/src', repos, workspaces), 'work');
+  assert.equal(placeOf('/Users/x/wt/thing/repo', repos, workspaces), 'work');
+  assert.equal(placeOf('/Users/x/personal', repos, workspaces), 'outside');
+  assert.equal(placeOf('/Users/x/vault/.projector', repos, workspaces), 'app', 'the relay and the judge run here');
+  assert.equal(placeOf(undefined, repos, workspaces), 'unknown');
+
+  // Through the channel: a session in a personal project is skipped with the
+  // directory in the reason, and one in a declared repo is offered.
+  const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
+  const prev = process.env.PROJECTOR_CLAUDE_HOME;
+  process.env.PROJECTOR_CLAUDE_HOME = home;
+  const root = vault({
+    proj: `---\nid: proj\ntitle: P\nproject:\n  repos:\n    - path: /Users/x/repo\n---\n\nb\n`,
+  });
+  try {
+    const dir = join(home, 'projects', '-Users-x');
+    mkdirSync(dir, { recursive: true });
+    const write = (uuid: string, cwd: string) => {
+      const lines: string[] = [];
+      for (let t = 0; t < 4; t++) {
+        lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: `turn ${t}` }, cwd, timestamp: `2026-08-20T10:0${t}:00Z` }));
+        lines.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ok' }, timestamp: `2026-08-20T10:0${t}:30Z` }));
+      }
+      writeFileSync(join(dir, `${uuid}.jsonl`), lines.join('\n') + '\n', 'utf8');
+    };
+    write('bbbbbbbb-0000-0000-0000-000000000001', '/Users/x/repo/src');
+    write('bbbbbbbb-0000-0000-0000-000000000002', '/Users/x/personal');
+    const report = claudeChannel.collect(context(root, { since: new Date('2026-01-01') })) as Awaited<ReturnType<typeof claudeChannel.collect>>;
+    assert.deepEqual(report.candidates.map((c) => c.fingerprint), ['claude:bbbbbbbb-0000-0000-0000-000000000001']);
+    assert.ok(report.skipped.some((s) => /\/Users\/x\/personal is outside every declared repo/.test(s.why)));
+  } finally {
+    if (prev === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = prev;
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   }
 });

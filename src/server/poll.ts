@@ -75,6 +75,10 @@ export interface PollResult {
   extending: number;
   /** Of `extending`, how many are news about a note the vault already tracked. */
   updates: number;
+  /** The owner's own progress attached to the notes it belongs to, with no card. */
+  linked: number;
+  /** Candidates the judge gave no verdict for after two asks, recorded as declined with that reason. */
+  unanswered: number;
   /** Notes worth interrupting for. A higher bar than deserving a note. */
   notify: { id: string; title: string }[];
   /** Set when the classifier could not be reached, so the tick held. */
@@ -101,6 +105,10 @@ export interface PollResult {
     extending: number;
     /** Of `extending`, those that are updates to a tracked note. */
     updates: number;
+    /** Progress attached to a note without a card. */
+    linked: number;
+    /** Declined for want of any verdict. */
+    unanswered: number;
     /** What fetching cost, when the transport said. */
     fetch?: Cost;
     /** What judging cost, when the classifier said. */
@@ -126,6 +134,8 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     declined: 0,
     extending: 0,
     updates: 0,
+    linked: 0,
+    unanswered: 0,
     notify: [],
     channels: [],
   };
@@ -147,6 +157,8 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
         declined: 0,
         extending: 0,
         updates: 0,
+        linked: 0,
+        unanswered: 0,
         ...(report.cost ? { fetch: report.cost } : {}),
         unreachable: reason,
       });
@@ -160,6 +172,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
      * made it, which is what `classify.enabled: false` is asking for.
      */
     let declinedHere = 0;
+    let unansweredHere = 0;
     let judge: Cost | undefined;
     let kept: Classified['keep'] = report.candidates.map((candidate) => ({
       candidate,
@@ -190,6 +203,21 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
         });
         out.declined++;
       }
+      // No verdict after two asks is not a keep. It is recorded as a decline with
+      // exactly that reason, so the pile shows it and one click brings it back;
+      // written as a card it would be the raw-material card this pass exists to
+      // prevent, with "no reason given" where the reason goes.
+      for (const c of judged.unjudged) {
+        suppress(root, {
+          fingerprint: c.fingerprint,
+          reason: 'no verdict from the judge after two asks',
+          channel: report.channel,
+          title: c.title,
+          by: 'model',
+        });
+        unansweredHere++;
+        out.unanswered++;
+      }
     }
 
     const res = materialise(root, report.channel, kept);
@@ -209,6 +237,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     out.skipped += res.skipped;
     out.extending += res.extending;
     out.updates += res.updates;
+    out.linked += res.linked.length;
     out.notify.push(...res.notify);
     out.cost = addCost(out.cost, addCost(report.cost, judge));
     out.channels.push({
@@ -219,6 +248,8 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
       declined: declinedHere,
       extending: res.extending,
       updates: res.updates,
+      linked: res.linked.length,
+      unanswered: unansweredHere,
       ...(report.cost ? { fetch: report.cost } : {}),
       ...(judge ? { judge } : {}),
       ...(report.reason ? { note: report.reason } : {}),
@@ -237,7 +268,9 @@ export function channelLine(c: PollResult['channels'][number]): string {
     new: c.created - c.extending,
     extending: c.extending - c.updates,
     updates: c.updates,
+    linked: c.linked,
     declined: c.declined,
+    unanswered: c.unanswered,
     known: c.skipped,
   });
   const spent = [c.fetch ? `fetch ${renderCost(c.fetch)}` : '', c.judge ? `judge ${renderCost(c.judge)}` : '']
@@ -252,7 +285,8 @@ export function tickLine(res: PollResult, elapsedMs: number): string {
     `tick in ${(elapsedMs / 1000).toFixed(1)}s  ` +
     `${count(res.created.length, 'note')} written` +
     (res.updates ? ` (${count(res.updates, 'update')})` : '') +
-    `, ${res.declined} declined, ${count(res.advanced.length, 'cursor')} advanced` +
+    (res.linked ? `, ${count(res.linked, 'link')} attached` : '') +
+    `, ${res.declined + res.unanswered} declined, ${count(res.advanced.length, 'cursor')} advanced` +
     (res.cost ? `  [${renderCost(res.cost)}]` : '')
   );
 }

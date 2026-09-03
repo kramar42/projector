@@ -54,11 +54,27 @@ import type { Candidate, Cost } from './types.ts';
  * dialog then asks about, one row per axis.
  */
 
-export type Decision = 'keep' | 'extend' | 'drop';
+/**
+ * What the pipeline does with a candidate. `keep` writes a card, `extend` writes
+ * a card pointing at a note, `link` attaches the candidate's link and fingerprint
+ * to a note with no card at all, `drop` records a decline.
+ */
+export type Decision = 'keep' | 'extend' | 'link' | 'drop';
+
+/**
+ * What the model says a candidate *is*. The pipeline maps a kind onto a decision
+ * with the evidence in hand — the same kind lands differently on a tracked item,
+ * on a mechanically matched one and on one matching nothing — so the two are
+ * kept apart: the model names the kind, the code decides the write.
+ */
+export type Kind = 'ask' | 'promise' | 'info' | 'area' | 'progress' | 'change' | 'drop';
+const KINDS: readonly Kind[] = ['ask', 'promise', 'info', 'area', 'progress', 'change', 'drop'];
 
 export interface Verdict {
   fingerprint: string;
   decision: Decision;
+  /** The kind the model named, when it named one of the seven. */
+  kind?: Kind;
   /** Why, in the model's words. Stored on the suppression when dropped. */
   reason: string;
   /** A real title, not the raw commit subject or opening prompt. */
@@ -79,48 +95,48 @@ export interface Verdict {
   notify?: boolean;
 }
 
-const DEFAULT_PROMPT = `You triage candidates for someone's personal work tracker, and you do two jobs at once: decide whether each deserves a note, and if it does, write the note.
+const DEFAULT_PROMPT = `You triage candidates for someone's personal work tracker, and you do two jobs at once: decide what each candidate is, and if it deserves a note, write the note.
 
-# Job one: does it deserve a note?
+# Job one: what is it?
 
-The tracker answers "what should I pick up next". A candidate earns a note only if reading it later tells its owner something they would otherwise forget or miss.
+The tracker answers "what should I pick up next" and "what did we decide". A card earns its place only if reading it later tells the owner something they would otherwise miss. Name exactly one kind per candidate:
 
-- "keep" — someone else is asking for a decision, a reply or a review; or it is unfinished work with nothing already tracking it; or it records a problem or decision that will not be obvious from the code later.
-- "extend" — it is more of something already tracked. The candidate's "matches" name the notes it might belong to; pick one as "target". Use this whenever a match is clearly the same piece of work.
-- "drop" — the owner's own routine progress: their commits, their coding sessions, refactors, formatting, test runs. They did it on purpose and do not need telling. Also mechanical noise: dependency bumps, generated files, merge commits, CI chatter.
+- "ask" — somebody else is asking the owner for a decision, a reply, a review or a piece of work, and it is still open.
+- "promise" — the owner said they would do something ("will do", "I'll send it tomorrow") and it is not done yet.
+- "info" — a decision, a finding or a constraint worth keeping that will not be obvious later from the code or the thread, and that belongs to a project or a note the tracker already has.
+- "area" — a new area of work with substantial work already done that nothing in the tracker maps yet. Not a plan and not a first commit: work.
+- "progress" — the owner's own activity on something already tracked: their commits, their coding sessions, a status they moved. They did it on purpose and do not need telling.
+- "change" — news about a tracked item that changes what its note should say: answered, done, blocked, a deadline appeared, somebody is now waiting.
+- "drop" — everything else: chatter, greetings, thanks, acknowledgements, scheduling, notifications, mechanical noise, and anything the owner can already see where it is.
 
-A candidate whose context carries a "conversation" shows the whole exchange, oldest first, with the owner's own lines marked "you". Read it to the end before deciding. If the owner already answered and nothing is left open, drop it: the answer was the resolution. If the owner promised something ("will do", "I'll send it"), keep it and say what they owe. Greetings, thanks, acknowledgements, reactions and scheduling chatter are drop.
+A candidate whose context carries a "conversation" shows the whole exchange, oldest first, with the owner's own lines marked "you". Read it to the end. If the owner already answered and nothing is left open, it is "drop": the answer was the resolution. If the owner said they would do something, it is "promise", and the body says what they owe.
 
-When genuinely torn between keep and drop, keep: a note too many costs a glance, a note too few costs the thing itself.
-
-# Tracked items
-
-A candidate carrying "tracked" is about something the tracker already has a note for, and "tracked" shows that note as it stands. It is not new work; it is news about tracked work. Decide only between:
-
-- "extend" — the news changes what the note should say: the question was answered, the issue moved to done or blocked, a deadline appeared, somebody is now waiting, a new ask arrived on the same thread. "target" is the tracked note's id. In "facets" propose only the axes that should change, with their new value, and leave the rest out. "title" names the change and "body" says what changed, in one or two sentences.
-- "drop" — nothing about the work changed: chatter, a comment that asks nothing, a field edit.
-
-Never "keep" a tracked item. A second note about the same work is the mistake this exists to prevent.
+When genuinely torn, drop. A decline is recorded with your reason, is searchable, and can be taken back in one click; a card the owner has to read and dismiss cannot.
 
 # Job two: write the note
 
-For "keep" and "extend", fill these in. This is most of the value — a card nobody can read is not worth having.
+For "ask", "promise", "info", "area" and "change", fill these in. This is most of the value — a card nobody can read is not worth having.
 
-- "title" — what a person would call this in conversation. Not a commit subject, not a raw prompt, not a file path. No ticket key prefix, no "feat(x):". Under 70 characters, no trailing full stop.
+- "title" — what a person would call this in conversation. Not a commit subject, not a raw message, not a file path. Under 70 characters, no trailing full stop.
 - "body" — one to three sentences: what this is, where it got to, and what is unresolved. Say what the raw material actually tells you and nothing you cannot see. No headings, no bullet lists, no restating the title.
-- "facets" — the axes below, with values from their own vocabulary. Only axes you have real grounds for; guessing every axis is worse than leaving one out. An axis marked single takes one value.
+- "facets" — the axes below, with values from their own vocabulary. Only axes you have real grounds for: an "ask" names who is waiting where such an axis exists, a "promise" or a deadline names the date. An axis marked single takes one value.
+- "target" — for "change", the tracked note's id; for "info" or "area", the id of a match that is clearly the same piece of work. Leave it out otherwise.
 
 Never reproduce a secret. When the raw material contains a token, an API key, a password or a private key, the note says what the credential is for and that the value was withheld — the value itself appears in no title and no body. A note about a credential is about rotating or replacing it, never a place to keep it.
 
+# Tracked items
+
+A candidate carrying "tracked" is about something the tracker already has a note for, and "tracked" shows that note as it stands. It is news about tracked work, never new work: the kinds that apply are "ask", "promise", "change", "progress" and "drop". For "change", propose in "facets" only the axes that should change, with their new value, and say what changed in "body".
+
 # Job three: does it need to interrupt?
 
-Set "notify": true only for something the owner would want to be told about now rather than find later — someone blocked on them, a deadline inside a day or two, a production problem, a direct question that has been waiting. This is a *higher* bar than deserving a note, and most things that deserve a note do not clear it. Default to false; a notification nobody wanted is how people turn notifications off.
+Set "notify": true only for something the owner would want to be told about now rather than find later — someone blocked on them, a deadline inside a day or two, a production problem, a direct question that has been waiting. Default to false; a notification nobody wanted is how people turn notifications off.
 
 # Output
 
 ONLY a JSON array, no prose and no code fences. One object per candidate, every "fp" verbatim:
 
-[{"fp":"…","decision":"keep"|"extend"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, extend only>","notify":false}]`;
+[{"fp":"…","decision":"ask"|"promise"|"info"|"area"|"progress"|"change"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, when one applies>","notify":false}]`;
 
 /**
  * The judgements already made, as examples.
@@ -333,7 +349,7 @@ const NO_TOOLS =
  * rather than an agent, which is both cheaper and more predictable — a classifier
  * able to read files would eventually read them.
  */
-export function claudeAsk(command: string, model: string, timeoutMs = 180_000): Ask {
+export function claudeAsk(command: string, model: string, timeoutMs = 180_000, cwd?: string): Ask {
   return async (system, user) => {
     const started = Date.now();
     const res = await run(
@@ -351,7 +367,10 @@ export function claudeAsk(command: string, model: string, timeoutMs = 180_000): 
         '--output-format',
         'json',
       ],
-      { timeoutMs },
+      // Inside the vault's own `.projector`, so the transcript this run leaves
+      // under `~/.claude` is recognisable as the app's and never swept back in as
+      // the owner's work (see `intake/claude.ts`).
+      { timeoutMs, ...(cwd && existsSync(cwd) ? { cwd } : {}) },
     );
     if (!res.ok) return null;
     try {
@@ -473,6 +492,13 @@ function validFacets(proposed: unknown, defs: Facets, projects: Set<string>): Re
 export interface Classified {
   keep: { candidate: Candidate; verdict: Verdict }[];
   drop: { candidate: Candidate; reason: string }[];
+  /**
+   * Candidates the model gave no verdict for, after being asked twice. Neither
+   * written nor kept: a card written from no judgement is the raw-material card
+   * the whole pass exists to prevent, so the caller records these as declined
+   * with that reason, where they can be seen and taken back.
+   */
+  unjudged: Candidate[];
   /** What the call cost, when the transport said. */
   cost?: Cost;
 }
@@ -501,23 +527,48 @@ export async function classify(
   ask: Ask = defaultAsk(root),
   batch = settingsFor(root).classify.batch,
 ): Promise<Classified | null> {
-  if (!candidates.length) return { keep: [], drop: [] };
+  if (!candidates.length) return { keep: [], drop: [], unjudged: [] };
 
   const { text: vocab, defs, projects, notes } = vocabularyFor(root);
   const system = `${promptFor(root)}\n\n${vocab}\n${calibrationFor(root, notes)}`;
   const size = Math.max(1, Math.floor(batch));
-  const out: Classified = { keep: [], drop: [] };
-  for (let at = 0; at < candidates.length; at += size) {
-    const slice = candidates.slice(at, at + size);
-    const judged = await classifyBatch(slice, system, notes, defs, projects, ask);
-    if (!judged) return null;
+  const out: Classified = { keep: [], drop: [], unjudged: [] };
+  const take = (judged: Classified) => {
     out.keep.push(...judged.keep);
     out.drop.push(...judged.drop);
     const cost = addCost(out.cost, judged.cost);
     if (cost) out.cost = cost;
+    return judged.unjudged;
+  };
+  let unmentioned: Candidate[] = [];
+  for (let at = 0; at < candidates.length; at += size) {
+    const slice = candidates.slice(at, at + size);
+    const judged = await classifyBatch(slice, system, notes, defs, projects, ask);
+    if (!judged) return null;
+    unmentioned.push(...take(judged));
   }
+  /**
+   * A candidate the model left out of its reply is asked about once more, on its
+   * own. A model answering for eight will now and then skip one, and the old
+   * rule — keep what was not mentioned — wrote it as a raw card: the message text
+   * for a title, the provenance line for a body, "no reason given" for a reason.
+   * Whatever survives the second ask unmentioned is handed back as `unjudged`,
+   * for the caller to decline with that reason rather than to write.
+   */
+  if (unmentioned.length) {
+    const again = await classifyBatch(unmentioned, system, notes, defs, projects, ask);
+    if (!again) return null;
+    unmentioned = take(again);
+  }
+  out.unjudged = unmentioned;
   return out;
 }
+
+/** A match made on something other than shared vocabulary: a directory, a branch, a key, a tracking note. */
+const mechanical = (why: string): boolean => why !== 'text';
+
+/** Channels whose candidates are the owner's own artefacts, worth linking onto the note they belong to. */
+const OWN_ARTEFACTS = new Set(['git', 'claude']);
 
 async function classifyBatch(
   candidates: Candidate[],
@@ -540,48 +591,101 @@ async function classifyBatch(
     if (fp) byFp.set(fp, r);
   }
 
-  const out: Classified = { keep: [], drop: [], ...(cost ? { cost } : {}) };
+  const out: Classified = { keep: [], drop: [], unjudged: [], ...(cost ? { cost } : {}) };
   for (const c of candidates) {
     const r = byFp.get(c.fingerprint);
-    const reason = str(r?.reason, 200) ?? 'no reason given';
-    const decision = r?.decision;
+    const said = str(r?.decision, 20);
+    // Nothing said, or a word that is not one of the seven and not one of the two
+    // older spellings a vault's own prompt may still use: no judgement was made.
+    if (!r || !said || !(KINDS as readonly string[]).includes(said) && said !== 'keep' && said !== 'extend') {
+      out.unjudged.push(c);
+      continue;
+    }
+    const kind: Kind | undefined = (KINDS as readonly string[]).includes(said) ? (said as Kind) : undefined;
+    const why = str(r.reason, 200) ?? 'no reason given';
+    const reason = kind ? `${kind}: ${why}` : why;
 
-    if (decision === 'drop') {
-      out.drop.push({ candidate: c, reason });
+    if (kind === 'drop') {
+      out.drop.push({ candidate: c, reason: why });
       continue;
     }
 
+    const tracked = c.evidence?.linkedTo ?? [];
+    const matches = c.evidence?.matches ?? [];
+    const matched = new Set(matches.map((m) => m.id));
+    const firm = matches.filter((m) => mechanical(m.why));
     // A target must be one of the mechanical matches. That is what stops a model
     // inventing a note id, and it costs nothing real: `matches` is computed from
     // the vault, so anything outside it was never a candidate for merging.
-    const matched = new Set((c.evidence?.matches ?? []).map((m) => m.id));
-    const named = str(r?.target, 200);
-    const tracked = c.evidence?.linkedTo ?? [];
-    // A tracked candidate lands on what tracks it whatever the verdict said —
-    // the model's own choice among those notes when it made one, the first of
-    // them otherwise. Anything else may only extend a match it actually named.
-    const target =
-      decision === 'extend' && named && matched.has(named)
-        ? named
-        : tracked.length
-          ? named && tracked.includes(named)
-            ? named
-            : tracked[0]!
-          : null;
+    const named = str(r.target, 200);
+    const valid = named && matched.has(named) ? named : null;
+    const facets = validFacets(r.facets, defs, projects);
+    const base = {
+      fingerprint: c.fingerprint,
+      ...(kind ? { kind } : {}),
+      reason,
+      ...(str(r.title, 200) ? { title: str(r.title, 200)! } : {}),
+      ...(str(r.body, 2000) ? { body: str(r.body, 2000)! } : {}),
+      facets,
+      ...(r.notify === true ? { notify: true } : {}),
+    };
+    const keep = (decision: 'keep' | 'extend' | 'link', target?: string) =>
+      out.keep.push({ candidate: c, verdict: { ...base, decision, ...(target ? { target } : {}) } });
+    const drop = (because: string) => out.drop.push({ candidate: c, reason: `${kind ?? said}, ${because}` });
 
-    out.keep.push({
-      candidate: c,
-      verdict: {
-        fingerprint: c.fingerprint,
-        decision: target ? 'extend' : 'keep',
-        reason,
-        ...(str(r?.title, 200) ? { title: str(r?.title, 200)! } : {}),
-        ...(str(r?.body, 2000) ? { body: str(r?.body, 2000)! } : {}),
-        facets: validFacets(r?.facets, defs, projects),
-        ...(target ? { target } : {}),
-        ...(r?.notify === true ? { notify: true } : {}),
-      },
-    });
+    /**
+     * The owner's own progress on tracked work is a link, not a card — the branch
+     * or the session attaches to the note it belongs to, silently. Only where the
+     * match is mechanical, and only for the owner's own artefacts: a Slack thread
+     * the note already links needs no second link per message, and a text match
+     * is a guess nobody should write a relationship on.
+     */
+    const progress = () => {
+      const onto = tracked[0] ?? firm[0]?.id;
+      if (onto && OWN_ARTEFACTS.has(c.channel)) keep('link', onto);
+      else drop(onto ? 'already tracked; nothing to add' : 'the owner’s own progress');
+    };
+
+    if (tracked.length) {
+      // News about tracked work lands on what tracks it, whatever the verdict
+      // said — the model's own choice among those notes when it made one, the
+      // first of them otherwise. Never as a note of its own.
+      const onto = named && tracked.includes(named) ? named : tracked[0]!;
+      if (kind === 'progress') progress();
+      else if (kind === 'change' && !Object.keys(facets).length && !base.body) drop('nothing on the note changes');
+      else keep('extend', onto);
+      continue;
+    }
+
+    switch (kind) {
+      case 'ask':
+      case 'promise':
+        keep(valid ? 'extend' : 'keep', valid ?? undefined);
+        break;
+      case 'info':
+        // Information has to attach to something: a note it extends, or a
+        // project it is filed under. Otherwise it is a card about nothing.
+        if (valid) keep('extend', valid);
+        else if (facets.project?.length) keep('keep');
+        else drop('attaches to no note or project');
+        break;
+      case 'area':
+        // A mechanical match says the area is mapped after all.
+        if (firm.length) progress();
+        else keep('keep');
+        break;
+      case 'progress':
+        progress();
+        break;
+      case 'change':
+        if (valid && (Object.keys(facets).length || base.body)) keep('extend', valid);
+        else drop(valid ? 'nothing on the note changes' : 'names nothing it changes');
+        break;
+      default:
+        // The older spellings, kept for a vault's own `classify.md`.
+        if (said === 'extend' && valid) keep('extend', valid);
+        else keep('keep');
+    }
   }
   return out;
 }
@@ -591,5 +695,5 @@ export function defaultAsk(root: string): Ask {
   const timeoutMs = cfg.timeoutSeconds * 1000;
   return cfg.provider === 'ollama'
     ? ollamaAsk(cfg.url, cfg.model, timeoutMs)
-    : claudeAsk(cfg.command, cfg.model, timeoutMs);
+    : claudeAsk(cfg.command, cfg.model, timeoutMs, paths(root).config);
 }

@@ -102,6 +102,7 @@ export const BUILTIN_FACETS: Facets = {
     open: true,
     single: true,
     builtin: true,
+    voice: 'pipeline',
     inverse: 'Extending',
   },
 };
@@ -131,7 +132,7 @@ export const BUILTIN_FACETS: Facets = {
  * So a declaration of a built-in is allowed and merges *under* this list.
  * `pj check` errors only when one of these keys is the thing being set.
  */
-export const STRUCTURAL: readonly string[] = ['type', 'values', 'open', 'single'];
+export const STRUCTURAL: readonly string[] = ['type', 'values', 'open', 'single', 'voice'];
 
 /**
  * Load the facet vocabulary. This file is the single place column order lives —

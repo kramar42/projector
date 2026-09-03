@@ -238,6 +238,17 @@ export interface FacetDef {
    */
   builtin?: true;
   /**
+   * Which of the app's own axes speaks in the pin's voice rather than the app's.
+   *
+   * A built-in draws in `--accent`, the app speaking about the note. `extends` is
+   * the app speaking about *the queue*: this card wants folding into that note,
+   * and a reader scanning twenty unjudged cards has to see which ones are that
+   * without reading each. So it borrows the register a pin has — the app's second
+   * voice, the yellow-family value that is not a family — and nothing else may.
+   * Set only in `BUILTIN_FACETS`; a vault cannot claim it.
+   */
+  voice?: 'pipeline';
+  /**
    * What the *other end* of this relation is called, if it has a name worth
    * drawing.
    *

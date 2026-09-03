@@ -945,6 +945,20 @@ invokes it. The cheatsheet closes with `✕` and `esc`, not a static `close` wor
 This does not turn every action into a puzzle: destructive bulk actions, ambiguous actions, and controls
 that need a phrase remain text buttons. The exception is earned by comprehension, not by convenience.
 
+### The Queue Speaks in the Pin's Voice
+
+**`extends` draws in `--pinned`; every other built-in draws in `--accent`.**
+
+A built-in axis is the app speaking about the note, and it draws in the accent. `extends` is the app
+speaking about the *queue*: this unjudged card is not a note of its own, it wants folding into that one.
+A reader clearing twenty cards has to see which are which without opening each, and the accent already
+means "the app's axis" on the same face. So the axis takes the app's second voice — `--pinned`, the
+yellow-family value the pin already uses and that is deliberately not the family, because nothing about
+a note stores it. `.facet-pipeline` on a face and `.refchip.is-pipeline` in the panel tint the fill and
+the border with it and leave the text ink: the value is a note's title, and a title reads as a title.
+The canvas edge for the axis is the same colour, so the line and the chip agree. `voice: 'pipeline'` on
+the built-in is what `hue.ts` reads; a vault cannot set it.
+
 ### The Removal Rule
 
 **`✕` unlinks. The trash destroys. A `danger` word destroys many.**

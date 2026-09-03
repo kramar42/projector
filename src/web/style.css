@@ -1790,6 +1790,18 @@ input:focus-visible + .checkbox {
   border-color: color-mix(in srgb, var(--accent) 32%, transparent);
 }
 
+/* The app's second voice, on a face: `extends`, the one axis that says a card
+   wants folding into another. It borrows the pin's register — `--pinned`, the
+   yellow-family value that is not the family — so twenty unjudged cards sort
+   themselves by eye into the ones that stand alone and the ones that do not.
+   The text stays ink: the value is a note's title, and a title reads as a title. */
+.facet-pipeline {
+  --tone: var(--pinned);
+  background: color-mix(in srgb, var(--pinned) 18%, transparent);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--pinned) 55%, transparent);
+}
+
 /*
  * A reference value, wherever it is drawn.
  *
@@ -3598,6 +3610,14 @@ textarea { resize: vertical; font-family: inherit; }
 
 .refchip.is-app .refchip-go { color: var(--accent); }
 .refchip.is-app:hover { border-color: var(--accent); }
+
+/* `extends` in the panel, in the pin's register — see `.facet-pipeline`. */
+.refchip.is-pipeline {
+  border-color: color-mix(in srgb, var(--pinned) 55%, transparent);
+  background: color-mix(in srgb, var(--pinned) 18%, transparent);
+}
+
+.refchip.is-pipeline:hover { border-color: var(--pinned); }
 
 /* Hueless on purpose. A vault has several reference axes, and One Hue Per Axis
    means a family serves exactly one — so a shared chip colour across all of them

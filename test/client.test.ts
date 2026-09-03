@@ -695,6 +695,10 @@ test("a reference draws as a note, and the app's own axis in the app's colour", 
   );
   // No hue: the chip recedes. The Hints Are Hueless Rule.
   assert.equal(chipClass(axis({})), 'facet-muted');
+  // The queue's own axis speaks in the pin's voice, before the app's.
+  assert.equal(chipClass(axis({ type: 'ref', builtin: true, voice: 'pipeline' })), 'facet-pipeline');
+  assert.equal(edgeColour(axis({ type: 'ref', builtin: true, voice: 'pipeline' })), 'var(--pinned)');
+  assert.deepEqual(registerOf(axis({ type: 'ref', builtin: true, voice: 'pipeline' })), { kind: 'pipeline' });
   assert.equal(chipClass(undefined), 'facet-muted', 'an axis the vocabulary does not have');
 
   // A reference draws as a note however it is declared — a `hue:` on one is a

@@ -27,11 +27,16 @@ import type { FacetDef } from './types.ts';
  */
 export type Register =
   | { kind: 'app' }
+  | { kind: 'pipeline' }
   | { kind: 'note' }
   | { kind: 'family'; hue: string; filled: boolean }
   | { kind: 'muted' };
 
 export function registerOf(def: FacetDef | undefined, bucket?: string): Register {
+  // The app's second voice, before the first: `extends` is the app speaking about
+  // the queue rather than the note, and it draws in the pin's register so a card
+  // that wants folding is told apart from one that stands alone at a glance.
+  if (def?.voice === 'pipeline') return { kind: 'pipeline' };
   // A reference is decided by what it *is*, before any hue it declares: the
   // declaration still does something — it colours the relation's edge — but a
   // note at the end of that edge is drawn as a note.
@@ -64,6 +69,8 @@ export function chipClass(def: FacetDef | undefined, bucket?: string): string {
   switch (reg.kind) {
     case 'app':
       return 'facet-app';
+    case 'pipeline':
+      return 'facet-pipeline';
     case 'note':
       return 'facet-ref';
     case 'muted':
@@ -84,6 +91,7 @@ export function chipClass(def: FacetDef | undefined, bucket?: string): string {
  */
 export function edgeColour(def: FacetDef | undefined): string {
   if (def?.hue && def.hue !== 'none') return `var(--hue-${def.hue})`;
+  if (def?.voice === 'pipeline') return 'var(--pinned)';
   if (def?.builtin) return 'var(--accent)';
   return 'var(--ink-3)';
 }

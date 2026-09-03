@@ -7,7 +7,7 @@ import { Button, IconButton } from './Button.tsx';
 import { RecordMark } from './CardBody.tsx';
 import { useHue } from '../vocabulary.tsx';
 import { KeyHint } from './KeyHint.tsx';
-import { isAppAxis } from '../hue.ts';
+import { isAppAxis, registerOf } from '../hue.ts';
 
 /**
  * Edit one facet's values against the vocabulary in facets.yaml.
@@ -133,6 +133,7 @@ export function FacetEditor({
    * follows between a tinted face chip and a bordered toggle here.
    */
   const app = isAppAxis(def);
+  const pipeline = registerOf(def).kind === 'pipeline';
 
   const body = () => {
     if (def.type === 'ref') {
@@ -143,7 +144,7 @@ export function FacetEditor({
             // click that goes there. Removing is its own mark — the row used
             // to remove on click and say so only in a hover title, which put
             // "go to this note" and "unlink this note" on the same gesture.
-            <span key={v} className={`refchip ${app ? 'is-app' : ''}`}>
+            <span key={v} className={`refchip ${app ? 'is-app' : ''}${pipeline ? 'is-pipeline' : ''}`}>
               {/* The mark sits inside the button, because it is part of the
                   note's identity rather than a control beside it — the same
                   order a card face and the panel title lead with, and the

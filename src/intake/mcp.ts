@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { evidenceFor } from './match.ts';
 import { run, ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
+import { paths } from '../config.ts';
 import {
   conversationsFrom,
   costFromEnvelope,
@@ -177,7 +179,10 @@ function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string):
           '--output-format',
           'json',
         ],
-        { timeoutMs: cfg.mcp.timeoutSeconds * 1000 },
+        // Inside the vault's own `.projector`, so the transcript the relay leaves
+        // under `~/.claude` is recognisable as the app's and never swept back in
+        // as the owner's work by the claude channel.
+        { timeoutMs: cfg.mcp.timeoutSeconds * 1000, ...(existsSync(paths(ctx.root).config) ? { cwd: paths(ctx.root).config } : {}) },
       );
       const elapsed = Date.now() - started;
       if (!res.ok) {

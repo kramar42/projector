@@ -949,9 +949,29 @@ does not propose it again.
 
 Candidates that do not deserve a note are recorded as declined, with the reason, and never become
 files — so a sweep of your own afternoon leaves the board empty and the declined pile three lines
-longer. The rule it applies: your own routine progress is not news to you; what needs a decision, a
-reply, or is unfinished and untracked, is. A candidate that is *more of something already tracked*
-lands pointing at that note through `extends`, to be merged rather than filed.
+longer.
+
+**What earns a card.** The judge names what each candidate *is*, one of seven kinds, and the code
+decides the write from the kind and the evidence. Three kinds earn a card of their own: an **ask** —
+somebody wants a decision, a reply, a review or work from you, and it is still open; a **promise** —
+you said you would do something and have not; and an **area** — substantial work already done that
+nothing in the vault maps yet. **Info** — a decision or finding worth keeping — earns a card only when
+it attaches to something: it extends a matched note, or it is filed under a project; information about
+nothing is a decline. **Change** is news about a tracked item and lands as an `extends` card carrying
+only the axes that move; a change that moves nothing is a decline. **Progress** — your own commits,
+sessions and status moves — is never a card: on a branch or in a workspace that resolves to a note by
+directory or name it is attached to that note as a link, silently, with one line in the log; on a text
+match alone it is a decline, because a relationship should not be written on a guess. Everything else —
+chatter, thanks, scheduling, notifications, anything you can already see where it is — is **drop**, and
+when the judge is torn it drops: a decline is recorded, searchable and reversible in one click, and a
+card you have to read and dismiss is not. A candidate the judge leaves out of its reply is asked about
+once more, alone; if it is still unanswered it is declined with that reason rather than written as a raw
+card. Each card's leading quote names the kind and the reason, so the queue says what each card is
+before you open it.
+
+Only sessions that ran inside a repo some project declares, or a workspace some note recorded, count as
+this vault's work: a personal project's sessions and the app's own headless runs are skipped with the
+directory in the reason. Declaring a repo on a project is how you widen that.
 
 **Intake is a sync, not only an inbox.** A sweep used to discover and nothing else: an issue a note
 already linked was skipped, a Slack message in a thread a note already pointed at became a second

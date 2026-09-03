@@ -1,5 +1,6 @@
 import { loadFacets } from '../schema/facets.ts';
-import { createNote } from '../server/mutate.ts';
+import { createNote, patchNote } from '../server/mutate.ts';
+import { readAll } from '../index/indexer.ts';
 import { paths } from '../config.ts';
 import type { Verdict } from './classify.ts';
 import type { Candidate } from './types.ts';
@@ -50,6 +51,11 @@ export interface Materialised {
    * the sync half — rather than a discovery that happened to match one.
    */
   updates: number;
+  /**
+   * The owner's own progress attached to the note it belongs to, with no card:
+   * the branch or session's link and its fingerprint now on that note.
+   */
+  linked: { id: string; fingerprint: string }[];
   /** The ones the classifier judged worth interrupting for: `{id, title}`. */
   notify: { id: string; title: string }[];
 }
@@ -109,10 +115,33 @@ export function materialise(
   const canTagSource =
     Boolean(defs.source) && (defs.source?.open || (defs.source?.values ?? []).includes(channel));
 
-  const out: Materialised = { created: [], skipped: 0, extending: 0, updates: 0, notify: [] };
+  const out: Materialised = { created: [], skipped: 0, extending: 0, updates: 0, linked: [], notify: [] };
+  let notes: Map<string, { links: { raw: string }[] }> | null = null;
   for (const { candidate: c, verdict: v } of kept) {
     if (alreadyAnswered(c, v)) {
       out.skipped++;
+      continue;
+    }
+    /**
+     * A link, not a card. The candidate's link joins the note's and its
+     * fingerprint is absorbed there, so the next sweep finds the branch answered
+     * for. `patchNote` refuses a fingerprint another note already holds, which is
+     * the convergence `createNote` has: a second run attaches nothing twice.
+     */
+    if (v.decision === 'link' && v.target) {
+      notes ??= readAll(paths(root).notes).notes;
+      const target = notes.get(v.target);
+      if (!target) {
+        out.skipped++;
+        continue;
+      }
+      try {
+        const links = [...new Set([...target.links.map((l) => l.raw), ...c.links])];
+        patchNote(root, v.target, { links, absorb: { values: [c.fingerprint], mode: 'add' } });
+        out.linked.push({ id: v.target, fingerprint: c.fingerprint });
+      } catch {
+        out.skipped++;
+      }
       continue;
     }
     const res = createNote(root, {

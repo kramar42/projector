@@ -1,7 +1,9 @@
+import { resolve, sep } from 'node:path';
 import { listTranscripts, liveById, describeTranscript } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
-import { evidenceFor } from './match.ts';
-import type { Candidate, Channel, ChannelReport, Skipped } from './types.ts';
+import { parseLink } from '../schema/links.ts';
+import { evidenceFor, repoIndex } from './match.ts';
+import type { Candidate, Channel, ChannelReport, IntakeContext, Skipped } from './types.ts';
 
 /**
  * Claude sessions that moved since the last sweep.
@@ -36,12 +38,48 @@ export function touchedButIdle(lastAt: string | undefined, since: Date): boolean
   return Number.isFinite(t) && t < since.getTime();
 }
 
+const inside = (path: string, dir: string): boolean => path === dir || path.startsWith(dir + sep);
+
+/**
+ * Whether a session's directory makes it this vault's work.
+ *
+ * A machine's `~/.claude` holds every session ever run on it — personal
+ * projects, one-off questions, and the app's own headless runs, which live under
+ * a vault's `.projector`. None of that is this vault's work, and offering it
+ * produced cards about a projector design discussion and about the relay's own
+ * prompt. So a session counts only inside a repo some project note declares or a
+ * workspace some note recorded (`workspace:` links); the app's own sessions are
+ * named for what they are. Deterministic, and widened by declaring a repo.
+ */
+export function placeOf(
+  cwd: string | undefined,
+  repos: string[],
+  workspaces: string[],
+): 'work' | 'app' | 'outside' | 'unknown' {
+  if (!cwd) return 'unknown';
+  const here = resolve(cwd);
+  if (here.split(sep).includes('.projector')) return 'app';
+  if (repos.some((r) => inside(here, r)) || workspaces.some((w) => inside(here, w))) return 'work';
+  return 'outside';
+}
+
+function workspacesIn(ctx: IntakeContext): string[] {
+  const out: string[] = [];
+  for (const raw of ctx.links.keys()) {
+    const link = parseLink(raw);
+    if (link.kind === 'workspace') out.push(resolve(link.ref.trim()));
+  }
+  return out;
+}
+
 export const claudeChannel: Channel = {
   name: 'claude',
   defaultDays: 7,
 
   collect(ctx): ChannelReport {
     const live = liveById();
+    const repos = repoIndex(ctx).map((r) => r.path);
+    const workspaces = workspacesIn(ctx);
     // Oldest first: the cursor has to advance monotonically, so a truncated run
     // must stop at a boundary with nothing older left behind it. See `run.ts`.
     const transcripts = listTranscripts({ since: ctx.since }).reverse();
@@ -113,6 +151,21 @@ export const claudeChannel: Channel = {
           fingerprint,
           title: sum.opening || t.uuid.slice(0, 8),
           why: `${sum.turns} turn(s) — below the threshold for work`,
+        });
+        continue;
+      }
+
+      const place = placeOf(sum.cwd, repos, workspaces);
+      if (place !== 'work') {
+        skipped.push({
+          fingerprint,
+          title: sum.opening || t.uuid.slice(0, 8),
+          why:
+            place === 'app'
+              ? 'the app’s own session, under a .projector directory'
+              : place === 'unknown'
+                ? 'no working directory recorded'
+                : `${sum.cwd} is outside every declared repo and recorded workspace`,
         });
         continue;
       }

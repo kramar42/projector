@@ -169,6 +169,13 @@ things.
   note, and the classifier has to drop it. Splitting a DM into episodes needs a gap threshold nobody
   can defend yet; do it when a real DM produces the wrong card, with that DM as the test.
 
+- **A change cannot clear an axis.** The judge proposes a delta as `facets` with new values, and
+  `validFacets` drops an empty list, so "nobody is waiting any more" — `waiting_on` cleared because the
+  thread was answered — is not expressible; the fold dialog draws no row for an empty `after` either.
+  The change is then a drop with "nothing on the note changes", and clearing stays a keystroke. Worth
+  fixing when the answered-thread case is the one that keeps arriving: an explicit empty list as a
+  proposal, and a fold row whose `after` is empty.
+
 - **Jira's change signal is status and assignee.** Comments move `updated` and are not fetched, so a
   question asked in a comment on a tracked issue is not news to the sync — it reaches the vault only if
   it also reaches a mailbox or a mention. Fetching comments is one more field and a bigger payload;
