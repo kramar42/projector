@@ -3012,3 +3012,27 @@ test('a session counts as this vault’s work only inside a declared repo or a r
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+
+test('a rejudged card that extends a note is judged as news about that note', async () => {
+  const root = vault({
+    real: `---\nid: real\ntitle: The tracked note\nfacets: { status: [active] }\n---\n\nb\n`,
+    card: `---\nid: card\ntitle: Timeline moved\nfacets: { intake: [unjudged], extends: [real], due: ['2026-09-06'] }\n---\n\nPromised for Monday.\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  single: true\ndue:\n  type: date\n  single: true\n', 'utf8');
+  let seen = '';
+  const judge: Ask = async (_s, user) => {
+    seen = user;
+    return JSON.stringify((JSON.parse(user) as { fp: string }[]).map((c) => ({ fp: c.fp, decision: 'change', reason: 'deadline moved', title: 'Timeline moved', body: 'Promised for Monday.', facets: { due: ['2026-09-07'] } })));
+  };
+  try {
+    const res = await rejudge(root, { ask: judge });
+    assert.match(seen, /"tracked":\[\{"id":"real"/, 'the card’s target is shown as the note it is news about');
+    assert.deepEqual(res.wouldDrop, [], 'a change with a delta onto its note is kept');
+    assert.deepEqual(res.changed.map((c) => c.id), ['card']);
+    assert.deepEqual(reindex(root).notes.get('card')!.facets.extends, ['real'], 'and it still extends the note');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});

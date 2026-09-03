@@ -70,16 +70,32 @@ export async function rejudge(
    * question is whether *this card*, as written, is worth keeping and correctly
    * described.
    */
-  const candidates: Candidate[] = pending.map((n) => ({
-    // Not read off whatever axis this vault records provenance on: which axis
-    // that is, is the vault's business (C4), and the channel is only context for
-    // the prompt here. The card is the input, not where it came from.
-    channel: 'vault',
-    fingerprint: n.source_fingerprint ?? `note:${n.id}`,
-    title: n.title,
-    links: n.links.map((l) => l.raw),
-    ...(n.body.trim() ? { detail: n.body.trim().slice(0, 800) } : {}),
-  }));
+  const candidates: Candidate[] = pending.map((n) => {
+    // A card that extends a note is news about that note, and the contract has
+    // to know it: without the target as tracking evidence a `change` on it
+    // looks untargeted and is dropped for naming nothing it changes — which is
+    // how a promise with a due date was named stale on the first rejudge.
+    const target = n.facets.extends?.[0];
+    const tracked = target && notes.has(target) ? [target] : [];
+    return {
+      // Not read off whatever axis this vault records provenance on: which axis
+      // that is, is the vault's business (C4), and the channel is only context
+      // for the prompt here. The card is the input, not where it came from.
+      channel: 'vault',
+      fingerprint: n.source_fingerprint ?? `note:${n.id}`,
+      title: n.title,
+      links: n.links.map((l) => l.raw),
+      ...(n.body.trim() ? { detail: n.body.trim().slice(0, 800) } : {}),
+      ...(tracked.length
+        ? {
+            evidence: {
+              linkedTo: tracked,
+              matches: tracked.map((id) => ({ id, title: notes.get(id)?.title ?? id, why: 'tracked' })),
+            },
+          }
+        : {}),
+    };
+  });
 
   const judged = await classify(root, candidates, opts.ask);
   if (!judged) {
