@@ -61,8 +61,16 @@ export const DECLINED_PARAM = 'declined';
  */
 export const PINS_PARAM = 'pins';
 
+/**
+ * The app inside someone else's frame — see `embed.ts`.
+ *
+ * Context, like `?vault=`: it says how this window is being looked at, never
+ * what it is looking at, so it is preserved by every control and saved by none.
+ */
+export const EMBED_PARAM = 'embed';
+
 /** Params that belong to the query, so the rest can be preserved verbatim. */
-function isQueryParam(key: string): boolean {
+export function isQueryParam(key: string): boolean {
   return key.startsWith('f.') || (SPEC_PARAMS as readonly string[]).includes(key);
 }
 
@@ -79,7 +87,7 @@ function isQueryParam(key: string): boolean {
 function isOwnParam(key: string): boolean {
   // Context belongs in the URL but never in a view. Keep it isolated here so a
   // feature that adds a view-adjacent key cannot accidentally discard it.
-  if (key === VAULT_PARAM) return true;
+  if (key === VAULT_PARAM || key === EMBED_PARAM) return true;
   return (
     key === NOTE_PARAM || key === SEL_PARAM || key === DECLINED_PARAM || key === PINS_PARAM ||
     // The calendar's page and grid are app-owned URL state. The page anchor is

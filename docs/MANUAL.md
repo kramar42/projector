@@ -543,6 +543,24 @@ rule board that should stay at zero. Without it the intake board reports the mom
 judging as "no note matches this filter", which is the one moment the loop pays you back. Saved-file
 only, like `lists:` and the arrangement: no control can derive what a view is *for*.
 
+## Embedding
+
+projector can be one part of itself inside another page's `<iframe>`. `?embed=view` draws the shape
+alone — no sidebar, and no panel sliding over it — `?embed=sidebar` draws the sidebar alone, and
+`?embed=note` draws the note panel alone, showing whatever `?note=` names. Everything else about the URL
+means what it always means, so `?vault=work&embed=view&view=actionable&shape=board` is the actionable
+board and nothing but the board. `?embed=` is context like `?vault=`: preserved by every control, saved
+by none.
+
+The parts find each other through the page that holds them. Whenever the URL changes, the frame posts
+`{ projector: "query", search, sel, note }` to its parent — the query half of the URL, the selected note
+ids and the open note — and the parent may post `{ projector: "navigate", search?, sel?, note? }` back
+to any frame, which replaces exactly what it names and nothing else. Clicking a card in an embedded
+shape therefore does not open the panel there: it sets `?note=`, which goes up, and the page puts it
+into the frame that *is* the panel. A page holding a sidebar frame, three shape frames and a note frame
+on the same query is projector's own "same notes, one control moved", drawn five times at once. Writing
+still happens where it always did, inside each frame, against the same server.
+
 ## Rules you can check
 
 Three of those keys are one feature. A **rule** is an ordinary saved view that says what should never

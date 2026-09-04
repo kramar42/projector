@@ -1,0 +1,158 @@
+{
+  "app": "projector",
+  "appLabel": "Projector",
+  "publishedBy": "kramar42/projector",
+  "note": "projector itself as patchwork cards. projector is a personal work-management app over a markdown vault (README.md at the repo root); its URL is its view (principle C9), and `?embed=view` / `?embed=sidebar` / `?embed=note` (src/web/embed.ts) draw one half of the app inside another page's frame, reporting the query up and taking a navigation down. So each card here is the real app in a frame — board, table, graph, calendar, the sidebar, or the note panel — with full functionality, and the card's own code only carries the URL between the frame and the workspace's focus channel: the query as a pj.view ref, the open note as a pj.note ref. Rewritten 2026-09-05 from hand-drawn projections to the app itself, on request. A workspace references this manifest by URL and does not vendor the files.",
+  "cards": [
+    {
+      "id": "controls",
+      "moduleId": "projector",
+      "name": "Sidebar",
+      "subtitle": "projector's sidebar: views, search, group, sort, filters",
+      "intent": "Hosts projector's own sidebar (?embed=sidebar) in a frame for the workspace's vault, asked from api.projector.meta.v1. Every control in it — saved views, search, group, sort, filters, focus — is the real one; whenever its query changes the card selects the query as a pj.view ref, and a pj.view or pj.note selected elsewhere is navigated into the frame. Shape is left out of the ref: each shape card is one shape.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 2,
+      "html": "controls.html"
+    },
+    {
+      "id": "board",
+      "moduleId": "projector",
+      "name": "Board",
+      "subtitle": "projector's board, the app itself",
+      "intent": "Hosts projector's own board (?embed=view&shape=board) in a frame for the workspace's vault, asked from api.projector.meta.v1: drag between columns, keyboard, every write are the app's. Follows the pj.view selected on the focus channel — actionable when none is — and the pj.note selection; a card opened inside the frame does not slide its panel over the shape — it becomes the pj.note selection, and the Note card shows it.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 4,
+      "html": "board.html"
+    },
+    {
+      "id": "table",
+      "moduleId": "projector",
+      "name": "Table",
+      "subtitle": "projector's table, the app itself",
+      "intent": "Hosts projector's own table (?embed=view&shape=table) in a frame for the workspace's vault, asked from api.projector.meta.v1: columns, sorting, the bulk bar, every write are the app's. Follows the pj.view selected on the focus channel — everything when none is — and the pj.note selection; a card opened inside the frame does not slide its panel over the shape — it becomes the pj.note selection, and the Note card shows it.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 4,
+      "html": "table.html"
+    },
+    {
+      "id": "graph",
+      "moduleId": "projector",
+      "name": "Graph",
+      "subtitle": "projector's graph, the app itself",
+      "intent": "Hosts projector's own graph (?embed=view&shape=graph) in a frame for the workspace's vault, asked from api.projector.meta.v1: pan, zoom, drag-to-arrange, save layout, edges by reference facet and the note panel are the app's. Follows the pj.view selected on the focus channel — patchwork when none is — and the pj.note selection; a card opened inside the frame does not slide its panel over the shape — it becomes the pj.note selection, and the Note card shows it.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 4,
+      "html": "graph.html"
+    },
+    {
+      "id": "calendar",
+      "moduleId": "projector",
+      "name": "Calendar",
+      "subtitle": "projector's calendar, the app itself",
+      "intent": "Hosts projector's own calendar (?embed=view&shape=calendar) in a frame for the workspace's vault, asked from api.projector.meta.v1: paging, grid settings, drag-to-reschedule and the note panel are the app's. Follows the pj.view selected on the focus channel — timeline when none is — and the pj.note selection; a card opened inside the frame does not slide its panel over the shape — it becomes the pj.note selection, and the Note card shows it.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 4,
+      "html": "calendar.html"
+    },
+    {
+      "id": "note",
+      "moduleId": "projector",
+      "name": "Note",
+      "subtitle": "projector's note panel, the app itself",
+      "intent": "Hosts projector's own note panel (?embed=note) in a frame for the workspace's vault, asked from api.projector.meta.v1, showing the pj.note selected on the focus channel: title, facets, body editor, links, the work starter — every write is the app's. With no note selected it says so. A note the panel navigates to (a link, a parent) becomes the pj.note selection for every card.",
+      "emits": [],
+      "consumes": [],
+      "asks": [
+        "api.projector.meta.v1"
+      ],
+      "focusProduces": [
+        "pj.view",
+        "pj.note"
+      ],
+      "focusConsumes": [
+        "pj.view",
+        "pj.note"
+      ],
+      "components": [
+        "br-empty"
+      ],
+      "defaultSpan": 3,
+      "html": "note.html"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" />
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--br-color-bg-app); }
+  iframe { flex: 1; width: 100%; border: 0; display: none; }
+</style>
+</head>
+<body>
+<div id="empty" class="br-empty"><div class="br-empty-title">Opening projector</div><p>Asking which vault this workspace is about.</p></div>
+<iframe id="app" title="projector"></iframe>
+<script>
+  // This card is projector itself — the note panel — in a frame, not a redrawing of
+  // it. projector's URL is its view (its C9), so holding the URL is holding the
+  // view; the card's only job is to carry that URL between the frame and the
+  // workspace's focus channel: the query as a pj.view ref, the open note as a
+  // pj.note ref. Full app inside: keyboard, drag, writes — all its own. The
+  // note panel is another card (embed=note), which is why a shape frame never
+  // slides it over itself: it reports the note, and the workspace routes it.
+  var BASE = "http://127.0.0.1:8092";   // where `bun run serve` listens (projector/CLAUDE.md)
+  var EMBED = "note", SHAPE = null, DEFAULT = "view=actionable";
+  var frame = document.getElementById("app");
+  var vaultName = null, current = null, note = null, lastKey = null, pending = null;
+
+  function withoutShape(search) {
+    var p = new URLSearchParams(search.replace(/^\?/, "")); p.delete("shape"); return p.toString();
+  }
+  function frameUrl(search) {
+    var p = new URLSearchParams(withoutShape(search));
+    if (SHAPE) p.set("shape", SHAPE);
+    if (note) p.set("note", note);
+    p.set("vault", vaultName); p.set("embed", EMBED);
+    return BASE + "/?" + p.toString();
+  }
+  function keyOf(search, n) { return search + "|" + (n || ""); }
+  function failed(title, message) {
+    var e = document.getElementById("empty"); e.style.display = "";
+    e.querySelector(".br-empty-title").textContent = title; e.querySelector("p").textContent = message;
+  }
+
+  // Up: the frame reports its query and its open note; the card selects them
+  // for everyone. `shape` is stripped from the view ref, or four shape cards
+  // would each insist on their own and the selection would never settle.
+  window.addEventListener("message", function (ev) {
+    if (ev.origin !== BASE || !ev.data || ev.data.projector !== "query") return;
+    var search = withoutShape(ev.data.search || ""), n = ev.data.note || null;
+    current = search; note = n; lastKey = keyOf(search, n);
+    var refs = [{ type: "pj.view", id: search }];
+    if (n) refs.push({ type: "pj.note", id: n });
+    TOS.select(refs);
+  });
+
+  // Down: a view or a note selected elsewhere becomes this frame's URL.
+  TOS.onFocus(function (f) {
+    var view = null, n = null;
+    (f.selection || []).forEach(function (r) { if (r.type === "pj.view") view = r.id; if (r.type === "pj.note" && n === null) n = r.id; });
+    if (view === null && n === null) return;
+    var search = view === null ? current : withoutShape(view);
+    if (search === null) return;
+    var k = keyOf(search, n);
+    if (k === lastKey) return;
+    lastKey = k;
+    if (!vaultName) { pending = search; note = n; return; }
+    current = search; note = n;
+    var msg = { projector: "navigate", search: search + (SHAPE ? "&shape=" + SHAPE : ""), note: n };
+    frame.contentWindow.postMessage(msg, BASE);
+  });
+
+  TOS.ask("api.projector.meta.v1").then(function (m) {
+    vaultName = m.vaultName;
+    current = pending !== null ? pending : (TOS.context.view || DEFAULT);
+    frame.src = frameUrl(current);
+    document.getElementById("empty").style.display = "none"; frame.style.display = "block";
+  }).catch(function (e) { failed("projector unavailable", e.message); });
+</script>
+</body>
+</html>

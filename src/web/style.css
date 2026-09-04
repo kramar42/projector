@@ -421,6 +421,37 @@ body {
   --rail-w: 38px;
 }
 
+/* One half of the app in someone else's frame (embed.ts): whichever half is
+   drawn takes the whole width, and the sidebar loses the rule that separated
+   it from a main that is not there. */
+.shell.embed-view,
+.shell.embed-sidebar,
+.shell.embed-note {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shell.embed-sidebar .sidebar {
+  border-right: 0;
+}
+/* The panel *is* the window: no fixed edge to slide in from, no shadow over a
+   shape that is not there, the frame's own width. */
+.shell.embed-note .panel {
+  position: static;
+  width: 100%;
+  height: 100%;
+  border-left: 0;
+  box-shadow: none;
+}
+.shell.embed-note .scrim {
+  display: none;
+}
+.embed-note-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: var(--text-root);
+}
+
 /*
  * The panel covers the view; it does not take a track from it.
  *

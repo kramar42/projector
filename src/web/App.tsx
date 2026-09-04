@@ -37,6 +37,7 @@ import { VaultPicker } from './VaultPicker.tsx';
 import { Cheatsheet } from './Cheatsheet.tsx';
 import { Palette } from './Palette.tsx';
 import { asksOnlyForAVault, VAULT_PARAM, vaultOf } from './vault.ts';
+import { embedOf, mergeEmbedNavigate, onEmbedNavigate, postEmbedQuery } from './embed.ts';
 import {
   NOTE_PARAM,
   DECLINED_PARAM,
@@ -121,6 +122,9 @@ export function App() {
   const [location, navigate] = useLocation();
   const search = useSearch();
   const vault = vaultOf(search);
+  // Inside someone else's frame? Then one half draws, and the query travels
+  // through the host — see embed.ts.
+  const embed = embedOf(search);
   // No vault chosen, or the server rejected the one we named: ask.
   const [gate, setGate] = useState<{ reason?: string } | null>(
     vault ? null : { reason: undefined },
@@ -173,6 +177,21 @@ export function App() {
   // Reading the current location from a ref keeps the deps genuinely empty.
   const nav = useRef({ search, location, navigate });
   nav.current = { search, location, navigate };
+
+  // Embedded: every change of the URL is reported up; a navigation from the
+  // host replaces the query and the selection in place, as `replace` — the
+  // host holds the history, this frame is one of its views.
+  useEffect(() => postEmbedQuery(search), [search]);
+  useEffect(
+    () =>
+      onEmbedNavigate((msg) => {
+        const { search: s, location: loc, navigate: go } = nav.current;
+        if (!embedOf(s)) return;
+        const next = mergeEmbedNavigate(s, msg);
+        if (next !== s) go(`${loc}${next}`, { replace: true });
+      }),
+    [],
+  );
 
   /**
    * The URL is the view, so a key nothing reads is not part of it.
@@ -858,13 +877,16 @@ export function App() {
       <div
         className={`shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${
           openNote && !stackOpen ? 'panel-is-open' : ''
-        } ${openNote && pins.length && !stackOpen ? 'pins-are-docked' : ''}`}
+        } ${openNote && pins.length && !stackOpen ? 'pins-are-docked' : ''} ${
+          embed ? `embed-${embed}` : ''
+        }`}
         // The dock's reach, for `--covered-right`: `SPINE_W` per pin, measured
         // nowhere because it is a token — the same argument `.panel` makes.
         // It matters only beside an open panel; compact views carry their pins
         // on the notes' record marks and give none of the view to duplicate UI.
         style={{ ['--pins-w' as string]: `${pins.length * SPINE_W}px` }}
       >
+        {embed !== 'view' && embed !== 'note' && (
         <Sidebar
           meta={meta}
           data={data}
@@ -890,6 +912,8 @@ export function App() {
           covered={stackOpen}
           onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
+        )}
+        {embed !== 'sidebar' && embed !== 'note' && (
         <main className="main" inert={stackOpen}>
           {/*
             What the keyboard did, when it is worth saying.
@@ -917,6 +941,7 @@ export function App() {
           )}
           {content}
         </main>
+        )}
         {helpOpen && <Cheatsheet meta={meta} onClose={() => setHelpOpen(false)} />}
         {paletteOpen && (
           <Palette
@@ -987,7 +1012,15 @@ export function App() {
             />
           </Suspense>
         )}
-        {openNote && !stackOpen && (
+        {/* Embedded as a shape or the sidebar, the panel is another frame's job:
+            `?note=` still travels in the URL and goes up to the host (embed.ts),
+            but nothing slides over the shape here. Embedded *as* the panel, this
+            is the whole window; with no note it says so instead of drawing
+            nothing. */}
+        {embed === 'note' && !openNote && (
+          <div className="embed-note-empty">No note open — pick one in any shape.</div>
+        )}
+        {openNote && !stackOpen && embed !== 'view' && embed !== 'sidebar' && (
           // A lazy chunk with no visible fallback: the panel slides in beside a
           // board that is already drawn, and an empty aside for one network
           // round-trip reads better than a flash of text inside it.
