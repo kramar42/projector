@@ -3,6 +3,305 @@
   "appLabel": "Projector",
   "publishedBy": "kramar42/projector",
   "note": "projector itself as patchwork cards. projector is a personal work-management app over a markdown vault (README.md at the repo root); its URL is its view (principle C9), and `?embed=view` / `?embed=sidebar` / `?embed=note` (src/web/embed.ts) draw one half of the app inside another page's frame, reporting the query up and taking a navigation down. So each card here is the real app in a frame — board, table, graph, calendar, the sidebar, or the note panel — with full functionality, and the card's own code only carries the URL between the frame and the workspace's focus channel: the query as a pj.view ref, the open note as a pj.note ref. Rewritten 2026-09-05 from hand-drawn projections to the app itself, on request. A workspace references this manifest by URL and does not vendor the files.",
+  "about": {
+    "label": "Projector",
+    "caption": "one query, one shape per card",
+    "hue": "#a21caf",
+    "description": "projector, a personal work-management app over a markdown vault: one shape of the same query per card. Not a Bluerock system.",
+    "ui": "http://127.0.0.1:8092",
+    "api": {
+      "base": "/pj-api",
+      "headers": {
+        "X-Projector-Vault": "work"
+      }
+    }
+  },
+  "contracts": {
+    "requests": [
+      {
+        "kind": "api",
+        "app": "projector",
+        "name": "api.projector.meta.v1",
+        "wiring": "api-only",
+        "operationId": "meta",
+        "summary": "The vault's vocabulary: facets, computed axes, saved views, counts.",
+        "method": "GET",
+        "path": "/meta",
+        "params": [],
+        "evidence": "GET /api/meta — src/server/serve.ts, meta() in src/server/meta.ts",
+        "response": {
+          "cardinality": "one",
+          "fields": [
+            {
+              "key": "vaultName",
+              "type": "string",
+              "description": "Registered name of the vault"
+            },
+            {
+              "key": "facets",
+              "type": "object",
+              "description": "facet name → {label, type, values, open, single, hue, buckets}",
+              "fields": []
+            },
+            {
+              "key": "computed",
+              "type": "array",
+              "description": "{name, label} of the computed axes",
+              "fields": []
+            },
+            {
+              "key": "views",
+              "type": "array",
+              "description": "{name, title, shape} of every saved view",
+              "fields": []
+            },
+            {
+              "key": "counts",
+              "type": "object",
+              "description": "facet value population",
+              "fields": []
+            }
+          ]
+        }
+      },
+      {
+        "kind": "api",
+        "app": "projector",
+        "name": "api.projector.query.v1",
+        "wiring": "api-only",
+        "operationId": "query",
+        "summary": "The one read: a saved view's name plus any override, answered as notes, grouping, counts, relations and arrangement.",
+        "method": "GET",
+        "path": "/query",
+        "params": [
+          {
+            "key": "view",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "Saved view supplying the defaults"
+          },
+          {
+            "key": "shape",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "table | board | graph | calendar — graph is what makes relations and layout come back"
+          },
+          {
+            "key": "group",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "Grouping facet(s), comma-separated"
+          },
+          {
+            "key": "sort",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "facet:asc|desc"
+          },
+          {
+            "key": "q",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "Full-text search"
+          },
+          {
+            "key": "focus",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "A note id to walk from"
+          },
+          {
+            "key": "via",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "Reference facet to walk"
+          },
+          {
+            "key": "dir",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "out | in | both"
+          },
+          {
+            "key": "depth",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "How far to walk"
+          },
+          {
+            "key": "show",
+            "in": "query",
+            "type": "string",
+            "optional": true,
+            "description": "Facets to surface, comma-separated; the first reference one lays a graph out"
+          },
+          {
+            "key": "f",
+            "in": "query",
+            "type": "object",
+            "optional": true,
+            "description": "Facet filters: { status: 'active,planning', priority: 'week' } → f.status=…&f.priority=…; a value may be negated with -",
+            "fields": []
+          }
+        ],
+        "evidence": "GET /api/query — src/server/serve.ts resolveSpec + src/view/payload.ts queryPayload; SPEC_PARAMS in src/view/spec.ts; f.<facet> in src/web/query.ts",
+        "response": {
+          "cardinality": "one",
+          "fields": [
+            {
+              "key": "spec",
+              "type": "object",
+              "description": "The resolved view: shape, query{filter,groupBy,sort}, show, name, title, nodes (saved graph positions), order",
+              "fields": []
+            },
+            {
+              "key": "notes",
+              "type": "object",
+              "description": "id → note",
+              "fields": [
+                {
+                  "key": "id",
+                  "type": "string",
+                  "description": "Note id — the file's identity in the vault"
+                },
+                {
+                  "key": "title",
+                  "type": "string",
+                  "description": "Title"
+                },
+                {
+                  "key": "isProject",
+                  "type": "boolean",
+                  "description": "Carries a project: block"
+                },
+                {
+                  "key": "facets",
+                  "type": "object",
+                  "description": "facet → values (arrays, even single ones)",
+                  "fields": []
+                },
+                {
+                  "key": "buckets",
+                  "type": "object",
+                  "description": "ordered facets as bucket names, e.g. due → [overdue]",
+                  "fields": []
+                },
+                {
+                  "key": "computed",
+                  "type": "object",
+                  "description": "computed axes: type, blocked, staleness, linked",
+                  "fields": []
+                },
+                {
+                  "key": "links",
+                  "type": "array",
+                  "description": "{kind, ref, label, href, raw}",
+                  "fields": []
+                },
+                {
+                  "key": "excerpt",
+                  "type": "string",
+                  "description": "First lines of the body"
+                },
+                {
+                  "key": "progress",
+                  "type": "object",
+                  "optional": true,
+                  "description": "{done, total} of checkboxes",
+                  "fields": []
+                },
+                {
+                  "key": "updated",
+                  "type": "string",
+                  "optional": true,
+                  "description": "ISO date the app last wrote it"
+                }
+              ]
+            },
+            {
+              "key": "ids",
+              "type": "array",
+              "description": "Matching note ids in sort order",
+              "fields": []
+            },
+            {
+              "key": "context",
+              "type": "array",
+              "description": "Ids shown for context but not matching (graph)",
+              "fields": []
+            },
+            {
+              "key": "groups",
+              "type": "array",
+              "description": "{value, ids} per primary group value",
+              "fields": []
+            },
+            {
+              "key": "groupOrder",
+              "type": "object",
+              "description": "{primary: [...], secondary: [...]} — column order",
+              "fields": []
+            },
+            {
+              "key": "counts",
+              "type": "array",
+              "description": "Per facet, {facet, label, values: [{value, count, selected, excluded}]}",
+              "fields": []
+            },
+            {
+              "key": "total",
+              "type": "number",
+              "description": "Matching notes"
+            },
+            {
+              "key": "universe",
+              "type": "number",
+              "description": "Notes in the vault"
+            },
+            {
+              "key": "layout",
+              "type": "string",
+              "optional": true,
+              "description": "The reference facet a graph lays out by"
+            },
+            {
+              "key": "relations",
+              "type": "array",
+              "description": "{src, dst, type} edges among the shown notes, per reference facet in show",
+              "fields": []
+            },
+            {
+              "key": "views",
+              "type": "array",
+              "description": "{name, title, shape} of every saved view",
+              "fields": []
+            }
+          ]
+        }
+      }
+    ],
+    "focusRefTypes": [
+      {
+        "name": "pj.view",
+        "idField": "search",
+        "description": "A projector view as its query string (view=…&group=…&sort=…&q=…&f.<facet>=…), the way projector's own URL carries it. Shape is left out: each card is one shape."
+      },
+      {
+        "name": "pj.note",
+        "idField": "id",
+        "description": "A projector note, by its id — the markdown file's identity in the vault."
+      }
+    ]
+  },
   "cards": [
     {
       "id": "controls",
