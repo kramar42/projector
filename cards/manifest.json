@@ -326,6 +326,7 @@
         "br-empty"
       ],
       "defaultSpan": 2,
+      "status": "framed",
       "html": "controls.html"
     },
     {
@@ -351,6 +352,7 @@
         "br-empty"
       ],
       "defaultSpan": 4,
+      "status": "framed",
       "html": "board.html"
     },
     {
@@ -376,6 +378,7 @@
         "br-empty"
       ],
       "defaultSpan": 4,
+      "status": "framed",
       "html": "table.html"
     },
     {
@@ -401,6 +404,7 @@
         "br-empty"
       ],
       "defaultSpan": 4,
+      "status": "framed",
       "html": "graph.html"
     },
     {
@@ -426,6 +430,7 @@
         "br-empty"
       ],
       "defaultSpan": 4,
+      "status": "framed",
       "html": "calendar.html"
     },
     {
@@ -451,6 +456,7 @@
         "br-empty"
       ],
       "defaultSpan": 3,
+      "status": "framed",
       "html": "note.html"
     }
   ]
