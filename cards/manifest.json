@@ -14,7 +14,8 @@
       "headers": {
         "X-Projector-Vault": "work"
       }
-    }
+    },
+    "data": "data.json"
   },
   "contracts": {
     "requests": [
@@ -62,7 +63,12 @@
               "fields": []
             }
           ]
-        }
+        },
+        "reads": [
+          "vault.facets",
+          "vault.views"
+        ],
+        "writes": []
       },
       {
         "kind": "api",
@@ -286,7 +292,13 @@
               "fields": []
             }
           ]
-        }
+        },
+        "reads": [
+          "vault.notes",
+          "vault.views",
+          "vault.facets"
+        ],
+        "writes": []
       }
     ],
     "focusRefTypes": [

@@ -1,0 +1,12 @@
+{
+  "generatedBy": "written by hand 2026-09-05 from .claude/skills/pj-about/SKILL.md — a projector vault is markdown notes with frontmatter, a facet vocabulary, and saved views; nothing is a database",
+  "tables": [
+    { "name": "vault.notes", "description": "One markdown file per note. The id is the file name; frontmatter carries the facets, links and dates; the body is prose.", "store": "markdown files in the vault (git)", "columns": [
+      { "name": "id", "type": "text", "description": "File name, lower-cased." }, { "name": "title", "type": "text" }, { "name": "facets", "type": "map<axis, value[]>", "description": "project, layer, status, priority, source … — the axes facets.yaml defines." }, { "name": "links", "type": "text[]", "description": "doc:, jira:, gh:, workspace: … references." }, { "name": "created", "type": "date" }, { "name": "updated", "type": "date" }, { "name": "body", "type": "markdown" } ],
+      "writtenBy": ["pj CLI", "a person's editor"] },
+    { "name": "vault.facets", "description": "The vocabulary: which facet axes exist, their values and order (.projector/facets.yaml).", "store": "yaml in the vault", "columns": [
+      { "name": "axis", "type": "text" }, { "name": "values", "type": "text[]" }, { "name": "order", "type": "integer" } ], "writtenBy": ["a person's editor"] },
+    { "name": "vault.views", "description": "Saved views — a query (facet filters, grouping, layout) with a name, what `pj ls --view` and the board/table/canvas cards render.", "store": "yaml in the vault", "columns": [
+      { "name": "name", "type": "text" }, { "name": "spec", "type": "jsonb", "description": "Filters, grouping, layout." } ], "writtenBy": ["pj CLI", "a person's editor"] }
+  ]
+}
