@@ -23,6 +23,22 @@ things.
 
 ## Parked
 
+- **Cardify projector properly — pure cards, not the app in a frame.** The six cards in `cards/`
+  (2026-09-05) frame `?embed=view|sidebar|note` and relay the URL to the workspace's focus channel;
+  that put the whole app on the board in an afternoon, and it is the wrong end state: a card that
+  frames its app needs the app's origin behind it and `allow-same-origin` in the host, so it is
+  neither a CDN artefact nor sandboxed. The destination is each shape as standalone HTML over the
+  bus: a Vite build target per card (`build.lib`, one file, inline CSS) that compiles the view
+  component — `views/BoardView.tsx`, `TableView`, `CalendarView`, `CanvasView`, the sidebar's
+  `QueryControls` — with `TOS.ask("api.projector.query.v1", …)` as the only data path and
+  `TOS.select`/`onFocus` carrying the `pj.view`/`pj.note` refs, in place of `api.ts` and the URL.
+  The shapes already read one `QueryResponse` and write through a handful of API calls, so the
+  work is pulling their keyboard, drag and write handlers out of `App.tsx` (2,456 lines, where the
+  shape-independent state lives) into a per-card entry that owns them, and adding the write asks
+  (`api.projector.move.v1`, `…save.v1`) to the manifest's contracts. Roughly two days; the payoff
+  is the first first-party app on the board whose cards write, from a CDN, with no projector
+  server-side UI at all. Until then the frame cards stay, labelled as the transitional shape they are.
+
 - **Vault-wide instructions — a root `AGENTS.md` every note inherits.** Instructions now live in
   `AGENTS.md` beside a project note, and the vault root's copy is deliberately *not* read: inheritance
   flows along the `project` facet, and a root file is on no chain, so reading it would attach the
