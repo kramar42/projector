@@ -828,3 +828,12 @@ test('hrefTarget declines anything that is not a relative path to markdown', () 
     assert.equal(hrefTarget(href, '/v/notes/a.md'), null, href);
   }
 });
+
+test('a wiki-style [[slug]] is one bare reference, brackets included', () => {
+  const body = 'Related: [[some-note]] and [[TOS]].\n';
+  const refs = bareRefs(body);
+  assert.deepEqual(refs.map((r) => r.text), ['some-note', 'TOS']);
+  // Whole, not the inner bracket: a caller replacing only the inside would leave
+  // `[[Title](x.md)]` behind.
+  for (const r of refs) assert.equal(body.slice(r.at, r.at + r.length), `[[${r.text}]]`);
+});

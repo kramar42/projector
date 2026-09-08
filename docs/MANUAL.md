@@ -315,7 +315,8 @@ unwraps the link and leaves its text, so the sentence still reads. `pj check` re
 a link whose path has nothing at the end of it, a link whose text no longer matches the note's title
 — a warning, not a rule, since prose is allowed to call a note something shorter — and a bare
 `[some-note]` bracket that names a note, which renders as literal brackets and is a link nobody
-wired up. A bare bracket that names *nothing* is prose and is left alone.
+wired up — `[[some-note]]` too, reported whole, since the wiki spelling is one reference rather than a
+bracket inside a bracket. A bare bracket that names *nothing* is prose and is left alone.
 
 A mention is deliberately **not** a facet. A relation is named — `parent`, `blocked_by` — and being
 named is what lets it filter, group, block and lay out a canvas. A link in a sentence names nothing,

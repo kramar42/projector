@@ -34,7 +34,7 @@ export interface BodyLink {
   length: number;
 }
 
-/** A bare `[slug]` — the convention that predates this module. */
+/** A bare `[slug]` or `[[slug]]` — the conventions that predate this module. */
 export interface BareRef {
   /** What was between the brackets. */
   text: string;
@@ -175,22 +175,33 @@ export function bareRefs(body: string): BareRef[] {
   const out: BareRef[] = [];
   for (const span of prose(body)) {
     for (const m of span.text.matchAll(/\[([^\[\]\n]*)\]/g)) {
-      const at = m.index;
+      let at = m.index;
+      let length = m[0].length;
       const before = span.text[at - 1];
-      const after = span.text.slice(at + m[0].length);
+      const after = span.text.slice(at + length);
       if (before === '!') continue;
-      // `[text](href)` and `[text][label]` are links; `[label]: url` is a
-      // definition. All three are markdown doing its job — and a reference link
-      // is two brackets, so the *second* one is recognised by what precedes it.
-      if (before === ']') continue;
-      if (/^[([]/.test(after)) continue;
-      if (/^:\s/.test(after)) continue;
+      // `[[slug]]` is the wiki-link spelling of the same convention, and it is
+      // *one* reference rather than a bracket inside a bracket. Reported whole,
+      // because a caller that fixed only the inner half would leave `[[Title](x.md)]`
+      // behind — which is exactly what a migration did before this said so.
+      const wiki = before === '[' && after.startsWith(']');
+      if (wiki) {
+        at -= 1;
+        length += 2;
+      } else {
+        // `[text](href)` and `[text][label]` are links; `[label]: url` is a
+        // definition. All three are markdown doing its job — and a reference link
+        // is two brackets, so the *second* one is recognised by what precedes it.
+        if (before === ']') continue;
+        if (/^[([]/.test(after)) continue;
+        if (/^:\s/.test(after)) continue;
+      }
       // A task checkbox is `- [ ]` or `- [x]`, which is a control and not a ref.
       // Measured from the start of its own line: a prose run spans many, so what
       // precedes the bracket in the *run* is most of the note.
       const line = span.text.slice(0, at).split('\n').pop()!;
       if (/^\s*(?:[-*+]|\d+[.)])\s*$/.test(line) && /^[ xX]?$/.test(m[1]!)) continue;
-      out.push({ text: m[1]!, at: span.at + at, length: m[0].length });
+      out.push({ text: m[1]!, at: span.at + at, length });
     }
   }
   return out.sort((a, b) => a.at - b.at);
