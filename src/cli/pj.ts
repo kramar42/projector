@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync } from 'node:fs';
-import { existsSync, paths, resolveCliVault } from '../config.ts';
+import { existsSync, paths, resolveCliVault, resolvePath } from '../config.ts';
 import { formatReport, probe, writeTemplate } from '../setup.ts';
 import { jiraConfig } from '../sources/jira.ts';
 import { forgetVault, initVault, listVaults, normalise, registerVault } from '../vault.ts';
@@ -15,6 +15,8 @@ import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
 import { SPEC_PARAMS, parseSpec, specToParams, withSavedOnly, type ViewSpec } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
+import { applySync, planSync, renderPlan } from '../sync/plan.ts';
+import type { Note } from '../schema/types.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { readCached, refresh } from '../server/enrich.ts';
@@ -290,6 +292,11 @@ Validate every note file and saved view.`,
   audit: `Usage: pj audit [--json]
 
 Run saved views that declare \`expect: empty\`. Exits non-zero when a rule is broken.`,
+  sync: `Usage: pj sync <view> <folder> [--exclude facet=value,value] [--apply]
+
+Write a view's notes into a folder as plain markdown a reader outside the vault can
+follow. Reports what it would do; \`--apply\` does it. \`--exclude\` holds notes back by
+facet value, and may be given more than once.`,
   reindex: `Usage: pj reindex
 
 Rebuild the derived index and report what it holds.`,
@@ -643,6 +650,67 @@ function cmdCheck(): void {
  * So there is no second place to declare one, and no rule that is checked but
  * cannot be opened and drained.
  */
+/**
+ * Sync a view into a folder outside the vault.
+ *
+ * The one write whose target is not the vault, so it reports and stops by
+ * default: `--apply` is a second decision, taken after reading what would land.
+ * That is the whole guard on a *computed* membership — the set is the view's own
+ * query, so a note entering it is a line in this report before it is a file on
+ * somebody's disk.
+ *
+ * Both the folder and the exclusion are given here rather than stored on the
+ * view, because a view is a query and nothing else: where its answer gets written
+ * is a property of the run, and nothing in the vault should quietly record that
+ * some view is shared with somebody.
+ */
+async function cmdSync(argv: string[]): Promise<void> {
+  const { flags, rest } = argFlags(argv, ['apply', 'exclude'], ['apply']);
+  const [named, folder] = rest;
+  if (!named || !folder) {
+    fail('which view, and into which folder? `pj sync <view> <folder>`');
+  }
+
+  const saved = findView(root, named);
+  if (!saved) fail(`no view "${named}"`);
+
+  const exclude: Record<string, string[]> = {};
+  for (const spec of flags.get('exclude') ?? []) {
+    const [facet, values] = spec.split('=');
+    if (!facet || values === undefined || !values.trim()) {
+      fail(`--exclude wants facet=value, and got "${spec}"`);
+    }
+    exclude[facet] = [...(exclude[facet] ?? []), ...values.split(',').filter(Boolean)];
+  }
+
+  const facets = loadFacets(p.facets);
+  const { db, notes } = await currentIndex();
+  const jiraBase = jiraConfig(root)?.url ?? null;
+  const payload = queryPayload(
+    { facets, db, notes, views: loadViews(root), jiraBase },
+    saved,
+    saved,
+  );
+  // In the view's own order, which is the order its author reads it in — and the
+  // order the index is written in. `payload.ids` is that order; the notes map is
+  // not ordered at all.
+  const ordered = payload.ids.map((id) => notes.get(id)).filter((n): n is Note => !!n);
+
+  const plan = planSync(ordered, notes, {
+    root,
+    target: resolvePath(folder, root),
+    exclude: Object.keys(exclude).length ? exclude : undefined,
+    jiraBase,
+  });
+
+  if (!flags.has('apply')) {
+    console.log(renderPlan(plan, named));
+    return;
+  }
+  const done = applySync(plan);
+  console.log(`${named} → ${plan.target}\n${done.written} file(s) written, ${done.removed} removed`);
+}
+
 async function cmdAudit(argv: string[]): Promise<void> {
   const { flags } = argFlags(argv, ['json'], ['json']);
   const facets = loadFacets(p.facets);
@@ -774,6 +842,9 @@ if (asking) {
       break;
     case 'audit':
       await cmdAudit(argv);
+      break;
+    case 'sync':
+      await cmdSync(argv);
       break;
     case 'reindex':
       argFlags(argv, []);

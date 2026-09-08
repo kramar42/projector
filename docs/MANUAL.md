@@ -563,6 +563,50 @@ rule board that should stay at zero. Without it the intake board reports the mom
 judging as "no note matches this filter", which is the one moment the loop pays you back. Saved-file
 only, like `lists:` and the arrangement: no control can derive what a view is *for*.
 
+## Syncing a view to a folder
+
+A view can be written out as a folder of plain markdown for people who do not have your vault.
+
+```bash
+pj sync patchwork ~/Code/work/shared/patchwork --exclude private=true
+```
+
+It reports what it would write; `--apply` writes it. The folder and the exclusion are arguments
+rather than keys in the view file — a view is a query and nothing else, so where its answer gets
+written is a property of the run, and nothing in the vault quietly records that a view is shared.
+
+**The shared set is what the view shows.** Not a second query and not a hand-kept list: the same view
+you work in, so it cannot drift from the one you read every day. `--exclude facet=value` names what is
+held back — your vault's own word for it, whatever that is — and may be given more than once.
+
+**What guards that is the report, not a narrower query.** A note joining the view joins the folder, so
+the plan is printed first and marked: `new`, `changed`, `remove`. It also names the notes the shared
+ones point at that are *not* shared — every one of those is a link the reader loses — which is the
+best signal that a set is drawn too small.
+
+**What each note becomes.** Its title as an `# H1`, since the frontmatter does not travel; the body; and
+the links a stranger can actually follow. Held back: every facet — a status and a priority are how
+*your* vault decides what to do next — `claude:` sessions and `workspace:` paths, which are directories
+on one machine, and anything cached from Jira or GitHub, because a fetched title differs between
+machines and days and would churn the diff for nothing.
+
+**A section headed `## Internal` never leaves**, with everything under it down to the next heading of
+the same level. That is what lets a shared note stay honest: the thinking that is not for the audience
+lives in the note, under a heading you can see, rather than in a second note you have to remember.
+
+**A reference travels or it unwraps.** A link to another shared note is rewritten to its file; a link
+to a note that is not shared becomes its own text, so the sentence still reads and the reader is not
+handed a door that does not open. An **image** is the exception — it is content rather than a pointer,
+so its file travels with the body that shows it. An **asset** travels when the note *links* it; one
+merely named in a sentence does not, which makes promoting it to a `links:` entry the moment you decide
+to share it.
+
+**It runs one way today, and it prunes**: a note that leaves the view leaves the folder. Nothing outside
+the vault is read back yet — but the render is deterministic on purpose, so a difference between the
+folder and a fresh render is somebody's edit and nothing else, which is what a sync back will read.
+Point it at a git repository and the diff before you push is the last thing between your vault and
+somebody else's reading.
+
 ## Embedding
 
 projector can be one part of itself inside another page's `<iframe>`. `?embed=view` draws the shape
