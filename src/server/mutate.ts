@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
+import { docPath } from '../vault.ts';
 import {
   frontmatterSchema,
   idFromFile,
@@ -556,6 +557,60 @@ export function repointed(
   return changed ? { facets: out, changed } : null;
 }
 
+/**
+ * How one note's `doc:` links change when the note they point at moves or stops
+ * existing — its file, and the asset folder that travels with it.
+ *
+ * The sibling of `repointed`, and it exists because a reference has two halves
+ * and only one was ever rewritten. `repointed` covers the facets, whose values
+ * are ids; a `doc:` ref is a *path*, so a delete used to leave every one of them
+ * aimed at a file that was gone, and a rename at a file that had moved. `check`
+ * reports the wreckage afterwards ("doc not found"), which is a report and not a
+ * repair — and a link is the half that carries a draft nobody can find again.
+ *
+ * `onto` is where the target went, or `null` when it went nowhere, which is a
+ * delete: the ref goes with it, exactly as a facet value does. A ref *into* the
+ * asset folder keeps its tail, because the whole directory moves as one, so only
+ * the folder segment is rewritten.
+ *
+ * `null` when nothing changed, so a caller writes only the files it must. Pure,
+ * like `repointed`, and asserted without a filesystem.
+ */
+export function redocked(
+  links: readonly string[],
+  root: string,
+  from: { file: string; assets: string },
+  onto: { file: string; assets: string } | null,
+): { links: string[]; changed: number } | null {
+  const out: string[] = [];
+  let changed = 0;
+  for (const raw of links) {
+    const link = parseLink(raw);
+    const at = link.kind === 'doc' ? docPath(link.ref, root) : null;
+    const inAssets = at !== null && (at === from.assets || at.startsWith(from.assets + sep));
+    if (at === null || (at !== from.file && !inAssets)) {
+      out.push(raw);
+      continue;
+    }
+    changed++;
+    if (!onto) continue;
+    const next = inAssets ? join(onto.assets, relative(from.assets, at)) : onto.file;
+    out.push(`doc:${relative(root, next)}`);
+  }
+  return changed ? { links: [...new Set(out)], changed } : null;
+}
+
+/**
+ * The links on disk *now*, for a record we are about to write.
+ *
+ * `facetsNow` in every respect, for the other whole key these loops replace. See
+ * its comment for why a snapshot taken before the loop started is the wrong input.
+ */
+function linksNow(rec: { file: string; links: { raw: string }[] }): string[] {
+  const res = loadNote(rec.file);
+  return (res.ok ? res.rec.links : rec.links).map((l) => l.raw);
+}
+
 const NOTE_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -643,6 +698,11 @@ function renamedView(
  * `parent`, `project`, or any future relation (C4). Every target is planned
  * before the first write so an occupied id, file, asset directory, or saved-view
  * arrangement leaves the vault unchanged.
+ *
+ * **A `doc:` link is the other half, and it moves by path rather than by id** —
+ * the note's file and its whole asset folder, from every note including this
+ * one. `repointed` cannot do it: the value it rewrites is an id, and none of
+ * these are.
  */
 export function renameNote(root: string, from: string, to: string): { repointed: number; views: number } {
   if (!NOTE_ID.test(to)) throw new Invalid(`"${to}" is not a lowercase slug`);
@@ -677,18 +737,41 @@ export function renameNote(root: string, from: string, to: string): { repointed:
     }))
     .filter((plan): plan is { file: string; patch: Record<string, unknown> } => plan.patch !== null);
 
+  const was = { file: source.file, assets: sourceAssets };
+  const now = { file: targetFile, assets: targetAssets };
+
   // The target declares its new id before anything points at it. There is no
   // multi-file transaction, so the preflight above is the refusal boundary and
   // each individual write stays atomic.
-  patchAll(root, source.file, { id: to });
+  //
+  // Its own links are rewritten in the same write: a note that links into its
+  // asset folder is the ordinary case, not an odd one, and the folder is about to
+  // move out from under those refs like anybody else's.
+  const ownDocs = redocked(linksNow(source), root, was, now);
+  patchAll(root, source.file, {
+    id: to,
+    ...(ownDocs ? { links: ownDocs.links.length ? ownDocs.links : undefined } : {}),
+  });
 
-  let moved = 0;
+  let moved = ownDocs?.changed ?? 0;
   for (const rec of notes.values()) {
     if (rec.id === from) continue;
+    const patch: Record<string, unknown> = {};
     const plan = repointed(facetsNow(rec), refFacets, new Set([from]), to, rec.id);
-    if (!plan) continue;
-    moved += plan.changed;
-    patchAll(root, rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
+    if (plan) {
+      moved += plan.changed;
+      patch.facets = Object.keys(plan.facets).length ? plan.facets : undefined;
+    }
+    // A `doc:` ref is a path, so it follows the move rather than the id — which
+    // is why it is rewritten here and not by `repointed`. The walk runs before
+    // the rename below, so `was` is still what is on disk.
+    const docs = redocked(linksNow(rec), root, was, now);
+    if (docs) {
+      moved += docs.changed;
+      patch.links = docs.links.length ? docs.links : undefined;
+    }
+    if (!plan && !docs) continue;
+    patchAll(root, rec.file, patch);
   }
   // A folder note brings its children and instructions along. This waits until
   // the reference walk above has used the paths it read before the directory
@@ -706,6 +789,11 @@ export function renameNote(root: string, from: string, to: string): { repointed:
 /**
  * Delete a note's file, and drop every reference that pointed at it so the graph
  * does not keep dangling values. The files are in git, so this is recoverable.
+ *
+ * **A reference is a facet value or a `doc:` link, and both are swept.** For a
+ * long time only the first was, which made the sentence above half true in the
+ * expensive direction: the note vanished, its asset folder vanished with it, and
+ * a `doc:` link written by a note nobody was deleting kept pointing at the hole.
  *
  * **A deleted note that came from a sweep is a decline**, so its fingerprint is
  * recorded on the way out. Without that, deleting a candidate destroys the only
@@ -766,20 +854,33 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
     });
   }
 
+  const assets = join(p.assets, id);
   for (const rec of notes.values()) {
     if (rec.id === id) continue;
     // These are files the caller never named and never read, and the write below
-    // replaces the whole `facets:` key on each of them — so the map has to be the
-    // one on disk. See `facetsNow`.
+    // replaces the whole `facets:` and `links:` keys on each of them — so both
+    // maps have to be the ones on disk. See `facetsNow`.
+    const patch: Record<string, unknown> = {};
     const plan = repointed(facetsNow(rec), refFacets, gone, null, rec.id);
-    if (!plan) continue;
-    removedEdges += plan.changed;
-    patchAll(root, rec.file, { facets: Object.keys(plan.facets).length ? plan.facets : undefined });
+    if (plan) {
+      removedEdges += plan.changed;
+      patch.facets = Object.keys(plan.facets).length ? plan.facets : undefined;
+    }
+    // Both halves of a reference, in one write: the ids on the facets and the
+    // paths in the links. Only the first was ever swept, so a `doc:` ref to the
+    // file below — or to anything under its asset folder — outlived it silently.
+    const docs = redocked(linksNow(rec), root, { file, assets }, null);
+    if (docs) {
+      removedEdges += docs.changed;
+      patch.links = docs.links.length ? docs.links : undefined;
+    }
+    if (!plan && !docs) continue;
+    patchAll(root, rec.file, patch);
   }
 
   rmSync(file);
-  // Assets belong to the note; nothing else references them.
-  const assets = join(p.assets, id);
+  // Assets belong to the note, and the sweep above has just removed the links
+  // that reached into this folder from outside it.
   if (existsSync(assets)) rmSync(assets, { recursive: true });
   return { removedEdges };
 }
@@ -899,17 +1000,42 @@ export function mergeNotes(
   }
 
   // Checked. From here it writes.
-  for (const plan of plans) {
+  const survivor = fileFor(root, into);
+  // Where the absorbed notes are about to go, in the two shapes a `doc:` ref can
+  // name: `adoptAssets` moves their folders into the survivor's, and `rmSync`
+  // takes their files. `reassigned` in `schema/merge.ts` is this same rewrite
+  // over the survivor's body — that pair and this one are one decision in two
+  // places, and neither is correct alone.
+  const landing = { file: survivor, assets: join(p.assets, into) };
+  // Every note, not only the ones in `plans`. `plans` is the *refusal* input and
+  // is facet-only by construction, but a note can point at an absorbed one with a
+  // `doc:` link and no facet at all — which is precisely the note whose link used
+  // to be left aimed at a file the loop below deletes.
+  for (const rec of notes.values()) {
+    if (rec.id === into || gone.has(rec.id)) continue;
     // Re-planned against the file rather than the snapshot, for the reason
-    // `facetsNow` gives: this loop writes the whole `facets:` key on notes the
-    // caller never named. The transform is the same one just validated; only its
-    // input is fresher.
-    const fresh = repointed(facetsNow(plan.rec), refFacets, gone, into, plan.rec.id);
-    if (!fresh) continue;
-    patchAll(root, plan.rec.file, { facets: Object.keys(fresh.facets).length ? fresh.facets : undefined });
+    // `facetsNow` gives: this loop writes the whole `facets:` and `links:` keys on
+    // notes the caller never named. The transform is the same one just validated;
+    // only its input is fresher.
+    const patch: Record<string, unknown> = {};
+    const fresh = repointed(facetsNow(rec), refFacets, gone, into, rec.id);
+    if (fresh) patch.facets = Object.keys(fresh.facets).length ? fresh.facets : undefined;
+    // One pass per absorbed note, each fed the previous pass's result: a note
+    // that linked into two of them is rewritten twice, not once.
+    let links = linksNow(rec);
+    let moved = 0;
+    for (const s of sources) {
+      const step = redocked(links, root, { file: s.file, assets: join(p.assets, s.id) }, landing);
+      if (!step) continue;
+      links = step.links;
+      moved += step.changed;
+    }
+    if (moved) patch.links = links.length ? links : undefined;
+    if (!fresh && !moved) continue;
+    patchAll(root, rec.file, patch);
   }
 
-  const file = fileFor(root, into);
+  const file = survivor;
   // The body first, so the frontmatter write is what stamps `updated` — one bump
   // for one merge, rather than one per field it happens to touch.
   putBody(file, out.body);

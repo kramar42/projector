@@ -17,6 +17,7 @@ import {
   renameNote,
   patchFields,
   patchNote,
+  redocked,
   repointed,
   putFrontmatter,
   saveAsset,
@@ -717,6 +718,105 @@ test('the delete cascade takes only the dangling reference off a bystander', () 
     assert.equal(holder.parent, undefined, 'the dangling reference is gone');
     assert.deepEqual(holder.tech, ['kafka']);
     assert.deepEqual(holder.priority, ['backlog'], 'and nothing else on the bystander moved');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ------------------------------------------------------------- doc: references
+
+/**
+ * The other half of a reference.
+ *
+ * A facet value is an id and a `doc:` link is a path, and for a long time only
+ * the first was swept when a note moved or went away. The cost was not
+ * theoretical: a delete took the note, took its whole `assets/<id>/` folder, and
+ * left the `doc:` link some *other* note had written into that folder pointing at
+ * nothing — the one surviving pointer to a draft, now naming a hole. `check`
+ * reported it afterwards as a warning, which is a report and not a repair.
+ *
+ * Three writes move a note: delete drops the ref, rename and merge rewrite it.
+ * One helper, asserted pure first and then at each of the three.
+ */
+const linksOf = (root: string, id: string) =>
+  (readAll(paths(root).notes).notes.get(id)?.links ?? []).map((l) => l.raw);
+
+test('redocked rewrites the file and the asset tail, drops on a delete, and leaves the rest', () => {
+  const root = '/vault';
+  const from = { file: '/vault/gone.md', assets: '/vault/assets/gone' };
+  const onto = { file: '/vault/kept/README.md', assets: '/vault/assets/kept' };
+  const links = ['doc:gone.md', 'doc:assets/gone/draft.md', 'doc:assets/gone/deep/shot.png', 'doc:other.md', 'jira:PROJ-1'];
+
+  const moved = redocked(links, root, from, onto);
+  assert.deepEqual(moved, {
+    changed: 3,
+    links: ['doc:kept/README.md', 'doc:assets/kept/draft.md', 'doc:assets/kept/deep/shot.png', 'doc:other.md', 'jira:PROJ-1'],
+  });
+
+  const dropped = redocked(links, root, from, null);
+  assert.deepEqual(dropped, { changed: 3, links: ['doc:other.md', 'jira:PROJ-1'] });
+
+  assert.equal(redocked(['doc:other.md', 'jira:PROJ-1'], root, from, null), null, 'nothing to do is no write');
+  // `assets/gonely` is not inside `assets/gone`, and a prefix match would say it was.
+  assert.equal(redocked(['doc:assets/gonely/x.md'], root, from, null), null, 'a sibling folder is not a child');
+});
+
+test('deleting a note takes the doc links that pointed at it and into its assets', () => {
+  const v = vault({
+    target: card('target', 'priority: [now]'),
+    holder: noteFile('holder', 'links: [doc:target.md, doc:assets/target/draft.md, doc:keeper.md, jira:PROJ-1]\n'),
+    keeper: card('keeper', 'priority: [now]'),
+  });
+  try {
+    mkdirSync(join(paths(v.root).assets, 'target'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'target', 'draft.md'), 'the draft', 'utf8');
+
+    const res = deleteNote(v.root, 'target');
+
+    assert.equal(res.removedEdges, 2, 'the file ref and the asset ref both counted');
+    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:keeper.md', 'jira:PROJ-1']);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('renaming a note carries every doc link with it, including its own', () => {
+  const v = vault({
+    'workflow-app': noteFile('workflow-app', 'links: [doc:assets/workflow-app/outline.md]\n'),
+    holder: noteFile('holder', 'facets: { parent: [workflow-app] }\nlinks: [doc:workflow-app.md, doc:assets/workflow-app/outline.md, jira:PROJ-1]\n'),
+  });
+  try {
+    mkdirSync(join(paths(v.root).assets, 'workflow-app'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'workflow-app', 'outline.md'), 'outline', 'utf8');
+
+    const res = renameNote(v.root, 'workflow-app', 'workflow-service');
+
+    assert.equal(res.repointed, 4, 'one facet, two links on the bystander, one on the note itself');
+    assert.deepEqual(linksOf(v.root, 'workflow-service'), ['doc:assets/workflow-service/outline.md']);
+    assert.deepEqual(linksOf(v.root, 'holder'), [
+      'doc:workflow-service.md',
+      'doc:assets/workflow-service/outline.md',
+      'jira:PROJ-1',
+    ]);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a merge points a bystander’s doc links at the survivor and its adopted assets', () => {
+  const v = vault({
+    keep: noteFile('keep'),
+    gone: noteFile('gone'),
+    holder: noteFile('holder', 'links: [doc:gone.md, doc:assets/gone/draft.md, jira:PROJ-1]\n'),
+  });
+  try {
+    mkdirSync(join(paths(v.root).assets, 'gone'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'gone', 'draft.md'), 'the draft', 'utf8');
+
+    mergeNotes(v.root, 'keep', ['gone']);
+
+    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:keep.md', 'doc:assets/keep/draft.md', 'jira:PROJ-1']);
+    assert.ok(existsSync(join(paths(v.root).assets, 'keep', 'draft.md')), 'and the file is where the link says');
   } finally {
     v.cleanup();
   }

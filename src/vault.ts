@@ -366,12 +366,24 @@ function ensureIgnore(path: string): void {
  * following it.
  */
 export function resolveDoc(ref: string, root: string): { path: string | null; tried: string[] } {
-  const raw = ref.trim();
-  if (!raw) return { path: null, tried: [] };
-  const candidate =
-    raw.startsWith('/') || raw.startsWith('~') ? resolvePath(raw, root) : resolve(root, raw);
+  const candidate = docPath(ref, root);
+  if (!candidate) return { path: null, tried: [] };
   const ok = existsSync(candidate) && statSync(candidate).isFile();
   return { path: ok ? candidate : null, tried: [candidate] };
+}
+
+/**
+ * Where a `doc:` ref points, whether or not anything is there.
+ *
+ * Split out of `resolveDoc` because the writes that move a note — a rename, a
+ * merge, a delete — have to rewrite refs to a file that is about to move or
+ * vanish, and existence is the one test they cannot use. Same resolution rules,
+ * minus the verdict.
+ */
+export function docPath(ref: string, root: string): string | null {
+  const raw = ref.trim();
+  if (!raw) return null;
+  return raw.startsWith('/') || raw.startsWith('~') ? resolvePath(raw, root) : resolve(root, raw);
 }
 
 /**

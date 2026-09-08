@@ -23,6 +23,16 @@ things.
 
 ## Parked
 
+- **A rename should carry the asset paths in the body, the way a merge does.** `redocked` now moves
+  every `doc:` link when a note is renamed, merged or deleted, so the frontmatter half is whole. The
+  body half is not: `schema/merge.ts`'s `reassigned` rewrites `assets/<from>/` to `assets/<to>/`
+  when a merge adopts a folder, and `renameNote` — which moves the same folder — has no equivalent,
+  so `![shot](assets/old-id/x.webp)` in the renamed note's own body goes stale the moment the
+  directory moves. The rewrite exists and is four lines; what is parked is the question of whose
+  bodies it may touch, since a *different* note can embed the same path and rewriting other people's
+  prose is a bigger promise than rewriting their links (C6 — the body is free-form). Small, real, and
+  the last place a move leaves something dangling.
+
 - **Cardify projector properly — pure cards, not the app in a frame.** The six cards in `cards/`
   (2026-09-05) frame `?embed=view|sidebar|note` and relay the URL to the workspace's focus channel;
   that put the whole app on the board in an afternoon, and it is the wrong end state: a card that
