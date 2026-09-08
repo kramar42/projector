@@ -1,8 +1,9 @@
 import { readFileSync, writeFileSync, renameSync, readdirSync, statSync } from 'node:fs';
-import { basename, dirname, join as pathJoin, resolve } from 'node:path';
+import { basename, dirname, join as pathJoin, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { KEY_ORDER, headingOf, join, parseDoc, serialize, split } from './frontmatter.ts';
 import { parseLink } from './links.ts';
+import { idFromPath, nameToId } from './slug.ts';
 import type { ProjectBlock, Note } from './types.ts';
 
 /**
@@ -95,9 +96,6 @@ const SLUG = /^[a-z0-9][a-z0-9-]*$/;
  * correspond to the file you can see. `notes-on-the-2026-plan.md` keeps every
  * word.
  */
-const nameToId = (name: string): string =>
-  name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'note';
-
 /**
  * A note's id when its file does not carry one: its filename — except for a
  * `README.md`, which takes the name of the folder it sits in.
@@ -121,11 +119,11 @@ const nameToId = (name: string): string =>
  * renaming `platform/` renames the note, exactly as renaming `platform.md` did.
  */
 export function idFromFile(file: string, root?: string): string {
-  if (basename(file) === 'README.md' && root !== undefined) {
-    const dir = dirname(file);
-    if (resolve(dir) !== resolve(root)) return nameToId(basename(dir));
-  }
-  return nameToId(basename(file, '.md'));
+  // The rule itself is `idFromPath`, in `slug.ts`, because the browser needs it
+  // too and this module reads files. What is left here is the part that needs a
+  // filesystem: measuring the file against the vault it is in.
+  if (root === undefined) return nameToId(basename(file, '.md'));
+  return idFromPath(relative(resolve(root), resolve(file)));
 }
 
 /** What a file with no `title:` and no heading is called: the same name its id came from. */

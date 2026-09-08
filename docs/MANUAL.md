@@ -23,6 +23,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **relation** | a facet declared `type: ref`, whose values are note ids. Stored on the note that depends, pointing at what it depends on |
 | **ref** | one value of a relation — a pointer *inside* the vault, traversable |
 | **link** | a pointer *outside* it: `jira:`, `gh:pr`, `claude:`, `workspace:`, `doc:`, `slack:`, a URL. Read-only, enriched for display, never written back |
+| **mention** | a pointer inside the vault written in the prose: an ordinary markdown link, `[Its title](other-note.md)`. Not a relation — it names nothing, so it does not filter, group or block — but it is maintained: `rename` and `delete` rewrite it, and `check` reports one that has gone wrong |
 | **project** | a note carrying a `project:` block of configuration, which its members inherit. Usually a folder: `platform/README.md` is the note `platform`, and `platform/AGENTS.md` is its instructions. A built-in facet points at them |
 | **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
 | **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
@@ -301,6 +302,25 @@ A note may name **several** projects, and they are merged into one order rather 
 another: every project comes before anything that names it, and two that are equally general keep the
 order the note listed them in. So a note belonging to both a subject and a way of working reads both
 sets of instructions as general → specific, with its own last.
+
+### A reference in the prose is an ordinary markdown link
+
+Write `[Its title](other-note.md)` — a relative path to the note's file, which is what markdown
+means and what a reader outside the app resolves: a folder on someone else's machine, a git host,
+another editor. In the panel the same link opens the note, because the renderer rewrites it to the
+deep link the app already uses; one thing written in the file, the right link for each reader.
+
+It is maintained like any other reference. Renaming a note repoints every mention of it; deleting one
+unwraps the link and leaves its text, so the sentence still reads. `pj check` reports three things:
+a link whose path has nothing at the end of it, a link whose text no longer matches the note's title
+— a warning, not a rule, since prose is allowed to call a note something shorter — and a bare
+`[some-note]` bracket that names a note, which renders as literal brackets and is a link nobody
+wired up. A bare bracket that names *nothing* is prose and is left alone.
+
+A mention is deliberately **not** a facet. A relation is named — `parent`, `blocked_by` — and being
+named is what lets it filter, group, block and lay out a canvas. A link in a sentence names nothing,
+so it stays prose, and what points at what is derived from the text rather than copied into
+frontmatter where it would need keeping in step.
 
 **Instructions are configuration**, so they live in their own file rather than under a heading in the
 body. The body is free-form: nothing in it is configuration. It is still read — task boxes become a

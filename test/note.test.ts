@@ -5,6 +5,7 @@ import { parseNote, renderNote } from '../src/schema/note.ts';
 import { clean, slugify, uniqueId } from '../src/schema/slug.ts';
 import { LINK_KINDS, fallbackHref, parseLink } from '../src/schema/links.ts';
 import { validate } from '../src/schema/validate.ts';
+import { bareRefs, bodyLinks, hrefTarget, rewriteLinks } from '../src/schema/body.ts';
 import { bucketOf, loadFacets, orderValues } from '../src/schema/facets.ts';
 import { demoted, merged } from '../src/schema/merge.ts';
 import type { Facets, Note } from '../src/schema/types.ts';
@@ -733,4 +734,97 @@ test('a slug-shaped id is still the note’s own', () => {
   const res = parseNote('/x/whatever.md', '---\nid: kept-as-written\n---\n');
   assert.ok(res.ok);
   assert.equal(res.rec.id, 'kept-as-written');
+});
+
+// ---------------------------------------------------------------- body references
+
+/**
+ * What a body says about other notes. The convention this replaces had no parser
+ * behind it, so these assert the two properties the rest of the system now leans
+ * on: a reference is *found* only where markdown means one, and a rewrite touches
+ * nothing else in the file.
+ */
+
+test('bodyLinks finds inline links in order, with offsets that address them', () => {
+  const body = 'See [one](a.md) and then [two](b/README.md).\n';
+  const links = bodyLinks(body);
+  assert.deepEqual(
+    links.map((l) => [l.text, l.href]),
+    [['one', 'a.md'], ['two', 'b/README.md']],
+  );
+  for (const l of links) assert.equal(body.slice(l.at, l.at + l.length), `[${l.text}](${l.href})`);
+});
+
+test('bodyLinks reads no link out of code — fenced, indented or inline', () => {
+  const body = [
+    '```md',
+    'a [fenced](x.md) sample',
+    '```',
+    '',
+    '    an [indented](y.md) sample',
+    '',
+    'and `[inline](z.md)` too, but [real](r.md) counts.',
+    '',
+    '~~~',
+    '[tilde](t.md)',
+    '~~~',
+  ].join('\n');
+  assert.deepEqual(bodyLinks(body).map((l) => l.href), ['r.md']);
+});
+
+test('bodyLinks skips an image, which points at a file rather than a note', () => {
+  assert.deepEqual(bodyLinks('![alt](p.png) then [note](n.md)').map((l) => l.href), ['n.md']);
+});
+
+test('bodyLinks sees a link whose text was wrapped onto the next line', () => {
+  const body = 'as argued in [the card\nspec note](patchwork-card-spec.md) already.\n';
+  assert.deepEqual(bodyLinks(body).map((l) => l.href), ['patchwork-card-spec.md']);
+});
+
+test('bareRefs reports a bare bracket but not markdown doing its job', () => {
+  const body = [
+    'a bare [some-note] ref',
+    'a link [text](x.md), a reference [text][label], a definition:',
+    '[label]: https://example.com',
+    '- [ ] a task',
+    '- [x] a done task',
+    'an image ![alt](p.png)',
+  ].join('\n');
+  assert.deepEqual(bareRefs(body).map((r) => r.text), ['some-note']);
+});
+
+test('rewriteLinks repoints one href and leaves every other byte alone', () => {
+  const body = 'See [one](a.md) and [two](b.md).\n';
+  const out = rewriteLinks(body, (l) => (l.href === 'a.md' ? 'moved.md' : l.href));
+  assert.equal(out, 'See [one](moved.md) and [two](b.md).\n');
+});
+
+test('rewriteLinks unwraps to the link text, so the sentence still reads', () => {
+  const body = 'Discussed in [the rollout note](gone.md) at length.\n';
+  assert.equal(
+    rewriteLinks(body, () => null),
+    'Discussed in the rollout note at length.\n',
+  );
+});
+
+test('rewriteLinks handles several links at once without corrupting offsets', () => {
+  const body = '[a](1.md) [b](2.md) [c](3.md)\n';
+  assert.equal(
+    rewriteLinks(body, (l) => (l.text === 'b' ? null : `x-${l.href}`)),
+    '[a](x-1.md) b [c](x-3.md)\n',
+  );
+});
+
+test('hrefTarget resolves against the note holding it, not the vault root', () => {
+  assert.equal(hrefTarget('other.md', '/v/notes/a.md'), '/v/notes/other.md');
+  // A folder note reaches a root note the way markdown does, with `..`.
+  assert.equal(hrefTarget('../other.md', '/v/notes/proj/README.md'), '/v/notes/other.md');
+  // A heading inside a note is still the note.
+  assert.equal(hrefTarget('other.md#a-heading', '/v/notes/a.md'), '/v/notes/other.md');
+});
+
+test('hrefTarget declines anything that is not a relative path to markdown', () => {
+  for (const href of ['https://example.com/x.md', 'mailto:a@b.c', '#section', '//host/x.md', 'p.png', '']) {
+    assert.equal(hrefTarget(href, '/v/notes/a.md'), null, href);
+  }
 });

@@ -58,3 +58,37 @@ export function uniqueId(base: string, taken: Set<string>): string {
   taken.add(id);
   return id;
 }
+
+/**
+ * A filename as an id: lowercase, punctuation collapsed to dashes.
+ *
+ * Here rather than in `note.ts` because the browser needs the id rule too — a
+ * body reference is a *path*, and the panel has to know which note a path names
+ * to make it followable. `note.ts` reads files, so it cannot be imported into a
+ * bundle; this module imports nothing, which is what makes it the one that can
+ * be shared.
+ */
+export function nameToId(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'note';
+}
+
+/**
+ * Which note a vault-relative path names, when the file does not say.
+ *
+ * The one implementation of the rule `idFromFile` states: a filename, except for
+ * a `README.md` inside a folder, which takes the folder's name — so
+ * `platform/README.md` is the note `platform` and there is no second name to
+ * keep in step with it (C11). A `README.md` at the top has no folder to be
+ * named by and keeps its filename, which is why depth is what the two cases turn
+ * on rather than the name alone.
+ *
+ * Path arithmetic only, so both readers can use it: `idFromFile` resolves a real
+ * file against a real vault and hands the remainder here, and the panel hands
+ * over a path it resolved from an href.
+ */
+export function idFromPath(path: string): string {
+  const segments = path.split('/').filter((s) => s && s !== '.');
+  const name = segments[segments.length - 1] ?? '';
+  if (name === 'README.md' && segments.length > 1) return nameToId(segments[segments.length - 2]!);
+  return nameToId(name.replace(/\.md$/, ''));
+}

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { renderBody, taskLines, toggleTask, withoutOuterBlankLines } from '../src/view/markdown.ts';
+import { noteHrefId, renderBody, taskLines, toggleTask, withoutOuterBlankLines } from '../src/view/markdown.ts';
 import { edgesFor } from '../src/web/views/edges.ts';
 import { earnsRollups } from '../src/web/views/columns.ts';
 import { blankQuery, changeView, excludeFilterValue, toggleFilterValue } from '../src/view/intents.ts';
@@ -1082,4 +1082,52 @@ test('the characters may not be spread across two fields', () => {
   assert.ok(fuzzyAny('kc', 'keycloak', 'other-id'));
   assert.ok(fuzzyAny('oth', 'keycloak', 'other-id'));
   assert.ok(!fuzzyAny('keyother', 'keycloak', 'other-id'));
+});
+
+// ---------------------------------------------------------------- body references
+
+/**
+ * A body reference is written as plain markdown so a reader outside the app can
+ * follow it, which means the panel is the one reader that has to translate: there
+ * is no `other.md` to navigate to inside a single-route app. These pin the
+ * translation and, as importantly, what it leaves alone.
+ */
+
+test('renderBody points a note reference at the deep link the app already uses', () => {
+  const html = renderBody('See [Other](other.md).\n', undefined, 'a.md');
+  assert.match(html, /href="\?note=other"/);
+});
+
+test('renderBody resolves a reference the way markdown does — relative to the file', () => {
+  // A folder note reaching a root note, and a root note reaching a folder note.
+  assert.match(renderBody('[Out](../out.md)', undefined, 'proj/README.md'), /href="\?note=out"/);
+  assert.match(renderBody('[Proj](proj/README.md)', undefined, 'a.md'), /href="\?note=proj"/);
+  // The vault's own front page keeps its filename, where a folder's README takes
+  // the folder's name.
+  assert.match(renderBody('[Front](README.md)', undefined, 'a.md'), /href="\?note=readme"/);
+});
+
+test('renderBody sends a document reference to the asset route, like an image', () => {
+  const html = renderBody('[handout](assets/a/h.md)', undefined, 'a.md');
+  assert.match(html, /href="\/api\/asset\/assets\/a\/h\.md"/);
+});
+
+test('renderBody leaves an outward link and an anchor exactly as written', () => {
+  const html = renderBody('[site](https://example.com/x.md) and [here](#section)', undefined, 'a.md');
+  assert.match(html, /href="https:\/\/example\.com\/x\.md"/);
+  assert.match(html, /href="#section"/);
+});
+
+test('renderBody with no file in hand rewrites nothing, rather than guessing', () => {
+  assert.match(renderBody('[Other](other.md)'), /href="other\.md"/);
+});
+
+test('noteHrefId reads back exactly what renderBody wrote, and nothing else', () => {
+  // The two halves of one href: the renderer writes it, the panel intercepts it.
+  const html = renderBody('[Other](other.md)', undefined, 'a.md');
+  const href = /href="([^"]+)"/.exec(html)?.[1] ?? '';
+  assert.equal(noteHrefId(href), 'other');
+  for (const other of ['https://example.com', '#section', '/api/asset/assets/a/h.md', '', '?note=']) {
+    assert.equal(noteHrefId(other), null, other);
+  }
 });

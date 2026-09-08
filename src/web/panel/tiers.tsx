@@ -115,7 +115,14 @@ export function NoteTiers({
       </div>
 
       <div className="panel-tier">
-        <Body card={card} write={write} onDirtyChange={onBodyDirty} lit={lit('body')} />
+        <Body
+          card={card}
+          file={data.file}
+          write={write}
+          onOpen={onOpen}
+          onDirtyChange={onBodyDirty}
+          lit={lit('body')}
+        />
       </div>
 
       <div className="panel-tier">

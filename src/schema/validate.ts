@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { isKnownKind } from './links.ts';
+import { bareRefs, bodyLinks, hrefBetween, hrefTarget } from './body.ts';
 import { isRef } from './facets.ts';
 import type { Facets, Issue, Note } from './types.ts';
 import { INSTRUCTIONS_FILE, isProject } from '../index/project.ts';
@@ -37,6 +38,12 @@ export function validate(
       message: `duplicate id "${d.id}" in ${d.files.length} files`,
     });
   }
+
+  // Where every note's file is, so a body link's resolved path can be turned back
+  // into the note it names. Built once: the alternative is a scan of every note
+  // per link, and a body carries many.
+  const byFile = new Map([...notes.values()].map((rec) => [resolve(rec.file), rec]));
+  const rel = (p: string) => relative(paths(dataRoot).notes, p) || p;
 
   for (const rec of notes.values()) {
     const at = (field: string, message: string, severity: Issue['severity'] = 'error') =>
@@ -150,6 +157,55 @@ export function validate(
           at('links', `doc not found: ${l.ref} (looked in ${tried.join(', ')})`, 'warning');
         }
       }
+    }
+
+    // --- body references ---
+    //
+    // A body reference is a reference, and until this existed it was the only
+    // kind nothing maintained: `[some-note]` had no parser behind it, so it
+    // rendered as literal brackets and no check could see it. The three rules
+    // below are the three ways one goes wrong, and each is a warning because a
+    // body is prose — an agent writes a link before the note it points at exists
+    // (the same leniency a reference facet's values already get), and none of
+    // this makes a file unreadable.
+    for (const link of bodyLinks(rec.body)) {
+      const target = hrefTarget(link.href, rec.file);
+      if (target === null) continue;
+      const to = byFile.get(target);
+      if (!to) {
+        // Not every relative link is a note: a body may point at a document in
+        // the asset folder, which is prose doing something reasonable. So the
+        // complaint is only about a path with nothing at the end of it.
+        if (!existsSync(target)) {
+          at('body', `link "${link.text}" points at ${rel(target)}, and nothing is there`, 'warning');
+        }
+        continue;
+      }
+      // Stale link text, which markdown has no `[[id|alias]]` to prevent. A
+      // warning and deliberately not a rule: prose is allowed to call a note
+      // something shorter than its title, and only the author knows which of the
+      // two this is.
+      if (link.text !== to.title) {
+        at(
+          'body',
+          `link to "${to.id}" reads "${link.text}", and that note is titled "${to.title}"`,
+          'warning',
+        );
+      }
+    }
+    // A bare bracket matters only when it names a note — which is what makes this
+    // check precise rather than a fight with prose. `[api]` and `[ext]` are legend
+    // markers in somebody's body and always will be; `[patchwork-navigation]` is a
+    // link that was never wired up.
+    for (const ref of bareRefs(rec.body)) {
+      const to = notes.get(ref.text);
+      if (!to || to.id === rec.id) continue;
+      at(
+        'body',
+        `"[${ref.text}]" names a note but is not a link — write ` +
+          `[${to.title}](${hrefBetween(rec.file, to.file)})`,
+        'warning',
+      );
     }
 
     // --- project block ---

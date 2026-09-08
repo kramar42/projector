@@ -17,6 +17,7 @@ import {
   renameNote,
   patchFields,
   patchNote,
+  rebodied,
   redocked,
   repointed,
   putFrontmatter,
@@ -1405,6 +1406,111 @@ test('a fold applies what was taken and merges the rest, in that order', () => {
     assert.deepEqual(after.facets.priority, ['month'], 'and the kept one did not');
     assert.match(after.body, /body of cand/, 'the body came across regardless');
     assert.equal(readAll(paths(v.root).notes).notes.has('cand'), false, 'the candidate is gone');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- body references
+
+/**
+ * The third half of a reference.
+ *
+ * `repointed` covers facet values and `redocked` covers `doc:` links; a reference
+ * written in a sentence was swept by neither, so a rename left it pointing at a
+ * path that had moved and a delete at a path with nothing behind it. These pin
+ * both outcomes, and the one case a root-relative `doc:` ref never had: a holder
+ * that moves at the same time as its target.
+ */
+
+test('rebodied repoints a moved target and unwraps a gone one', () => {
+  const was = { file: '/v/old.md', assets: '/v/assets/old' };
+  const now = { file: '/v/new.md', assets: '/v/assets/new' };
+  const body = 'See [Old](old.md) and [the handout](assets/old/h.md), plus [other](x.md).\n';
+
+  const moved = rebodied(body, '/v/holder.md', was, now);
+  assert.equal(moved?.changed, 2);
+  assert.equal(moved?.body, 'See [Old](new.md) and [the handout](assets/new/h.md), plus [other](x.md).\n');
+
+  const gone = rebodied(body, '/v/holder.md', was, null);
+  assert.equal(gone?.changed, 2);
+  assert.equal(gone?.body, 'See Old and the handout, plus [other](x.md).\n');
+
+  assert.equal(rebodied('nothing to see\n', '/v/holder.md', was, now), null);
+});
+
+test('renaming a note repoints the references written in other notes bodies', () => {
+  const v = vault({ target: card('target', 'priority: [now]'), holder: card('holder', '') });
+  try {
+    writeFileSync(
+      join(paths(v.root).notes, 'holder.md'),
+      `---\nid: holder\ntitle: HOLDER\n---\nAs argued in [TARGET](target.md), the plan holds.\n`,
+      'utf8',
+    );
+    renameNote(v.root, 'target', 'renamed');
+    assert.equal(bodyOf(v.root, 'holder'), 'As argued in [TARGET](renamed.md), the plan holds.\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('deleting a note unwraps the body links that named it, keeping the sentence', () => {
+  const v = vault({ target: card('target', 'priority: [now]'), holder: card('holder', '') });
+  try {
+    writeFileSync(
+      join(paths(v.root).notes, 'holder.md'),
+      `---\nid: holder\ntitle: HOLDER\n---\nAs argued in [TARGET](target.md), the plan holds.\n`,
+      'utf8',
+    );
+    const res = deleteNote(v.root, 'target');
+    assert.equal(res.removedEdges, 1);
+    assert.equal(bodyOf(v.root, 'holder'), 'As argued in TARGET, the plan holds.\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('renaming a folder note fixes its children, whose own files move with it', () => {
+  const v = vault();
+  try {
+    mkdirSync(join(paths(v.root).notes, 'proj'), { recursive: true });
+    writeFileSync(
+      join(paths(v.root).notes, 'proj', 'README.md'),
+      `---\nid: proj\ntitle: PROJ\nproject: {}\n---\nthe project note\n`,
+      'utf8',
+    );
+    // A child inside the folder, pointing at the README it sits beside. Both
+    // files move, so the href that stays correct is the one that does not change.
+    writeFileSync(
+      join(paths(v.root).notes, 'proj', 'child.md'),
+      `---\nid: child\ntitle: CHILD\n---\nPart of [PROJ](README.md), and see [OUT](../out.md).\n`,
+      'utf8',
+    );
+    writeFileSync(
+      join(paths(v.root).notes, 'out.md'),
+      `---\nid: out\ntitle: OUT\n---\nPoints in at [PROJ](proj/README.md).\n`,
+      'utf8',
+    );
+    renameNote(v.root, 'proj', 'pw');
+    assert.equal(bodyOf(v.root, 'child'), 'Part of [PROJ](README.md), and see [OUT](../out.md).\n');
+    assert.equal(bodyOf(v.root, 'out'), 'Points in at [PROJ](pw/README.md).\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('renaming rewrites the moving notes own links into its own asset folder', () => {
+  const v = vault({ target: card('target', 'priority: [now]') });
+  try {
+    writeFileSync(
+      join(paths(v.root).notes, 'target.md'),
+      `---\nid: target\ntitle: TARGET\n---\nEvidence in [the handout](assets/target/h.md).\n`,
+      'utf8',
+    );
+    mkdirSync(join(paths(v.root).assets, 'target'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'target', 'h.md'), '# handout\n', 'utf8');
+    renameNote(v.root, 'target', 'renamed');
+    assert.equal(bodyOf(v.root, 'renamed'), 'Evidence in [the handout](assets/renamed/h.md).\n');
   } finally {
     v.cleanup();
   }

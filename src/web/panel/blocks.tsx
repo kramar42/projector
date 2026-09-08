@@ -9,7 +9,7 @@ import { BodyEditor, type BodyEditorHandle } from '../components/BodyEditor.tsx'
 import { FrontmatterEditor } from '../components/FrontmatterEditor.tsx';
 import { useEnrichment, useRequestEnrichment } from '../enrichment.tsx';
 import { focusSoon } from '../cursor.ts';
-import { renderBody, toggleTask } from '../../view/markdown.ts';
+import { noteHrefId, renderBody, toggleTask } from '../../view/markdown.ts';
 import type { NoteWriter } from './usePanelWriter.ts';
 import type { NoteDTO, NoteDetailDTO, NoteDetail, Meta } from '../types.ts';
 
@@ -539,13 +539,22 @@ export function Frontmatter({
 
 export function Body({
   card,
+  file,
   write,
+  onOpen,
   onDirtyChange,
   lit = false,
 }: {
   // The detail DTO, because the body only travels on the panel's own route.
   card: NoteDetailDTO;
+  /**
+   * Where this note's file is, measured from the vault — what a body reference's
+   * relative href resolves against. See `appHref` in `view/markdown.ts`.
+   */
+  file: string;
   write: Pick<NoteWriter, 'body' | 'task'>;
+  /** How the panel opens a note — the same one the reference rows use. */
+  onOpen: (id: string, mods?: { altKey?: boolean; shiftKey?: boolean }) => void;
   onDirtyChange: (dirty: boolean) => void;
   lit?: boolean;
 }) {
@@ -640,13 +649,28 @@ export function Body({
             waiting on a round-trip to admit it was pressed.
           */
           onClick={(e) => {
+            // A reference in the prose opens the note it names, through the same
+            // `onOpen` the reference rows use — so it lands wherever the app
+            // decides a note lands, and carries the rest of the query with it.
+            // The `?note=` href stays in the HTML and is not decoration: it is
+            // what a middle-click, a copy-link and a keyboard both need, and
+            // following it directly would replace the whole query string, which
+            // is how the vault and the view got dropped.
+            const link = (e.target as HTMLElement).closest('a');
+            const named = noteHrefId(link?.getAttribute('href') ?? '');
+            if (named !== null) {
+              if (e.metaKey || e.ctrlKey || e.button !== 0) return;
+              e.preventDefault();
+              onOpen(named, { altKey: e.altKey, shiftKey: e.shiftKey });
+              return;
+            }
             const box = (e.target as HTMLElement).closest('input[type="checkbox"]');
             if (!box) return;
             const boxes = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')];
             const next = toggleTask(card.body, boxes.indexOf(box));
             if (next !== null) write.task(next);
           }}
-          dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title) }}
+          dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title, file) }}
         />
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>

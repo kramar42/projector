@@ -27,6 +27,7 @@ import { wouldCycle } from '../index/refs.ts';
 import { merged } from '../schema/merge.ts';
 import { suppress } from '../intake/db.ts';
 import { parseLink } from '../schema/links.ts';
+import { hrefBetween, hrefTarget, rewriteLinks } from '../schema/body.ts';
 import { readAll } from '../index/indexer.ts';
 import { loadViewFiles, viewFileFor } from './views.ts';
 import type { Note } from '../schema/types.ts';
@@ -446,8 +447,8 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
   if (Object.keys(patch).length) patchAll(root, file, patch);
 
   if (input.body !== undefined) {
-    // The body is written verbatim; only this call path and `mergeNotes` may
-    // touch it.
+    // The body is written verbatim; the only writers are this call path,
+    // `mergeNotes`, and the reference sweeps in `rename` and `delete`.
     putBody(file, input.body);
     patchAll(root, file, {});
   }
@@ -611,6 +612,57 @@ function linksNow(rec: { file: string; links: { raw: string }[] }): string[] {
   return (res.ok ? res.rec.links : rec.links).map((l) => l.raw);
 }
 
+/**
+ * How one note's *body* links change when the note they point at moves or stops
+ * existing — the third half of a reference, and the one nothing swept.
+ *
+ * `repointed` covers facet values, `redocked` covers `doc:` links, and a
+ * reference written in a sentence outlived both: a body said `[text](other.md)`
+ * and a rename left it aimed at a path that had moved, a delete at a path with
+ * nothing behind it. `check` reported the wreckage and could not repair it, which
+ * is the same gap those two were built to close, one layer further in.
+ *
+ * The two outcomes differ from `redocked`'s in one way that matters. A moved
+ * target is repointed, as there. A *gone* target does not drop the link — it
+ * unwraps it, leaving the link text as prose, because a facet value is a field
+ * and a body link is a clause: deleting `[the rollout note](gone.md)` from the
+ * middle of a sentence takes the sentence with it.
+ *
+ * Hrefs resolve against the file holding them (`hrefTarget`), so `holder` is not
+ * optional decoration — the same href means different targets in a root note and
+ * in a folder note one level down.
+ *
+ * `null` when nothing changed, so a caller writes only the files it must. Pure,
+ * and asserted without a filesystem.
+ */
+export function rebodied(
+  body: string,
+  holder: string,
+  from: { file: string; assets: string },
+  onto: { file: string; assets: string } | null,
+): { body: string; changed: number } | null {
+  let changed = 0;
+  const next = rewriteLinks(body, (link) => {
+    const at = hrefTarget(link.href, holder);
+    if (at === null) return link.href;
+    const inAssets = at === from.assets || at.startsWith(from.assets + sep);
+    if (at !== from.file && !inAssets) return link.href;
+    changed++;
+    if (!onto) return null;
+    return hrefBetween(holder, inAssets ? join(onto.assets, relative(from.assets, at)) : onto.file);
+  });
+  return changed ? { body: next, changed } : null;
+}
+
+/**
+ * The body on disk *now*, for a record we are about to write. `linksNow` for the
+ * other key these loops replace — see its comment.
+ */
+function bodyNow(rec: { file: string; body: string }): string {
+  const res = loadNote(rec.file);
+  return res.ok ? res.rec.body : rec.body;
+}
+
 const NOTE_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -748,12 +800,24 @@ export function renameNote(root: string, from: string, to: string): { repointed:
   // asset folder is the ordinary case, not an odd one, and the folder is about to
   // move out from under those refs like anybody else's.
   const ownDocs = redocked(linksNow(source), root, was, now);
+  // Its own body too, for the same reason its own links are rewritten here: a
+  // note that points into its own asset folder is the ordinary case, and that
+  // folder is about to move. The file itself moves *below*, so the href is
+  // computed from where the body will be, not where it is.
+  const ownProse = rebodied(bodyNow(source), now.file, was, now);
+  if (ownProse) putBody(source.file, ownProse.body);
   patchAll(root, source.file, {
     id: to,
     ...(ownDocs ? { links: ownDocs.links.length ? ownDocs.links : undefined } : {}),
   });
 
-  let moved = ownDocs?.changed ?? 0;
+  let moved = (ownDocs?.changed ?? 0) + (ownProse?.changed ?? 0);
+
+  /** Where a note's file ends up, which is only ever different inside a moving folder. */
+  const holderAfter = (file: string): string =>
+    folderNote && (file === sourceDir || file.startsWith(sourceDir + sep))
+      ? join(dirname(targetFile), relative(sourceDir, file))
+      : file;
   for (const rec of notes.values()) {
     if (rec.id === from) continue;
     const patch: Record<string, unknown> = {};
@@ -770,8 +834,22 @@ export function renameNote(root: string, from: string, to: string): { repointed:
       moved += docs.changed;
       patch.links = docs.links.length ? docs.links : undefined;
     }
-    if (!plan && !docs) continue;
-    patchAll(root, rec.file, patch);
+    // And the third half: a reference written in a sentence.
+    //
+    // The holder passed here is where the body *will* live, not where it is. A
+    // `doc:` ref is root-relative and so survives its holder moving; a body href
+    // is relative to the file, and renaming a folder note moves every note
+    // inside that folder — so a child's link to the README it sits beside has to
+    // be computed against the child's new path or it comes out one directory
+    // wrong, silently.
+    const prose = rebodied(bodyNow(rec), holderAfter(rec.file), was, now);
+    if (prose) moved += prose.changed;
+    if (!plan && !docs && !prose) continue;
+    if (Object.keys(patch).length) patchAll(root, rec.file, patch);
+    if (prose) {
+      putBody(rec.file, prose.body);
+      patchAll(root, rec.file, {});
+    }
   }
   // A folder note brings its children and instructions along. This waits until
   // the reference walk above has used the paths it read before the directory
@@ -874,8 +952,16 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
       removedEdges += docs.changed;
       patch.links = docs.links.length ? docs.links : undefined;
     }
-    if (!plan && !docs) continue;
-    patchAll(root, rec.file, patch);
+    // A body link to a note that is going away unwraps to its own text, so the
+    // sentence it sits in still reads. See `rebodied`.
+    const prose = rebodied(bodyNow(rec), rec.file, { file, assets }, null);
+    if (prose) removedEdges += prose.changed;
+    if (!plan && !docs && !prose) continue;
+    if (Object.keys(patch).length) patchAll(root, rec.file, patch);
+    if (prose) {
+      putBody(rec.file, prose.body);
+      patchAll(root, rec.file, {});
+    }
   }
 
   rmSync(file);
