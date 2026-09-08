@@ -35,7 +35,32 @@ function seededFacetsFile(): string {
  * exempt the entire token block, which is the only place hex appears.
  */
 
-const CSS = readFileSync(fileURLToPath(new URL('../src/web/style.css', import.meta.url)), 'utf8');
+/**
+ * **Every stylesheet the client ships, not just the main one.**
+ *
+ * These invariants read "the stylesheet" as a single string, and for a long time
+ * that string was `style.css` because there was nothing else. When `CardTile.css`
+ * appeared beside its component, it did not just escape the orphan-class check
+ * below — it escaped *all* of them: a 200ms transition, a second `@media`, a
+ * sixth radius step or an unreadable pair could have landed there and no test
+ * would have said a word. A design system is not per-file, so neither is this.
+ *
+ * `style.css` goes first, because the slices below take the *first* `:root` and
+ * the *first* dark block and those are its.
+ */
+const WEB = fileURLToPath(new URL('../src/web/', import.meta.url));
+
+function stylesheets(dir: string): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) out.push(...stylesheets(join(dir, e.name)));
+    else if (e.name.endsWith('.css')) out.push(join(dir, e.name));
+  }
+  return out.sort((a, b) => Number(b === join(WEB, 'style.css')) - Number(a === join(WEB, 'style.css')));
+}
+
+const SHEETS = stylesheets(WEB);
+const CSS = SHEETS.map((f) => readFileSync(f, 'utf8')).join('\n');
 /** Comments carry example values and prose; none of it is a declaration. */
 const CODE = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 

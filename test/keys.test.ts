@@ -973,6 +973,28 @@ test('a surface that draws controls is reachable from the keyboard', () => {
   walk(dir);
   assert.ok(files.length > 15, 'the component tree moved');
 
+  /**
+   * The components that *are* the cursor's address, so rendering one is having one.
+   *
+   * `data-card` is the cursor's own address: a board, a table and a calendar put
+   * the keyboard on a card with `j`/`k`/`h`/`l` and a roving tabindex, which is a
+   * different mechanism from the chip walk and just as much an address. That
+   * attribute used to be written inline in each view, and when the board and the
+   * calendar were given a shared `CardTile` it moved one file away — so a grep
+   * per file started reading a refactor as a regression, which is the one thing
+   * a coarse test must not do.
+   *
+   * Deliberately only `data-card`, and not every address. A component carrying
+   * `data-nav` — `Popover`, say — addresses *itself* and says so: its contents
+   * are the caller's to wire, and letting a caller inherit its address would
+   * excuse exactly the surface this test exists to catch.
+   */
+  const cursorBearing = files
+    .filter((f) => /data-card=/.test(readFileSync(f, 'utf8')))
+    .map((f) => f.slice(f.lastIndexOf('/') + 1, -'.tsx'.length));
+  assert.ok(cursorBearing.includes('CardTile'), 'the shared card should carry the cursor');
+  const rendersACard = new RegExp(`<(?:${cursorBearing.join('|')})[\\s/>]`);
+
   const unreachable: string[] = [];
   for (const file of files) {
     const name = file.slice(file.lastIndexOf('/') + 1);
@@ -980,10 +1002,8 @@ test('a surface that draws controls is reachable from the keyboard', () => {
     const src = readFileSync(file, 'utf8');
     // Only files that actually draw something clickable are asked the question.
     if (!/onClick=/.test(src)) continue;
-    // `data-card` is the cursor's own address: a board and a table put the
-    // keyboard on a card with `j`/`k`/`h`/`l` and a roving tabindex, which is a
-    // different mechanism from the chip walk and just as much an address.
     if (/data-nav|data-act|data-rail|data-card/.test(src)) continue;
+    if (rendersACard.test(src)) continue;
     unreachable.push(name);
   }
 

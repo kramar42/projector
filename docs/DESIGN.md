@@ -594,6 +594,13 @@ spacing value in the stylesheet, and `2`, `3`, `9` and `10` are all in heavy use
 
 ### Named Rules
 
+**The One-System Rule.** "The stylesheet" is `src/web/style.css` plus any `*.css` sitting beside a
+component — `components/CardTile.css` is the first. It is still *one* system: `theme.test.ts` reads
+every sheet under `src/web/` as a single string, so a second `@media`, a 200ms transition, a sixth
+radius step or an unreadable pair fails wherever it is written. Co-locating a component's rules with
+its component is fine; escaping the invariants by doing so is not, and for a while it silently was.
+Tokens stay in `style.css`: it is the one place `:root` is declared.
+
 **The Desktop-Only Rule.** The only `@media` query in the stylesheet is `prefers-color-scheme`. There
 are no breakpoints and no responsive system, because the surface is a second monitor and never a phone.
 Overlays clamp themselves against the viewport — `min(420px, 90vw)`, `min(560px, 92vw)`,

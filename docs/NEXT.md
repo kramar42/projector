@@ -23,6 +23,16 @@ things.
 
 ## Parked
 
+- **`new card here` has no keyboard address.** The `add` IconButton in a board column
+  (`views/BoardView.tsx`) and in a calendar day (`views/CalendarView.tsx`) is the same control, and
+  neither can be reached by a key — it is mouse or Tab. `keys.test.ts` never caught it: its unit is
+  the file, deliberately, and the calendar's pager already puts a `data-act` in `CalendarView.tsx`
+  while the board's cards put a `data-card` in `CardTile.tsx`, so both files answer *yes* to a
+  question neither button was asked. Parked rather than fixed because the fix is a binding, not an
+  attribute: it needs a stroke nobody else owns, a `data-act` name shared by both views, a cheatsheet
+  row, and a decision about whether creating into the *cursor's* column is the same act as creating
+  into a named one. Small, but it is grammar, and grammar is where this app is strict.
+
 - **A rename should carry the asset paths in the body, the way a merge does.** `redocked` now moves
   every `doc:` link when a note is renamed, merged or deleted, so the frontmatter half is whole. The
   body half is not: `schema/merge.ts`'s `reassigned` rewrites `assets/<from>/` to `assets/<to>/`
