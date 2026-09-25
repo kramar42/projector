@@ -144,12 +144,15 @@ test('vault: a note closed today reads as closed against its last commit, even u
     });
     note('ship', 'done', `created: 2026-01-01\nupdated: ${day.day}\n`);
     note('fresh', 'active', `created: ${day.day}\nupdated: ${day.day}\n`);
+    // Written before today and never committed: edited today, not created today.
+    note('draft', 'active', `created: 2026-01-02\nupdated: ${day.day}\n`);
 
     const r = await did(root, day, ['vault']);
     const got = r.sources[0]!.activities.map((a) => [a.kind, a.ref]);
     assert.deepEqual(got, [
       ['note-closed', 'ship'],
       ['note-created', 'fresh'],
+      ['note-edited', 'draft'],
     ]);
     assert.deepEqual(r.sources[0]!.activities[0]!.detail, ['status: active → done']);
   } finally {

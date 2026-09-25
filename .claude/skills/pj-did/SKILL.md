@@ -49,8 +49,9 @@ Record exactly one **outcome** per task, read from the traces:
 Leave out traces that are not the user's work:
 
 - chit-chat, thanks and emoji-only messages
-- sessions that only asked a question and got an answer (no tool calls, nothing written, no follow-up
-  in another source)
+- sessions that wrote nothing and led to nothing in another source. Keep one as *handled* when its
+  answer went to someone else (a ticket, a colleague), and drop it when the answer was only for the
+  user
 - meetings attended
 - reviewing somebody else's work
 
@@ -59,9 +60,12 @@ left-out count.
 
 ## 3. Categorise and answer in chat
 
-Group tasks under the **vault project** their notes point at, using the project note's title. If a
+Group tasks under the **vault project** their notes point at, using the project note's title. A
+`cwd` match only says the work happened in a repo that project declares, and one repo can serve
+several projects. When the content plainly belongs elsewhere, group by content and name the override
+under Gaps. If a
 task matches no note, group it by theme: *Support*, *Infra / DevOps*, *Coordination*, or a name the
-traces make obvious. Put the busiest category first.
+traces make obvious. Order categories by number of tasks, most first.
 
 ```markdown
 ## <day> — <n> tasks

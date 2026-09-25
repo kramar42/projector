@@ -97,8 +97,12 @@ export function vaultSource(ctx: IntakeContext, day: Day): SourceReport {
       changes.push(`${facet}: ${from ?? '(none)'} → ${to ?? '(none)'}`);
       if (shuts(facet, from) !== shuts(facet, to)) closed = shuts(facet, to);
     }
-    const kind = !was
+    // No committed "before" is not the same as new: a note written yesterday and
+    // never committed has none either. Its own `created` stamp decides.
+    const kind = note.created === day.day && !was
       ? 'note-created'
+      : !was
+        ? 'note-edited'
       : closed === true
         ? 'note-closed'
         : closed === false
