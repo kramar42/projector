@@ -48,6 +48,8 @@ import { pickSession } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
 import { createNote, deleteNote, mergeNotes, patchNote, patchFields, renameNote } from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
+import { parseDay } from '../did/day.ts';
+import { did, renderDid } from '../did/run.ts';
 
 // ---------------------------------------------------------------- flags
 
@@ -223,6 +225,7 @@ Work with notes
   ls                 list notes; saved views and query flags included
   search             full-text search, most relevant first
   log                what changed, from git history
+  did                what you did on one day, from every source
   context            everything known about one note
   add, set, link     create or change notes
   mv, merge, rm      rename, combine, or remove notes
@@ -253,6 +256,12 @@ const COMMAND_HELP: Record<string, string> = {
 
 List notes through the same query compiler and payload builder as the app.
 \`--json\` prints the payload the web app receives.`,
+  did: `Usage: pj did [today|yesterday|YYYY-MM-DD] [--only source,source] [--json]
+
+Your own traces on one local day: vault notes created, closed or moved, and
+commits in the work repos. Facts only, nothing summarised and nothing written —
+the pj-did skill turns them into a list of tasks. \`did.roots\` in the vault's
+config says which directories count as work.`,
   log: `Usage: pj log [--since "1 week ago"]
 
 Read status transitions, deadlines, and creations from this vault's git history.`,
@@ -827,6 +836,16 @@ if (asking) {
         process.exit(1);
       }
       console.log(formatHistory(history(root, flags.get('since')?.[0] ?? '1 week ago')));
+      break;
+    }
+    case 'did': {
+      const { flags, rest } = argFlags(argv, ['only', 'json'], ['json']);
+      if (rest.length > 1) fail(`pj did takes one day, got: ${rest.join(' ')}`);
+      const day = parseDay(rest[0]);
+      if ('error' in day) fail(day.error);
+      const only = (flags.get('only')?.[0] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const report = await did(root, day, only);
+      console.log(flags.has('json') ? JSON.stringify(report, null, 2) : renderDid(report));
       break;
     }
     case 'add': {

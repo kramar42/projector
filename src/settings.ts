@@ -119,6 +119,12 @@ export interface Settings {
     /** How long one relay run may take before the channel reports itself unfetched. */
     timeoutSeconds: number;
   };
+  /**
+   * Where `pj did` looks for your work: directories whose git repos and Claude
+   * sessions count. Empty means only the repos project notes declare and the
+   * workspaces notes recorded — the narrow answer, never a guessed folder.
+   */
+  did: { roots: string[] };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -146,6 +152,7 @@ interface Raw {
     timeout?: unknown;
   };
   gmail?: { command?: unknown; account?: unknown; transport?: unknown };
+  did?: { roots?: unknown };
   mcp?: {
     slack?: unknown;
     gmail?: unknown;
@@ -302,6 +309,7 @@ export function settingsFor(root: string): Settings {
       // the ceiling before the channel gives up and says so.
       timeoutSeconds: Math.max(60, Number(raw.mcp?.timeout ?? 600) || 600),
     },
+    did: { roots: (list(raw.did?.roots) ?? []).map((r) => resolvePath(r, root)) },
   };
 
   cache.set(root, { key, value });

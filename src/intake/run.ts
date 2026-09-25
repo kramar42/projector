@@ -40,7 +40,7 @@ export function channelNames(): string[] {
 
 export const DEFAULT_LIMIT = 25;
 
-type VaultRead = Pick<
+export type VaultRead = Pick<
   IntakeContext,
   'root' | 'db' | 'notes' | 'fingerprints' | 'links' | 'suppressed'
 >;
@@ -52,7 +52,7 @@ type VaultRead = Pick<
  * it — which fingerprints exist, which links exist, and the full-text index — so
  * paying for it per channel would be paying three times for one answer.
  */
-function readVault(root: string): VaultRead {
+export function readVault(root: string): VaultRead {
   const { db, notes } = reindex(root);
   const fingerprints = new Map<string, string[]>();
   const links = new Map<string, string[]>();

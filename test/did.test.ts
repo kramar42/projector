@@ -1,0 +1,156 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { paths } from '../src/config.ts';
+import { parseDay, within } from '../src/did/day.ts';
+import { branchOf, parseCommits } from '../src/did/git.ts';
+import { inScope, reposUnder } from '../src/did/scope.ts';
+import { did } from '../src/did/run.ts';
+
+/**
+ * `pj did` is a fixed window over sources that are already there, so what is
+ * worth pinning is the window and the identity: the right day, your work and
+ * nobody else's, and one piece of work counted once however many clones reach it.
+ */
+
+const git = (cwd: string, args: string[], env: Record<string, string> = {}) =>
+  execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+
+function commitAs(repo: string, email: string, when: Date, message: string): void {
+  const file = join(repo, `f${Math.random().toString(36).slice(2)}.txt`);
+  writeFileSync(file, message, 'utf8');
+  git(repo, ['add', file]);
+  const iso = when.toISOString();
+  git(repo, ['-c', `user.email=${email}`, '-c', 'user.name=X', 'commit', '-qm', message], {
+    GIT_AUTHOR_DATE: iso,
+    GIT_COMMITTER_DATE: iso,
+  });
+}
+
+function repoAt(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  git(dir, ['init', '-q', '-b', 'main']);
+  return dir;
+}
+
+test('a day is local, half-open, and refuses what the calendar does not have', () => {
+  const now = new Date(2026, 8, 25, 14, 0);
+  const today = parseDay('today', now);
+  assert.ok(!('error' in today));
+  assert.equal(today.day, '2026-09-25');
+  assert.equal(today.start.getHours(), 0);
+  const y = parseDay('yesterday', now);
+  assert.ok(!('error' in y) && y.day === '2026-09-24');
+  const first = parseDay('2026-03-01', now);
+  assert.ok(!('error' in first) && first.end.getDate() === 2);
+  assert.ok('error' in parseDay('2026-02-30', now));
+  assert.ok('error' in parseDay('last tuesday', now));
+  // End exclusive: midnight belongs to the next day.
+  assert.equal(within(today.end.toISOString(), today), false);
+  assert.equal(within(today.start.toISOString(), today), true);
+});
+
+test('commit records survive bodies with blank lines, and a source ref names its branch', () => {
+  const out =
+    '\u001eabc\u001f2026-09-25T10:00:00+02:00\u001ffeat: x\u001fline one\n\nSigned-off-by: A\n\u001frefs/remotes/origin/feat/x\n' +
+    '\u001edef\u001f2026-09-25T11:00:00+02:00\u001ffix: y\u001f\u001frefs/heads/main\n';
+  const commits = parseCommits(out);
+  assert.equal(commits.length, 2);
+  assert.equal(commits[0]!.body, 'line one\n\nSigned-off-by: A');
+  assert.equal(branchOf(commits[0]!.ref), 'feat/x');
+  assert.equal(branchOf(commits[1]!.ref), 'main');
+});
+
+test('repos are found under a root without descending into one or into build output', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pj-did-scope-'));
+  try {
+    repoAt(join(root, 'a'));
+    repoAt(join(root, 'a', 'nested'));
+    repoAt(join(root, 'group', 'b'));
+    repoAt(join(root, 'node_modules', 'dep'));
+    assert.deepEqual(reposUnder(root).map((p) => p.slice(root.length + 1)).sort(), ['a', 'group/b']);
+    const scope = { roots: [root], repos: [] };
+    assert.equal(inScope(scope, join(root, 'group')), true);
+    assert.equal(inScope(scope, tmpdir()), false);
+    // The app's own headless sessions are not anybody's work.
+    assert.equal(inScope(scope, join(root, 'vault', '.projector', 'x')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('git: your commits on the day, once, however many clones and cherry-picks reach them', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'pj-did-git-'));
+  try {
+    const work = join(base, 'work');
+    const vault = join(base, 'vault');
+    mkdirSync(paths(vault).config, { recursive: true });
+    writeFileSync(
+      join(paths(vault).config, 'config.yaml'),
+      `git: { author: me@x }\ndid: { roots: [${work}] }\n`,
+      'utf8',
+    );
+    const day = parseDay('today');
+    assert.ok(!('error' in day));
+    const noon = new Date(day.start.getTime() + 12 * 3600_000);
+    const before = new Date(day.start.getTime() - 3600_000);
+
+    const repo = repoAt(join(work, 'svc'));
+    commitAs(repo, 'me@x', before, 'yesterday, not today');
+    commitAs(repo, 'me@x', noon, 'feat: mine today');
+    commitAs(repo, 'them@x', noon, 'theirs today');
+    git(repo, ['checkout', '-qb', 'release']);
+    git(repo, ['reset', '-q', '--hard', 'HEAD~2']);
+    const sha = git(repo, ['rev-parse', 'main~1']).trim();
+    git(repo, ['-c', 'user.email=me@x', '-c', 'user.name=X', 'cherry-pick', sha], { GIT_COMMITTER_DATE: new Date().toISOString() });
+    // A second clone reaches the same shas through its remote.
+    execFileSync('git', ['clone', '-q', repo, join(work, 'svc-twin')]);
+
+    const r = await did(vault, day, ['git']);
+    const titles = r.sources[0]!.activities.map((a) => a.title);
+    assert.deepEqual(titles, ['feat: mine today']);
+    assert.equal(r.scope.repos.length, 2);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('vault: a note closed today reads as closed against its last commit, even uncommitted', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pj-did-vault-'));
+  try {
+    mkdirSync(paths(root).config, { recursive: true });
+    writeFileSync(paths(root).facets, 'status: { values: [active, done], single: true, closed: [done] }\n', 'utf8');
+    git(root, ['init', '-q']);
+    const day = parseDay('today');
+    assert.ok(!('error' in day));
+    const note = (id: string, status: string, stamps: string) =>
+      writeFileSync(
+        join(paths(root).notes, `${id}.md`),
+        `---\nid: ${id}\ntitle: ${id} title\nfacets: { status: [${status}] }\n${stamps}---\n`,
+        'utf8',
+      );
+    note('ship', 'active', 'created: 2026-01-01\nupdated: 2026-01-01\n');
+    note('idle', 'active', 'created: 2026-01-01\nupdated: 2026-01-01\n');
+    git(root, ['add', '-A']);
+    const before = new Date(day.start.getTime() - 3600_000).toISOString();
+    git(root, ['-c', 'user.email=me@x', '-c', 'user.name=X', 'commit', '-qm', 'seed'], {
+      GIT_AUTHOR_DATE: before,
+      GIT_COMMITTER_DATE: before,
+    });
+    note('ship', 'done', `created: 2026-01-01\nupdated: ${day.day}\n`);
+    note('fresh', 'active', `created: ${day.day}\nupdated: ${day.day}\n`);
+
+    const r = await did(root, day, ['vault']);
+    const got = r.sources[0]!.activities.map((a) => [a.kind, a.ref]);
+    assert.deepEqual(got, [
+      ['note-closed', 'ship'],
+      ['note-created', 'fresh'],
+    ]);
+    assert.deepEqual(r.sources[0]!.activities[0]!.detail, ['status: active → done']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
