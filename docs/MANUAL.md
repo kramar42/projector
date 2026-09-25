@@ -1288,6 +1288,7 @@ itself.
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
 | `/pj-triage` | give incomplete notes a project, priority and status |
 | `/pj-work` | start work on a note |
+| `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as a note |
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
