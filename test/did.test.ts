@@ -8,6 +8,7 @@ import { paths } from '../src/config.ts';
 import { parseDay, within } from '../src/did/day.ts';
 import { branchOf, parseCommits } from '../src/did/git.ts';
 import { daySession, typed } from '../src/did/claude.ts';
+import { adfText, changeLine } from '../src/did/jira.ts';
 import { inScope, reposUnder } from '../src/did/scope.ts';
 import { did } from '../src/did/run.ts';
 
@@ -223,5 +224,81 @@ test('claude: only the day’s turns of a session count, and only sessions in sc
     if (prior === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
     else process.env.PROJECTOR_CLAUDE_HOME = prior;
     rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('jira text: document format flattens to a sentence, long fields say only that they changed', () => {
+  const doc = {
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'mention', attrs: { text: '@Ann' } }, { type: 'text', text: ' is it ' }, { type: 'text', text: 'fixed?' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'second' }] },
+    ],
+  };
+  assert.equal(adfText(doc), '@Ann is it fixed? second');
+  assert.equal(changeLine({ field: 'status', fromString: 'Open', toString: 'Done' }), 'status: Open → Done');
+  assert.equal(changeLine({ field: 'description', fromString: 'a', toString: 'b' }), 'edited description');
+});
+
+test('jira: only what you authored inside the day survives the nomination', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pj-did-jira-'));
+  mkdirSync(paths(root).config, { recursive: true });
+  const env = { PROJECTOR_JIRA_URL: 'https://j.example', PROJECTOR_JIRA_EMAIL: 'me@x', PROJECTOR_JIRA_TOKEN: 't' };
+  const prior = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, env);
+  const realFetch = globalThis.fetch;
+  const day = parseDay('today');
+  assert.ok(!('error' in day));
+  const at = (h: number) => new Date(day.start.getTime() + h * 3600_000).toISOString();
+  const me = { accountId: 'me' };
+  const them = { accountId: 'them' };
+  const asked: string[] = [];
+  const routes: Record<string, unknown> = {
+    '/rest/api/3/myself': me,
+    '/rest/api/3/search/jql': {
+      issues: [
+        { key: 'A-1', fields: { summary: 'Fix it', status: { name: 'Done' }, created: at(-48) } },
+        { key: 'B-2', fields: { summary: 'Theirs', status: { name: 'Open' }, created: at(-48) } },
+        { key: 'C-3', fields: { summary: 'New one', issuetype: { name: 'Bug' }, created: at(8), creator: me } },
+      ],
+    },
+    '/rest/api/3/issue/A-1/changelog': {
+      total: 2,
+      values: [
+        { created: at(-20), author: me, items: [{ field: 'status', fromString: 'Open', toString: 'In Progress' }] },
+        { created: at(10), author: me, items: [{ field: 'status', fromString: 'In Progress', toString: 'Done' }] },
+      ],
+    },
+    '/rest/api/3/issue/A-1/comment': {
+      comments: [
+        { created: at(11), author: them, body: 'thanks' },
+        { created: at(-10), author: me, body: 'yesterday' },
+      ],
+    },
+    '/rest/api/3/issue/B-2/changelog': { total: 1, values: [{ created: at(9), author: them, items: [{ field: 'status' }] }] },
+  };
+  globalThis.fetch = (async (input: string | URL) => {
+    const url = new URL(String(input));
+    asked.push(url.pathname);
+    const body = routes[url.pathname] ?? {};
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const r = await did(root, day, ['jira']);
+    const rows = r.sources[0]!.activities;
+    assert.deepEqual(rows.map((a) => [a.kind, a.title]), [
+      ['created', 'C-3 New one'],
+      ['transition', 'A-1 Fix it'],
+    ]);
+    assert.deepEqual(rows[1]!.detail!.map((d) => d.slice(6)), ['status: In Progress → Done']);
+    assert.equal(rows[1]!.ref, 'https://j.example/browse/A-1');
+    assert.ok(asked.every((p) => p.startsWith('/rest/api/3/')), 'only reads');
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const [k, v] of Object.entries(prior)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(root, { recursive: true, force: true });
   }
 });
