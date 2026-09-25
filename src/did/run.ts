@@ -1,12 +1,13 @@
 import { readVault } from '../intake/run.ts';
 import type { Day } from './day.ts';
+import { claudeSource } from './claude.ts';
 import { gitSource } from './git.ts';
 import { ctxOf, scopeOf } from './scope.ts';
 import { vaultSource } from './vault.ts';
 import type { Activity, DidReport, SourceReport } from './types.ts';
 
 /** Every source, in the order a reader wants them: the durable traces first. */
-export const DID_SOURCES = ['vault', 'git'] as const;
+export const DID_SOURCES = ['vault', 'git', 'claude'] as const;
 
 /**
  * One day, every source. A source that fails is that source's news, not the
@@ -26,6 +27,7 @@ export async function did(root: string, day: Day, only: string[] = []): Promise<
     try {
       if (name === 'vault') sources.push(vaultSource(ctx, day));
       if (name === 'git') sources.push(gitSource(ctx, scope, day));
+      if (name === 'claude') sources.push(claudeSource(ctx, scope, day));
     } catch (err) {
       sources.push({ source: name, fetched: false, reason: (err as Error).message, activities: [] });
     }

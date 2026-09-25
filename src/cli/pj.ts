@@ -258,8 +258,8 @@ List notes through the same query compiler and payload builder as the app.
 \`--json\` prints the payload the web app receives.`,
   did: `Usage: pj did [today|yesterday|YYYY-MM-DD] [--only source,source] [--json]
 
-Your own traces on one local day: vault notes created, closed or moved, and
-commits in the work repos. Facts only, nothing summarised and nothing written —
+Your own traces on one local day: vault notes created, closed or moved,
+commits in the work repos, and the Claude sessions you worked in there. Facts only, nothing summarised and nothing written —
 the pj-did skill turns them into a list of tasks. \`did.roots\` in the vault's
 config says which directories count as work.`,
   log: `Usage: pj log [--since "1 week ago"]

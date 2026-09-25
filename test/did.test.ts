@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
 import { parseDay, within } from '../src/did/day.ts';
 import { branchOf, parseCommits } from '../src/did/git.ts';
+import { daySession, typed } from '../src/did/claude.ts';
 import { inScope, reposUnder } from '../src/did/scope.ts';
 import { did } from '../src/did/run.ts';
 
@@ -152,5 +153,75 @@ test('vault: a note closed today reads as closed against its last commit, even u
     assert.deepEqual(r.sources[0]!.activities[0]!.detail, ['status: active → done']);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a session prompt is what a person typed, never the harness', () => {
+  assert.equal(typed('fix the build'), 'fix the build');
+  assert.equal(typed('<command-name>/pj-did</command-name><command-args></command-args>'), '/pj-did');
+  assert.equal(typed('<command-name>/compact</command-name>'), null);
+  assert.equal(typed('/compact'), null);
+  assert.equal(typed('<bash-input>git push</bash-input><bash-stdout>ok</bash-stdout>'), '$ git push');
+  assert.equal(typed('<task-notification><task-id>x</task-id></task-notification>'), null);
+  assert.equal(typed('This session is being continued from a previous conversation that ran out of context.'), null);
+});
+
+test('claude: only the day’s turns of a session count, and only sessions in scope', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'pj-did-claude-'));
+  const prior = process.env.PROJECTOR_CLAUDE_HOME;
+  try {
+    const work = join(base, 'work');
+    mkdirSync(join(work, 'svc'), { recursive: true });
+    const vault = join(base, 'vault');
+    mkdirSync(paths(vault).config, { recursive: true });
+    writeFileSync(join(paths(vault).config, 'config.yaml'), `did: { roots: [${work}] }\n`, 'utf8');
+    const home = join(base, 'claude');
+    mkdirSync(join(home, 'projects', 'p'), { recursive: true });
+    process.env.PROJECTOR_CLAUDE_HOME = home;
+
+    const day = parseDay('today');
+    assert.ok(!('error' in day));
+    const at = (h: number) => new Date(day.start.getTime() + h * 3600_000).toISOString();
+    const cwd = join(work, 'svc');
+    const user = (h: number, content: unknown, extra: object = {}) =>
+      JSON.stringify({ type: 'user', timestamp: at(h), cwd, gitBranch: 'feat/x', message: { content }, ...extra });
+    const lines = [
+      user(-3, 'yesterday\'s ask'),
+      JSON.stringify({ type: 'custom-title', customTitle: 'Fix the build' }),
+      user(9, 'fix the build'),
+      user(9.1, [{ type: 'tool_result', content: 'ok' }]),
+      user(9.2, 'Caveat: harness text', { isMeta: true }),
+      user(9.3, 'a subagent prompt', { isSidechain: true }),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: at(9.4),
+        cwd,
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Edit', input: { file_path: '/w/svc/a.ts' } },
+            { type: 'tool_use', name: 'Bash', input: { command: 'ls' } },
+            { type: 'text', text: 'Fixed: the build passes.' },
+          ],
+        },
+      }),
+    ];
+    writeFileSync(join(home, 'projects', 'p', 's1.jsonl'), lines.join('\n') + '\n', 'utf8');
+    const elsewhere = JSON.stringify({ type: 'user', timestamp: at(10), cwd: tmpdir(), message: { content: 'personal' } });
+    writeFileSync(join(home, 'projects', 'p', 's2.jsonl'), elsewhere + '\n', 'utf8');
+
+    const s = daySession(join(home, 'projects', 'p', 's1.jsonl'), day);
+    assert.deepEqual(s.prompts, ['fix the build']);
+    assert.deepEqual(s.files, ['/w/svc/a.ts']);
+    assert.equal(s.toolCalls, 2);
+    assert.equal(s.lastWord, 'Fixed: the build passes.');
+
+    const r = await did(vault, day, ['claude']);
+    const src = r.sources[0]!;
+    assert.deepEqual(src.activities.map((a) => [a.title, a.ref]), [['Fix the build', 'claude:s1']]);
+    assert.match(src.reason ?? '', /1 session\(s\) outside/);
+  } finally {
+    if (prior === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
+    else process.env.PROJECTOR_CLAUDE_HOME = prior;
+    rmSync(base, { recursive: true, force: true });
   }
 });
