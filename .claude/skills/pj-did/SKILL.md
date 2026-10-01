@@ -91,12 +91,16 @@ traces make obvious. Order categories by number of tasks, most first.
 
 Ask one question: **"Save this as a vault note?"** Then wait.
 
-Only if the user says yes, read the `pj-about` skill first, then create one note for the day:
+Only if the user says yes, read the `pj-about` skill first. If the vault's `AGENTS.md` describes a
+daily-note convention, follow it exactly: its folder, title, facets and links. Otherwise create one
+note for the day:
 
 ```bash
-pj add "Did — <day>" --id did-<day> --facet status=done --body "<the summary above>"
+pj add "<day> <weekday> — <the day's two or three biggest outcomes>" --id did-<day> \
+  --facet status=done --body "<the summary above, without its first heading>"
 ```
 
-Give it whatever other facets the vault's triage rules require, so it doesn't land in triage. Add the Jira
-keys and sessions it cites with `--link jira:<KEY>` and `--link claude:<uuid>`. If `did-<day>` already exists, show both versions and ask
-whether to replace or append. Don't overwrite it silently.
+Either way, give it the facets the vault's triage rules require, so it doesn't land in triage, and
+add the Jira keys and sessions it cites with `--link jira:<KEY>` and `--link claude:<uuid>`. If
+`did-<day>` already exists, show both versions and ask whether to replace or append. Don't
+overwrite it silently. A day with no traces gets no note.
