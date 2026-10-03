@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { rescues, seenState } from './db.ts';
 import { evidenceFor } from './match.ts';
 import { run, ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
@@ -6,11 +7,13 @@ import { paths } from '../config.ts';
 import {
   conversationsFrom,
   costFromEnvelope,
+  heardUpTo,
   knownFor,
   parseGmailRelay,
   parseSlackRelay,
   relayInstructions,
   searchToolIn,
+  sinceHeard,
   slackBoundary,
   trackedBy,
   transcribedAll,
@@ -137,6 +140,9 @@ export function candidateFor(
       ...(conv.myLastAt ? [{ k: 'you last wrote', v: ago(conv.myLastAt) }] : []),
       ...(tracked.length ? [{ k: 'tracked_as', v: tracked.join(', ') }] : []),
     ],
+    // The newest ask this judgement covers, recorded once it is judged, so the
+    // next tick hears only what came after — whatever subset the relay returns.
+    state: { key: `${kind}:${conv.key}`, value: newest.at },
     evidence: {
       ...(tracked.length ? { linkedTo: tracked } : mechanical.linkedTo ? { linkedTo: mechanical.linkedTo } : {}),
       ...(mechanical.capturedAs ? { capturedAs: mechanical.capturedAs } : {}),
@@ -211,15 +217,24 @@ function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string):
       let newest = ctx.cursor;
       let truncated = parsed.more;
 
-      for (const conv of conversationsFrom(kind, parsed.messages, ctx.cursor)) {
-        if (!newest || conv.last.at > newest) newest = conv.last.at;
+      const heard = heardUpTo(kind, ctx, rescues(ctx.root, 10_000).map((r) => r.fingerprint));
+      for (const fetched of conversationsFrom(kind, parsed.messages, ctx.cursor)) {
+        if (!newest || fetched.last.at > newest) newest = fetched.last.at;
+        // Asks the vault already answers for are not asks: a window read twice
+        // must not turn a second subset of one exchange into a second card.
+        const conv = sinceHeard(fetched, heard, seenState(ctx.root, `${kind}:${fetched.key}`));
         const tracked = trackedBy(conv, known);
         const c = candidateFor(kind, ctx, conv, tracked);
         if (!c) {
           skipped.push({
             fingerprint: `${kind}:${conv.key}/${conv.last.id}`,
             title: conv.name,
-            why: conv.asks.length ? 'nothing said in words since the cursor' : 'nothing new from anyone else since the cursor',
+            why:
+              conv.heard && !conv.asks.length
+                ? `already heard up to ${conv.heard.at} (${conv.heard.by.join(', ')})`
+                : conv.asks.length
+                  ? 'nothing said in words since the cursor'
+                  : 'nothing new from anyone else since the cursor',
           });
           continue;
         }

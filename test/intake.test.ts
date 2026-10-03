@@ -16,6 +16,7 @@ import { candidateFor, linkFor } from '../src/intake/mcp.ts';
 import {
   conversationsFrom,
   costFromEnvelope,
+  heardUpTo,
   knownFor,
   parseGmailRelay,
   parseSlackRelay,
@@ -23,6 +24,7 @@ import {
   renderCost,
   scrubSecrets,
   searchToolIn,
+  sinceHeard,
   slackBoundary,
   slackPermalinkParts,
   trackedBy,
@@ -2282,6 +2284,162 @@ test('a Gmail thread an open note links is an update keyed by the new message', 
     const c = candidateFor('gmail', ctx, conv!, tracked)!;
     assert.equal(c.fingerprint, 'gmail:1a05c9cf17367981@1a05c9cf17367999');
     assert.deepEqual(c.evidence?.linkedTo, ['a']);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** A stand-in relay that answers each run with the next of `ticks`, as `claude -p` would. */
+function scriptedRelay(root: string, ticks: unknown[]): void {
+  const script = join(root, 'ticks.json');
+  const counter = join(root, 'tick');
+  writeFileSync(script, JSON.stringify(ticks), 'utf8');
+  writeFileSync(counter, '0', 'utf8');
+  const agent = join(root, 'fake-agent.mjs');
+  writeFileSync(
+    agent,
+    `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from 'node:fs';
+const n = Number(readFileSync(${JSON.stringify(counter)}, 'utf8'));
+writeFileSync(${JSON.stringify(counter)}, String(n + 1));
+const answer = JSON.stringify(JSON.parse(readFileSync(${JSON.stringify(script)}, 'utf8'))[n]);
+process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: answer }));
+`,
+    { encoding: 'utf8', mode: 0o755 },
+  );
+  writeFileSync(
+    settingsPath(root),
+    `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`,
+    'utf8',
+  );
+}
+
+/**
+ * The duplicate cards of 2026-09-28 – 10-02: one DM, four unjudged cards with the
+ * same title, `-2`, `-3`, `-4`. The Slack cursor was held for two weeks because
+ * the relay never transcribed every result it was shown, so every tick re-read
+ * the same window — and transcribed a *different subset* of it each time. An
+ * update is keyed by the newest ask in what came back, so each subset was a new
+ * fingerprint for news the vault had already been handed.
+ *
+ * Ticks run through the real poller, with a fake relay that answers from a
+ * script and a judge that extends whatever is tracked, as the live one did.
+ */
+test('a re-read of a held window does not mint a second card for a conversation already captured', async () => {
+  const D = 'D0SSSSSSS';
+  const root = vault({
+    coverage: `---\nid: coverage\ntitle: Admin coverage\nfacets: { status: [active] }\nlinks: ['slack:${P(D, '1789383348.868479')}']\nsource_fingerprint: slack:${D}/1789383348.868479\n---\n\nb\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
+  const ask = slackRecord(D, '1789457024.117719', 'Sam', 'I reviewed most of the tech challenge, want your opinion');
+  const thanks = slackRecord(D, '1789472529.463059', 'Sam', 'very cool, okay good to know');
+  const later = slackRecord(D, '1789725073.431009', 'Sam', 'done!');
+  const mine = slackRecord(D, '1789461290.990299', 'me', 'yes, will check today', true);
+  // Each tick reports more results than it transcribes — the held cursor of the
+  // live runs — and the subset differs from tick to tick.
+  const ticks = [
+    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine, thanks, later], more: false },
+    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine], more: false },
+    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine, thanks], more: false },
+  ];
+  scriptedRelay(root, ticks);
+  const extendTracked: Ask = async (_system, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => ({
+        fp: c.fp,
+        decision: 'extend',
+        target: 'coverage',
+        reason: 'ask: review requested',
+        title: 'Review the tech challenge',
+      })),
+    );
+  try {
+    const first = await pollOnce(root, extendTracked);
+    assert.equal(first.created.length, 1, 'the first tick files the conversation once');
+    assert.equal(first.updates, 1);
+    assert.equal(watermarkFor(root, 'slack')?.cursor ?? null, null, 'and the cursor holds: fewer transcribed than reported');
+
+    const second = await pollOnce(root, extendTracked);
+    assert.deepEqual(second.created, [], 'an older subset of the same conversation is not news');
+    const third = await pollOnce(root, extendTracked);
+    assert.deepEqual(third.created, [], 'nor is any other subset at or before what was captured');
+
+    const cards = [...reindex(root).notes.values()].filter((n) => n.facets.intake?.length);
+    assert.deepEqual(cards.map((n) => n.source_fingerprint), [`slack:${D}/1789725073.431009`]);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a discovery re-read without its first ask is not a second discovery', async () => {
+  const D = 'D0TTTTTTT';
+  const root = vault({ a: card('a') });
+  const first = slackRecord(D, '1789551120.700799', 'Tam', 'any update on the first response?');
+  const second = slackRecord(D, '1789632572.912729', 'Tam', 'can you check the script pulling the priorities?');
+  const third = slackRecord(D, '1789646332.052109', 'Tam', 'yeah just the severity matters');
+  // The first ask is the discovery's fingerprint; a re-read that misses it would
+  // fingerprint the second ask instead, which no note carries.
+  scriptedRelay(root, [
+    { pages: [{ query: 'to:me', results: 40 }], messages: [first, second, third], more: false },
+    { pages: [{ query: 'to:me', results: 40 }], messages: [second], more: false },
+  ]);
+  try {
+    const one = await pollOnce(root, keepAll);
+    assert.equal(one.created.length, 1);
+    assert.equal(seenState(root, `slack:${D}`), '2026-09-17T11:58:52.052Z', 'the newest ask the judgement covered');
+    const two = await pollOnce(root, keepAll);
+    assert.deepEqual(two.created, [], 'the store remembers the rest of the exchange the fingerprint does not name');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a newer ask in a captured conversation is still its own update, and the skip says why for older ones', () => {
+  const D = 'D0SSSSSSS';
+  const root = vault({
+    coverage: `---\nid: coverage\ntitle: Admin coverage\nfacets: { status: [active] }\nlinks: ['slack:${P(D, '1789383348.868479')}']\n---\n\nb\n`,
+    card: `---\nid: card\ntitle: Review the tech challenge\nfacets: { intake: [unjudged], extends: [coverage] }\nsource_fingerprint: slack:${D}/1789725073.431009\n---\n\nb\n`,
+  });
+  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
+  try {
+    const ctx = context(root, { cursor: '2026-09-15T06:09:11.000Z' });
+    const heard = heardUpTo('slack', ctx);
+    const convOf = (...recs: ReturnType<typeof slackRecord>[]) =>
+      conversationsFrom('slack', parseSlackRelay(JSON.stringify({ messages: recs, more: false }))!.messages, ctx.cursor)[0]!;
+
+    const old = convOf(slackRecord(D, '1789457024.117719', 'Sam', 'please review the tech challenge'));
+    const replayed = sinceHeard(old, heard);
+    assert.equal(replayed.asks.length, 0, 'an ask at or before what the vault holds is not an ask any more');
+    assert.equal(replayed.heard?.at, '2026-09-18T09:51:13.431Z');
+    assert.deepEqual(replayed.heard?.by, ['card']);
+
+    const fresh = convOf(
+      slackRecord(D, '1789457024.117719', 'Sam', 'please review the tech challenge'),
+      slackRecord(D, '1789900000.000001', 'Sam', 'any news on the review?'),
+    );
+    const moved = sinceHeard(fresh, heard);
+    assert.deepEqual(moved.asks.map((m) => m.id), ['1789900000.000001'], 'only what came after is news');
+    const c = candidateFor('slack', ctx, moved, trackedBy(moved, knownFor('slack', ctx)))!;
+    assert.equal(c.fingerprint, `slack:${D}/1789900000.000001`, 'and it is its own offer, as before');
+
+    // A suppressed decline counts as heard too: the model already said no to that exchange.
+    const declined = heardUpTo('slack', { ...ctx, suppressed: new Set([`slack:${D}/1789950000.000001`]) });
+    assert.equal(sinceHeard(fresh, declined).asks.length, 0);
+
+    // Un-declining walks the cursor back to bring an item within reach; the marks
+    // must not be what hides it again. Once a note carries it, it is heard again.
+    const rescued = heardUpTo('slack', ctx, [`slack:${D}/1789457024.117719`]);
+    assert.equal(sinceHeard(old, rescued).asks.length, 1, 'a rescued ask comes back');
+    const filed = heardUpTo('slack', ctx, [`slack:${D}/1789725073.431009`]);
+    assert.equal(filed.wanted.size, 0, 'a rescue a note already answers for wants nothing');
+
+    // A public channel is not one conversation: a fingerprint elsewhere in it hears nothing here.
+    const pub = convOf(slackRecord('C0PPPPPPP', '1789457024.117719', 'Sam', 'question about the tech challenge'));
+    const pubHeard = heardUpTo('slack', { ...ctx, fingerprints: new Map([['slack:C0PPPPPPP/1789999999.000001', ['x']]]) });
+    assert.equal(sinceHeard(pub, pubHeard).asks.length, 1);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });

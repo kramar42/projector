@@ -67,6 +67,11 @@ export interface Conversation {
   ball: 'mine' | 'theirs';
   last: RelayMessage;
   myLastAt?: string;
+  /**
+   * How far the vault had already heard this conversation, when `sinceHeard`
+   * found that it had — and so dropped every ask at or before it.
+   */
+  heard?: Mark;
 }
 
 export interface RelayResult {
@@ -616,4 +621,126 @@ export function trackedBy(conv: Conversation, known: Known): string[] {
     for (const id of known.byContainer.get(conv.channel) ?? []) ids.add(id);
   }
   return [...ids];
+}
+
+// ------------------------------------------------------------------- heard
+
+/** A point in a conversation the vault already answers for, and what answers for it. */
+export interface Mark {
+  /** ISO. */
+  at: string;
+  /** Note ids, `declined` for a suppressed fingerprint, `seen` for the intake store's record. */
+  by: string[];
+}
+
+/**
+ * Every point in a conversation the vault has already been handed, read off the
+ * fingerprints it holds — on any note, open or closed, a card still in the queue
+ * included — and the ones somebody declined.
+ */
+export interface Heard {
+  /** Slack DM or group DM channel → the newest message anything answers for. */
+  byContainer: Map<string, Mark>;
+  /** `<channel>/<ts>` for Slack, `<thread>@<message>` for Gmail → what answers for it. */
+  byMessage: Map<string, string[]>;
+  /**
+   * Fingerprints somebody un-declined and no note carries yet. A conversation
+   * holding one is not filtered at all: a rescue walks the cursor back to bring
+   * the item within reach, and the marks must not be what hides it again.
+   */
+  wanted: Set<string>;
+}
+
+const later = (a: Mark | undefined, b: Mark): Mark =>
+  !a || b.at > a.at ? b : b.at === a.at ? { at: a.at, by: [...new Set([...a.by, ...b.by])] } : a;
+
+/**
+ * Why an exact-fingerprint check is not enough, and what this adds.
+ *
+ * An update is keyed by the newest ask in what the relay returned, which is right
+ * when every run reads past the last one: each new exchange is its own offer. It
+ * is wrong when a run re-reads a window it has already been through — a cursor
+ * held because the relay transcribed fewer records than the page reported, say,
+ * which held the live Slack cursor for two weeks — because the relay copies a
+ * *different subset* each time, the newest ask in it differs, and every subset
+ * was a new fingerprint for news the vault already had. Four cards with one
+ * title, `-2`, `-3`, `-4`, all extending the same note.
+ *
+ * So the question is not "is this fingerprint known" but "is anything in this
+ * conversation newer than what is known". The fingerprint names a message, and
+ * the message has a place in the conversation: an ask at or before a point the
+ * vault already answers for is not news, whichever subset it arrived in.
+ */
+export function heardUpTo(
+  kind: RelayKind,
+  ctx: Pick<IntakeContext, 'fingerprints' | 'suppressed'>,
+  rescued: Iterable<string> = [],
+): Heard {
+  const byContainer = new Map<string, Mark>();
+  const byMessage = new Map<string, string[]>();
+  const note = (fp: string, by: string[]) => {
+    if (!fp.startsWith(`${kind}:`)) return;
+    const rest = fp.slice(kind.length + 1);
+    if (kind === 'slack') {
+      // Both spellings a sweep has written: `C123/1700.000` and `C123:1700.000`.
+      const m = /^([A-Z0-9]+)[/:](\d+\.\d+)$/.exec(rest);
+      if (!m) return;
+      const key = `${m[1]}/${m[2]}`;
+      byMessage.set(key, [...new Set([...(byMessage.get(key) ?? []), ...by])]);
+      // A DM is one conversation, so a point in it is a point in all of it. A
+      // public channel is not: a fingerprint there speaks for its own message.
+      if (/^[DG]/.test(m[1]!)) {
+        const at = slackTsToIso(m[2]!);
+        if (Number.isFinite(Date.parse(at))) byContainer.set(m[1]!, later(byContainer.get(m[1]!), { at, by }));
+      }
+      return;
+    }
+    // `gmail:<thread>@<message>` places a message; `gmail:<thread>` alone is a
+    // discovery, which the exact-fingerprint check already answers for.
+    if (rest.includes('@')) byMessage.set(rest, [...new Set([...(byMessage.get(rest) ?? []), ...by])]);
+  };
+  for (const [fp, ids] of ctx.fingerprints) note(fp, ids);
+  for (const fp of ctx.suppressed) note(fp, ['declined']);
+  const wanted = new Set<string>();
+  for (const fp of rescued) {
+    if (fp.startsWith(`${kind}:`) && !ctx.fingerprints.has(fp) && !ctx.suppressed.has(fp)) wanted.add(fp);
+  }
+  return { byContainer, byMessage, wanted };
+}
+
+/**
+ * The conversation with only the asks the vault has not heard yet.
+ *
+ * `seen` is the intake store's own record of the newest ask a judged tick was
+ * shown in this conversation (`seen`, keyed `<kind>:<conversation key>`). The
+ * fingerprints only place the message a card was keyed by — the first ask of a
+ * discovery, the newest of an update — so the store is what covers the rest of a
+ * discovery's exchange; the fingerprints are what survive losing the store, and
+ * what already answer for the duplicates written before it was kept.
+ */
+export function sinceHeard(conv: Conversation, heard: Heard, seen?: string | null): Conversation {
+  const fpOf = (m: RelayMessage) =>
+    conv.kind === 'slack' ? [`slack:${conv.channel}/${m.id}`] : [`gmail:${conv.channel}`, `gmail:${conv.channel}@${m.id}`];
+  if (heard.wanted.size && conv.asks.some((m) => fpOf(m).some((fp) => heard.wanted.has(fp)))) return conv;
+  let mark: Mark | undefined;
+  if (seen && Number.isFinite(Date.parse(seen))) mark = { at: seen, by: ['seen'] };
+  if (conv.kind === 'slack') {
+    if (/^[DG]/.test(conv.channel)) {
+      const m = heard.byContainer.get(conv.channel);
+      if (m) mark = later(mark, m);
+    }
+    const ids = [...conv.messages.map((m) => m.id), ...(conv.thread ? [conv.thread] : [])];
+    for (const id of ids) {
+      const by = heard.byMessage.get(`${conv.channel}/${id}`);
+      if (by) mark = later(mark, { at: slackTsToIso(id), by });
+    }
+  } else {
+    for (const m of conv.messages) {
+      const by = heard.byMessage.get(`${conv.channel}@${m.id}`);
+      if (by) mark = later(mark, { at: m.at, by });
+    }
+  }
+  if (!mark) return conv;
+  const asks = conv.asks.filter((m) => m.at > mark.at);
+  return asks.length === conv.asks.length ? conv : { ...conv, asks, heard: mark };
 }
