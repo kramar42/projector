@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, IconButton } from '../components/Button.tsx';
 import { PopoverButton } from '../components/Popover.tsx';
 import { RecordMark } from '../components/CardBody.tsx';
@@ -563,6 +563,20 @@ export function Body({
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const editor = useRef<BodyEditorHandle>(null);
+  /**
+   * The rendered body, as one object for as long as its inputs hold.
+   *
+   * React 19 compares `dangerouslySetInnerHTML` by the object, not by the string
+   * in it, so a fresh `{ __html }` per render rewrote the body on *every* render.
+   * That is invisible until something renders between a press and its click: a
+   * spread page takes focus on `pointerdown`, the re-render replaced the task box
+   * under the pointer, `mouseup` landed on its replacement, and no click fired —
+   * so a box on a pinned page could not be ticked at all.
+   */
+  const html = useMemo(
+    () => ({ __html: renderBody(card.body, card.title, file) }),
+    [card.body, card.title, file],
+  );
   const report = (d: boolean) => {
     setDirty(d);
     onDirtyChange(d);
@@ -670,7 +684,7 @@ export function Body({
             const next = toggleTask(card.body, boxes.indexOf(box));
             if (next !== null) write.task(next);
           }}
-          dangerouslySetInnerHTML={{ __html: renderBody(card.body, card.title, file) }}
+          dangerouslySetInnerHTML={html}
         />
       ) : (
         <p className="emptystate hint">Empty. Switch to edit to write something.</p>
