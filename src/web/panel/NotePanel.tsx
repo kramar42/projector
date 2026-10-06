@@ -4,6 +4,7 @@ import { useLive } from '../useLive.ts';
 import { ProjectMark } from '../components/CardBody.tsx';
 import { useIsPinned } from '../pinned.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
+import type { PanelWidth } from './width.ts';
 import { usePanelWriter } from './usePanelWriter.ts';
 import { useWorkStarter } from './useWorkStarter.ts';
 import { FoldDialog } from '../FoldDialog.tsx';
@@ -60,6 +61,9 @@ export function NotePanel(props: {
   /** Walk `via` inward from this note and show what it reaches. */
   onFocus: (id: string, via: string) => void;
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
+  /** The width step the note is drawn at, and one step wider (wrapping). */
+  width: PanelWidth;
+  onWidth: () => void;
 }) {
   const { data, error, reload } = useLive<NoteDetail>(() => api.note(props.id), [props.id]);
   return (
@@ -85,6 +89,8 @@ function NoteCard({
   onOpen,
   onFocus,
   onUnsaved,
+  width,
+  onWidth,
   data,
   error,
   reload,
@@ -103,6 +109,8 @@ function NoteCard({
    * needs this one fact from in here to ask the right question.
    */
   onUnsaved: (u: { body: boolean; frontmatter: boolean }) => void;
+  width: PanelWidth;
+  onWidth: () => void;
   data: NoteDetail | null;
   error: string | null;
   reload: () => void;
@@ -386,6 +394,19 @@ function NoteCard({
               that overshoots lands on nothing rather than on Delete. */}
           {card && (
             <div className="panel-acts">
+              {/*
+                * The width, first: it is about the reading rather than the
+                * note, so it stays furthest from the acts that change the note.
+                * One control that cycles; `-` and `=` are the directed pair.
+                */}
+              <IconButton
+                glyph="width"
+                size="normal"
+                extra="panel-x"
+                aria-label={`Note width: ${width}`}
+                title={`Note width: ${width} — click for wider, wrapping back to narrow (- narrower, = wider)`}
+                onClick={onWidth}
+              />
               {/*
                 * Only on a candidate that wants folding in, which is the only
                 * note the act means anything on. Drawn first — leftmost, furthest

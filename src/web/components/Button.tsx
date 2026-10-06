@@ -234,6 +234,17 @@ const GLYPH = {
    * Two arcs per circle rather than one: a 360° elliptical arc has identical start
    * and end points, which is the one case the SVG spec says to render as nothing.
    */
+  /**
+   * The note's width: a bar with a head at each end, because the act is one
+   * control for both directions — it steps wider and wraps back to narrow.
+   * Drawn on the grounds the others were; `↔` sits on a substituted face's
+   * advance like every arrow measured above. Stroked at the shared weight, it is
+   * `open`'s arrow mirrored onto its own tail, so it reads at `open`'s weight.
+   */
+  width: {
+    px: 15,
+    path: 'M2.5 8H13.5M5.3 5.2L2.5 8L5.3 10.8M10.7 5.2L13.5 8L10.7 10.8',
+  },
   focus: {
     px: 15,
     path: 'M3.5 8A4.5 4.5 0 1 1 12.5 8A4.5 4.5 0 1 1 3.5 8',

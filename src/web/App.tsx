@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { ApiError, api, onAttention } from './api.ts';
 import { useLive } from './useLive.ts';
@@ -51,6 +51,13 @@ import {
   type Patch,
 } from './query.ts';
 import { afterRemovingPage, PAGE_SCROLL, SPINE_W, stackPages } from './panel/pins.ts';
+import {
+  DEFAULT_PANEL_WIDTH,
+  loadPanelWidth,
+  type PanelWidth,
+  savePanelWidth,
+  stepPanelWidth,
+} from './panel/width.ts';
 import { useSelection, type Selection } from './selection.ts';
 import { focusSoon, useCursor, useDormantRing, type Cursor } from './cursor.ts';
 import {
@@ -134,6 +141,17 @@ export function App() {
   // open note survive a reload; the expensive multi-note surface does not make
   // itself the next cold start merely because it was open on exit.
   const [stackOpen, setStackOpen] = useState(false);
+  // How wide a note is drawn, open or pinned. Per browser — see `panel/width.ts`.
+  const [panelWidth, setPanelWidth] = useState<PanelWidth>(loadPanelWidth);
+  // On the root, because `--panel-w` is a `:root` token and every reader of it
+  // — the panel, the dock, a spread page, `--covered-right` — sits below it.
+  // Before paint, so a stored width never flashes the default first.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (panelWidth === DEFAULT_PANEL_WIDTH) delete root.dataset.panelWidth;
+    else root.dataset.panelWidth = panelWidth;
+    savePanelWidth(panelWidth);
+  }, [panelWidth]);
   // A slow response for the vault we just left must not re-install its metadata.
   const activeVault = useRef(vault);
   activeVault.current = vault;
@@ -696,6 +714,8 @@ export function App() {
     setPins,
     stackOpen,
     setStack,
+    panelWidth,
+    setPanelWidth,
     panelUnsaved,
     facets: meta?.facets ?? {},
     notes: data?.notes ?? {},
@@ -1048,6 +1068,8 @@ export function App() {
             onUnsaved={(u) => {
               panelUnsaved.current = u;
             }}
+            width={panelWidth}
+            onWidth={() => setPanelWidth((w) => stepPanelWidth(w, 1, true))}
           />
           </Suspense>
         )}
@@ -1079,6 +1101,9 @@ interface KeyState {
   stackOpen: boolean;
   /** Fold or spread — and, folding, optionally land on a note. */
   setStack: (open: boolean, note?: string | null) => void;
+  /** The note's width step, shared by the panel and the spread. */
+  panelWidth: PanelWidth;
+  setPanelWidth: (width: PanelWidth) => void;
   panelUnsaved: { current: { body: boolean; frontmatter: boolean } };
   /** The vocabulary, for the declared value a digit names and its cardinality. */
   facets: Meta['facets'];
@@ -2296,6 +2321,20 @@ function run(command: Command, s: KeyState): void {
       const landing = openNote ?? (cursor.id && s.pins.includes(cursor.id) ? cursor.id : s.pins[s.pins.length - 1]);
       if (landing) cursor.step(landing);
       return s.setStack(true);
+    }
+
+    /**
+     * A width step. It stops at either end rather than wrapping, so holding the
+     * key lands somewhere predictable — and says so, since a key that did
+     * nothing visible is otherwise indistinguishable from one that is unbound.
+     */
+    case 'panelWidth': {
+      const next = stepPanelWidth(s.panelWidth, command.delta);
+      if (next === s.panelWidth) {
+        return s.notify({ tone: 'info', text: `the note is as ${command.delta > 0 ? 'wide' : 'narrow'} as it goes` });
+      }
+      s.setPanelWidth(next);
+      return s.notify({ tone: 'info', text: `note width: ${next}` });
     }
 
     /**

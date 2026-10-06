@@ -361,6 +361,11 @@ export type Command =
    * enter that page in place; every other pinned page remains read-only.
    */
   | { kind: 'stack' }
+  /**
+   * A note one width step wider or narrower — the open panel and every spread
+   * page together, since they are drawn at one width (`panel/width.ts`).
+   */
+  | { kind: 'panelWidth'; delta: 1 | -1 }
   | { kind: 'search' }
   | { kind: 'help' }
   | { kind: 'palette' }
@@ -913,6 +918,16 @@ export const BINDINGS: readonly Binding[] = [
   { id: 'pin.toggle', stroke: "'", palette: 'Pin / unpin this note', command: { kind: 'pin' } },
   { id: 'stack.toggle', stroke: '"', palette: 'Spread the pinned notes side by side', command: { kind: 'stack' } },
 
+  /**
+   * The note's width. Marks for the reason the pin pair is — no vocabulary can
+   * claim one — and this pair because they are the zoom keys every browser
+   * already teaches, without the ⌘ that would make them the browser's. `=`
+   * rather than `+` because `+` is spent on `judge`, and `=` is the same key
+   * unshifted.
+   */
+  { id: 'width.wider', stroke: '=', palette: 'Widen the note', command: { kind: 'panelWidth', delta: 1 } },
+  { id: 'width.narrower', stroke: '-', palette: 'Narrow the note', command: { kind: 'panelWidth', delta: -1 } },
+
   { id: 'palette', stroke: '.', palette: undefined, command: { kind: 'palette' } },
   { id: 'search', stroke: '/', palette: 'Search notes', command: { kind: 'search' } },
   { id: 'help', stroke: '?', palette: 'Show the keyboard map', command: { kind: 'help' } },
@@ -929,8 +944,8 @@ export const BINDINGS: readonly Binding[] = [
    *
    * Punctuation for the same reason `!` is. `+` because both outcomes are *this
    * belongs in the vault*, which is the one question the queue asks. `=` held the
-   * fold and is free again — the two acts turned out to be one decision the card
-   * had already made.
+   * fold until the two acts turned out to be one decision the card had already
+   * made; it widens the note now.
    */
   { id: 'judge', stroke: '+', palette: 'Judge this candidate', command: { kind: 'judge' } },
   /**
@@ -1143,6 +1158,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
     rows: [
       { ids: ['pin.toggle'], does: 'pin / unpin the focused note' },
       { ids: ['stack.toggle'], does: 'spread the pins side by side / fold them back' },
+      { ids: ['width.narrower', 'width.wider'], does: 'narrower / wider note — open or pinned' },
       // A sequence, so its keys are written out; `ACTS` carries it into the
       // palette, which is the only other place it can be found.
       {

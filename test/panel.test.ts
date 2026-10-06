@@ -12,6 +12,14 @@ import {
   planWrite,
   type CardWrite,
 } from '../src/web/panel/write.ts';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_PANEL_WIDTH,
+  PANEL_WIDTHS,
+  parsePanelWidth,
+  stepPanelWidth,
+} from '../src/web/panel/width.ts';
 
 /**
  * The note panel's decisions.
@@ -236,4 +244,38 @@ test('the header names the newest write in flight, and nothing when idle', () =>
   s = nextStatus(s, { t: 'start', seq: 2, label: 'renaming' });
   assert.equal(busyLabel(s), 'renaming');
   assert.equal(bannerFor(idleStatus()), null);
+});
+
+// ---------------------------------------------------------------- width
+
+test('a width step stops at either end from the keys, and wraps from the button', () => {
+  const first = PANEL_WIDTHS[0];
+  const last = PANEL_WIDTHS[PANEL_WIDTHS.length - 1]!;
+  assert.equal(stepPanelWidth(last, 1), last, '= on the widest step stays put');
+  assert.equal(stepPanelWidth(first, -1), first, '- on the narrowest step stays put');
+  assert.equal(stepPanelWidth(last, 1, true), first, 'the button comes back round');
+  assert.equal(stepPanelWidth(DEFAULT_PANEL_WIDTH, 1), PANEL_WIDTHS[PANEL_WIDTHS.indexOf(DEFAULT_PANEL_WIDTH) + 1]);
+});
+
+test('a stored width nobody recognises is the default, not an undrawn step', () => {
+  assert.equal(parsePanelWidth(null), DEFAULT_PANEL_WIDTH);
+  assert.equal(parsePanelWidth('huge'), DEFAULT_PANEL_WIDTH);
+  assert.equal(parsePanelWidth('wide'), 'wide');
+});
+
+/**
+ * The names live in `width.ts` and the widths in the stylesheet, so a step
+ * added on one side only would be a key that changes nothing. And a spread page
+ * drawn at its own width is the drift this exists to stop: a note pinned was
+ * 100px narrower than the same note open.
+ */
+test('every width step is drawn, and a pinned page is drawn at the same width as the panel', () => {
+  const css = readFileSync(fileURLToPath(new URL('../src/web/style.css', import.meta.url)), 'utf8');
+  for (const w of PANEL_WIDTHS.filter((w) => w !== DEFAULT_PANEL_WIDTH)) {
+    assert.match(css, new RegExp(`:root\\[data-panel-width='${w}'\\] \\{\\s*--panel-w:`), `no --panel-w for ${w}`);
+  }
+  const page = /\.pinpage \{[^}]*\}/.exec(css)?.[0] ?? '';
+  assert.match(page, /\bwidth: var\(--panel-w\);/);
+  const panel = /\n\.panel \{[^}]*\}/.exec(css)?.[0] ?? '';
+  assert.match(panel, /\bwidth: var\(--panel-w\);/);
 });

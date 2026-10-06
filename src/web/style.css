@@ -135,8 +135,25 @@
      width, and `.shell` reserves the same width as a track so that an open panel
      takes space out of the view instead of covering it. Written twice, they drift
      and the view draws cards under the panel again. Clamped with `min(px, vw)`,
-     which is what DESIGN.md asks of an overlay in a narrow window. */
-  --panel-w: min(560px, 92vw);
+     which is what DESIGN.md asks of an overlay in a narrow window.
+
+     It is a step the reader picks (`-` / `=`, `panel/width.ts`), and a spread
+     page is drawn at it too, so a note is one width whether it is open or
+     pinned. The default grows with the window, because 560px was a third of a
+     laptop screen and a quarter of a second monitor. */
+  --panel-w: min(clamp(560px, 40vw, 760px), 92vw);
+}
+
+:root[data-panel-width='narrow'] {
+  --panel-w: min(460px, 92vw);
+}
+
+:root[data-panel-width='wide'] {
+  --panel-w: min(clamp(720px, 55vw, 1040px), 92vw);
+}
+
+:root[data-panel-width='widest'] {
+  --panel-w: 75vw;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2293,7 +2310,8 @@ input:focus-visible + .checkbox {
 .pinpage {
   position: sticky;
   flex: none;
-  width: min(460px, 92vw);
+  /* The panel's width, so pinning a note does not narrow it. See `--panel-w`. */
+  width: var(--panel-w);
   height: 100%;
   display: flex;
   background: var(--surface);

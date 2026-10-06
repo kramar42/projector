@@ -1647,6 +1647,7 @@ lands somewhere you are not. Their empty slots remain, so changing focus reveals
 moving the labels or content they annotate.
 
 **Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
+| `-` `=` | a **narrower / wider** note. The open panel and every spread page are one width, so pinning a note never narrows it. Four steps — narrow, default, wide, widest — and the default grows with the window. The **↔** in the panel's corner steps wider and wraps back to narrow. Remembered per browser, not per vault: it is a fact about your screen |
 and cannot write — so there is still one place a keystroke can land with four notes on screen. Its
 region and axis keys edit that page in place: `g c` edits its body, `g y` its frontmatter, `g f` its
 facets and `g ⇧F` adds one. None changes the open slot or folds the spread. Their header controls

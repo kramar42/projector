@@ -183,7 +183,7 @@ components:
     padding: "5px"
   panel:
     backgroundColor: "{colors.surface}"
-    width: "min(560px, 92vw)"
+    width: "min(clamp(560px, 40vw, 760px), 92vw)"
     padding: "0 0 30px"
   table-header:
     backgroundColor: "{colors.ground}"
@@ -549,7 +549,7 @@ replaced the grid's dock. Nothing covering it means `0px` and no behaviour.
 
 **Aim is not room, and only a board needs the room.** `scroll-padding` moves where a scroll aims; it
 cannot invent scroll range, and at maximum scroll a board's last column ends flush with the scroller's
-right edge — 560px inside the panel. So `.board` grows an empty trailing flex item while the panel is
+right edge — `--panel-w` inside the panel. So `.board` grows an empty trailing flex item while the panel is
 open, which costs nothing because a column is `flex: 0 0 292px`. **A table gets none of this**: its
 cursor is a full-width row, so there is no horizontal clearance to win, and `.table` is `width: 100%`
 — end padding on the wrap resolves into the table and reflows every column, which is the exact reflow
@@ -574,9 +574,9 @@ sliver. That cap was a fixed fraction of the viewport, which only added up for t
 strip under the last one that nothing could use. Lanes are 14px apart, and a lane head is
 `position: sticky; left: 0` so its name survives horizontal scroll.
 
-**The panel** is fixed to the right edge at `--panel-w` (`min(560px, 92vw)`, the same token the shell
-declares as `--covered-right` while it is open, so the width it covers and the width it clears cannot
-drift) over a `rgba(10, 8, 14, 0.34)` scrim,
+**The panel** is fixed to the right edge at `--panel-w` (the same token the shell declares as
+`--covered-right` while it is open, so the width it covers and the width it clears cannot drift) over
+a `rgba(10, 8, 14, 0.34)` scrim,
 with `0 0 30px` of padding on the scrolling body and `10px` on every tier inside it — the deep bottom
 pad so the last section clears the viewport edge when scrolled. **The tier owns its padding**, which is
 what lets its divider reach the panel's edges instead of stopping 20px short at both ends; the panel
@@ -584,6 +584,13 @@ had 20px at the sides against 10px above and below the rule, so the horizontal b
 twice the vertical. Uniform 10px is `.rail-block`'s own number, and it makes the interval between two
 tiers exactly the interval to the edge — 6px between a section's parts, 5px between the rows of a
 facet grid, 10px and a hairline between tiers.
+
+**A note is one width, open or pinned.** `--panel-w` is a step the reader picks — `narrow` 460px,
+the default `clamp(560px, 40vw, 760px)`, `wide` `clamp(720px, 55vw, 1040px)`, `widest` 75vw, each
+under the `92vw` clamp — set as `data-panel-width` on the root, and a spread page is drawn at it too
+rather than at a width of its own. The steps are only ever written in `style.css`; `panel/width.ts`
+knows their names. A step settles at once: the panel's prose reflows, and a reflow is a different
+layout rather than a motion of the same one.
 
 **Density is the point.** At 1080p a column shows about ten notes, and a couple of hundred notes are
 four columns and one scroll. Every measurement in the system is hand-tuned to a 1px granularity rather
@@ -603,8 +610,8 @@ Tokens stay in `style.css`: it is the one place `:root` is declared.
 
 **The Desktop-Only Rule.** The only `@media` query in the stylesheet is `prefers-color-scheme`. There
 are no breakpoints and no responsive system, because the surface is a second monitor and never a phone.
-Overlays clamp themselves against the viewport — `min(420px, 90vw)`, `min(560px, 92vw)`,
-`min(680px, 100%)` — and that is the whole of the adaptive behaviour. Do not add breakpoints; if
+Overlays clamp themselves against the viewport — `min(420px, 90vw)`, `min(680px, 100%)` —
+and that is the whole of the adaptive behaviour. Do not add breakpoints; if
 something must fit a narrower window, clamp it.
 
 **The No Chrome Rule.** New global controls go into a rail block or the footer. The app has no top bar
