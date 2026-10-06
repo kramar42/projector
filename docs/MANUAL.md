@@ -1627,6 +1627,7 @@ sight — the reading set beside the writing set, and the two never touch.
 | `'` | pin / unpin the cursor's note. No panel needed, like a digit write. A **yellow thumbtack** appears stuck into its record mark wherever the note is drawn, so you can see what you are holding without leaving the board — and clicking the mark is the same toggle, which is also the only way a pointer can make a pin. Open a note and the pins appear beside its panel as navigable title spines |
 | `g [` `g ]` | previous / next pinned note, opened in the panel — the keyboard's way to the folded spines. It wraps, and from a note that is not pinned it enters at the near end. In the spread it is `h` / `l`, which already walk the pages |
 | `"` | **spread** the pins side by side over the view, or fold them back |
+| `-` `=` | a **narrower / wider** note. The open panel and every spread page are one width, so pinning a note never narrows it. Four steps — narrow, default, wide, widest — and the default grows with the window. The **↔** in the panel's corner steps wider and wraps back to narrow. Remembered per browser, not per vault: it is a fact about your screen |
 | `h` `l` | across the spread pages. The focused page **is** the cursor: its facet writes and `g c` / `g y` edits land there |
 | `j` `k` | scroll the focused page |
 | `o` | move the focused pin into the **open slot** at the right, without leaving the spread |
@@ -1647,7 +1648,6 @@ lands somewhere you are not. Their empty slots remain, so changing focus reveals
 moving the labels or content they annotate.
 
 **Exactly one page body is actionable, and it is the focused one.** The others cannot be tabbed into
-| `-` `=` | a **narrower / wider** note. The open panel and every spread page are one width, so pinning a note never narrows it. Four steps — narrow, default, wide, widest — and the default grows with the window. The **↔** in the panel's corner steps wider and wraps back to narrow. Remembered per browser, not per vault: it is a fact about your screen |
 and cannot write — so there is still one place a keystroke can land with four notes on screen. Its
 region and axis keys edit that page in place: `g c` edits its body, `g y` its frontmatter, `g f` its
 facets and `g ⇧F` adds one. None changes the open slot or folds the spread. Their header controls
