@@ -355,6 +355,14 @@ export type Command =
    */
   | { kind: 'pinStep'; delta: 1 | -1 }
   /**
+   * Move a pin one place earlier or later in the run — the spread's page order,
+   * and the dock's spine order beside the panel.
+   *
+   * `⌥h` / `⌥l` because `⌥j` / `⌥k` already move a card within its column: ⌥
+   * plus a motion key is *carry this along that axis*, and pages run across.
+   */
+  | { kind: 'pinMove'; delta: 1 | -1 }
+  /**
    * Spread the pinned notes side by side over the view, or fold them back.
    *
    * The spread has one writable page: the cursor. Region and axis shortcuts
@@ -595,8 +603,8 @@ export function bind(pending: Pending | null, stroke: KeyStroke, ctx: KeyContext
     return { pending, command: null, handled: false };
   }
 
-  // A browser shortcut is not ours to take. ⌥ is, and is used for exactly two
-  // things: reordering within a column, and landing on a saved view.
+  // A browser shortcut is not ours to take. ⌥ is, and is used for exactly three
+  // things: reordering within a column, moving a pin, and landing on a saved view.
   if (stroke.metaKey || stroke.ctrlKey) return nothing;
 
   /**
@@ -750,6 +758,8 @@ function start(stroke: KeyStroke, ctx: KeyContext): Dispatch {
     // is unavailable, the code preserves the long-standing QWERTY fallback.
     if (optionLetterOf(stroke) === 'j') return emit({ kind: 'reorder', delta: 1 });
     if (optionLetterOf(stroke) === 'k') return emit({ kind: 'reorder', delta: -1 });
+    if (optionLetterOf(stroke) === 'h') return emit({ kind: 'pinMove', delta: -1 });
+    if (optionLetterOf(stroke) === 'l') return emit({ kind: 'pinMove', delta: 1 });
     return nothing;
   }
 
@@ -997,6 +1007,8 @@ export const ACTS: readonly Act[] = [
      same shape the `,` rows below take, and for the same reason. */
   { id: 'act.pinPrev', palette: 'Previous pinned note', keys: 'g [', command: { kind: 'pinStep', delta: -1 } },
   { id: 'act.pinNext', palette: 'Next pinned note', keys: 'g ]', command: { kind: 'pinStep', delta: 1 } },
+  { id: 'act.pinEarlier', palette: 'Move this pin earlier', keys: '⌥h', command: { kind: 'pinMove', delta: -1 } },
+  { id: 'act.pinLater', palette: 'Move this pin later', keys: '⌥l', command: { kind: 'pinMove', delta: 1 } },
 
   { id: 'act.view', palette: railControlDescription('view'), keys: ', v', command: { kind: 'rail', control: 'view' } },
   { id: 'act.save', palette: railControlDescription('save'), keys: ', V', command: { kind: 'rail', control: 'save' } },
@@ -1171,6 +1183,8 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { keys: 'h l', bindings: ['h', 'l'], does: 'across the spread pages — writes land on the focused one' },
       { keys: 'j k', bindings: ['j', 'k'], does: 'scroll the focused page' },
       { keys: 'o', does: 'send the focused page to the open slot at right' },
+      // ⌥ is read before the registry, so these are written out like `⌥j ⌥k`.
+      { keys: '⌥h ⌥l', bindings: ['⌥h', '⌥l'], does: 'move the focused pin earlier / later' },
       { keys: '⏎', does: 'fold the spread onto the focused note' },
     ],
   },

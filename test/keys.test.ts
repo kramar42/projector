@@ -283,6 +283,12 @@ test('⌥ falls back to the physical key, because macOS rewrites the character',
 
   const optJ = stroke('∆', { code: 'KeyJ', altKey: true });
   assert.deepEqual(bind(null, optJ, ctx()).command, { kind: 'reorder', delta: 1 });
+
+  // The pin pair, across: ⌥h / ⌥l are `˙` / `¬` on a Mac.
+  const optH = stroke('˙', { code: 'KeyH', altKey: true });
+  const optL = stroke('¬', { code: 'KeyL', altKey: true });
+  assert.deepEqual(bind(null, optH, ctx()).command, { kind: 'pinMove', delta: -1 });
+  assert.deepEqual(bind(null, optL, ctx()).command, { kind: 'pinMove', delta: 1 });
 });
 
 test('⌥ letter commands follow the active keyboard layout, while ⌥ numbers remain physical', () => {
@@ -291,7 +297,7 @@ test('⌥ letter commands follow the active keyboard layout, while ⌥ numbers r
   const optionOne = stroke('¡', { code: 'Digit1', altKey: true, layoutKey: '1' });
 
   assert.deepEqual(bind(null, dvorakJ, ctx()).command, { kind: 'reorder', delta: 1 });
-  assert.equal(bind(null, dvorakH, ctx()).command, null, 'the Dvorak H key is not ⌥J');
+  assert.deepEqual(bind(null, dvorakH, ctx()).command, { kind: 'pinMove', delta: -1 }, 'the Dvorak H key is ⌥h, not ⌥j');
   assert.deepEqual(bind(null, optionOne, ctx()).command, { kind: 'view', ordinal: 1 });
 });
 
@@ -1101,6 +1107,7 @@ test('every command is reachable, and how is written down', () => {
     declined: ',d',
     view: '⌥1–9',
     reorder: '⌥j / ⌥k',
+    pinMove: '⌥h / ⌥l',
     // The four the palette exists for: a control, no key, and `ACTS` names them.
     rename: 'the palette',
     toggleProject: 'the palette',

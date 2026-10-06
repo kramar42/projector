@@ -213,8 +213,10 @@ export function PinStack({
     if (cursor !== focused) onCursor(focused);
     reveal(pages.indexOf(focused));
     // `pages` is derived from the same URL state a focus change re-renders on.
+    // Its place as well as its length: `⌥h` / `⌥l` move the focused page without
+    // changing either the focus or the count, and it must follow itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focused, pages.length, reveal]);
+  }, [focused, pages.length, focused ? pages.indexOf(focused) : -1, reveal]);
 
   /**
    * A card never changes width; only its presentation follows the width not

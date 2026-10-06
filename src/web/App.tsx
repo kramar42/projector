@@ -2305,6 +2305,34 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
+     * Move a pin one place along the run it is drawn in.
+     *
+     * The pin is the focused page in the spread, and the open note beside the
+     * dock otherwise. It trades places with its neighbour *in the drawn run*
+     * rather than in `?pins=`, because a pinned open note leaves the run while it
+     * holds the right-hand slot — swapping with its hidden place would move
+     * nothing on screen.
+     */
+    case 'pinMove': {
+      const id = s.stackOpen ? cursor.id : (openNote ?? cursor.id);
+      if (!id || !s.pins.includes(id)) {
+        return s.notify({ tone: 'info', text: "not a pin — ' pins the note under the cursor" });
+      }
+      const run = s.stackOpen && openNote ? s.pins.filter((p) => p !== openNote) : s.pins;
+      if (!run.includes(id)) {
+        return s.notify({ tone: 'info', text: 'the open note keeps the right-hand slot — o sends a pin there' });
+      }
+      const other = run[run.indexOf(id) + command.delta];
+      if (!other) {
+        return s.notify({ tone: 'info', text: `already the ${command.delta < 0 ? 'first' : 'last'} pin` });
+      }
+      const next = [...s.pins];
+      next[next.indexOf(id)] = other;
+      next[s.pins.indexOf(other)] = id;
+      return s.setPins(next);
+    }
+
+    /**
      * Spread the pins, or fold them. Spreading unmounts the panel — the spread
      * is read-only (C10) — so unsaved text gets the same question Escape asks
      * before the surface holding it goes.
