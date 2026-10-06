@@ -2741,11 +2741,18 @@ code {
  */
 .md li input[type='checkbox'] {
   appearance: none;
-  display: inline-grid;
-  place-items: center;
+  /* `inline-block`, not `inline-grid`, and the tick out of flow. An inline
+     grid takes its baseline from its first item, so a ticked box aligned on the
+     tick and an empty one on its own bottom edge — two heights for one box, and
+     every line jumped when it was ticked. With nothing in flow the baseline is
+     always the box's bottom edge. */
+  display: inline-block;
+  position: relative;
   width: 11px;
   height: 11px;
-  margin: 0 5px 0 0;
+  /* 5px and the space GFM put after the box, which the renderer no longer
+     emits — see `view/markdown.ts`. */
+  margin: 0 9px 0 0;
   padding: 0;
   border: 1px solid var(--rule-2);
   border-radius: var(--radius-xs);
@@ -2769,11 +2776,23 @@ code {
 
 .md li input[type='checkbox']:checked::before {
   content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
   width: 5px;
   height: 2.5px;
   border-left: 1.5px solid var(--ink-3);
   border-bottom: 1.5px solid var(--ink-3);
   transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* A ticked item is struck through, the whole line rather than the box alone:
+   the line is the task, and done is a fact about all of it. `ink-3` for the
+   same reason the tick is — it is the file's state, not the app's. */
+.md li:has(> input[type='checkbox']:checked) {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-3);
+  color: var(--ink-3);
 }
 
 /* A row that carries a box does not also carry a bullet: two markers for one

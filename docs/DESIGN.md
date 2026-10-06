@@ -1148,7 +1148,11 @@ There were **three** checkboxes and **two** stray selects:
   wording missed it, and the most visually foreign of the three. It has since become a control as
   well: the box takes a click and writes the character back. Nothing about the drawing changed, which
   is the useful part — the rule had already put an app-drawn box there, so the day it started
-  listening it needed a cursor and a focus ring and not a redesign
+  listening it needed a cursor and a focus ring and not a redesign. Ticking it moves nothing: the box
+  is `inline-block` with its tick out of flow, so its baseline is its own bottom edge whether ticked or
+  not — as an `inline-grid` it took the tick's baseline and sat 3.5px lower once ticked. A ticked line
+  is struck through whole, in `ink-3`, and the renderer emits no space after the box, so the strike
+  starts at the first word rather than as a dash in front of it
 - the bulk bar's select and the canvas toolbar's select — the draft asserted "every `<select>`
   already takes `appearance: none`"; the shared field rule has none, so only `.rail-select` did.
   Three selects, three type steps, two of them OS controls.

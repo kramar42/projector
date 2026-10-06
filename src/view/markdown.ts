@@ -19,9 +19,13 @@ const md = new Marked({
      * It was rendered disabled-by-default for as long as nothing listened, which
      * was the honest state then and a false affordance the moment it stopped
      * being true.
+     *
+     * No trailing space, unlike GFM's: a ticked line is struck through, and a
+     * space between the box and the words is struck with it — a dash in front of
+     * every done task. The gap is the box's own margin instead.
      */
     checkbox({ checked }: { checked: boolean }): string {
-      return `<input type="checkbox"${checked ? ' checked=""' : ''}> `;
+      return `<input type="checkbox"${checked ? ' checked=""' : ''}>`;
     },
   },
 });
