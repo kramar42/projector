@@ -32,6 +32,7 @@ import { ACTS, KEYMAP, railControlDescription } from '../src/view/keys.ts';
 import {
   afterRemovingPage,
   exposedPageWidths,
+  movePin,
   isCompactPage,
   revealScroll,
   SPINE_W,
@@ -396,6 +397,28 @@ test('revealing a spread page clears one spine on its right, however many pages 
   assert.equal(revealScroll(3, 8, 460, 1280, 0, 2400), 594, 'only as far as the one waiting spine');
   assert.equal(revealScroll(1, 8, 460, 1280, 2400, 2400), 426, 'walking left clears elder spines');
   assert.equal(revealScroll(7, 8, 460, 1280, 0, 2400), 2400, 'the final page reaches the scroll end');
+});
+
+/**
+ * Two pages, one of them the open note, was the case that could not be
+ * reordered: the move only looked along the run, and the run held one page.
+ */
+test('a pin trades places along the drawn order, the open slot included when it is pinned', () => {
+  assert.deepEqual(movePin(['a', 'b'], null, 'a', 1, true), { pins: ['b', 'a'], open: null });
+  assert.deepEqual(movePin(['a', 'b'], 'b', 'a', 1, true), { pins: ['b', 'a'], open: 'a' }, 'into the open slot');
+  assert.deepEqual(movePin(['a', 'b'], 'b', 'b', -1, true), { pins: ['b', 'a'], open: 'a' }, 'out of it, the same trade');
+  // The open note's place in `?pins=` is not where it is drawn: c is pinned first
+  // but drawn last, and trading it with b leaves it drawn second.
+  const out = movePin(['c', 'a', 'b'], 'c', 'b', 1, true);
+  assert.deepEqual(out, { pins: ['b', 'a', 'c'], open: 'b' });
+  if (!('refused' in out)) assert.deepEqual(stackPages(out.pins, out.open), ['a', 'c', 'b']);
+
+  assert.deepEqual(movePin(['a'], 'x', 'a', 1, true), { refused: 'open-unpinned' }, 'an unpinned open note is never closed by a move');
+  assert.deepEqual(movePin(['a', 'b'], null, 'a', -1, true), { refused: 'first' });
+  assert.deepEqual(movePin(['a', 'b'], 'b', 'b', 1, true), { refused: 'last' });
+  assert.deepEqual(movePin(['a'], null, 'z', 1, true), { refused: 'not-pinned' });
+  // Beside the panel the dock draws `?pins=` as it is, and the open note stays open.
+  assert.deepEqual(movePin(['a', 'b'], 'b', 'b', -1, false), { pins: ['b', 'a'], open: 'b' });
 });
 
 test('the open note is the spread\'s trailing slot, even when it is pinned', () => {

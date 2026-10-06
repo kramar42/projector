@@ -50,7 +50,7 @@ import {
   strippedOfStrays,
   type Patch,
 } from './query.ts';
-import { afterRemovingPage, PAGE_SCROLL, SPINE_W, stackPages } from './panel/pins.ts';
+import { afterRemovingPage, movePin, PAGE_SCROLL, SPINE_W, stackPages } from './panel/pins.ts';
 import {
   DEFAULT_PANEL_WIDTH,
   loadPanelWidth,
@@ -393,6 +393,12 @@ export function App() {
     go(`${loc}${patchSearch(s, pinsPatch(ids))}`, { replace: true });
   }, []);
 
+  /** Both at once, for a gesture that changes which pin holds the open slot. */
+  const setPinsAndNote = useCallback((ids: string[], note: string | null) => {
+    const { search: s, location: loc, navigate: go } = nav.current;
+    go(`${loc}${patchSearch(s, { ...pinsPatch(ids), [NOTE_PARAM]: note })}`, { replace: true });
+  }, []);
+
   /**
    * Hold this note, or let it go — through the same URL writer, wherever the
    * control lives. The same act `'` performs, so a pointer and a key cannot
@@ -712,6 +718,7 @@ export function App() {
     setOpenNote,
     pins,
     setPins,
+    setPinsAndNote,
     stackOpen,
     setStack,
     panelWidth,
@@ -1098,6 +1105,8 @@ interface KeyState {
   /** The pinned notes, in pin order, and whether they are spread. */
   pins: string[];
   setPins: (ids: string[]) => void;
+  /** `?pins=` and `?note=` in one write. */
+  setPinsAndNote: (ids: string[], note: string | null) => void;
   stackOpen: boolean;
   /** Fold or spread — and, folding, optionally land on a note. */
   setStack: (open: boolean, note?: string | null) => void;
@@ -2305,31 +2314,23 @@ function run(command: Command, s: KeyState): void {
     }
 
     /**
-     * Move a pin one place along the run it is drawn in.
-     *
-     * The pin is the focused page in the spread, and the open note beside the
-     * dock otherwise. It trades places with its neighbour *in the drawn run*
-     * rather than in `?pins=`, because a pinned open note leaves the run while it
-     * holds the right-hand slot — swapping with its hidden place would move
-     * nothing on screen.
+     * Move a pin one place along the order it is drawn in — `movePin` decides,
+     * including the trade with a pinned open note's right-hand slot. One URL
+     * write, because that trade changes `?pins=` and `?note=` together.
      */
     case 'pinMove': {
       const id = s.stackOpen ? cursor.id : (openNote ?? cursor.id);
-      if (!id || !s.pins.includes(id)) {
-        return s.notify({ tone: 'info', text: "not a pin — ' pins the note under the cursor" });
+      const out = movePin(s.pins, openNote, id ?? '', command.delta, s.stackOpen);
+      if ('refused' in out) {
+        const why = {
+          'not-pinned': "not a pin — ' pins the note under the cursor",
+          first: 'already the first pin',
+          last: 'already the last pin',
+          'open-unpinned': "the open note is not pinned — ' pins it, and then it can trade places",
+        }[out.refused];
+        return s.notify({ tone: 'info', text: why });
       }
-      const run = s.stackOpen && openNote ? s.pins.filter((p) => p !== openNote) : s.pins;
-      if (!run.includes(id)) {
-        return s.notify({ tone: 'info', text: 'the open note keeps the right-hand slot — o sends a pin there' });
-      }
-      const other = run[run.indexOf(id) + command.delta];
-      if (!other) {
-        return s.notify({ tone: 'info', text: `already the ${command.delta < 0 ? 'first' : 'last'} pin` });
-      }
-      const next = [...s.pins];
-      next[next.indexOf(id)] = other;
-      next[s.pins.indexOf(other)] = id;
-      return s.setPins(next);
+      return s.setPinsAndNote(out.pins, out.open);
     }
 
     /**

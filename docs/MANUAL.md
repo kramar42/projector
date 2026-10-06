@@ -1631,7 +1631,7 @@ sight — the reading set beside the writing set, and the two never touch.
 | `h` `l` | across the spread pages. The focused page **is** the cursor: its facet writes and `g c` / `g y` edits land there |
 | `j` `k` | scroll the focused page |
 | `o` | move the focused pin into the **open slot** at the right, without leaving the spread |
-| `⌥h` `⌥l` | move the focused pin one place earlier / later — the spread's page order, and the spine order beside an open panel, where it moves the open note's pin. The open note itself keeps the right-hand slot; `o` is how a pin gets there |
+| `⌥h` `⌥l` | move the focused pin one place earlier / later — the spread's page order, and the spine order beside an open panel, where it moves the open note's pin. A pinned open note trades places too: the page moving right takes the open slot. An unpinned one cannot, since that would close it — pin it first |
 | `⏎` | fold the spread onto the focused note's panel |
 | `Esc` | close the open note first, *then* fold the spread. Neither unpins — only `'` and a pin control do, so no chain of Escapes can cost you the set |
 

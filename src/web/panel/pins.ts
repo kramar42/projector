@@ -59,6 +59,43 @@ export function stackPages(pins: readonly string[], openNote: string | null): st
   return [...pins.filter((id) => id !== openNote), openNote];
 }
 
+/**
+ * What `⌥h` / `⌥l` do to the pin `id`: the new `?pins=` and `?note=`, or why not.
+ *
+ * It trades places with its neighbour in the order that is *drawn*, which is not
+ * `?pins=`: in the spread a pinned open note leaves the run for the right-hand
+ * slot (`stackPages`). Trading with that slot is the case that matters most — two
+ * pages, one of them open, used to have nothing to swap with — and it means the
+ * page moving right becomes the open note while the other takes its place in the
+ * run. An *unpinned* open note cannot be traded: it has no place in the run to
+ * go to, and taking the slot from it would close it.
+ */
+export type PinMove =
+  | { pins: string[]; open: string | null }
+  | { refused: 'not-pinned' | 'first' | 'last' | 'open-unpinned' };
+
+export function movePin(
+  pins: readonly string[],
+  openNote: string | null,
+  id: string,
+  delta: 1 | -1,
+  spread: boolean,
+): PinMove {
+  if (!pins.includes(id)) return { refused: 'not-pinned' };
+  const drawn = spread ? stackPages(pins, openNote) : [...pins];
+  const other = drawn[drawn.indexOf(id) + delta];
+  if (!other) return { refused: delta < 0 ? 'first' : 'last' };
+  if (!pins.includes(other)) return { refused: 'open-unpinned' };
+  const next = [...pins];
+  next[pins.indexOf(id)] = other;
+  next[pins.indexOf(other)] = id;
+  // Into or out of the trailing slot: whichever of the two now comes later holds it.
+  const open = spread && openNote && (id === openNote || other === openNote)
+    ? (delta > 0 ? id : other)
+    : openNote;
+  return { pins: next, open };
+}
+
 /** Where focus lands when a page disappears from the spread. */
 export function afterRemovingPage(pages: readonly string[], removed: string): string | null {
   const at = pages.indexOf(removed);
