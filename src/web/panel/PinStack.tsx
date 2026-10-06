@@ -34,11 +34,15 @@ import type { Meta, NoteDetail, QueryResponse } from '../types.ts';
  * header; none writes note content. This keeps the cursor the only write target
  * even when `?note=` holds a separate trailing page for context (C10).
  *
- * The fold is CSS `position: sticky` with per-index offsets, not measurement:
- * page i may go no further left than `i` spines and no further right than the
- * `n-1-i` behind it, and everything the spread does — the fold, the stacking,
- * the "viewport shrinks by one spine per folded page" — falls out of those two
- * numbers. The one scripted motion is `reveal`, and it moves only when the page
+ * The fold is CSS `position: sticky`, not measurement, and it is Andy
+ * Matuschak's: page i may go no further left than `i` spines, and every page
+ * may go right until only its own spine is left on screen. So the elders fold
+ * into a row of spines at the left, while the pages still to come wait behind
+ * one spine at the right edge — a page being read loses one spine's width to
+ * what follows it, not a spine per page. It used to stack those too, `n-1-i`
+ * of them, which pinned the trailing page whole at the right and left the page
+ * being read cut off by the stack. Everything the spread does falls out of
+ * those two numbers. The one scripted motion is `reveal`, and it moves only when the page
  * it is asked for is not already whole on screen.
  */
 
@@ -154,11 +158,10 @@ export function PinStack({
   /**
    * Bring page i into view — and **only** as far as it takes.
    *
-   * A page is fully in view when neither edge is under a stuck neighbour. The
-   * elders at the left have folded to spines, but the first younger page at the
-   * right has not: until normal flow reaches the focused page's edge it is a
-   * whole sticky page, with only the younger pages behind *it* reduced to
-   * spines. `revealScroll` keeps that painted geometry in one tested equation.
+   * A page is fully in view when neither edge is under a stuck neighbour: the
+   * elders' spines at the left, and the one spine the younger pages wait behind
+   * at the right. `revealScroll` keeps that painted geometry in one tested
+   * equation.
    *
    * Seating every focused page at the left edge instead — which is what this did
    * — meant `h` and `l` dragged the whole spread sideways on every step even when
@@ -297,9 +300,10 @@ export function PinStack({
           id={id}
           meta={meta}
           // The sticky pair that makes the fold: no further left than my elders'
-          // spines, no further right than my juniors'.
+          // spines, and no further right than my own spine. A page's width is
+          // `--panel-w`, so that offset is a CSS expression rather than a number.
           left={i * SPINE_W}
-          right={(pages.length - 1 - i) * SPINE_W}
+          right={`calc(${SPINE_W}px - var(--panel-w))`}
           isFocus={id === focused}
           isPinned={pins.includes(id)}
           isOpen={id === openNote}
@@ -339,7 +343,7 @@ function PinPage({
   id: string;
   meta: Meta;
   left: number;
-  right: number;
+  right: string;
   isFocus: boolean;
   isPinned: boolean;
   isOpen: boolean;

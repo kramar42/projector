@@ -365,19 +365,20 @@ view. While a note panel is open the pins stand beside it as title-spine navigat
   spine could be clicked and nothing reached one otherwise; in the spread the pages *are* the pins and
   the command defers to `h`/`l` rather than becoming a second walker over one row.
 - **The fold keeps geometry fixed; presentation follows exposure.** A spread page is `position: sticky` with per-index
-  offsets — no further left than its elders' spines, no further right than its juniors' — so pages
-  fold to their own spines at either viewport edge instead of scrolling away, and there is no
-  overflow bookkeeping to drift. The offsets and the open panel-side dock's `--covered-right` reach
-  are all multiples of one constant (`src/web/panel/pins.ts`), written inline rather than restated in
+  offsets — no further left than its elders' spines, and no further right than its own spine, the
+  offsets Andy Matuschak's notes use — so the pages behind fold into a row of spines at the left, the
+  pages ahead wait behind one spine at the right edge, and there is no overflow bookkeeping to drift.
+  The right edge used to stack a spine per page still ahead, which pinned the trailing page whole and
+  cut the page being read short by the stack. The offsets and the open panel-side dock's `--covered-right` reach
+  are all written from one constant (`src/web/panel/pins.ts`), written inline rather than restated in
   the stylesheet. Its DOM width never changes. The visible width is measured from the painted
   interval left before the next, later-painted page begins. The normal header and body own the full
   card width until only two spine widths remain; then they fade out while the same title fades in
   vertically on an out-of-flow spine. The compact page has only its own and its neighbour's boundary
   rules, with no internal divider. Only opacity moves, and reduced-motion makes the switch immediate.
-  The same two offsets give `reveal` its answer, with one sticky subtlety: the first page to the right
-  is still a **whole page** until normal flow reaches the focused page's edge; only the pages behind
-  it have folded to spines. Thus the lower bound reserves `w + (n−2−i)·SPINE_W` when a younger page
-  exists, not `(n−1−i)·SPINE_W`. Walking the spread scrolls **only** when the page landed on is outside
+  The same two offsets give `reveal` its answer: a page is whole once it clears its elders' spines on
+  the left and, when a younger page exists, the one spine waiting at the right — so the lower bound
+  reserves `SPINE_W` there however many pages follow. Walking the spread scrolls **only** when the page landed on is outside
   that range, and then only to its nearer end. Keyboard focus seats that offset in a layout effect,
   without smooth scrolling, so repeated `h`/`l` cannot leave the cursor painted on a page that is
   still behind its neighbours; a direct spine click keeps the glide. `L` is `i × w` and not

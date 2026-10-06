@@ -385,14 +385,15 @@ test('pins round-trip the URL in order, and an empty set leaves no key', () => {
 });
 
 /**
- * A right-stuck page paints its full width over the page before it until the
- * strip has moved far enough for that page to return to normal flow. Counting
- * it as a 34px spine says page two is visible at scroll zero, while its title is
- * actually behind page three.
+ * The younger pages wait behind one spine at the right edge, the way Andy
+ * Matuschak's notes do, so a page is whole once it clears that one spine —
+ * not a spine per page still to come, which is what the right edge used to
+ * stack and what cut the page being read short.
  */
-test('revealing a spread page clears the full sticky page on its right', () => {
+test('revealing a spread page clears one spine on its right, however many pages follow', () => {
   assert.equal(revealScroll(0, 8, 460, 1280, 0, 2400), 0, 'the first page is already whole');
-  assert.equal(revealScroll(1, 8, 460, 1280, 0, 2400), 270);
+  assert.equal(revealScroll(1, 8, 460, 1280, 0, 2400), 0, 'and so is the second, beside it');
+  assert.equal(revealScroll(3, 8, 460, 1280, 0, 2400), 594, 'only as far as the one waiting spine');
   assert.equal(revealScroll(1, 8, 460, 1280, 2400, 2400), 426, 'walking left clears elder spines');
   assert.equal(revealScroll(7, 8, 460, 1280, 0, 2400), 2400, 'the final page reaches the scroll end');
 });

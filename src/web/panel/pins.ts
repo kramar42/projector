@@ -85,13 +85,12 @@ export function revealScroll(
   const most = layout - index * SPINE_W;
   const after = count - 1 - index;
   /*
-   * The first younger page is still a whole page until normal flow reaches the
-   * focused page's right edge. Only the pages behind that one have folded down
-   * to spines. Reserving `after × SPINE_W` here is the tempting formula, but it
-   * describes the final folded picture rather than the sticky page currently
-   * painted over the title we are trying to reveal.
+   * Every younger page sticks with only its own spine on screen, all of them at
+   * the same place — so whatever follows costs the focused page one spine at the
+   * right edge, however many pages there are. The last page has nothing after
+   * it and may run to the edge itself.
    */
-  const rightReach = after > 0 ? pageWidth + (after - 1) * SPINE_W : 0;
+  const rightReach = after > 0 ? SPINE_W : 0;
   const least = layout + pageWidth + rightReach - viewportWidth;
   const target = scrollLeft > most ? most : scrollLeft < least ? Math.min(least, most) : scrollLeft;
   return Math.max(0, Math.min(target, maxScroll));
