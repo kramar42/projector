@@ -842,3 +842,23 @@ test('a wiki-style [[slug]] is one bare reference, brackets included', () => {
   // `[[Title](x.md)]` behind.
   for (const r of refs) assert.equal(body.slice(r.at, r.at + r.length), `[[${r.text}]]`);
 });
+
+test('a shortened link text is silent, and a drifted one is reported', () => {
+  const facets = {} as Facets;
+  const note = (id: string, title: string, body: string): Note => ({
+    id, title, facets: {}, links: [], body, file: `/v/${id}.md`,
+  });
+  const target = note('target', 'Data substrate — L1 contracts as the shared layer', '');
+  const report = (text: string) => {
+    const holder = note('holder', 'Holder', `See [${text}](target.md).\n`);
+    const notes = new Map([['holder', holder], ['target', target]]);
+    return validate(notes, facets, '/v').filter((i) => i.field === 'body');
+  };
+  // Prose refers to a note by a few of its words; the sentence has to read.
+  assert.deepEqual(report('Data substrate'), []);
+  // The prose may also be the longer of the two.
+  assert.deepEqual(report('Data substrate — L1 contracts as the shared layer, in full'), []);
+  // Sharing nothing with the title is what a rename leaves behind.
+  assert.equal(report('the old name for it').length, 1);
+  assert.match(report('the old name for it')[0]!.message, /reads "the old name for it"/);
+});

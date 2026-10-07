@@ -19,10 +19,13 @@ reachable from one note.
 [Nothing but the two required fields](bare.md). A folder note is reached the same
 way, by its `README.md`: [Platform](platform/README.md).
 
-**Resolves, but the text has drifted** from the note's own title, which `check`
-warns about and does not correct — prose is allowed to call a note something
-shorter than its title, and only the author knows which of the two this is:
-[the everything note](every-facet.md).
+**Resolves under a shortened title**, which is silent: prose refers to
+[Nothing but the two](bare.md) and the sentence has to read, so sharing the
+title's words is enough.
+
+**Resolves, but the text has drifted** — sharing nothing with the title, which is
+what a rename leaves behind. Reported and not corrected, because only the author
+knows which of the two a difference is: [the everything note](every-facet.md).
 
 **Points at nothing.** A relative link into the vault whose path has no file at
 the end of it, which is the one a rename or a delete used to leave behind:

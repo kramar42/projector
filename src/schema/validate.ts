@@ -181,11 +181,23 @@ export function validate(
         }
         continue;
       }
-      // Stale link text, which markdown has no `[[id|alias]]` to prevent. A
-      // warning and deliberately not a rule: prose is allowed to call a note
-      // something shorter than its title, and only the author knows which of the
-      // two this is.
-      if (link.text !== to.title) {
+      // Stale link text, which markdown has no `[[id|alias]]` to prevent.
+      //
+      // A *shortened* title is silent, and that distinction is the whole check.
+      // Prose refers to "the [Data substrate](…)" note whose title runs on for
+      // another eleven words, and it should: the sentence has to read. What is
+      // worth reporting is text that shares nothing with the title, because that
+      // is what a rename leaves behind. Substring in either direction, since the
+      // prose may also be the longer of the two.
+      //
+      // Reported and never corrected either way: only the author knows which of
+      // the two a difference is. The first version compared for equality and
+      // said so 27 times about one vault's deliberate short forms, which is how
+      // a check stops being read.
+      const shortened =
+        to.title.toLowerCase().includes(link.text.toLowerCase()) ||
+        link.text.toLowerCase().includes(to.title.toLowerCase());
+      if (link.text !== to.title && !shortened) {
         at(
           'body',
           `link to "${to.id}" reads "${link.text}", and that note is titled "${to.title}"`,
