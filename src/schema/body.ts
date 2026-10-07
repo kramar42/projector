@@ -184,6 +184,9 @@ export function bareRefs(body: string): BareRef[] {
       // *one* reference rather than a bracket inside a bracket. Reported whole,
       // because a caller that fixed only the inner half would leave `[[Title](x.md)]`
       // behind — which is exactly what a migration did before this said so.
+      // The text before the bracket on *its own* line, which two of the guards
+      // below need: a prose run spans many lines.
+      const line = span.text.slice(0, at).split('\n').pop()!;
       const wiki = before === '[' && after.startsWith(']');
       if (wiki) {
         at -= 1;
@@ -194,12 +197,15 @@ export function bareRefs(body: string): BareRef[] {
         // is two brackets, so the *second* one is recognised by what precedes it.
         if (before === ']') continue;
         if (/^[([]/.test(after)) continue;
-        if (/^:\s/.test(after)) continue;
+        // `[label]: url` is a definition — but only where markdown says one can
+        // be, which is the start of a line. Anywhere else the colon belongs to
+        // the sentence: `Relation to [some-note]: the checklist items…` is prose
+        // holding a reference, and reading it as a definition is how that
+        // reference went unreported in a real vault.
+        if (/^:\s/.test(after) && /^ {0,3}$/.test(line)) continue;
       }
       // A task checkbox is `- [ ]` or `- [x]`, which is a control and not a ref.
-      // Measured from the start of its own line: a prose run spans many, so what
-      // precedes the bracket in the *run* is most of the note.
-      const line = span.text.slice(0, at).split('\n').pop()!;
+      // Measured from the start of its own line, like the definition guard above.
       if (/^\s*(?:[-*+]|\d+[.)])\s*$/.test(line) && /^[ xX]?$/.test(m[1]!)) continue;
       out.push({ text: m[1]!, at: span.at + at, length });
     }

@@ -786,11 +786,16 @@ test('bareRefs reports a bare bracket but not markdown doing its job', () => {
     'a bare [some-note] ref',
     'a link [text](x.md), a reference [text][label], a definition:',
     '[label]: https://example.com',
+    '   [indented-label]: https://example.com',
     '- [ ] a task',
     '- [x] a done task',
     'an image ![alt](p.png)',
+    // A definition is only a definition at the start of a line. Mid-sentence the
+    // colon belongs to the prose, and reading it as a definition is how a real
+    // reference went unreported.
+    'Relation to [another-note]: the two items it lists.',
   ].join('\n');
-  assert.deepEqual(bareRefs(body).map((r) => r.text), ['some-note']);
+  assert.deepEqual(bareRefs(body).map((r) => r.text), ['some-note', 'another-note']);
 });
 
 test('rewriteLinks repoints one href and leaves every other byte alone', () => {
