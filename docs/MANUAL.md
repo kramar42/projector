@@ -1704,7 +1704,8 @@ act as clicking its card, and `g [` / `g ]` do it from the keyboard. The spine w
 panel carries the accent top edge the focused spread page carries — it is not a cursor, it is the
 answer to *which of these am I reading*. Spread, the pages glue edge to edge and scroll sideways — drag a
 spine, a header or a margin to pan (prose stays selectable), click a spine to glide that page fully
-into view, and a spread wider than the window folds its far pages down to their spines instead of
+into view, and the mouse wheel scrolls whichever page is under the pointer while `j` / `k` stay on
+the focused one. A spread wider than the window folds its far pages down to their spines instead of
 scrolling them away: the pages behind you fold into a row of spines at the left, and the pages still
 ahead wait behind one spine at the right edge, the way Andy Matuschak's notes do — so the page you are
 reading loses at most one spine's width to what follows it. A page never changes width while it folds, and its body owns the full card — no

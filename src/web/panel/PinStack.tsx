@@ -398,8 +398,34 @@ function PinPage({
    */
   const write = isFocus && !isCompact ? writer : NO_WRITES;
 
+  /**
+   * The wheel reads any page under the pointer; the keyboard stays on the focused one.
+   *
+   * An unfocused page's scroller is `inert`, and inert content is not hit-tested,
+   * so the wheel would fall through to the spread and scroll nothing. Reading is
+   * not acting — scrolling moves no focus and lands no write — so the page
+   * forwards the vertical wheel to its own scroller. Native and non-passive,
+   * because React's `onWheel` cannot cancel the spread's diagonal pan.
+   */
+  const pageEl = useRef<HTMLElement>(null);
+  const scrollEl = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = pageEl.current;
+    if (!el || isFocus || isCompact) return;
+    const wheel = (e: WheelEvent) => {
+      const sc = scrollEl.current;
+      if (!sc || e.shiftKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? sc.clientHeight : 1;
+      e.preventDefault();
+      sc.scrollTop += e.deltaY * unit;
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, [isFocus, isCompact]);
+
   return (
     <section
+      ref={pageEl}
       className={`pinpage ${isFocus ? 'is-focus' : ''} ${isCompact ? 'is-compact' : ''}`}
       data-page={id}
       style={{ left, right }}
@@ -496,7 +522,7 @@ function PinPage({
           on" the panel gets by being the only one mounted. Hints become invisible
           with it, but keep their boxes so moving focus does not move the labels.
         */}
-        <div className="pinpage-scroll" inert={!isFocus || isCompact}>
+        <div className="pinpage-scroll" ref={scrollEl} inert={!isFocus || isCompact}>
           {error && <div className="pane-error">{error}</div>}
           {!data && !error && <div className="pane-loading">loading…</div>}
           {data && card && (
