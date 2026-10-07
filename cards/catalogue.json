@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "projector's own catalogue source: one publisher, this one, named relative to this file. A",
+    "personal work-management app over a markdown vault — not a Bluerock system, so it is not in",
+    "patchwork's shared catalogue. Add it in the workspace under Settings -> Catalogues (or the",
+    "explorer's Sources tab):",
+    "",
+    "    http://localhost:5173/external-cards/projector/catalogue.json",
+    "",
+    "which the patchwork dev server serves from this directory once its dev/sources.local.json",
+    "points at this checkout. An added source lives in that browser only. The cards reach the",
+    "projector server through patchwork's dev projector-bridge (127.0.0.1:8092), which is dev-only."
+  ],
+  "cards": {
+    "projector": {
+      "manifest": "manifest.json",
+      "publishedBy": "kramar42/projector",
+      "description": "One shape of the same vault query per card: notes, facets and the views over them."
+    }
+  }
+}
