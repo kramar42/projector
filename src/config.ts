@@ -39,6 +39,16 @@ export const paths = (root: string) => ({
   db: join(root, '.projector', 'index.db'),
   enrichDb: join(root, '.projector', 'enrich.db'),
   intakeDb: join(root, '.projector', 'intake.db'),
+  /**
+   * Where `pj sync` records what it wrote into each folder it syncs.
+   *
+   * Here rather than in the folder itself, which is where it started: the target
+   * is somebody else's repository, and a file named after a personal tool has no
+   * business being cloned by everyone who works there. Nothing else ever reads
+   * the record — only this machine runs the sync — so it belongs beside the other
+   * derived state, under `.projector/`.
+   */
+  syncRecords: join(root, '.projector', 'sync'),
 });
 
 /**

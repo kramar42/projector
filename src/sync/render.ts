@@ -18,7 +18,7 @@
  *
  * What is dropped is dropped because the reader cannot use it, not because it is
  * secret: `claude:` is a session on one machine, `workspace:` is a directory on
- * it. The one thing dropped for privacy is an `## Internal` section, and it is
+ * it. The one thing dropped for privacy is a `## Private` section, and it is
  * the author's own marker rather than anything derived.
  */
 
@@ -32,12 +32,19 @@ import type { Link, Note } from '../schema/types.ts';
  * A heading rather than a fence or a comment, for the reason `AGENTS.md` is a
  * file: prose made load-bearing by a regex is a trap, *unless* the marker is
  * something the author already sees and can read the meaning of. A reader of the
- * note sees a section titled Internal and knows why it is there; a reader of the
+ * note sees a section titled Private and knows why it is there; a reader of the
  * shared copy never receives it. The alternative — a note being all-or-nothing —
  * pushes the thinking out of the note, which is the one thing the vault must not
  * make people do.
+ *
+ * *Private* rather than *internal*, because the audience this is kept from is
+ * usually a colleague: everything in a work vault is internal, and a section
+ * headed so would read as a category rather than as a boundary. It is also the
+ * word the facet uses for the same decision one level up — `private: true` holds
+ * a whole note back, `## Private` holds a paragraph — and one word for one idea
+ * is worth more than either name is on its own.
  */
-export const INTERNAL_HEADING = 'Internal';
+export const PRIVATE_HEADING = 'Private';
 
 /** What else is being shared, which is what decides how a reference travels. */
 export interface Companions {
@@ -75,14 +82,14 @@ export interface Companions {
 const SHAREABLE_KINDS = new Set(['jira', 'gh:pr', 'gh:branch', 'gh:commit', 'slack', 'url']);
 
 /**
- * The body without its internal sections.
+ * The body without its private sections.
  *
  * A section is the heading and everything under it until a heading of the same
- * level or higher, so `## Internal` takes its own `###` subsections with it and
- * stops at the next `##`. Fenced code is skipped, because `## Internal` in a
+ * level or higher, so `## Private` takes its own `###` subsections with it and
+ * stops at the next `##`. Fenced code is skipped, because `## Private` in a
  * markdown sample is a sample.
  */
-export function withoutInternal(body: string): string {
+export function withoutPrivate(body: string): string {
   const out: string[] = [];
   let fence: string | null = null;
   let dropping: number | null = null;
@@ -99,7 +106,7 @@ export function withoutInternal(body: string): string {
     if (heading) {
       const level = heading[1]!.length;
       if (dropping !== null && level <= dropping) dropping = null;
-      if (dropping === null && heading[2]!.toLowerCase() === INTERNAL_HEADING.toLowerCase()) {
+      if (dropping === null && heading[2]!.toLowerCase() === PRIVATE_HEADING.toLowerCase()) {
         dropping = level;
         continue;
       }
@@ -182,7 +189,7 @@ function linkLines(links: readonly Link[], companions: Companions): string[] {
  * *this* vault decides what to do next, and to anybody else they are a note.
  */
 export function renderShared(note: Note, companions: Companions): string {
-  const stripped = withoutInternal(note.body);
+  const stripped = withoutPrivate(note.body);
   const body = withImagesResolved(
     withLinksResolved(stripped, note.file, companions),
     note.file,

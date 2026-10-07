@@ -302,11 +302,17 @@ Validate every note file and saved view.`,
   audit: `Usage: pj audit [--json]
 
 Run saved views that declare \`expect: empty\`. Exits non-zero when a rule is broken.`,
-  sync: `Usage: pj sync <view> <folder> [--exclude facet=value,value] [--apply]
+  sync: `Usage: pj sync <view> <folder> [--exclude facet=value,value] [--apply] [--adopt]
 
 Write a view's notes into a folder as plain markdown a reader outside the vault can
 follow. Reports what it would do; \`--apply\` does it. \`--exclude\` holds notes back by
-facet value, and may be given more than once.`,
+facet value, and may be given more than once.
+
+A sync owns only the files it wrote, recorded under \`.projector/sync/\` in the vault — never
+in the target, which is somebody else's repository — so it never overwrites or deletes
+anything somebody else put there. \`--adopt\` claims every
+file the view produces, for a folder that predates the record or edits already taken
+back into the vault.`,
   reindex: `Usage: pj reindex
 
 Rebuild the derived index and report what it holds.`,
@@ -675,7 +681,7 @@ function cmdCheck(): void {
  * some view is shared with somebody.
  */
 async function cmdSync(argv: string[]): Promise<void> {
-  const { flags, rest } = argFlags(argv, ['apply', 'exclude'], ['apply']);
+  const { flags, rest } = argFlags(argv, ['apply', 'exclude', 'adopt'], ['apply', 'adopt']);
   const [named, folder] = rest;
   if (!named || !folder) {
     fail('which view, and into which folder? `pj sync <view> <folder>`');
@@ -708,9 +714,14 @@ async function cmdSync(argv: string[]): Promise<void> {
 
   const plan = planSync(ordered, notes, {
     root,
+    view: named,
     target: resolvePath(folder, root),
     exclude: Object.keys(exclude).length ? exclude : undefined,
     jiraBase,
+    adopt: flags.has('adopt'),
+    // The view's own centre and its own name. See `indexOf`.
+    lead: saved.query.focus?.id,
+    title: saved.title,
   });
 
   if (!flags.has('apply')) {
@@ -718,7 +729,10 @@ async function cmdSync(argv: string[]): Promise<void> {
     return;
   }
   const done = applySync(plan);
-  console.log(`${named} → ${plan.target}\n${done.written} file(s) written, ${done.removed} removed`);
+  console.log(
+    `${named} → ${plan.target}\n${done.written} file(s) written, ${done.removed} removed` +
+      (done.skipped ? `, ${done.skipped} left alone` : ''),
+  );
 }
 
 async function cmdAudit(argv: string[]): Promise<void> {

@@ -591,9 +591,11 @@ the links a stranger can actually follow. Held back: every facet — a status an
 on one machine, and anything cached from Jira or GitHub, because a fetched title differs between
 machines and days and would churn the diff for nothing.
 
-**A section headed `## Internal` never leaves**, with everything under it down to the next heading of
+**A section headed `## Private` never leaves**, with everything under it down to the next heading of
 the same level. That is what lets a shared note stay honest: the thinking that is not for the audience
-lives in the note, under a heading you can see, rather than in a second note you have to remember.
+lives in the note, under a heading you can see, rather than in a second note you have to remember. It
+is the same word the facet uses one level up — `private: true` holds a whole note back, `## Private`
+holds a paragraph.
 
 **A reference travels or it unwraps.** A link to another shared note is rewritten to its file; a link
 to a note that is not shared becomes its own text, so the sentence still reads and the reader is not
@@ -602,11 +604,29 @@ so its file travels with the body that shows it. An **asset** travels when the n
 merely named in a sentence does not, which makes promoting it to a `links:` entry the moment you decide
 to share it.
 
-**It runs one way today, and it prunes**: a note that leaves the view leaves the folder. Nothing outside
-the vault is read back yet — but the render is deterministic on purpose, so a difference between the
-folder and a fresh render is somebody's edit and nothing else, which is what a sync back will read.
-Point it at a git repository and the diff before you push is the last thing between your vault and
-somebody else's reading.
+**A sync owns only what it wrote.** The paths it writes are recorded under `.projector/sync/` in
+your vault — never in the target, which is somebody else's repository and should carry the notes
+and nothing about the tool that put them there. Everything turns on that record: a file no run recorded is **unmanaged** — somebody else
+put it there — and a recorded file whose bytes have changed is a **conflict**, edited on the far side.
+Neither is overwritten and neither is deleted; both are reported. `--adopt` claims every file the view
+produces, which is how you start on a folder that predates the record, or overwrite edits you have
+already taken back into the vault.
+
+That rule is not theoretical. Without it a sync computes removals as *everything here I did not
+produce*, which reads like pruning and behaves like deleting somebody's work — on a real folder it
+took a hand-written front page, a 63-line document and a 269-line asset.
+
+**The front page is seeded, not maintained.** An empty folder gets the generated index; after that
+`README.md` is the folder's own. A useful front page groups the notes, says what each one is in a
+line and carries a verified date per note, and none of that is derivable — so the generator starts
+you off and then leaves it alone, including when pruning.
+
+**It runs one way today, and it prunes what it owns**: a note that leaves the view leaves the folder,
+unless the copy has been edited, in which case it stays and is reported. Nothing outside the vault is
+read back yet — but the render is deterministic on purpose, so a difference between the folder and a
+fresh render is somebody's edit and nothing else, which is what a sync back will read. Point it at a
+git repository and the diff before you push is the last thing between your vault and somebody else's
+reading.
 
 ## Embedding
 

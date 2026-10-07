@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { INTERNAL_HEADING, renderShared, withoutInternal } from '../src/sync/render.ts';
+import { PRIVATE_HEADING, renderShared, withoutPrivate } from '../src/sync/render.ts';
 import type { Companions } from '../src/sync/render.ts';
 import { parseLink } from '../src/schema/links.ts';
 import type { Note } from '../src/schema/types.ts';
-import { applySync, planSync, renderPlan, type SyncPlan } from '../src/sync/plan.ts';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { applySync, planSync, recordFor, renderPlan, type SyncPlan } from '../src/sync/plan.ts';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readAll } from '../src/index/indexer.ts';
@@ -42,13 +42,13 @@ const companions = (over: Partial<Companions> = {}): Companions => ({
   ...over,
 });
 
-// ---------------------------------------------------------------- internal sections
+// ---------------------------------------------------------------- private sections
 
-test('an internal section leaves, taking its subsections and stopping at its peer', () => {
+test('a private section leaves, taking its subsections and stopping at its peer', () => {
   const body = [
     'Public opening.',
     '',
-    '## Internal',
+    '## Private',
     '',
     'Not for anybody else.',
     '',
@@ -61,21 +61,21 @@ test('an internal section leaves, taking its subsections and stopping at its pee
     'Kept.',
   ].join('\n');
   assert.equal(
-    withoutInternal(body),
+    withoutPrivate(body),
     ['Public opening.', '', '## Public again', '', 'Kept.'].join('\n'),
   );
 });
 
-test('an internal heading inside a fence is a sample, not a marker', () => {
-  const body = ['```md', '## Internal', 'sample prose', '```', '', 'Kept.'].join('\n');
-  assert.equal(withoutInternal(body), body);
+test('a private heading inside a fence is a sample, not a marker', () => {
+  const body = ['```md', '## Private', 'sample prose', '```', '', 'Kept.'].join('\n');
+  assert.equal(withoutPrivate(body), body);
 });
 
-test('a deeper internal section does not swallow the section it sits in', () => {
-  const body = ['## Section', '', '### Internal', '', 'held back', '', '### Sibling', '', 'kept'].join('\n');
-  assert.equal(withoutInternal(body), ['## Section', '', '### Sibling', '', 'kept'].join('\n'));
+test('a deeper private section does not swallow the section it sits in', () => {
+  const body = ['## Section', '', '### Private', '', 'held back', '', '### Sibling', '', 'kept'].join('\n');
+  assert.equal(withoutPrivate(body), ['## Section', '', '### Sibling', '', 'kept'].join('\n'));
   // The name is the author's marker, so it is the one word this looks for.
-  assert.equal(INTERNAL_HEADING, 'Internal');
+  assert.equal(PRIVATE_HEADING, 'Private');
 });
 
 // ---------------------------------------------------------------- references
@@ -143,7 +143,7 @@ test('the note is shared with its title as a heading and nothing else from the f
     note({
       title: 'Card spec — what the unit is',
       facets: { status: ['planning'], priority: ['month'], private: ['true'] },
-      body: 'The unit of the model is a card.\n\n## Internal\n\nSay nothing about the reorg.\n',
+      body: 'The unit of the model is a card.\n\n## Private\n\nSay nothing about the reorg.\n',
       links: [parseLink('jira:PROJ-1')],
     }),
     companions(),
@@ -235,6 +235,46 @@ function ordered(root: string, ids: string[]): { list: Note[]; all: Map<string, 
   return { list: ids.map((id) => all.get(id)!), all };
 }
 
+test('the index leads with the view focus, and names the folder after the view', () => {
+  const v = vault({
+    'a.md': noteFile('a', 'Note A', 'Points at [Note B](b.md).\n'),
+    'b.md': noteFile('b', 'Note B', 'Plain.\n'),
+  });
+  try {
+    const { list, all } = ordered(v.root, ['a', 'b']);
+    const plan = planSync(list, all, {
+      root: v.root,
+      view: 'shared',
+      target: v.target,
+      jiraBase: null,
+      lead: 'b',
+      title: 'Patchwork',
+    });
+    // `b` is second in the view's order and is still the way in, so it is named
+    // rather than merely first — and it is not repeated in the list below.
+    assert.equal(
+      plan.files.find((f) => f.path === 'README.md')!.content,
+      '# Patchwork\n\nStart with [Note B](b.md).\n\n- [Note A](a.md)\n',
+    );
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('with no focus the index is the view order under a plain heading', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    const { list, all } = ordered(v.root, ['a']);
+    const plan = planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
+    assert.equal(
+      plan.files.find((f) => f.path === 'README.md')!.content,
+      '# Contents\n\n- [Note A](a.md)\n',
+    );
+  } finally {
+    v.cleanup();
+  }
+});
+
 test('the plan writes an index in the view order and marks every file new', () => {
   const v = vault({
     'a.md': noteFile('a', 'Note A', 'Points at [Note B](b.md).\n'),
@@ -242,7 +282,7 @@ test('the plan writes an index in the view order and marks every file new', () =
   });
   try {
     const { list, all } = ordered(v.root, ['a', 'b']);
-    const plan = planSync(list, all, { root: v.root, target: v.target, jiraBase: null });
+    const plan = planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
     assert.deepEqual(
       plan.files.map((f) => [f.path, f.state]),
       [['README.md', 'new'], ['a.md', 'new'], ['b.md', 'new']],
@@ -265,6 +305,7 @@ test('an excluded note is held back and named, and the links into it are reporte
     const { list, all } = ordered(v.root, ['a', 'b']);
     const plan = planSync(list, all, {
       root: v.root,
+      view: 'shared',
       target: v.target,
       exclude: { private: ['true'] },
       jiraBase: null,
@@ -286,12 +327,15 @@ test('applying twice writes nothing the second time', () => {
   try {
     const plan = (): SyncPlan => {
       const { list, all } = ordered(v.root, ['a']);
-      return planSync(list, all, { root: v.root, target: v.target, jiraBase: null });
+      return planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
     };
     const first = applySync(plan());
     assert.equal(first.written, 2);
     const second = plan();
-    assert.deepEqual(second.files.map((f) => f.state), ['same', 'same']);
+    // The front page is seeded once and then the folder's own, so the second run
+    // plans the note alone.
+    assert.deepEqual(second.files.map((f) => f.path), ['a.md']);
+    assert.deepEqual(second.files.map((f) => f.state), ['same']);
     assert.equal(applySync(second).written, 0);
   } finally {
     v.cleanup();
@@ -305,11 +349,11 @@ test('a note that leaves the view is removed from the folder — an unshare unsh
   });
   try {
     const both = ordered(v.root, ['a', 'b']);
-    applySync(planSync(both.list, both.all, { root: v.root, target: v.target, jiraBase: null }));
+    applySync(planSync(both.list, both.all, { root: v.root, view: 'shared', target: v.target, jiraBase: null }));
     assert.ok(existsSync(join(v.target, 'b.md')));
 
     const one = ordered(v.root, ['a']);
-    const next = planSync(one.list, one.all, { root: v.root, target: v.target, jiraBase: null });
+    const next = planSync(one.list, one.all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
     assert.deepEqual(next.remove, ['b.md']);
     applySync(next);
     assert.equal(existsSync(join(v.target, 'b.md')), false);
@@ -325,7 +369,7 @@ test('a dotfile in the target is never touched, so it can stay a git repository'
     mkdirSync(join(v.target, '.git'), { recursive: true });
     writeFileSync(join(v.target, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
     const { list, all } = ordered(v.root, ['a']);
-    const plan = planSync(list, all, { root: v.root, target: v.target, jiraBase: null });
+    const plan = planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
     assert.deepEqual(plan.remove, []);
     applySync(plan);
     assert.ok(existsSync(join(v.target, '.git', 'HEAD')));
@@ -339,11 +383,153 @@ test('the report leads with what would surprise you, and says nothing was writte
   try {
     const { list, all } = ordered(v.root, ['a']);
     const out = renderPlan(
-      planSync(list, all, { root: v.root, target: v.target, jiraBase: null }),
+      planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null }),
       'shared',
     );
     assert.match(out, /new {6}README\.md/);
     assert.match(out, /Nothing written — pass --apply\./);
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- what a sync owns
+
+/**
+ * A sync owns only what it wrote.
+ *
+ * The first version computed removals as "everything here this run did not
+ * produce", which reads like pruning and behaves like deleting somebody's work:
+ * on a real folder it took a hand-written front page, a 63-line document and a
+ * 269-line asset. These pin the four cases the record now separates.
+ */
+
+test('a file nobody recorded writing is left alone, not overwritten', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    const plan = () => {
+      const { list, all } = ordered(v.root, ['a']);
+      return planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
+    };
+    // Somebody's folder, kept by hand, with a file at a path the sync also wants.
+    mkdirSync(v.target, { recursive: true });
+    writeFileSync(join(v.target, 'a.md'), 'written by hand\n', 'utf8');
+
+    const first = plan();
+    assert.deepEqual(first.files.map((f) => [f.path, f.state]), [['README.md', 'new'], ['a.md', 'unmanaged']]);
+    const done = applySync(first);
+    assert.equal(done.skipped, 1);
+    assert.equal(readFileSync(join(v.target, 'a.md'), 'utf8'), 'written by hand\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('--adopt claims it, which is the only way to overwrite an edit', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    mkdirSync(v.target, { recursive: true });
+    writeFileSync(join(v.target, 'a.md'), 'written by hand\n', 'utf8');
+    const { list, all } = ordered(v.root, ['a']);
+    const plan = planSync(list, all, {
+      root: v.root,
+      view: 'shared',
+      target: v.target,
+      jiraBase: null,
+      adopt: true,
+    });
+    assert.deepEqual(plan.files.find((f) => f.path === 'a.md')!.state, 'changed');
+    applySync(plan);
+    assert.match(readFileSync(join(v.target, 'a.md'), 'utf8'), /# Note A/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a file this sync wrote and somebody then edited is a conflict, and survives', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    const plan = () => {
+      const { list, all } = ordered(v.root, ['a']);
+      return planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
+    };
+    applySync(plan());
+    // Edited on the far side, the way a shared copy gets edited.
+    writeFileSync(join(v.target, 'a.md'), '# Note A\n\nProse, improved by the reader.\n', 'utf8');
+
+    const next = plan();
+    assert.equal(next.files.find((f) => f.path === 'a.md')!.state, 'conflict');
+    applySync(next);
+    assert.match(readFileSync(join(v.target, 'a.md'), 'utf8'), /improved by the reader/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a note that leaves the view is removed only while the copy is untouched', () => {
+  const v = vault({
+    'a.md': noteFile('a', 'Note A', 'Prose.\n'),
+    'b.md': noteFile('b', 'Note B', 'Prose.\n'),
+  });
+  try {
+    const both = ordered(v.root, ['a', 'b']);
+    applySync(planSync(both.list, both.all, { root: v.root, view: 'shared', target: v.target, jiraBase: null }));
+    // Somebody edits the copy of the note that is about to leave the view.
+    writeFileSync(join(v.target, 'b.md'), '# Note B\n\nEdited here.\n', 'utf8');
+
+    const one = ordered(v.root, ['a']);
+    const next = planSync(one.list, one.all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
+    // An unshare must unshare — but not by throwing away the only copy of an edit.
+    assert.deepEqual(next.remove, []);
+    assert.deepEqual(next.orphaned, ['b.md']);
+    applySync(next);
+    assert.ok(existsSync(join(v.target, 'b.md')));
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('the record is kept in the vault, and nothing is left in the target', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    const opts = { root: v.root, view: 'shared', target: v.target, jiraBase: null };
+    const { list, all } = ordered(v.root, ['a']);
+    applySync(planSync(list, all, opts));
+
+    // The target is somebody else's repository: it gets the notes and nothing
+    // about the tool that put them there.
+    assert.ok(existsSync(recordFor(v.root, 'shared', v.target)));
+    assert.ok(recordFor(v.root, 'shared', v.target).startsWith(paths(v.root).syncRecords));
+    assert.deepEqual(readdirSync(v.target).sort(), ['README.md', 'a.md']);
+
+    // And two views into one folder, or one view into two, do not share a record.
+    assert.notEqual(recordFor(v.root, 'other', v.target), recordFor(v.root, 'shared', v.target));
+    assert.notEqual(recordFor(v.root, 'shared', '/elsewhere'), recordFor(v.root, 'shared', v.target));
+
+    const next = planSync(list, all, opts);
+    assert.deepEqual(next.files.map((f) => f.state), ['same']);
+    assert.deepEqual(next.remove, []);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a hand-written front page is never regenerated and never pruned', () => {
+  const v = vault({ 'a.md': noteFile('a', 'Note A', 'Prose.\n') });
+  try {
+    const plan = () => {
+      const { list, all } = ordered(v.root, ['a']);
+      return planSync(list, all, { root: v.root, view: 'shared', target: v.target, jiraBase: null });
+    };
+    applySync(plan());
+    // The generated list is a reasonable first page and a poor permanent one.
+    writeFileSync(join(v.target, 'README.md'), '# Patchwork\n\nGrouped, with one line each.\n', 'utf8');
+
+    const next = plan();
+    assert.equal(next.files.some((f) => f.path === 'README.md'), false);
+    assert.deepEqual(next.remove, []);
+    applySync(next);
+    assert.match(readFileSync(join(v.target, 'README.md'), 'utf8'), /Grouped, with one line each/);
   } finally {
     v.cleanup();
   }
