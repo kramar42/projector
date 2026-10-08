@@ -164,7 +164,7 @@ test('every command refuses a flag it does not know', () => {
     const commands = [
       ['ls'], ['log'], ['add', 'x'], ['link', 'alpha', 'jira:A-1'], ['check'], ['reindex'],
       ['search', 'x'], ['vaults'], ['enrich', 'jira:A-1'], ['intake'], ['context', 'alpha'],
-      ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'], ['did'],
+      ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'], ['did'], ['mcp'],
     ];
     for (const cmd of commands) {
       const r = run(['--vault', v.root, ...cmd, '--nonsense'], { PROJECTOR_VAULTS: v.registry });

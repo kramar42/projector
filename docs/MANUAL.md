@@ -1427,6 +1427,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
 | `pj context <id> [--json]` | everything known about a note, assembled |
+| `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `views`, `search`, `context`, `log`, `did`, `vault_status`, and `propose`, which answers with the `pj` command for a change and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
