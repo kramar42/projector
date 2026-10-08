@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react';
 import { useEnrichment } from '../enrichment.tsx';
 import { useTouched } from '../touched.tsx';
 import { plural } from '../plural.ts';
@@ -120,6 +121,29 @@ function Progress({ done, total }: { done: number; total: number }) {
   );
 }
 
+/**
+ * The one value a filter fixes on an axis, or `null` when it fixes none.
+ *
+ * Only a single plain name counts. A negation, `(none)`, a range expression or
+ * two names leave the axis open, so its values still tell cards apart.
+ */
+export function fixedValue(filter: Record<string, string[]> | undefined, facet: string): string | null {
+  const selection = filter?.[facet];
+  if (selection?.length !== 1) return null;
+  const only = selection[0]!;
+  return only.startsWith('-') || only === '(none)' || /^[<>=]/.test(only) ? null : only;
+}
+
+/**
+ * The filter of the view a face is drawn in. A value it fixes is what the whole
+ * view is about, so a face does not repeat it: in a `project=tos` view every
+ * card would carry the same `tos` chip, and a colour on every card marks
+ * nothing. A context rather than a prop, like `pinned` and `touched`, because
+ * four shapes draw faces through two layers each and none of them should care.
+ */
+const FaceFilterContext = createContext<Record<string, string[]> | undefined>(undefined);
+export const FaceFilter = FaceFilterContext.Provider;
+
 export function CardBody({
   card,
   showFacets,
@@ -130,12 +154,19 @@ export function CardBody({
   showFacets: string[];
   onOpen?: (id: string) => void;
 }) {
+  const filter = useContext(FaceFilterContext);
   const { touched } = useTouched();
   const isPinned = useIsPinned();
   const pin = useTogglePin();
   const pinned = isPinned(card.id);
   const blocked = card.blockedBy.filter((b) => !b.done);
-  const facetKeys = showFacets.filter((f) => axisValues(card, f).length);
+  const chipValues = (f: string) => {
+    const fixed = fixedValue(filter, f);
+    return axisValues(card, f)
+      .map((v, i) => ({ v, bucket: card.buckets[f]?.[i] }))
+      .filter(({ v }) => v !== fixed);
+  };
+  const facetKeys = showFacets.filter((f) => chipValues(f).length);
 
   return (
     <div
@@ -153,9 +184,7 @@ export function CardBody({
       {facetKeys.length > 0 && (
         <div className="chiprow">
           {facetKeys.map((f) =>
-            axisValues(card, f).map((v, i) => (
-              <FacetChip key={`${f}:${v}`} facet={f} value={v} bucket={card.buckets[f]?.[i]} />
-            )),
+            chipValues(f).map(({ v, bucket }) => <FacetChip key={`${f}:${v}`} facet={f} value={v} bucket={bucket} />),
           )}
         </div>
       )}

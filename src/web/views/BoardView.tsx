@@ -3,6 +3,7 @@ import { dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-d
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { ApiError, api } from '../api.ts';
 import { CardTile } from '../components/CardTile.tsx';
+import { FaceFilter } from '../components/CardBody.tsx';
 import { emptyReason, unusedGrouping } from '../../view/empty.ts';
 import { isCursorAt, type Spot } from './motion.ts';
 import { attachPan } from './pan.ts';
@@ -303,6 +304,7 @@ export function BoardView({
   const empty = emptyReason(meta, data);
 
   return (
+    <FaceFilter value={data.spec.query.filter}>
     <div className="board-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
       {unused && <div className="board-unused">{unused.text}</div>}
@@ -394,6 +396,7 @@ export function BoardView({
         </div>
       )}
     </div>
+    </FaceFilter>
   );
 }
 

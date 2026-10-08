@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { ApiError, api } from '../api.ts';
 import { CardTile } from '../components/CardTile.tsx';
+import { FaceFilter } from '../components/CardBody.tsx';
 import { Button, IconButton } from '../components/Button.tsx';
 import { emptyReason } from '../../view/empty.ts';
 import { NONE } from '../../schema/vocabulary.ts';
@@ -220,6 +221,7 @@ export function CalendarView({
   }, [axis, selected, move, reorder, orderedFor, viewName]);
 
   const days = page.days.flat();
+  const weekdays = weekdayLabels(page.weekStart);
 
   // The keyboard follows the cursor's *placement*, not merely its note id: a
   // note scheduled twice can be ordered on either day independently.
@@ -292,6 +294,7 @@ export function CalendarView({
   };
 
   return (
+    <FaceFilter value={data.spec.query.filter}>
     <div className="calendar-wrap">
       {problem && <div className="banner is-bad">{problem}</div>}
 
@@ -366,20 +369,18 @@ export function CalendarView({
 
       <div className="calendar-main">
         <div
-          className={`calendar-grid ${page.cols === 7 ? 'has-dow' : ''}`}
+          className="calendar-grid"
           style={{ ['--cal-cols' as string]: page.cols, ['--cal-rows' as string]: page.rows }}
         >
-          {page.cols === 7 &&
-            weekdayLabels(page.weekStart).map((d) => (
-              <div key={d} className="calendar-dow">
-                {d}
-              </div>
-            ))}
           {days.map((day, i) => (
             <DayColumn
               key={day}
               day={day}
               label={dayLabel(day, i === 0)}
+              // The weekday sits in the day's own head ("WED 7"), on the first
+              // row of a week-wide page only: a header row above the grid split
+              // one label across two places and needed its own track.
+              dow={page.cols === 7 && i < 7 ? weekdays[i] : undefined}
               isToday={day === today}
               // Where this cell sits in the grid `motion.ts` walks: one lane,
               // the page's days in reading order, the rail last. The indices
@@ -425,6 +426,7 @@ export function CalendarView({
         />
       )}
     </div>
+    </FaceFilter>
   );
 }
 
@@ -437,6 +439,7 @@ export function CalendarView({
 function DayColumn({
   day,
   label,
+  dow,
   isToday,
   columnIndex,
   ids,
@@ -459,6 +462,8 @@ function DayColumn({
   /** The ISO day this column is, or `(none)` for the rail. */
   day: string;
   label: string;
+  /** The weekday, on the first row of a week-wide page; absent elsewhere. */
+  dow?: string;
   isToday: boolean;
   /** This column's position in the one-lane grid `gridOf` builds. */
   columnIndex: number;
@@ -531,9 +536,10 @@ function DayColumn({
       }
     >
       <header className="calendar-day-head">
+        {dow && <span className="calendar-dow">{dow}</span>}
         <span className="calendar-day-date">{label}</span>
         {ids.length > 0 && <span className="column-count">{ids.length}</span>}
-        <IconButton glyph="add" title="new card here" onClick={() => setAdding(true)} />
+        <IconButton extra="calendar-day-add" glyph="add" title="new card here" onClick={() => setAdding(true)} />
       </header>
       <div className="calendar-day-body card-stack">
         {adding && (

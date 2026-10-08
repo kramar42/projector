@@ -1449,26 +1449,38 @@ input:focus-visible + .checkbox {
   flex: 1;
 }
 
+/*
+ * Edges, not frames (patchwork's docs/decisions/2026-10-03-edges-not-frames.md).
+ *
+ * A column is not a box: it is the page's own ground, and a hairline runs where
+ * two columns meet. The card is the one framed thing on a board, so a chip sits
+ * one edge deep instead of three (column, card, chip), and the only rounded
+ * corner between the page and the text is the card's. `stretch`, so the
+ * hairlines run the full height of the row rather than stopping at the shortest
+ * column.
+ */
 .board {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  gap: 0;
+  align-items: stretch;
 }
 
 .column {
   flex: 0 0 292px;
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 120px);
   min-height: 0;
 }
 
+.column + .column {
+  border-left: 1px solid var(--rule);
+}
+
+/* `(none)` keeps its dash, now on the one edge a column has. */
 .column.is-none {
   opacity: 0.72;
-  border-style: dashed;
+  border-left-style: dashed;
 }
 
 .column-head {
@@ -1513,9 +1525,12 @@ input:focus-visible + .checkbox {
 
 /* ---------------------------------------------------------------- card face */
 
+/* The board's one frame (see `.board`). `rule-2` rather than `rule`: with the
+   column's box gone this hairline is the whole edge, and `rule` on the dark
+   ground measured about 1.15:1, which is no edge at all. `rule-2` is about 2:1. */
 .cardface {
   background: var(--surface);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--rule-2);
   border-radius: var(--radius-lg);
   padding: 9px 10px;
   display: flex;
@@ -1524,28 +1539,18 @@ input:focus-visible + .checkbox {
 }
 
 /*
- * A hover marks the card's edge; it does not repaint its state.
+ * A hover lifts the card's fill; it does not repaint its state.
  *
- * `:where()` so this contributes nothing to specificity. `border-color` sets all
- * four sides, and `.column-card:hover .cardface` outranked `.cardface.is-blocked`
- * by one class — so under the cursor a blocked card's `bad` stripe went `rule-2`
- * and a selected one's went `accent`. Measured: 223,135,135 → 166,166,231 on
- * selection. That is The Load-Bearing Left Border Rule's one element losing the
- * one thing the rule protects, on the surface where hover is continuous.
- *
- * Zeroed, this ties with `.cardface`'s own border and wins on order, while the
- * stripe rule at (0,2,0) keeps the left edge. Narrowing to three sides would
- * have worked too, but then an *unstriped* face would hover with three edges lit
- * and one not — and re-asserting the stripe per state per variant is four more
- * declarations naming the variants, which a second stripe would have to
- * remember.
- *
- * `.reflink` resolves the same collision the opposite way, and by accident: its
- * hover and its `.is-open` are both (0,2,0), so the stripe survives only because
- * it is declared later in the file.
+ * It used to light the edge, `border-color: rule-2`, and that collided with the
+ * Load-Bearing Left Border Rule: `border-color` sets all four sides, so a
+ * blocked card's `bad` stripe went grey under the cursor until this was wrapped
+ * in `:where()`. The edge is already `rule-2` at rest now, so the hover moves to
+ * the channel no state draws in — the fill — and the collision has nothing left
+ * to collide over. Still `:where()`, so a selected card's `accent-soft` fill
+ * outranks it.
  */
 :where(.column-card:hover) .cardface {
-  border-color: var(--rule-2);
+  background: var(--surface-2);
 }
 
 /* The one state a face draws in its shape, and it is the only one left. A project
@@ -1877,6 +1882,25 @@ input:focus-visible + .checkbox {
   background: transparent;
   color: var(--ink-3);
   border-color: var(--rule);
+}
+
+/*
+ * On a card face a chip has no edge of its own: the card's hairline is the frame
+ * and a chip is content on it (see `.board`). A hued chip keeps its tint, a
+ * reference its `surface-2` fill, and a muted one becomes `ink-3` text, which is
+ * what "recedes" meant. Elsewhere (the panel, the table) chips keep their edges.
+ *
+ * Two keep theirs on a face too, because there the edge is the state: a filled
+ * chip and the pipeline's `extends`. That is the "accent is a difference" rule:
+ * emphasis stays on the deviations and leaves the defaults.
+ */
+.cardface .chip:not(.is-filled):not(.facet-pipeline) {
+  border-color: transparent;
+}
+
+.cardface .linkchip {
+  border-color: transparent;
+  background: var(--surface-2);
 }
 
 .linkchip {
@@ -3082,7 +3106,8 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* board editing */
 
-.column.is-over { border-color: var(--accent); background: var(--accent-soft); }
+/* A fill, not an outline: a column has no frame to light. */
+.column.is-over { background: var(--accent-soft); }
 
 /*
  * A wash means selected; a ring means the cursor is here.
@@ -4484,8 +4509,13 @@ button.linkrow-label.is-host:hover { border-bottom-color: var(--accent); }
   min-height: 0;
 }
 
-/* Rows share the height evenly, so a 5-row page is five equal weeks. The
-   weekday header row is content-sized and only exists at week width. */
+/* Rows share the height evenly, so a 5-row page is five equal weeks.
+
+   The hairlines between days are the grid's own 1px gap showing the `rule`
+   behind it, the way a table's rules are: they run the full height and width,
+   meet each other, and stop at the outer edge, which the page already gives.
+   A day is the board's column at cell scale (see `.board`), so it is ground,
+   not a box. */
 .calendar-grid {
   flex: 1;
   min-width: 0;
@@ -4493,24 +4523,18 @@ button.linkrow-label.is-host:hover { border-bottom-color: var(--accent); }
   display: grid;
   grid-template-columns: repeat(var(--cal-cols, 7), minmax(0, 1fr));
   grid-template-rows: repeat(var(--cal-rows, 1), minmax(0, 1fr));
-  gap: 8px;
+  gap: 1px;
+  background: var(--rule);
 }
 
-.calendar-grid.has-dow {
-  grid-template-rows: auto repeat(var(--cal-rows, 1), minmax(0, 1fr));
-}
-
+/* In the day's head now, before the date: "WED 7". The register is the shared
+   label step; this only lines it up with the date pill's 8px start. */
 .calendar-dow {
-  align-self: end;
-  padding: 0 2px 2px;
+  padding-left: 6px;
 }
 
-/* A day is a column at cell scale: same surface, same hairline, one radius step
-   down because the box is smaller. */
 .calendar-day {
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-lg);
+  background: var(--ground);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -4545,19 +4569,39 @@ button.linkrow-label.is-host:hover { border-bottom-color: var(--accent); }
 /* `.column.is-over`, verbatim: a drop target lights the same way everywhere. */
 .calendar-day.is-over,
 .calendar-unscheduled.is-over {
-  border-color: var(--accent);
   background: var(--accent-soft);
 }
 
+/* The rail is the one calendar column that keeps an edge, and the dash is why:
+   it says `(none)`. So the edge lights on a drop; a day has none to light. */
+.calendar-unscheduled.is-over {
+  border-color: var(--accent);
+}
+
 /* The date carries the pill's own left inset, so the head gives back what it
-   takes: 2 + 6 is the 8px every other head starts its content at. */
+   takes: 2 + 6 is the 8px every other head starts its content at.
+
+   Read from the left: weekday, date, then the count beside them. The count was
+   `space-between`'s middle child, a value centred for no reason; the add button
+   takes the right edge on its own. */
 .calendar-day-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   padding: 5px 8px 5px 2px;
   flex: none;
+}
+
+.calendar-day-add {
+  margin-left: auto;
+}
+
+/* Seven always-on `+`s are seven calls to act on a page you are reading. Shown
+   where the pointer or focus is, and `n` creates from the keyboard either way.
+   No hover query: the app is desktop-only (theme.test's Desktop-Only Rule). */
+.calendar-day:not(:hover):not(:focus-within) .calendar-day-add,
+.calendar-unscheduled:not(:hover):not(:focus-within) .calendar-day-add {
+  opacity: 0;
 }
 
 /* Padded on every day, filled on one: today changes the paint and not the
@@ -4579,13 +4623,11 @@ button.linkrow-label.is-host:hover { border-bottom-color: var(--accent); }
   min-height: 0;
 }
 
-/* The `(none)` column, standing to the side: dashed like `.column.is-none`,
-   and a column's width and radius because it is one. */
+/* The `(none)` column, standing to the side: dashed like `.column.is-none`.
+   Ground and square like every column now; the dash is the whole difference. */
 .calendar-unscheduled {
   flex: 0 0 272px;
-  background: var(--surface-2);
-  border: 1px dashed var(--rule);
-  border-radius: var(--radius-xl);
+  border: 1px dashed var(--rule-2);
   display: flex;
   flex-direction: column;
   min-height: 0;
