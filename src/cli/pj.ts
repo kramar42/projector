@@ -13,8 +13,11 @@ import { readAll, reindex } from '../index/indexer.ts';
 import { delegatedIndex } from './delegate.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
-import { SPEC_PARAMS, parseSpec, specToParams, withSavedOnly, type ViewSpec } from '../view/spec.ts';
+import { SPEC_PARAMS } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
+import { renderListing, resolveListing, type Overrides } from '../view/listing.ts';
+import { editFacets, parseFacetSpec, type FacetOp } from '../schema/edit.ts';
+import { serveMcp } from '../mcp/server.ts';
 import { applySync, planSync, renderPlan } from '../sync/plan.ts';
 import type { Note } from '../schema/types.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
@@ -231,6 +234,7 @@ Work with notes
   mv, merge, rm      rename, combine, or remove notes
   work               prepare a worktree workspace and briefing
   enrich             resolve links
+  mcp                serve the vault read-only to MCP clients, over stdio
 
 Intake
   intake             preview what happened elsewhere; writes nothing
@@ -293,6 +297,15 @@ Remove notes and every reference pointing at them.`,
   work: `Usage: pj work <id> [--dry-run] [--no-open] [--new]
 
 Prepare the worktree workspace and briefing for a note.`,
+  mcp: `Usage: pj --vault <name|path> mcp
+
+Serve the vault to an MCP client — Claude Desktop, claude.ai, any other — over
+stdio, until the client closes it. The tools are ls, views, search, context,
+log and did — each the command of that name, run in-process — vault_status,
+which is check, audit and the index counts in one, and propose, which prints
+the \`pj\` command for a change and applies nothing.
+Saved views are resources too. \`--vault\` is required: a server outlives the
+shell that started it, so it never takes a vault it was not given.`,
   enrich: `Usage: pj enrich [<ref>...] [--all] [--force]
 
 Resolve link enrichment and print it.`,
@@ -420,20 +433,10 @@ async function cmdLs(argv: string[]): Promise<void> {
   const facets = loadFacets(p.facets);
   const { db, notes } = await currentIndex();
 
-  const params: Record<string, string> = {};
-  const named = flags.get('view')?.[0];
-  let saved: ViewSpec | null = null;
-  if (named) {
-    saved = findView(root, named) ?? null;
-    if (!saved) {
-      console.error(`no view "${named}"`);
-      process.exit(1);
-    }
-    Object.assign(params, specToParams(saved));
-  }
+  const overrides: Overrides = {};
   for (const spec of flags.get('filter') ?? []) {
     const [facet, values] = spec.split('=');
-    if (facet && values !== undefined) params[`f.${facet}`] = values;
+    if (facet && values !== undefined) overrides[`f.${facet}`] = values;
   }
   // Every spec parameter, from the one list that says what a spec is made of —
   // which is how `--shape` and `--show` arrive: they were
@@ -441,13 +444,11 @@ async function cmdLs(argv: string[]): Promise<void> {
   for (const key of SPEC_PARAMS) {
     if (key === 'view') continue;
     const v = flags.get(key)?.[0];
-    if (v && v !== 'true') params[key] = v;
+    if (v && v !== 'true') overrides[key] = v;
   }
-
-  // The saved view's file-only halves — its composition and its curated order —
-  // which the query round-trip does not carry. See `withSavedOnly`.
-  const spec = withSavedOnly(parseSpec(params), saved);
-  spec.name = named;
+  const resolved = resolveListing(root, flags.get('view')?.[0], overrides);
+  if ('error' in resolved) fail(resolved.error);
+  const { spec, saved } = resolved;
 
   // The same assembly the web app receives, from the same module (C9). A second
   // shape for the CLI is how the two surfaces would start disagreeing about the
@@ -458,43 +459,7 @@ async function cmdLs(argv: string[]): Promise<void> {
     saved,
   );
 
-  if (flags.has('json')) {
-    console.log(JSON.stringify(payload, null, 2));
-    return;
-  }
-
-  const title = (id: string) => payload.notes[id]?.title ?? '';
-  const mark = (id: string) => {
-    const note = payload.notes[id];
-    // A container is a note something points at, not a kind it declares.
-    return note?.isProject ? 'P' : (note?.refCount ?? 0) > 0 ? '+' : ' ';
-  };
-  const line = (id: string) => `   ${mark(id)} ${pad(id, 32)} ${title(id)}`;
-
-  if (!payload.groups) {
-    for (const id of payload.ids) console.log(`${pad(id, 34)} ${title(id)}`);
-    console.log(`\n${payload.total} note(s) of ${payload.universe}`);
-    return;
-  }
-
-  const axes = spec.query.groupBy ?? [];
-  // A composition has columns without an axis, so it says what it is instead of
-  // naming the grouping it does not have.
-  console.log(
-    spec.lists?.length
-      ? `# ${spec.lists.length} list(s)\n`
-      : `# grouped by ${axes.join(' \u00d7 ')}\n`,
-  );
-  for (const g of payload.groups) {
-    console.log(`## ${g.lane ? `${g.lane} / ` : ''}${g.value} (${g.ids.length})`);
-    for (const id of g.ids) console.log(line(id));
-    console.log('');
-  }
-  const extra = payload.placements - payload.total;
-  console.log(
-    `${payload.total} note(s) of ${payload.universe} in ${payload.groups.length} group(s)` +
-      (extra > 0 ? ` — ${extra} appear in more than one group` : ''),
-  );
+  console.log(flags.has('json') ? JSON.stringify(payload, null, 2) : renderListing(payload, spec));
 }
 
 function cmdAdd(argv: string[]): void {
@@ -1234,12 +1199,6 @@ if (asking) {
       const { notes } = readAll(p.notes);
       for (const id of rest) if (!notes.has(id)) fail(`no note with id "${id}"`);
 
-      const split = (spec: string): [string, string[]] => {
-        const i = spec.indexOf('=');
-        const f = i === -1 ? spec : spec.slice(0, i);
-        const v = i === -1 ? '' : spec.slice(i + 1);
-        return [f, v ? v.split(',').map((x) => x.trim()).filter(Boolean) : []];
-      };
       const sets: Record<string, string> = {};
       for (const spec of flags.get('set') ?? []) {
         const i = spec.indexOf('=');
@@ -1247,26 +1206,18 @@ if (asking) {
         sets[spec.slice(0, i)] = spec.slice(i + 1);
       }
 
+      // `--facet`, then `--add`, then `--remove`, whatever order they were typed in.
+      const ops: FacetOp[] = (['facet', 'add', 'remove'] as const).flatMap((op) =>
+        (flags.get(op) ?? []).map((spec) => {
+          const [facet, values] = parseFacetSpec(spec);
+          return { op, facet, values };
+        }),
+      );
+
       // Every id gets the same edit, so a bulk move is one invocation rather
       // than one process per note re-reading the whole vault.
       for (const id of rest) {
-        const rec = notes.get(id)!;
-        const facets: Record<string, string[]> = { ...rec.facets };
-        for (const spec of flags.get('facet') ?? []) {
-          const [f, v] = split(spec);
-          if (v.length) facets[f] = v;
-          else delete facets[f];
-        }
-        for (const spec of flags.get('add') ?? []) {
-          const [f, v] = split(spec);
-          facets[f] = [...new Set([...(facets[f] ?? []), ...v])];
-        }
-        for (const spec of flags.get('remove') ?? []) {
-          const [f, v] = split(spec);
-          const kept = (facets[f] ?? []).filter((x) => !v.includes(x));
-          if (kept.length) facets[f] = kept;
-          else delete facets[f];
-        }
+        const facets = editFacets(notes.get(id)!.facets, ops);
         const title = flags.get('title')?.[0];
         const touchesFacets = flags.has('facet') || flags.has('add') || flags.has('remove');
         if (title || touchesFacets) {
@@ -1427,6 +1378,15 @@ if (asking) {
             : `run it yourself:\n  cd ${shellQuote(started.workspace)} && claude ${shellQuote(BRIEFING_PROMPT)}`,
         );
       }
+      break;
+    }
+
+    case 'mcp': {
+      argFlags(argv, []);
+      if (!vaultGiven) {
+        fail('pj mcp needs --vault <name|path>: a server outlives the shell that started it, so it does not guess');
+      }
+      await serveMcp(root);
       break;
     }
 
