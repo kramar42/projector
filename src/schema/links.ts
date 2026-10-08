@@ -18,13 +18,14 @@ export const LINK_KINDS = [
   'gh:branch',
   'gh:commit',
   'claude',
+  'bb',
   'workspace',
   'doc',
   'slack',
   'url',
 ] as const;
 
-const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'workspace', 'doc', 'slack'];
+const PREFIXED = ['gh:pr', 'gh:branch', 'gh:commit', 'jira', 'claude', 'bb', 'workspace', 'doc', 'slack'];
 
 /**
  * Parse a link string into kind and ref. A bare URL becomes kind `url`.
@@ -56,6 +57,8 @@ export function fallbackLabel(link: Link): string {
       return link.ref.split('@').pop() ?? link.ref;
     case 'claude':
       return 'session ' + link.ref.slice(-6);
+    case 'bb':
+      return 'thread ' + link.ref.replace(/^thr_/, '');
     case 'workspace':
       return link.ref.split('/').filter(Boolean).pop() ?? link.ref;
     case 'doc':
@@ -84,6 +87,9 @@ export function fallbackLabel(link: Link): string {
  *
  * - `claude` is a session on this machine. It has an app deep link and a
  *   `--resume` command, which is what its fetcher supplies.
+ * - `bb` is a thread in the bb app, which owns its routes (they are
+ *   project-aware, and bb asks callers not to build them), so its fetcher
+ *   offers `bb thread open` instead.
  * - `workspace` is a directory on this machine, for the same reason.
  * - `doc` is a file in the vault, not a URL at all.
  *
@@ -118,6 +124,7 @@ export function fallbackHref(link: Link, jiraBase?: string | null): string | nul
     }
 
     case 'claude':
+    case 'bb':
     case 'workspace':
     case 'doc':
       return null;

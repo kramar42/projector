@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useEnrichment } from '../enrichment.tsx';
 import { IconButton } from './Button.tsx';
 import { linkHue } from '../links.ts';
+import { embedOf, postEmbedOpen } from '../embed.ts';
 import type { NoteDTO } from '../types.ts';
 
 /**
@@ -53,6 +54,7 @@ function LinkRow({ link, onRemove }: { link: NoteDTO['links'][number]; onRemove:
   // browser url, which changes where it goes and not what it is.
   const href = d?.url ?? link.href ?? d?.action?.href ?? null;
   const tip = [link.raw, d?.action?.label].filter(Boolean).join(' — ');
+  const embedded = typeof window !== 'undefined' && embedOf(window.location.search) !== null;
 
   return (
     <div className={`linkrow ${res?.state ? `state-${res.state}` : ''}`}>
@@ -71,6 +73,18 @@ function LinkRow({ link, onRemove }: { link: NoteDTO['links'][number]; onRemove:
           >
             {label}
           </a>
+        ) : embedded ? (
+          // Nowhere on the web to go, but the page holding this frame may know
+          // the thing — bb knows its own threads. Offered up, never assumed.
+          <button
+            type="button"
+            className="linkrow-label is-host"
+            data-nav="link"
+            title={tip}
+            onClick={() => postEmbedOpen(kind, link.raw.slice(kind.length + 1))}
+          >
+            {label}
+          </button>
         ) : (
           <span className="linkrow-label" title={tip}>
             {label}

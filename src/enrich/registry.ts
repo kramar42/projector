@@ -1,5 +1,6 @@
 import { branchFetcher, commitFetcher, prFetcher } from './github.ts';
 import { sessionFetcher, workspaceFetcher } from './claudeSession.ts';
+import { bbFetcher } from './bb.ts';
 import { docFetcher } from './doc.ts';
 import { jiraFetcher } from './jira.ts';
 import { enrichEnabled } from '../settings.ts';
@@ -24,6 +25,7 @@ export function registry(dataRoot: string): Record<string, Fetcher> {
     'gh:branch': branchFetcher,
     'gh:commit': commitFetcher,
     claude: sessionFetcher,
+    bb: bbFetcher,
     workspace: workspaceFetcher,
     doc: docFetcher(dataRoot),
     // `slack` and bare urls stay as parsed labels. Slack is the one kind kept

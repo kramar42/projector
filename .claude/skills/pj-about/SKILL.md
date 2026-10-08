@@ -303,14 +303,18 @@ create the file, and confirm it by opening it: `pj ls --view <name>`.
 ## Link kinds
 
 `jira:PROJ-303` · `gh:pr:ORG/repo#412` · `gh:branch:ORG/repo@name` · `gh:commit:ORG/repo@sha` ·
-`claude:<transcript-uuid>` · `workspace:/abs/path` · `doc:relative/path.md` · `slack:<permalink>` ·
-a bare `https://…`
+`claude:<transcript-uuid>` · `bb:thr_…` · `workspace:/abs/path` · `doc:relative/path.md` ·
+`slack:<permalink>` · a bare `https://…`
 
 A kind exists when something resolves it. Everything else — a Trello note, a calendar entry, a Grafana
 dashboard — is a bare URL, with provenance in the `source` facet where it matters.
 
 A `claude:` link takes the **transcript uuid** — the filename under `~/.claude/projects/<slug>/`.
 A `local_…` id comes from the desktop app's store, is not on disk, and will not resolve.
+
+A `bb:` link names a thread in the bb app by its `thr_…` id. It is a reference, not a sync: the note
+says which threads worked on it, and the thread's status is read from bb when the link is shown.
+`bb pj attach <id> --record` and `bb pj work <id>` write it.
 
 A `workspace:` link is written by `pj work` and names the directory it prepared. Do not write one by
 hand: every session that has ever run there is read back off the directory, so the link is how a note

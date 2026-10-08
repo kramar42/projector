@@ -646,6 +646,11 @@ into the frame that *is* the panel. A page holding a sidebar frame, three shape 
 on the same query is projector's own "same notes, one control moved", drawn five times at once. Writing
 still happens where it always did, inside each frame, against the same server.
 
+One more message goes up, and only on a click: a link with nowhere on the web to go — a `bb:` thread,
+a `claude:` session, a `workspace:` — is a button inside a frame, and clicking it posts
+`{ projector: "open", kind, ref }`. The page decides. bb's projector plugin opens a `bb:` thread in
+bb; a page that does not know the kind ignores it. Outside a frame the row keeps its copyable command.
+
 ## Rules you can check
 
 Three of those keys are one feature. A **rule** is an ordinary saved view that says what should never
@@ -894,10 +899,11 @@ Slack ref is not interchangeable with the permalink it wraps, and it is common e
 resolving.
 
 **Where a link opens does not depend on a fetcher.** Six of the eight kinds resolve an `href` from the
-ref alone — a fetcher adds a title, a status and a diff size, never the ability to click. The two that
-do not are the two with nowhere on the web to go: a Claude session and a local file. Both are reached
-the same way instead — a deep link where the machine has an app registered for one, and a copyable
-command where it does not.
+ref alone — a fetcher adds a title, a status and a diff size, never the ability to click. The ones that
+do not are the ones with nowhere on the web to go: a Claude session, a bb thread and a local file. They
+are reached the same way instead — a deep link where the machine has an app registered for one, and a
+copyable command where it does not (`bb thread open <id>`: bb owns its routes and asks callers not to
+build them).
 
 | Kind | Syntax | Source | Needs | TTL |
 |---|---|---|---|---|
@@ -906,6 +912,7 @@ command where it does not.
 | `gh:branch` | `gh:branch:ORG/repo@ref` | `gh api` | the `gh` CLI, authenticated | 10 min |
 | `gh:commit` | `gh:commit:ORG/repo@sha` | `gh api` | the `gh` CLI, authenticated | never |
 | `claude` | `claude:<uuid>` | `~/.claude/projects/**` | — | 1 min |
+| `bb` | `bb:thr_…` | `bb thread show --json` | the `bb` CLI (`BB_CLI`, else PATH) | 1 min |
 | `workspace` | `workspace:/abs/path` | `~/.claude/projects/**` | — | 1 min |
 | `doc` | `doc:path.md` | filesystem | `PROJECTOR_DOC_URL` to make it clickable | 30 s |
 | `slack` `url` | — | not fetched — the ref is already the URL | — | — |

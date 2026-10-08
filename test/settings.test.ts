@@ -77,6 +77,7 @@ test('a vault with no config file behaves exactly as one did before there was on
     assert.equal(enrichEnabled(root, 'jira'), true);
     // Every kind that has a fetcher is still offered.
     assert.deepEqual(Object.keys(registry(root)).sort(), [
+      'bb',
       'claude',
       'doc',
       'gh:branch',

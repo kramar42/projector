@@ -6,7 +6,8 @@ import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher, workspaceFetcher } from '../src/enrich/claudeSession.ts';
 import { jiraFetcher, statusTone as jiraStatusTone } from '../src/enrich/jira.ts';
 import { docFetcher } from '../src/enrich/doc.ts';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { bbFetcher } from '../src/enrich/bb.ts';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -229,5 +230,53 @@ test('no fetcher offers a command beside a click', async () => {
     if (before === undefined) delete process.env.PROJECTOR_DOC_URL;
     else process.env.PROJECTOR_DOC_URL = before;
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** A stand-in `bb` that answers `thread show` with whatever the test hands it. */
+function withFakeBb(answer: string, exit = 0) {
+  const dir = mkdtempSync(join(tmpdir(), 'pj-bb-'));
+  const bin = join(dir, 'bb');
+  writeFileSync(join(dir, 'answer.json'), answer, 'utf8');
+  writeFileSync(bin, `#!/bin/sh\ncat '${join(dir, 'answer.json')}'\nexit ${exit}\n`, 'utf8');
+  chmodSync(bin, 0o755);
+  const before = process.env.BB_CLI;
+  process.env.BB_CLI = bin;
+  return () => {
+    if (before === undefined) delete process.env.BB_CLI;
+    else process.env.BB_CLI = before;
+    rmSync(dir, { recursive: true, force: true });
+  };
+}
+
+test('a bb: link reads the thread from the bb CLI and offers bb thread open', async () => {
+  const restore = withFakeBb(
+    JSON.stringify({
+      thread: { title: 'Fix the realm export', status: 'active', updatedAt: Date.now(), providerId: 'claude-code' },
+      environment: { path: '/wt/iam', branchName: 'kc/iam' },
+    }),
+  );
+  try {
+    const res = await bbFetcher.fetch('thr_abc123');
+    assert.ok(!isUnavailable(res));
+    assert.equal(res.label, 'abc123');
+    assert.equal(res.title, 'Fix the realm export');
+    assert.deepEqual(res.badges?.map((b) => b.label), ['active', 'kc/iam']);
+    assert.equal(res.command, 'bb thread open thr_abc123');
+    assert.equal(res.url, undefined, 'bb owns its routes; the fetcher must not build one');
+  } finally {
+    restore();
+  }
+});
+
+test('a bb: link says why when bb cannot answer', async () => {
+  assert.ok(isUnavailable(await bbFetcher.fetch('not-a-thread')));
+  const restore = withFakeBb(JSON.stringify({ ok: false, error: { message: 'thread not found' } }), 1);
+  try {
+    const res = await bbFetcher.fetch('thr_gone');
+    assert.ok(isUnavailable(res));
+    assert.equal(res.reason, 'thread not found');
+  } finally {
+    restore();
   }
 });

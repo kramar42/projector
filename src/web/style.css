@@ -4073,6 +4073,16 @@ textarea { resize: vertical; font-family: inherit; }
 }
 a.linkrow-label { color: var(--accent); border-bottom: 1px solid transparent; }
 a.linkrow-label:hover { border-bottom-color: var(--accent); }
+/* Embedded only: a link with no href, offered to the host page (embed.ts). */
+button.linkrow-label.is-host {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent);
+}
+button.linkrow-label.is-host:hover { border-bottom-color: var(--accent); }
 .linkrow-head .btn.tiny { margin-left: auto; }
 
 .badge {

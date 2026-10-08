@@ -148,9 +148,10 @@ const HREF_CASES: Record<(typeof LINK_KINDS)[number], { raw: string; href: strin
   'gh:pr': { raw: 'gh:pr:Org/repo#4', href: 'https://github.com/Org/repo/pull/4' },
   'gh:branch': { raw: 'gh:branch:Org/repo@main', href: 'https://github.com/Org/repo/tree/main' },
   'gh:commit': { raw: 'gh:commit:Org/repo@abc123', href: 'https://github.com/Org/repo/commit/abc123' },
-  // A session on this machine, the directory one worked in, and a file in the
-  // vault: none of the three is a web page.
+  // A session on this machine, a bb thread (bb owns its routes), the directory
+  // one worked in, and a file in the vault: none of them is a web page.
   claude: { raw: 'claude:local_abc', href: null },
+  bb: { raw: 'bb:thr_abc123', href: null },
   workspace: { raw: 'workspace:/wt/plat-wt-ship-it', href: null },
   doc: { raw: 'doc:a/b.md', href: null },
   // The ref is already the permalink — no fetcher, and no special case either.

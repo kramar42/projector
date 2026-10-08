@@ -64,6 +64,28 @@ export function postEmbedQuery(search: string): void {
   window.parent.postMessage(message, '*');
 }
 
+/**
+ * Posted up: a link with nowhere on the web to go, offered to the host.
+ *
+ * A `bb:` thread, a `claude:` session or a `workspace:` directory has no href,
+ * and outside a frame the row shows a command to copy. Inside one, the host may
+ * own the thing — bb knows its threads — so the click is handed up as the link's
+ * kind and ref. The host decides; one that does not know the kind ignores it,
+ * which is the same as the click not existing.
+ */
+export interface EmbedOpen {
+  projector: 'open';
+  kind: string;
+  ref: string;
+}
+
+export function postEmbedOpen(kind: string, ref: string): void {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  const message: EmbedOpen = { projector: 'open', kind, ref };
+  // `*` for the reason above: a link ref, not a secret.
+  window.parent.postMessage(message, '*');
+}
+
 /** Our search with the query params replaced by the message's and the selection set from it. */
 export function mergeEmbedNavigate(search: string, msg: EmbedNavigate): string {
   const params = paramsOf(search);
