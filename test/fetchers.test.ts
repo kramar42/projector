@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ago, firstLine, run } from '../src/sources/run.ts';
+import { ago, firstLine, resolveCommand, run } from '../src/sources/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher, workspaceFetcher } from '../src/enrich/claudeSession.ts';
 import { jiraFetcher, statusTone as jiraStatusTone } from '../src/enrich/jira.ts';
 import { docFetcher } from '../src/enrich/doc.ts';
 import { bbFetcher } from '../src/enrich/bb.ts';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 /** No config file lives here, so settings come from the environment alone. */
@@ -285,4 +285,32 @@ test('a command that never started says why, rather than nothing', async () => {
   const res = await run('pj-no-such-command-anywhere', []);
   assert.equal(res.ok, false);
   assert.match(res.stderr, /pj-no-such-command-anywhere/, 'the spawn error is the only account of it, in either runtime');
+});
+
+test('claude is found where its installer puts it when PATH does not say', () => {
+  // A server started from a launcher or a non-login shell often has no
+  // `~/.local/bin` on PATH, and every judged tick then held on a binary that was
+  // installed all along.
+  const home = mkdtempSync(join(tmpdir(), 'pj-home-'));
+  const elsewhere = mkdtempSync(join(tmpdir(), 'pj-path-'));
+  try {
+    assert.equal(resolveCommand('claude', '', home), 'claude', 'nothing installed: the name, so the failure names it');
+    mkdirSync(join(home, '.local', 'bin'), { recursive: true });
+    const installed = join(home, '.local', 'bin', 'claude');
+    writeFileSync(installed, '#!/bin/sh\n', 'utf8');
+    chmodSync(installed, 0o755);
+    assert.equal(resolveCommand('claude', '', home), installed, 'off PATH, the installer’s location');
+    assert.equal(resolveCommand('claude', `/nonexistent${delimiter}${elsewhere}`, home), installed);
+
+    const onPath = join(elsewhere, 'claude');
+    writeFileSync(onPath, '#!/bin/sh\n', 'utf8');
+    chmodSync(onPath, 0o755);
+    assert.equal(resolveCommand('claude', elsewhere, home), 'claude', 'PATH wins whenever it has one');
+
+    assert.equal(resolveCommand('/opt/claude', '', home), '/opt/claude', 'a path is taken as written');
+    assert.equal(resolveCommand('gog', '', home), 'gog', 'only claude has a known install location');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
+  }
 });

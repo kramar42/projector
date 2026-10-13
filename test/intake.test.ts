@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
@@ -38,7 +38,8 @@ import { jiraChannel } from '../src/intake/jira.ts';
 import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { deleteNote } from '../src/server/mutate.ts';
-import { pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
+import { firstTickIn, lastTick, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
+import { logTo } from '../src/server/log.ts';
 import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { touchedButIdle } from '../src/intake/claude.ts';
@@ -1039,6 +1040,90 @@ test('polling is off unless the vault asks for it', () => {
     stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the first tick waits out whatever is left of the interval since the last one', () => {
+  const now = Date.parse('2026-10-14T12:00:00.000Z');
+  assert.equal(firstTickIn(null, 900, now), 0, 'a vault never swept is due now');
+  assert.equal(firstTickIn('2026-10-14T11:00:00.000Z', 900, now), 0, 'an hour ago is overdue');
+  assert.equal(firstTickIn('2026-10-14T11:55:00.000Z', 900, now), 10 * 60_000, 'five minutes ago leaves ten');
+  assert.equal(firstTickIn('2026-10-14T13:00:00.000Z', 900, now), 900_000, 'a clock that ran ahead waits one interval, no more');
+  assert.equal(firstTickIn('not a date', 900, now), 0, 'an unreadable stamp is no evidence of a recent tick');
+
+  // The newest channel is the one that counts: a channel that has been
+  // unreachable for a week does not make a tick that ran a minute ago stale.
+  const root = vault({ a: card('a') });
+  try {
+    assert.equal(lastTick(root), null);
+    commitWatermark(root, 'git', 'abc');
+    commitWatermark(root, 'jira', '2026-10-01T00:00:00.000Z');
+    openIntakeDb(root).prepare(`UPDATE watermark SET ran_at = ? WHERE channel = 'jira'`).run('2026-10-07T00:00:00.000Z');
+    assert.equal(lastTick(root), watermarkFor(root, 'git')!.ranAt);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a restart does not repeat a tick the interval has not come round for', async () => {
+  // `bun --watch` restarts the server on every save. A tick on every start would
+  // be a full sweep — minutes and real money — per save.
+  const root = vault({ a: card('a') });
+  let collected = 0;
+  const fake: Channel = {
+    name: 'fakeR',
+    defaultDays: 1,
+    collect: (ctx) => {
+      collected++;
+      return { channel: 'fakeR', cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [] };
+    },
+  };
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeR]\nclassify:\n  enabled: false\n', 'utf8');
+  try {
+    commitWatermark(root, 'fakeR', 'x');
+    assert.equal(startPolling(root), true, 'the loop is running');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(collected, 0, 'but the tick that just ran is not run again');
+    stopPolling(root);
+
+    // Stale, it ticks straight away, as it always has.
+    openIntakeDb(root).prepare(`UPDATE watermark SET ran_at = ?`).run('2026-01-01T00:00:00.000Z');
+    assert.equal(startPolling(root), true);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(collected, 1, 'a stale vault is swept on start');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the server starts every vault that asked to be polled, and says so for each', () => {
+  const on = vault({ a: card('a') });
+  const off = vault({ a: card('a') });
+  writeFileSync(settingsPath(on), 'poll:\n  enabled: true\n  every: 120\n  hours: [8, 20]\nchannels: [git]\n', 'utf8');
+  commitWatermark(on, 'git', 'abc');
+  const lines: string[] = [];
+  logTo((l) => lines.push(l));
+  try {
+    pollAtStartup([on, off]);
+    const said = (root: string) => lines.filter((l) => l.includes(` ${basename(root)} `));
+    assert.equal(said(on).length, 1, 'one line for the polled vault');
+    assert.match(said(on)[0]!, /polling every 120s, 8–20 local time — next tick in 2m \(last ran just now\)/);
+    assert.equal(said(off).length, 1, 'and one for the vault that did not ask');
+    assert.match(said(off)[0]!, /not polling — poll\.enabled is off/);
+    assert.equal(startPolling(on), true, 'the loop it started is the one a request finds');
+    assert.equal(startPolling(off), false);
+  } finally {
+    logTo(null);
+    stopPolling(on);
+    for (const root of [on, off]) {
+      closeIntakeDb(root);
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

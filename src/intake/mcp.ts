@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { rescues, seenState } from './db.ts';
 import { evidenceFor } from './match.ts';
-import { run, ago } from '../sources/run.ts';
+import { resolveCommand, run, ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
 import { paths } from '../config.ts';
 import {
@@ -172,7 +172,7 @@ function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string):
 
       const started = Date.now();
       const res = await run(
-        cfg.mcp.command,
+        resolveCommand(cfg.mcp.command),
         [
           '-p',
           relayInstructions(kind, { since: ctx.since, pages: cfg.mcp.pages, searchTool }),

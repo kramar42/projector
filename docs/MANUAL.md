@@ -1025,8 +1025,14 @@ writing notes because you opened it once would be a surprise. If your intake boa
 days, this is the first thing to check: `pj intake status` shows each channel's last run, and a *last
 run* hours old with no poller means every sweep you have had was one you typed.
 
-It starts when the vault is first opened, and each candidate that survives judgement lands as an
-ordinary note in `inbox/` — so an open board shows it appear without doing anything. Being in the
+It starts with the server: `bun run serve` or `bun run dev` starts every registered vault that sets
+`poll.enabled`, with no board open, and logs one line per vault saying whether it is polling and when
+its next tick is. The first tick waits out whatever is left of the interval since the last one — the
+newest *last run* in `pj intake status` — so a restart, which `bun run dev` does on every save, does not
+sweep again a vault swept five minutes ago; a vault that is behind, or was never swept, ticks at once.
+Turning `poll.enabled` on later needs no restart: the next request that opens the vault starts it.
+Each candidate that survives judgement lands as an ordinary note in `inbox/` — so an open board shows
+it appear without doing anything. Being in the
 inbox is what makes it unjudged: every query sees `intake: unjudged` on it, read off the folder and
 never stored in the file. Accepting it moves the file to where a note like it lives — `notes/`, or the
 folder of its one project — and every body link to it follows.
@@ -1144,6 +1150,11 @@ classify:
 # model: haiku
 # command: claude
 ```
+
+`command` is spawned as written, and so is `mcp.command` below. A bare `claude` that is not on the
+server's PATH — a server started from a launcher or a non-login shell often has no `~/.local/bin` there —
+falls back to `~/.local/bin/claude`, where Claude Code's installer puts it, before the tick gives up and
+holds.
 
 A channel's candidates are judged in batches of `batch`, so a slow model answers for eight at a time
 rather than for eighteen in one breath, and the tick line shows what judging cost. If a tick still
@@ -2156,6 +2167,8 @@ things that happen with nobody watching, which are the things you cannot otherwi
 server that is doing nothing at all:
 
 ```
+[INFO] 2026-08-28 13:51:03 intake pollvault polling every 900s, 8–20 local time — next tick now (last ran 2h ago)
+[INFO] 2026-08-28 13:51:03 intake coverage not polling — poll.enabled is off
 [INFO] 2026-08-28 13:52:02 intake pollvault/claude saw 25  new:25  [judge 6.1s · 4.0k in / 610 out tok]
 [INFO] 2026-08-28 13:52:02 intake pollvault/git saw 0
 [INFO] 2026-08-28 13:52:02 intake pollvault/slack saw 3  declined:2 updates:1  [fetch 48.2s · 31k in / 2.9k out tok · 6 turns · $0.052, judge 4.4s · 3.1k in / 240 out tok]
@@ -2170,7 +2183,7 @@ Four areas, and each line is an **event** rather than progress:
 
 | area | one line when |
 |---|---|
-| `intake` | a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
+| `intake` | the server starts — one line per vault, polling or not, and when its next tick is — and a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
 | `watch` | a note, a view or a vocabulary file **arrives**. Edits are deliberately silent: a vault under an editor changes on every save, and a log that said so is one nobody reads |
 | `enrich` | a batch of links resolves, counted by kind — `gh:0 jira:7` says which integration is down, where a single total cannot |
 | `index` | the vault is reloaded after a change, with how long it took |

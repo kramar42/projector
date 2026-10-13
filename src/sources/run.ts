@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { accessSync, constants, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { delimiter, join } from 'node:path';
 
 /**
  * Read-only transport, shared by everything that reaches outside the vault.
@@ -67,6 +70,40 @@ export function run(
     // the only thing in stderr when the run fails for some other reason.
     child.stdin?.end();
   });
+}
+
+/**
+ * Where a command lives that PATH does not know about.
+ *
+ * Claude Code's installer puts `claude` in `~/.local/bin`, and a server started
+ * from a launcher, a service manager or a non-login shell often has no
+ * `~/.local/bin` on PATH. Every judged tick then held, warning that the judge
+ * could not be reached, for a binary that was installed all along. Only commands
+ * with one well-known home are listed: a guess is worse than the error.
+ */
+const INSTALLED: Record<string, (home: string) => string> = {
+  claude: (home) => join(home, '.local', 'bin', 'claude'),
+};
+
+function executable(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK);
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The command to spawn for `cmd`: as given when PATH finds it or it is already a
+ * path, otherwise where its installer puts it, if that exists. An unresolvable
+ * name comes back unchanged, so the spawn error still names what was missing.
+ */
+export function resolveCommand(cmd: string, path = process.env.PATH ?? '', home = homedir()): string {
+  if (cmd.includes('/')) return cmd;
+  if (path.split(delimiter).some((dir) => dir && executable(join(dir, cmd)))) return cmd;
+  const installed = INSTALLED[cmd]?.(home);
+  return installed && executable(installed) ? installed : cmd;
 }
 
 /**

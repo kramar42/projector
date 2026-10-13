@@ -62,7 +62,7 @@ import { clearEnrichment, readCached, refresh } from './enrich.ts';
 import { info, logTo } from './log.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
-import { startPolling } from './poll.ts';
+import { pollAtStartup, startPolling } from './poll.ts';
 import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
 
@@ -926,7 +926,9 @@ function ensureWatched(root: string): void {
 /**
  * Start this vault's poll loop, if it asked for one and has not got one.
  *
- * Called on **every** request that resolves a vault, rather than once beside the
+ * The server starts every registered vault at startup (`pollAtStartup`, below),
+ * so intake ticks with no board open. This is the other half: it is also called
+ * on **every** request that resolves a vault, rather than once beside the
  * watcher, and that placement is the whole point. The watcher is set up the first
  * time a vault is used and never again — so turning `poll.enabled` on in a vault
  * the server was already watching did nothing at all until a restart, with no
@@ -1068,4 +1070,11 @@ serve({ fetch: app.fetch, hostname: '127.0.0.1', port: PORT }, (addr) => {
    */
   logTo((line) => console.log(line));
   console.log(`logging  background events — watcher, intake and enrichment`);
+
+  // After the sink, so each vault's polling line is printed. A missing vault is
+  // already named in the banner, and a request could not resolve it either.
+  pollAtStartup(
+    known.filter((v) => v.exists).map((v) => v.path),
+    bumpAttention,
+  );
 });

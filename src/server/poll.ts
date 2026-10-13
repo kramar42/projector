@@ -2,8 +2,9 @@ import { advance } from '../intake/run.ts';
 import { classify, type Ask, type Classified } from '../intake/classify.ts';
 import { materialise } from '../intake/materialise.ts';
 import { addCost, renderCost } from '../intake/relay.ts';
+import { ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
-import { markSeen, suppress } from '../intake/db.ts';
+import { markSeen, suppress, watermarks } from '../intake/db.ts';
 import { sweep } from '../intake/run.ts';
 import type { Cost } from '../intake/types.ts';
 import { basename } from 'node:path';
@@ -305,21 +306,71 @@ export function withinHours(hour: number, hours: { from: number; until: number }
 }
 
 type Timer = ReturnType<typeof setInterval>;
-const timers = new Map<string, Timer>();
+
+/**
+ * When this vault last ticked: the newest `ranAt` across its channels, or null
+ * when none has ever run.
+ *
+ * Read off the cursors rather than kept as a stamp of its own (C11): a tick
+ * that judged a channel committed its cursor, so the record already exists.
+ * The newest rather than the oldest, because a channel that has been
+ * unreachable for a week says nothing about whether a tick ran a minute ago.
+ * An intake store that cannot be read is no evidence of a recent tick either.
+ */
+export function lastTick(root: string): string | null {
+  try {
+    let newest: string | null = null;
+    for (const w of watermarks(root)) {
+      if (Number.isFinite(Date.parse(w.ranAt)) && (!newest || Date.parse(w.ranAt) > Date.parse(newest))) newest = w.ranAt;
+    }
+    return newest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How long a loop starting now should wait before its first tick: whatever is
+ * left of the interval since the last one, and nothing when that is spent.
+ *
+ * `bun run dev` restarts the server on every save, and a loop that ticked on
+ * start paid for a full sweep — minutes of relay and judge calls — per restart.
+ * A vault that is behind still ticks at once, which is the point of the server
+ * polling at all. Capped at one interval, so a clock that ran ahead cannot park
+ * the loop for longer than it would have waited anyway.
+ */
+export function firstTickIn(last: string | null, everySeconds: number, now = Date.now()): number {
+  const at = last ? Date.parse(last) : NaN;
+  if (!Number.isFinite(at)) return 0;
+  const every = everySeconds * 1000;
+  return Math.min(every, Math.max(0, at + every - now));
+}
+
+/** `next tick now`, `… in 40s`, `… in 12m`, `… in 3h`: for the line a loop starts with. */
+function nextTick(ms: number): string {
+  if (ms <= 0) return 'next tick now';
+  const secs = Math.ceil(ms / 1000);
+  if (secs < 90) return `next tick in ${secs}s`;
+  const mins = Math.round(secs / 60);
+  return `next tick in ${mins < 90 ? `${mins}m` : `${Math.round(mins / 60)}h`}`;
+}
+
+/** The pending first tick and the interval after it, as one thing to cancel. */
+const loops = new Map<string, () => void>();
 
 /**
  * Start polling a vault, if it asked to be polled.
  *
- * Idempotent per vault: the server calls this whenever a vault is first used, and
- * a second call must not double the rate. Returns whether a loop is now running,
- * so the caller can say so once rather than guessing.
+ * Idempotent per vault: the server calls this at startup and whenever a vault is
+ * used, and a second call must not double the rate. Returns whether a loop is
+ * now running, so the caller can say so once rather than guessing.
  */
 export function startPolling(
   root: string,
   /** Called with what a tick judged worth interrupting for. Local delivery only. */
   onAttention: (notes: { id: string; title: string }[]) => void = () => {},
 ): boolean {
-  if (timers.has(root)) return true;
+  if (loops.has(root)) return true;
   const { poll } = settingsFor(root);
   if (!poll.enabled) return false;
 
@@ -374,25 +425,63 @@ export function startPolling(
     }
   };
 
+  const last = lastTick(root);
+  const delay = firstTickIn(last, poll.everySeconds);
   info(
     'intake',
     `${name} polling every ${poll.everySeconds}s` +
-      (poll.hours ? `, ${poll.hours.from}–${poll.hours.until} local time` : ''),
+      (poll.hours ? `, ${poll.hours.from}–${poll.hours.until} local time` : '') +
+      ` — ${nextTick(delay)} (${last ? `last ran ${ago(last)}` : 'never ran'})`,
   );
-  const timer = setInterval(tick, poll.everySeconds * 1000);
-  // Never hold the process open on our account. A timer is not a reason for a
-  // server to refuse to exit.
-  timer.unref?.();
-  timers.set(root, timer);
-  void tick();
+
+  // The cadence runs from the first tick, so a loop that waited out the rest of
+  // the interval keeps the rhythm the last process had.
+  let interval: Timer | undefined;
+  const begin = () => {
+    interval = setInterval(tick, poll.everySeconds * 1000);
+    // Never hold the process open on our account. A timer is not a reason for a
+    // server to refuse to exit.
+    interval.unref?.();
+    void tick();
+  };
+  let first: ReturnType<typeof setTimeout> | undefined;
+  if (delay) {
+    first = setTimeout(begin, delay);
+    first.unref?.();
+  }
+  loops.set(root, () => {
+    clearTimeout(first);
+    clearInterval(interval);
+  });
+  if (!delay) begin();
   return true;
+}
+
+/**
+ * Start every vault the server knows, at startup, and say for each whether it
+ * is polling.
+ *
+ * Before this the loop started on the first request that named a vault, so a
+ * server with no board open polled nothing: intake went days without a tick
+ * while the process ran, and nothing said so. Running the server is now enough.
+ * A vault that did not opt in gets its one line here and nowhere else — at
+ * startup it answers "why is nothing polling", and on a request it is not news.
+ */
+export function pollAtStartup(
+  roots: string[],
+  onAttention: (root: string, notes: { id: string; title: string }[]) => void = () => {},
+): void {
+  for (const root of roots) {
+    if (startPolling(root, (notes) => onAttention(root, notes))) continue;
+    info('intake', `${basename(root)} not polling — poll.enabled is off`);
+  }
 }
 
 /** Stop polling one vault, or all of them. Used by tests and by shutdown. */
 export function stopPolling(root?: string): void {
-  for (const [key, timer] of timers) {
+  for (const [key, cancel] of loops) {
     if (root && key !== root) continue;
-    clearInterval(timer);
-    timers.delete(key);
+    cancel();
+    loops.delete(key);
   }
 }

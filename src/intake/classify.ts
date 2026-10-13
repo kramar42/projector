@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { paths } from '../config.ts';
 import { isRef, loadFacets } from '../schema/facets.ts';
 import { reindex } from '../index/indexer.ts';
-import { run } from '../sources/run.ts';
+import { resolveCommand, run } from '../sources/run.ts';
 import { rescues, suppressions } from './db.ts';
 import { settingsFor } from '../settings.ts';
 import type { Facets, Note } from '../schema/types.ts';
@@ -353,7 +353,7 @@ export function claudeAsk(command: string, model: string, timeoutMs = 180_000, c
   return async (system, user) => {
     const started = Date.now();
     const res = await run(
-      command,
+      resolveCommand(command),
       [
         '-p',
         user,
