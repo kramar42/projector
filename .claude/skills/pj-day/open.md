@@ -18,11 +18,19 @@ or `not asked` are what is still asked; its T-entries are why each plan item was
 dated claims like any note: a theory that survived then is a prior to re-test, not a fact. Read
 `memory/patterns/` too.
 
+**Last night's draft.** If today's day note already exists, last night's close wrote it with the
+Plan the user approved: that Plan is the starting draft, and its T-entries (`rests on: tomorrow's
+Plan <n>`) and `## Tomorrow (approved …)` are in the last closed day's theories file. If close
+drafted but the user didn't approve, the draft is there under `## Tomorrow (draft, not approved)`:
+candidates to test like any other, not the user's plan. Either way the morning re-tests each line
+(step 2) against what came in overnight — the plan was written before the night's intake, mail and
+calendar changes.
+
 If the invocation says what the user worked on, that goes under `Said` in today's theories file
 (rule 3 in SKILL.md).
 
-Done when you hold every plan item since the last closed day, ticked or not, and every question
-still waiting.
+Done when you hold every plan item since the last closed day, ticked or not, last night's draft if
+there is one, and every question still waiting.
 
 ## 2. Gather, then test
 
@@ -74,6 +82,10 @@ outcome, and the rest are carried untested with their as-of date.
 <only when intake was stale: intake last ran <MM-DD HH:MM>, the server is probably down — ran a tick now>
 
 **<Ddd DD Mon>** — <the day's shape in one line: meetings, the free blocks>
+
+<only when last night's Plan exists:>
+**Since last night** — <"nothing moved; the Plan stands", or one line per line that moved:>
+- Plan <n> <item> — T<n> refuted overnight: <what was found> → off / swapped for <…>
 
 **Outcomes** (pick or replace — at most three)
 1. <outcome> — <note id> · T<n> survived (<refuter looked for, not found>)
@@ -134,10 +146,12 @@ Stop. The user picks, edits, drops, adds or answers.
    ```bash
    pj add "<YYYY-MM-DD Ddd> — plan: <the agreed outcomes, short>" --id day-<YYYY-MM-DD> \
      --facet day=<YYYY-MM-DD> --facet private=true --facet source=brain \
-     --facet project=<id> …
+     --facet project=<id> --facet project=<id>
    ```
 
    A note carrying `day` is written to `daily/`; `pj add` prints where. That is the file to edit.
+   If last night's close already wrote it, don't add it again: edit its Plan, and `pj set` its
+   `--title` and `project` facets only where the agreed Plan changed them.
 2. Write the body into it with your file tools — the two sections, links relative to `daily/`.
    `Plan`: the agreed items, one line each plus the link to its note, nothing more. `Did`: empty.
 3. Today's theories file already holds this run's T-entries and questions. Add to it:

@@ -56,13 +56,15 @@ Six rules hold in every mode:
 **At most three questions per run, each about a load-bearing theory the world couldn't settle** —
 its refuter was looked for and found nothing either way. Order them by the cost of being wrong: a
 decision only the user can make, an ownership call, or sources that disagree. A question a trace
-could settle is your legwork, not a question. Every other can't-settle goes under `Asked` in today's
+could settle is your legwork, and one a pattern in `memory/patterns/` answers is already settled:
+neither is a question. Every other can't-settle goes under `Asked` in today's
 theories file, marked `not asked`, so a later run can raise it. An unanswered question means leave it
 as it is — never "agreed".
 
 ## The loop
 
-Open and check-in each run it once; their files say what to gather and what the stop holds.
+Open, check-in and close each run it once — close over tomorrow's draft; their files say what to
+gather and what the stop holds. The week reset consolidates what the runs wrote.
 
 ```text
 read     memory/AGENTS.md, memory/patterns/*, today's and the last closed day's theories
@@ -76,7 +78,8 @@ test     for each theory
              refuted      → a proposed note edit, or the line leaves the plan
              survived     → a plan suggestion
              can't settle → one closed question (the budget above)
-             held again   → say so in its outcome, citing the earlier theory
+             held again   → say so in its outcome, citing the earlier theory or the
+                              pattern (patterns/<slug>.md) — what the week reset counts
 write    the theories file: T-entries, and this run's questions under Asked as waiting
 stop     once: the day's shape · plan · inbox · at most three questions · proposed commands
 ```
@@ -159,11 +162,13 @@ sections, in this order:
 ## Did
 ```
 
-- **Plan** — agreed at open, edited at check-ins. **One line per item, plus a link** to the note it
-  is about, written the way every body reference in a vault is written: `[Its title](path.md)`, the
-  path relative to the day note's own folder — `pj context <id>` prints the note's `file:`. `pj check`
-  reports a link that resolves to nothing, and names the fix. No evidence, quotes or timestamps on
-  the line: why an item is on the plan lives in today's theories file, not here.
+- **Plan** — drafted at the evening's close and written as tomorrow's note only on the user's yes,
+  or agreed at open; re-tested at open, edited at check-ins. **One line per item, plus a link** to
+  the note it is about, written the way every body reference in a vault is written:
+  `[Its title](path.md)`, the path relative to the day note's own folder — `pj context <id>` prints
+  the note's `file:`. `pj check` reports a link that resolves to nothing, and names the fix. No
+  evidence, quotes or timestamps on the line: why an item is on the plan lives in the theories
+  file, not here.
 - **Did** — written at close, by `pj-did`'s method.
 
 What the user said, the questions asked and still waiting, and the evidence behind each Plan line
@@ -218,6 +223,12 @@ day's first run:
 
 ## Asked
 - Q1 Tonight's EU-PROD maintenance: yours? (asked 15:31) — waiting | answered 16:02: no
+
+## Delta
+- 18:40 inferred: web1 displaced the Loki review — Plan 3 has no trace (T2)
+
+## Tomorrow (draft, not approved)
+- [ ] web1 RCA, the actions section — [RCA draft](../assets/web1-incident-2026-10/rca.md)
 ```
 
 - **T-entries** — the beliefs the Plan, or a proposed write, rests on: one per Plan line at least.
@@ -234,13 +245,32 @@ day's first run:
 - **Asked** — every question you put to the user, numbered for the day, with when it was asked;
   marked `answered HH:MM: <answer>` when it is. Unknowns over the three-question budget go here too,
   marked `not asked`. The next run starts from what is still waiting here.
+- **Delta** and **Tomorrow** — written by close ([close.md](close.md)): why the day diverged from
+  its Plan, as inference, and tomorrow's Plan; the heading says whether the user approved it.
+
+**A pattern** is one small file, `memory/patterns/<slug>.md`, rewritten in place, never appended to:
+
+```markdown
+# Gemini meeting notes assign the team's actions to Oleksii
+
+- held: 3 · last held: 2026-10-13 · first: 2026-10-13
+- refuter: an action from a Gemini summary that Jira or Slack shows as Oleksii's
+- so: test a Gemini-assigned action against Jira and Slack before planning on it
+- evidence: theories/2026-10-13.md T3, …
+```
+
+It is about how to read the user and their sources, never about the state of the world. Write one
+mid-run when the user's own words settle something that will come up again — an owner (rule 5),
+where a carried item came from — or when the same misreading of a source turns up twice in one run;
+then the next run doesn't repeat it, or ask it. The week reset ([week.md](week.md)) recounts every
+pattern, promotes theories that held across days, and removes the ones whose refuter turned up.
 
 **What may be written where:**
 
 | where | what | whose yes |
 |---|---|---|
 | `memory/` | theories, patterns, `memory/AGENTS.md` | none — yours; write freely, every run |
-| today's day note in `daily/` | `Plan` as agreed, `Did` at close, the day note's facets | the user's |
+| today's day note in `daily/`, and tomorrow's at close | `Plan` as agreed, `Did` at close, the day note's facets | the user's |
 | a card in `inbox/` | accept, fold or decline, as the Inbox block proposed it | the user's |
 | every other note | approved `pj` commands, one per note | the user's |
 | outside the vault | nothing — a reply the user owes is drafted in your answer, never sent | — |
@@ -251,8 +281,8 @@ Pick one, then read its file and follow it:
 
 | mode | when | file |
 |---|---|---|
-| **open** | named, or today's note does not exist yet | [open.md](open.md) |
-| **checkin** | named, or today's note exists and the day is still going | [checkin.md](checkin.md) |
+| **open** | named, or no run today yet — no `memory/theories/<today>.md`, even if last night's close wrote today's note | [open.md](open.md) |
+| **checkin** | named, or today has been opened and the day is still going | [checkin.md](checkin.md) |
 | **close** | named, the user says they are wrapping up, or it is evening and `Did` is empty | [close.md](close.md) |
 | **week** | named, or offered at the end of a Monday open or a Friday close | [week.md](week.md) |
 

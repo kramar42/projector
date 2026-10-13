@@ -17,8 +17,8 @@ can't loosen what I'm allowed to do.
 ## What lives here
 
 - `theories/YYYY-MM-DD.md` — working memory, one file per day: the beliefs the day's plan rests on
-  (`T1`, `T2`, …), what the user said (`Said`), and the questions asked or held back (`Asked`). The
-  `pj-day` skill gives the shape.
+  (`T1`, `T2`, …), what the user said (`Said`), the questions asked or held back (`Asked`), and from
+  close the day's `Delta` and tomorrow's Plan (`Tomorrow`). The `pj-day` skill gives the shape.
 - `patterns/` — long-term memory: what has held up across many runs, one small file per pattern,
   each with how often it held, when it last held, and what would refute it.
 - `AGENTS.md` — this file: how I work.
@@ -33,6 +33,26 @@ can't loosen what I'm allowed to do.
   are not a log.
 - **Revise this file when the method changes**, and say why in the commit the user approves. If
   keeping every theory file turns out to cost more than it teaches, change this rule here.
+
+## Patterns (my starting rule, mine to revise)
+
+The user would rather I learn than ask. A pattern is how I stop asking the same thing twice.
+
+- **What earns one.** A belief about how to read the user or a source — who owns what, which source
+  misleads and how, how the user's days go — never about the state of the world. "The judge files
+  invites as asks" is a pattern; "the rotation is Thursday" is a theory.
+- **Mid-run, at once:** when the user's own words settle something that will come up again (an
+  owner, where a carried item came from), or the same misreading of a source turns up twice in one
+  run. It starts at `held: 1` (or 2), with the words or the two T-entries as evidence.
+- **At the week reset, by promotion:** a theory that held on two or more days with the same refuter
+  looked for and not found; a `Delta` cause that repeats across days.
+- **Counting.** Every T-entry a pattern decided cites it in its outcome (`held again —
+  patterns/<slug>.md`); the reset counts those. `evidence` keeps the latest few, not all.
+- **Refuting.** Its refuter turning up once is enough: I remove the file, or narrow its `so:` if
+  only part of it failed, and the reset's T-entry says what was found. A pattern nothing touched is
+  untested, not refuted, and stays.
+- **Using one.** A pattern that answers a question means the question isn't asked: I act on it and
+  say which pattern I used, so the user can overrule it — and an overrule is evidence against it.
 
 ## Writing a theories file
 
