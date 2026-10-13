@@ -2,14 +2,13 @@
 id: intake-extends
 title: "Another go at the retry bug, on the same branch"
 facets:
-  intake: ["unjudged"]
-  extends: ["every-facet"]
-  source: ["git"]
-  status: ["on-hold"]
-  priority: ["month"]
-  tech: ["kafka"]
-created: 2025-07-26  # older
-updated: 2025-07-26  # older
+  extends: [every-facet]
+  source: [git]
+  status: [on-hold]
+  priority: [month]
+  tech: [kafka]
+created: 2025-07-26 # older
+updated: 2025-07-26 # older
 ---
 
 Renders a candidate that wants **folding into** another note rather than standing

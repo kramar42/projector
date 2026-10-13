@@ -16,6 +16,7 @@ import { COMPUTED, runQuery } from '../src/index/query.ts';
 import { queryPayload } from '../src/view/payload.ts';
 import { SEED_FACETS } from '../src/server/seed.ts';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 
 /**
@@ -193,8 +194,8 @@ test('a note field outranks a facet wearing its name, whatever the facet type', 
   for (const decl of ['updated: { type: date }', 'updated: { values: [a, b] }']) {
     const root = mkdtempSync(join(tmpdir(), 'projector-shadow-'));
     mkdirSync(paths(root).config, { recursive: true });
-    writeFileSync(join(paths(root).notes, 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
-    writeFileSync(join(paths(root).notes, 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
+    writeFileSync(place(root, 'older.md'), card('older', '2020-01-01', '2030-01-01'), 'utf8');
+    writeFileSync(place(root, 'newer.md'), card('newer', '2030-01-01', '2020-01-01'), 'utf8');
     writeFileSync(paths(root).facets, decl + '\n', 'utf8');
 
     const { db, notes } = reindex(root);
@@ -337,7 +338,7 @@ test('every axis `show` accepts arrives on the note, computed or stored', () => 
   try {
     mkdirSync(paths(root).config, { recursive: true });
     writeFileSync(
-      join(paths(root).notes, 'a.md'),
+      place(root, 'a.md'),
       '---\nid: a\ntitle: A\nfacets: {status: [active]}\nupdated: 2026-08-18\n---\n\n',
       'utf8',
     );
@@ -383,7 +384,7 @@ test('a query payload carries derivations of the body, never the body', () => {
   try {
     mkdirSync(paths(root).config, { recursive: true });
     writeFileSync(
-      join(paths(root).notes, 'a.md'),
+      place(root, 'a.md'),
       '---\nid: a\ntitle: A\n---\n\nFirst prose paragraph.\n\n- [x] done\n- [ ] not\n',
       'utf8',
     );
@@ -418,7 +419,7 @@ test('a lists view draws its children as columns, and its own query does nothing
     mkdirSync(paths(root).config, { recursive: true });
     const note = (id: string, facets: string) =>
       writeFileSync(
-        join(paths(root).notes, `${id}.md`),
+        place(root, `${id}.md`),
         `---\nid: ${id}\ntitle: ${id}\nfacets: ${facets}\n---\n\n`,
         'utf8',
       );
@@ -502,7 +503,7 @@ test('a composition is a query like any other: shape, sort, filter and lanes all
     mkdirSync(paths(root).config, { recursive: true });
     const note = (id: string, facets: string) =>
       writeFileSync(
-        join(paths(root).notes, `${id}.md`),
+        place(root, `${id}.md`),
         `---\nid: ${id}\ntitle: ${id}\nfacets: ${facets}\n---\n\n`,
         'utf8',
       );

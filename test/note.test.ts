@@ -12,7 +12,7 @@ import type { Facets, Note } from '../src/schema/types.ts';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
-import { listNoteFiles, walkIgnores } from '../src/schema/note.ts';
+import { isNotePath, listNoteFiles, walkIgnores } from '../src/schema/note.ts';
 import { readAll } from '../src/index/indexer.ts';
 
 
@@ -342,15 +342,15 @@ test('without a root, a README is just a file called README', () => {
  */
 test('AGENTS.md is not a note, anywhere in the vault', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-walk-'));
-  mkdirSync(pathJoin(root, 'platform'));
+  mkdirSync(pathJoin(root, 'projects', 'platform'), { recursive: true });
   writeFileSync(pathJoin(root, 'AGENTS.md'), 'how this vault is kept', 'utf8');
-  writeFileSync(pathJoin(root, 'platform', 'AGENTS.md'), 'how platform work is done', 'utf8');
-  writeFileSync(pathJoin(root, 'platform', 'README.md'), '# Platform\n', 'utf8');
-  writeFileSync(pathJoin(root, 'platform', 'design.md'), '# Design\n', 'utf8');
+  writeFileSync(pathJoin(root, 'projects', 'platform', 'AGENTS.md'), 'how platform work is done', 'utf8');
+  writeFileSync(pathJoin(root, 'projects', 'platform', 'README.md'), '# Platform\n', 'utf8');
+  writeFileSync(pathJoin(root, 'projects', 'platform', 'design.md'), '# Design\n', 'utf8');
 
   assert.deepEqual(
     listNoteFiles(root).map((f) => f.slice(root.length + 1)).sort(),
-    ['platform/README.md', 'platform/design.md'],
+    ['projects/platform/README.md', 'projects/platform/design.md'],
   );
   const { notes, duplicates } = readAll(root);
   assert.deepEqual([...notes.keys()].sort(), ['design', 'platform']);
@@ -366,10 +366,12 @@ test('CLAUDE.md is configuration, not content — anywhere, symlinked or not', (
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-claude-'));
   writeFileSync(pathJoin(root, 'CLAUDE.md'), 'reader-named AGENTS.md', 'utf8');
   writeFileSync(pathJoin(root, 'CLAUDE.local.md'), 'private half', 'utf8');
-  writeFileSync(pathJoin(root, 'real.md'), '# real\n', 'utf8');
+  mkdirSync(pathJoin(root, 'notes'));
+  writeFileSync(pathJoin(root, 'notes', 'CLAUDE.md'), 'reader-named AGENTS.md, one level down', 'utf8');
+  writeFileSync(pathJoin(root, 'notes', 'real.md'), '# real\n', 'utf8');
   assert.deepEqual(
     listNoteFiles(root).map((f) => f.slice(root.length + 1)),
-    ['real.md'],
+    ['notes/real.md'],
   );
 });
 
@@ -377,36 +379,39 @@ test('.projector/ignore masks notes by pattern, from the vault root', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-mask-'));
   mkdirSync(pathJoin(root, '.projector'));
   writeFileSync(pathJoin(root, '.projector', 'ignore'), '_index.md\ndrafts/\n', 'utf8');
-  mkdirSync(pathJoin(root, 'docs', 'deep'), { recursive: true });
-  writeFileSync(pathJoin(root, 'docs', '_index.md'), '# hugo\n', 'utf8');
-  writeFileSync(pathJoin(root, 'docs', 'deep', '_index.md'), '# hugo deep\n', 'utf8');
-  writeFileSync(pathJoin(root, 'docs', 'page.md'), '# page\n', 'utf8');
-  mkdirSync(pathJoin(root, 'drafts'));
-  writeFileSync(pathJoin(root, 'drafts', 'wip.md'), '# wip\n', 'utf8');
+  mkdirSync(pathJoin(root, 'notes', 'docs', 'deep'), { recursive: true });
+  writeFileSync(pathJoin(root, 'notes', 'docs', '_index.md'), '# hugo\n', 'utf8');
+  writeFileSync(pathJoin(root, 'notes', 'docs', 'deep', '_index.md'), '# hugo deep\n', 'utf8');
+  writeFileSync(pathJoin(root, 'notes', 'docs', 'page.md'), '# page\n', 'utf8');
+  mkdirSync(pathJoin(root, 'notes', 'drafts'));
+  writeFileSync(pathJoin(root, 'notes', 'drafts', 'wip.md'), '# wip\n', 'utf8');
   assert.deepEqual(
     listNoteFiles(root).map((f) => f.slice(root.length + 1)),
-    ['docs/page.md'],
+    ['notes/docs/page.md'],
   );
 });
 
 test('git-ignored markdown is not a note', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'projector-ignore-'));
-  writeFileSync(pathJoin(root, '.gitignore'), 'node_modules/\n*.draft.md\n/top-only.md\n', 'utf8');
-  writeFileSync(pathJoin(root, 'kept.md'), '# kept\n', 'utf8');
-  writeFileSync(pathJoin(root, 'top-only.md'), '# anchored out\n', 'utf8');
-  writeFileSync(pathJoin(root, 'plan.draft.md'), '# draft\n', 'utf8');
-  mkdirSync(pathJoin(root, 'repo', 'node_modules', 'pkg'), { recursive: true });
-  writeFileSync(pathJoin(root, 'repo', 'node_modules', 'pkg', 'CHANGELOG.md'), '# junk\n', 'utf8');
-  writeFileSync(pathJoin(root, 'repo', 'README.md'), '# repo\n', 'utf8');
-  mkdirSync(pathJoin(root, 'repo', 'dist'));
-  writeFileSync(pathJoin(root, 'repo', 'dist', 'out.md'), '# built\n', 'utf8');
-  writeFileSync(pathJoin(root, 'repo', '.gitignore'), 'dist/\n', 'utf8');
-  // the root's anchored /top-only.md must not reach into subfolders
-  writeFileSync(pathJoin(root, 'repo', 'top-only.md'), '# not anchored here\n', 'utf8');
+  const n = pathJoin(root, 'notes');
+  mkdirSync(n);
+  writeFileSync(pathJoin(root, '.gitignore'), 'node_modules/\n*.draft.md\n', 'utf8');
+  writeFileSync(pathJoin(n, '.gitignore'), '/top-only.md\n', 'utf8');
+  writeFileSync(pathJoin(n, 'kept.md'), '# kept\n', 'utf8');
+  writeFileSync(pathJoin(n, 'top-only.md'), '# anchored out\n', 'utf8');
+  writeFileSync(pathJoin(n, 'plan.draft.md'), '# draft\n', 'utf8');
+  mkdirSync(pathJoin(n, 'repo', 'node_modules', 'pkg'), { recursive: true });
+  writeFileSync(pathJoin(n, 'repo', 'node_modules', 'pkg', 'CHANGELOG.md'), '# junk\n', 'utf8');
+  writeFileSync(pathJoin(n, 'repo', 'README.md'), '# repo\n', 'utf8');
+  mkdirSync(pathJoin(n, 'repo', 'dist'));
+  writeFileSync(pathJoin(n, 'repo', 'dist', 'out.md'), '# built\n', 'utf8');
+  writeFileSync(pathJoin(n, 'repo', '.gitignore'), 'dist/\n', 'utf8');
+  // the anchored /top-only.md must not reach into subfolders
+  writeFileSync(pathJoin(n, 'repo', 'top-only.md'), '# not anchored here\n', 'utf8');
 
   assert.deepEqual(
     listNoteFiles(root).map((f) => f.slice(root.length + 1)).sort(),
-    ['kept.md', 'repo/README.md', 'repo/top-only.md'],
+    ['notes/kept.md', 'notes/repo/README.md', 'notes/repo/top-only.md'],
   );
 });
 
@@ -418,28 +423,86 @@ test('the watcher predicate agrees with the walk about what the vault is', () =>
   writeFileSync(pathJoin(root, '.gitignore'), 'node_modules/\n*.draft.md\n', 'utf8');
   mkdirSync(pathJoin(root, '.projector'));
   writeFileSync(pathJoin(root, '.projector', 'ignore'), 'drafts/\n', 'utf8');
-  mkdirSync(pathJoin(root, 'repo'), { recursive: true });
-  writeFileSync(pathJoin(root, 'repo', '.gitignore'), 'dist/\n', 'utf8');
+  const n = pathJoin(root, 'notes');
+  mkdirSync(pathJoin(n, 'repo'), { recursive: true });
+  writeFileSync(pathJoin(n, 'repo', '.gitignore'), 'dist/\n', 'utf8');
 
   const ignored = walkIgnores(root);
 
   // What the walk keeps, the watcher watches…
-  assert.equal(ignored(pathJoin(root, 'kept.md'), false), false);
-  assert.equal(ignored(pathJoin(root, 'repo'), true), false);
-  assert.equal(ignored(pathJoin(root, 'repo', 'README.md'), false), false);
+  assert.equal(ignored(n, true), false);
+  assert.equal(ignored(pathJoin(n, 'kept.md'), false), false);
+  assert.equal(ignored(pathJoin(n, 'repo'), true), false);
+  assert.equal(ignored(pathJoin(n, 'repo', 'README.md'), false), false);
   // …and what it masks, the watcher prunes: the root's rules, a subfolder's, and
   // the vault's own escape hatch, judged at the directory so nothing below costs.
-  assert.equal(ignored(pathJoin(root, 'node_modules'), true), true);
-  assert.equal(ignored(pathJoin(root, 'plan.draft.md'), false), true);
-  assert.equal(ignored(pathJoin(root, 'repo', 'dist'), true), true);
+  assert.equal(ignored(pathJoin(n, 'node_modules'), true), true);
+  assert.equal(ignored(pathJoin(n, 'plan.draft.md'), false), true);
+  assert.equal(ignored(pathJoin(n, 'repo', 'dist'), true), true);
   assert.equal(ignored(pathJoin(root, 'drafts'), true), true);
   // The skip list is the walk's too — configuration and dot-state are not notes.
   assert.equal(ignored(pathJoin(root, 'CLAUDE.md'), false), true);
   assert.equal(ignored(pathJoin(root, '.git'), true), true);
+  // And so is the layout: nothing outside the places is watched for notes.
+  assert.equal(ignored(pathJoin(root, 'memory'), true), true);
+  assert.equal(ignored(pathJoin(root, 'loose.md'), false), true);
   // Unknown kind: a non-.md may take the directory reading and be pruned by a
   // `dir/` rule without ever costing a note; an .md never is.
-  assert.equal(ignored(pathJoin(root, 'repo', 'dist')), true);
-  assert.equal(ignored(pathJoin(root, 'dist.md')), false);
+  assert.equal(ignored(pathJoin(n, 'repo', 'dist')), true);
+  assert.equal(ignored(pathJoin(n, 'dist.md')), false);
+});
+
+test('a note lives in one of four places, and a markdown file anywhere else is a stray', () => {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-places-'));
+  const write = (rel: string) => {
+    mkdirSync(pathJoin(root, rel, '..'), { recursive: true });
+    writeFileSync(pathJoin(root, rel), `# ${rel}\n`, 'utf8');
+  };
+  for (const rel of [
+    'notes/a.md',
+    'notes/deep/b.md',
+    'projects/platform/README.md',
+    'projects/platform/design.md',
+    'daily/2026-10-13.md',
+    'inbox/card.md',
+    // Not notes, and not strays: what the vault says about itself, and the trees
+    // that hold something else on purpose.
+    'README.md',
+    'AGENTS.md',
+    'memory/theories/2026-10-13.md',
+    'assets/a/handout.md',
+    // Strays: a note at the root, a project that is not a folder, a note in a
+    // folder the layout does not have.
+    'loose.md',
+    'projects/flat.md',
+    'archive/old.md',
+  ]) {
+    write(rel);
+  }
+  const rel = (files: string[]) => files.map((f) => f.slice(root.length + 1)).sort();
+  assert.deepEqual(rel(listNoteFiles(root)), [
+    'daily/2026-10-13.md',
+    'inbox/card.md',
+    'notes/a.md',
+    'notes/deep/b.md',
+    'projects/platform/README.md',
+    'projects/platform/design.md',
+  ]);
+  assert.deepEqual(rel(listNoteFiles(root, { strays: true })), ['archive/old.md', 'loose.md', 'projects/flat.md']);
+  assert.equal(isNotePath('notes/deep/b.md'), true);
+  assert.equal(isNotePath('README.md'), false, 'the vault’s own README describes it and is not a note');
+  assert.equal(isNotePath('memory/patterns/x.md'), false);
+  const { notes } = readAll(root);
+  assert.deepEqual([...notes.keys()].sort(), ['2026-10-13', 'a', 'b', 'card', 'design', 'platform']);
+  assert.deepEqual(notes.get('card')!.facets.intake, ['unjudged'], 'a card in the inbox is unjudged by being there');
+  assert.equal(notes.get('a')!.facets.intake, undefined);
+
+  // And `pj check` says so, with the move that fixes each one.
+  const strays = validate(notes, {}, root).filter((i) => i.field === 'place');
+  assert.deepEqual(strays.map((i) => i.file.slice(root.length + 1)), ['archive/old.md', 'loose.md', 'projects/flat.md']);
+  assert.ok(strays.every((i) => i.severity === 'error'), 'the layout is required, not suggested');
+  assert.match(strays[1]!.message, /move it to notes\/loose\.md/);
+  assert.match(strays[2]!.message, /projects\/flat\/README\.md if it is a project, else notes\/flat\.md/);
 });
 
 test('a bare note keeps its identity when it is written down', () => {
@@ -501,7 +564,7 @@ test('a single-valued facet holding two values is an error, not a note in two co
 test('instructions left in the frontmatter are an error naming where they go', () => {
   const facets = loadFacets(facetsFile('status: { values: [done] }\n'));
   const stale = parseNote(
-    '/data/platform/README.md',
+    '/data/projects/platform/README.md',
     '---\nid: platform\nproject:\n  instructions: |\n    - a rule\n---\n',
   );
   assert.ok(stale.ok);
@@ -509,19 +572,19 @@ test('instructions left in the frontmatter are an error naming where they go', (
   const moved = issues.filter((i) => i.field === 'project.instructions');
   assert.equal(moved.length, 1);
   assert.equal(moved[0]!.severity, 'error');
-  assert.match(moved[0]!.message, /move them to platform\/AGENTS\.md$/, 'vault-relative, like the file column beside it');
+  assert.match(moved[0]!.message, /move them to projects\/platform\/AGENTS\.md$/, 'vault-relative, like the file column beside it');
 
   // A flat project has no folder to put the file in, so the fix is the move that
   // makes one — and the message says so rather than naming the vault's own file.
-  const flat = parseNote('/data/platform.md', '---\nid: platform\nproject:\n  instructions: x\n---\n');
+  const flat = parseNote('/data/notes/platform.md', '---\nid: platform\nproject:\n  instructions: x\n---\n');
   assert.ok(flat.ok);
   const atRoot = validate(new Map([['platform', flat.rec]]), facets, '/data')
     .filter((i) => i.field === 'project.instructions');
   assert.equal(atRoot.length, 1);
-  assert.match(atRoot[0]!.message, /platform\/AGENTS\.md, and this note to platform\/README\.md/);
+  assert.match(atRoot[0]!.message, /projects\/platform\/AGENTS\.md, and this note to projects\/platform\/README\.md/);
 
   // A project block without it is clean.
-  const ok = parseNote('/data/platform/README.md', '---\nid: platform\nproject:\n  jira: PROJ\n---\n');
+  const ok = parseNote('/data/projects/platform/README.md', '---\nid: platform\nproject:\n  jira: PROJ\n---\n');
   assert.ok(ok.ok);
   assert.equal(
     validate(new Map([['platform', ok.rec]]), facets, '/data').filter((i) => i.severity === 'error').length,

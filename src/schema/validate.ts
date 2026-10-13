@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { isKnownKind } from './links.ts';
 import { bareRefs, bodyLinks, hrefBetween, hrefTarget } from './body.ts';
 import { isRef } from './facets.ts';
@@ -8,6 +8,7 @@ import { INSTRUCTIONS_FILE, isProject } from '../index/project.ts';
 import { wouldCycle } from '../index/refs.ts';
 import { paths, resolvePath } from '../config.ts';
 import { resolveDoc } from '../vault.ts';
+import { listNoteFiles } from './note.ts';
 
 /**
  * Validate every note against the loaded vocabulary and the graph.
@@ -36,6 +37,22 @@ export function validate(
       id: d.id,
       field: 'id',
       message: `duplicate id "${d.id}" in ${d.files.length} files`,
+    });
+  }
+
+  // The layout is required: a markdown file outside the places is not read as a
+  // note at all, so it is reported rather than silently missing from every view.
+  for (const file of listNoteFiles(paths(dataRoot).notes, { strays: true })) {
+    const at = relative(dataRoot, file);
+    const [top, ...rest] = at.split('/');
+    const to = top === 'projects' && rest.length === 1
+      ? `projects/${rest[0]!.replace(/\.md$/, '')}/README.md if it is a project, else notes/${rest[0]}`
+      : `notes/${at}`;
+    issues.push({
+      severity: 'error',
+      file,
+      field: 'place',
+      message: `outside the vault's places, so not a note — notes live in notes/, projects/<id>/, daily/ and inbox/; move it to ${to}`,
     });
   }
 
@@ -232,16 +249,15 @@ export function validate(
       // vault loads, the board draws — and members stop inheriting the rules they
       // are supposed to work under, with nothing anywhere saying so.
       if (rec.project?.instructions !== undefined) {
-        // At the vault root there is no folder to put the file in yet, so the fix
+        // A project not yet in its folder has nowhere to put the file, so the fix
         // is the move that creates one — which is the whole shape of a project now.
-        const notes = paths(dataRoot).notes;
-        const atRoot = resolve(dirname(rec.file)) === resolve(notes);
+        const inFolder = basename(rec.file) === 'README.md';
         at(
           'project.instructions',
           `instructions are a file now — move them to ` +
-            (atRoot
-              ? `${rec.id}/${INSTRUCTIONS_FILE}, and this note to ${rec.id}/README.md`
-              : join(relative(notes, dirname(rec.file)), INSTRUCTIONS_FILE)),
+            (inFolder
+              ? join(relative(dataRoot, dirname(rec.file)), INSTRUCTIONS_FILE)
+              : `projects/${rec.id}/${INSTRUCTIONS_FILE}, and this note to projects/${rec.id}/README.md`),
         );
       }
     }

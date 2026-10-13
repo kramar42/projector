@@ -18,6 +18,7 @@ import { COMPUTED } from '../src/index/query.ts';
 import { LINK_KINDS } from '../src/schema/links.ts';
 import { channelNames } from '../src/intake/run.ts';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * The constraint the whole model rests on: **no facet is special.**
@@ -171,18 +172,18 @@ function bareVault(): { root: string; cleanup: () => void } {
 
   const card = (id: string, body: string) =>
     writeFileSync(
-      join(paths(root).notes, `${id}.md`),
+      place(root, `${id}.md`),
       `---\nid: ${id}\ntitle: ${id}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\n${body}\n`,
       'utf8',
     );
   card('plain', 'A note with no facets, which is now every note.');
   writeFileSync(
-    join(paths(root).notes, 'linked.md'),
+    place(root, 'linked.md'),
     '---\nid: linked\ntitle: linked\nlinks: [jira:PROJ-1]\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA link, so the `linked` axis has something.\n',
     'utf8',
   );
   writeFileSync(
-    join(paths(root).notes, 'owner.md'),
+    place(root, 'owner.md'),
     '---\nid: owner\ntitle: owner\nproject: {}\ncreated: 2026-08-01\nupdated: 2026-08-01\n---\n\nA project block, which is not a facet.\n',
     'utf8',
   );

@@ -127,7 +127,7 @@ export function countNotes(path: string): number {
  * The same count, from the vault's own index when it has one.
  *
  * `indexStamp` already writes the number: `meta.stamp` is
- * `v2:<files>:<stat count>:<mtime sum>:<max mtime>`, and the second field is the
+ * `v3:<files>:<stat count>:<mtime sum>:<max mtime>:<paths hash>`, and the second field is the
  * length of exactly the walk `countNotes` does. Reading one small row is 2–5ms
  * against 822ms for the walk that produced it, so the listing costs a read per
  * vault instead of a filesystem traversal per vault.
@@ -292,15 +292,18 @@ export function suggestName(path: string): string {
  * has a `.projector/`** is left alone: an absent `facets.yaml` is a vault
  * carrying the built-ins and nothing else, and a deleted `home.yaml` is a view
  * somebody deleted — re-running `--create` over it must not quietly put both
- * back. **One holding markdown** is somebody's notes: the notes are already
- * there, so only the config is written, and nothing that was in the folder is
- * touched or moved. **An empty one** gets the same config and starts bare.
+ * back. **One with the layout's shape** — a `notes/` in it — is somebody's
+ * notes: they are already there, so only the config is written, and nothing
+ * that was in the folder is touched or moved. **An empty one** gets the same
+ * config and an empty `notes/`.
  *
- * Anything else is somebody's documents, and is refused.
+ * Anything else is somebody's documents, and is refused — loose markdown with
+ * the one move that makes it notes, since guessing which of a person's files
+ * are notes is how a tool rewrites their documentation.
  *
  * Views are part of the config rather than an optional extra: a vault with no
  * board would open onto nothing, which is a dead end rather than a fresh start.
- * That is why a folder of markdown is seeded too — the whole point of opening one
+ * That is why a folder of notes is seeded too — the whole point of opening one
  * is to see it arranged.
  */
 export function initVault(
@@ -312,9 +315,12 @@ export function initVault(
   const configured = isConfigured(path);
   if (existsSync(path) && !looksLikeVault(path)) {
     const entries = readdirSync(path).filter((f) => !f.startsWith('.'));
+    if (entries.some((f) => f.endsWith('.md'))) {
+      throw new Error(`${path} holds markdown but no notes/ — move the notes into ${path}/notes/ and open it again`);
+    }
     if (entries.length) throw new Error(`${path} is not empty and does not look like a vault`);
   }
-  mkdirSync(p.notes, { recursive: true });
+  mkdirSync(p.places.notes, { recursive: true });
   if (configured) return ensureIgnore(path);
 
   mkdirSync(p.views, { recursive: true });
@@ -390,10 +396,9 @@ export function docPath(ref: string, root: string): string | null {
  * Immediate subdirectories, for the folder picker.
  *
  * Both halves of "is this a vault" are reported, because they look different to a
- * person browsing: `configured` is one they have opened before, `isVault` is any
- * folder holding markdown — which, since the layout stopped requiring a `notes/`,
- * includes `~/Documents` and every source repository. Marking those identically
- * to a real vault would be the picker asserting something it does not know.
+ * person browsing: `configured` is one they have opened before, `isVault` is a
+ * folder with the layout's shape that nobody has opened yet. Marking those
+ * identically would be the picker asserting something it does not know.
  */
 export function browse(
   path: string,

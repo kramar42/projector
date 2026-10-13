@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 
 /**
@@ -31,7 +32,7 @@ function scratchVault(): { root: string; cleanup: () => void } {
     'utf8',
   );
   writeFileSync(
-    pathJoin(paths(root).notes, 'x.md'),
+    place(root, 'x.md'),
     '---\nid: x\n# a comment worth keeping\ntitle: X\nfacets: { status: [planning] }\n---\n\nbody\n',
     'utf8',
   );
@@ -79,13 +80,13 @@ test('--set project={} makes a project and --set project= unmakes one', () => {
     assert.equal(isProject(made), true);
     // And it moved: a project's instructions are `AGENTS.md` beside its note, so
     // promoting in place would leave it with nowhere to put them.
-    assert.equal(made.file, pathJoin(paths(root).notes, 'x', 'README.md'));
+    assert.equal(made.file, place(root, 'x', 'README.md'));
 
     patchFields(root, 'x', { project: '' });
     const after = noteById(root, 'x');
     assert.equal(after.project, undefined);
     // Un-projecting does not move it back. The folder may hold anything by now.
-    assert.equal(after.file, pathJoin(paths(root).notes, 'x', 'README.md'));
+    assert.equal(after.file, place(root, 'x', 'README.md'));
   } finally {
     cleanup();
   }
@@ -127,7 +128,7 @@ test('deleting a note drops every reference pointing at it', () => {
     createNote(root, { title: 'Inside', id: 'thing', facets: { parent: ['box'] } });
     const { removedEdges } = deleteNote(root, 'box');
     assert.equal(removedEdges, 1);
-    const left = loadNote(pathJoin(paths(root).notes, 'thing.md'));
+    const left = loadNote(place(root, 'thing.md'));
     assert.ok(left.ok);
     // A dangling reference is what removing the file by hand leaves behind.
     assert.equal(left.rec.facets.parent, undefined);

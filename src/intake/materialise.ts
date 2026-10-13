@@ -180,12 +180,12 @@ export function materialise(
       title: v.title ?? c.title,
       facets: {
         ...v.facets,
-        intake: ['unjudged'],
         ...(v.target ? { extends: [v.target] } : {}),
         ...(canTagSource ? { source: [channel] } : {}),
       },
       links: c.links,
       fingerprint: c.fingerprint,
+      inbox: true,
       ...(cardBody(v, c) ? { body: cardBody(v, c)! } : {}),
     });
     if (res.existed) out.skipped++;

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { cached, invalidate, stampOf } from '../src/index/cache.ts';
 import { reindex } from '../src/index/indexer.ts';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * The memo, and the one thing its stamp cannot see.
@@ -24,8 +25,8 @@ function vault(): string {
     join(root, '.projector', 'facets.yaml'),
     'status:\n  label: Status\n  values: [planning, active]\n',
   );
-  writeFileSync(join(root, 'one.md'), '---\nid: one\ntitle: One\n---\n\nBody.\n');
-  writeFileSync(join(root, 'two.md'), '---\nid: two\ntitle: Two\n---\n\nBody.\n');
+  writeFileSync(place(root, 'one.md'), '---\nid: one\ntitle: One\n---\n\nBody.\n');
+  writeFileSync(place(root, 'two.md'), '---\nid: two\ntitle: Two\n---\n\nBody.\n');
   return root;
 }
 
@@ -51,7 +52,7 @@ test('a note written outside the app rebuilds the memo', () => {
   try {
     invalidate(root);
     const first = cached(root, build, dispose);
-    writeFileSync(join(root, 'three.md'), '---\nid: three\ntitle: Three\n---\n\nBody.\n');
+    writeFileSync(place(root, 'three.md'), '---\nid: three\ntitle: Three\n---\n\nBody.\n');
     const second = cached(root, build, dispose);
     assert.notEqual(second, first, 'a new note changes the stamp');
     assert.equal(second.notes.size, 3);
@@ -110,7 +111,7 @@ test('a dispose that throws does not fail the rebuild that caused it', () => {
   try {
     invalidate(root);
     cached(root, build, dispose);
-    writeFileSync(join(root, 'four.md'), '---\nid: four\ntitle: Four\n---\n\nBody.\n');
+    writeFileSync(place(root, 'four.md'), '---\nid: four\ntitle: Four\n---\n\nBody.\n');
     const value = cached(root, build, () => {
       throw new Error('close failed');
     });

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { paths, resolvePath } from '../config.ts';
@@ -27,7 +27,7 @@ import { wouldCycle } from '../index/refs.ts';
 import { merged } from '../schema/merge.ts';
 import { suppress } from '../intake/db.ts';
 import { parseLink } from '../schema/links.ts';
-import { hrefBetween, hrefTarget, rewriteLinks } from '../schema/body.ts';
+import { hrefBetween, hrefTarget, pathTarget, rewriteLinks } from '../schema/body.ts';
 import { readAll } from '../index/indexer.ts';
 import { loadViewFiles, viewFileFor } from './views.ts';
 import type { Note } from '../schema/types.ts';
@@ -55,14 +55,17 @@ export class Invalid extends Error {}
 
 function fileFor(root: string, id: string): string {
   const p = paths(root);
-  const direct = join(p.notes, `${id}.md`);
-  if (existsSync(direct)) return direct;
-  // The other shape an id has on disk: a folder of that name, the note being its
-  // README. Probed rather than scanned for the same reason as the line above — a
-  // project is the note most often written to, and the scan below is the whole
-  // vault.
-  const folder = join(p.notes, id, 'README.md');
-  if (existsSync(folder)) return folder;
+  // Each place a note of this id would have been written to, probed before the
+  // scan below — which reads the whole vault. A project's note is its folder's
+  // README, the shape an id most often written to has on disk.
+  for (const probe of [
+    join(p.places.notes, `${id}.md`),
+    join(p.places.projects, id, 'README.md'),
+    join(p.places.inbox, `${id}.md`),
+    join(p.places.daily, `${id}.md`),
+  ]) {
+    if (existsSync(probe)) return probe;
+  }
   // The filename may drift from the id, so fall back to a scan.
   for (const f of listNoteFiles(p.notes)) {
     const res = loadNote(f, p.notes);
@@ -183,7 +186,7 @@ function identity(text: string, file: string, root: string): Record<string, stri
  * - it is already a `README.md` — it is already a folder's note, and `AGENTS.md`
  *   beside it already resolves, whatever the folder is called. Renaming that
  *   folder could move files nobody asked about;
- * - it is already at `<id>/README.md` — the target.
+ * - it is already at `projects/<id>/README.md` — the target.
  *
  * An existing folder is *joined*, not refused: `platform/` full of notes plus a
  * flat `platform.md` is exactly the vault mid-migration. Only an occupied
@@ -197,7 +200,7 @@ function settleProjectFolder(root: string, id: string, file: string): string {
   if (!res.ok || !res.rec.project) return file;
   if (basename(file) === 'README.md') return file;
 
-  const dir = join(dirname(file), id);
+  const dir = join(paths(root).places.projects, id);
   const target = join(dir, 'README.md');
   if (existsSync(target)) {
     throw new Invalid(
@@ -453,8 +456,97 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
     patchAll(root, file, {});
   }
 
-  return { mtime: mtimeOf(settleProjectFolder(root, id, file)) };
+  // Accepting a card is taking `intake` off it, and `intake` is a place: so a
+  // card in `inbox/` asked to stop being unjudged moves to wherever a note like
+  // it lives. Only an explicit removal counts — a whole facet map that merely
+  // omits the axis is a client that never knew about it, not a judgement.
+  const accepted =
+    (input.facet?.name === 'intake' && !applyMode([], input.facet.values, input.facet.mode ?? 'set').length) ||
+    (input.facets !== undefined && 'intake' in input.facets && !input.facets.intake!.length);
+  let now = file;
+  if (accepted && inInbox(root, file)) {
+    const res = loadNote(file, paths(root).notes);
+    now = relocateNote(root, id, placeFor(root, id, res.ok ? res.rec.facets : {}));
+  }
+  return { mtime: mtimeOf(settleProjectFolder(root, id, now)) };
 }
+
+const inInbox = (root: string, file: string): boolean =>
+  resolve(file).startsWith(resolve(paths(root).places.inbox) + sep);
+
+/**
+ * Where a note's file belongs, by what kind of note it is.
+ *
+ * A card intake brought in is in `inbox/` until somebody judges it. A note about
+ * a day is in `daily/`. A note belonging to exactly one project is in that
+ * project's folder, which is where a person looking for it goes first — by
+ * preference only: membership stays the `project` facet, and a note filed
+ * anywhere else still belongs. Everything else is in `notes/`. The file is named
+ * for the id.
+ */
+export function placeFor(
+  root: string,
+  id: string,
+  facets: Record<string, string[]>,
+  opts: { inbox?: boolean } = {},
+): string {
+  const { places } = paths(root);
+  if (opts.inbox) return join(places.inbox, `${id}.md`);
+  if (facets.day?.length) return join(places.daily, `${id}.md`);
+  const only = facets.project?.length === 1 ? facets.project[0]! : null;
+  if (only && existsSync(join(places.projects, only, 'README.md'))) return join(places.projects, only, `${id}.md`);
+  return join(places.notes, `${id}.md`);
+}
+
+/**
+ * Move a note's file to another place, its id and its assets unchanged.
+ *
+ * What accepting a card is, and what filing a note anywhere else is: the file
+ * moves and every reference that is a *path* follows it. Its own body is rebased
+ * onto where it will be, because a relative href means something else one
+ * folder over; every other note's body links and `doc:` links into it are
+ * repointed. Facet references are ids and need nothing. A project's note is its
+ * folder, and moves with `pj mv` instead.
+ */
+export function relocateNote(root: string, id: string, target: string): string {
+  const p = paths(root);
+  const { notes } = readAll(p.notes);
+  const source = notes.get(id);
+  if (!source) throw new Invalid(`no note with id "${id}"`);
+  if (resolve(source.file) === resolve(target)) return source.file;
+  if (basename(source.file) === 'README.md') throw new Invalid(`"${id}" is a folder's note; a project moves with its folder`);
+  if (existsSync(target)) throw new Invalid(`cannot move "${id}": ${relative(p.notes, target)} already exists`);
+
+  const assets = join(p.assets, id);
+  const was = { file: source.file, assets };
+  const now = { file: target, assets };
+
+  let rebased = 0;
+  const own = rewriteLinks(bodyNow(source), (link) => {
+    const at = pathTarget(link.href, source.file);
+    if (at === null) return link.href;
+    const href = hrefBetween(target, at);
+    if (href !== link.href) rebased++;
+    return href;
+  });
+  if (rebased) putBody(source.file, own);
+
+  for (const rec of notes.values()) {
+    if (rec.id === id) continue;
+    const docs = redocked(linksNow(rec), root, was, now);
+    if (docs) patchAll(root, rec.file, { links: docs.links.length ? docs.links : undefined });
+    const prose = rebodied(bodyNow(rec), rec.file, was, now);
+    if (prose) {
+      putBody(rec.file, prose.body);
+      patchAll(root, rec.file, {});
+    }
+  }
+  mkdirSync(dirname(target), { recursive: true });
+  renameSync(source.file, target);
+  patchAll(root, target, {});
+  return target;
+}
+
 
 export function createNote(
   root: string,
@@ -471,8 +563,10 @@ export function createNote(
      * present short-circuits instead of creating a duplicate.
      */
     fingerprint?: string;
+    /** A card intake brought in: written to `inbox/`, which is what makes it unjudged. */
+    inbox?: boolean;
   },
-): { id: string; existed?: boolean } {
+): { id: string; existed?: boolean; file?: string } {
   const title = input.title.trim();
   if (!title) throw new Invalid('title cannot be empty');
   const p = paths(root);
@@ -511,8 +605,10 @@ export function createNote(
     updated: today(),
     body: input.body ? `\n${input.body}\n` : '\n',
   });
-  writeNoteFile(join(p.notes, `${id}.md`), text);
-  return { id };
+  const target = placeFor(root, id, facets, { inbox: input.inbox });
+  mkdirSync(dirname(target), { recursive: true });
+  writeNoteFile(target, text);
+  return { id, file: target };
 }
 
 /** The names of every facet that holds note ids. */
@@ -1451,7 +1547,7 @@ export function saveArrangement(
   const dead = (ids: string[]): Set<string> => {
     const out = new Set<string>();
     for (const id of ids) {
-      if (existsSync(join(p.notes, `${id}.md`))) continue;
+      if (existsSync(join(p.places.notes, `${id}.md`)) || existsSync(join(p.places.projects, id, 'README.md'))) continue;
       if (!live) {
         live = new Set<string>();
         for (const f of listNoteFiles(p.notes)) {

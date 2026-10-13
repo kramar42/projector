@@ -159,6 +159,12 @@ export function patchYamlFile(text: string, patch: Record<string, unknown>): str
 export function patchKey(text: string, key: string, value: unknown): string {
   const { yaml, body } = split(text);
   const doc = parseDoc(yaml ?? '');
+  // `intake` is a place, not a stored facet (see `stored` in note.ts) — dropped
+  // here because every frontmatter write ends in this function.
+  if (key === 'facets' && value && typeof value === 'object' && 'intake' in value) {
+    const { intake: _derived, ...rest } = value as Record<string, unknown>;
+    value = Object.keys(rest).length ? rest : undefined;
+  }
   if (value === undefined) doc.delete(key);
   // createNode first: `set` with a plain JS value stores it unconverted, and the
   // flow pass below only walks real yaml nodes.

@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readAll } from '../src/index/indexer.ts';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * Syncing a view into a folder of markdown.
@@ -215,7 +216,7 @@ function vault(files: Record<string, string>): { root: string; target: string; c
     'utf8',
   );
   for (const [path, content] of Object.entries(files)) {
-    const full = join(paths(root).notes, path);
+    const full = place(root, path);
     mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content, 'utf8');
   }

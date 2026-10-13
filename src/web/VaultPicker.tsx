@@ -86,8 +86,9 @@ export function VaultPicker({
       <div className="vaultgate-card">
         <h1>Open a vault</h1>
         <p className="vaultgate-lede">
-          A vault is a folder of markdown. Point at notes you already keep, at a vault you have
-          opened before, or at an empty folder to start one.
+          A vault is a folder with your notes in its <code>notes/</code>. Point at a vault you have
+          opened before, at a folder holding a <code>notes/</code>, or at an empty folder to start one.
+          Notes you already keep elsewhere become a vault by moving them into a <code>notes/</code>.
         </p>
         {reason && <div className="banner is-conflict">{reason}</div>}
         {error && <div className="banner is-bad">{error}</div>}
@@ -155,14 +156,14 @@ export function VaultPicker({
                 </>
               ) : inspection.isVault ? (
                 <>
-                  <b className="tone-good">A folder of markdown.</b> {plural(inspection.notes, 'card')}
+                  <b className="tone-good">A folder of notes.</b> {plural(inspection.notes, 'card')}
                   . Opening it adds <code>.projector/</code> for the vocabulary and the views; your
                   files are not touched or moved.
                 </>
               ) : inspection.exists && !inspection.empty ? (
                 <>
                   <b className="tone-bad">Not a vault, and not empty.</b> Pick an empty folder, or one
-                  that holds markdown.
+                  that holds a <code>notes/</code> — loose markdown goes into one first.
                 </>
               ) : (
                 <>

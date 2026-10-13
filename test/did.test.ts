@@ -11,6 +11,7 @@ import { daySession, typed } from '../src/did/claude.ts';
 import { adfText, changeLine } from '../src/did/jira.ts';
 import { inScope, reposUnder } from '../src/did/scope.ts';
 import { did } from '../src/did/run.ts';
+import { place } from './fixture.ts';
 
 /**
  * `pj did` is a fixed window over sources that are already there, so what is
@@ -130,7 +131,7 @@ test('vault: a note closed today reads as closed against its last commit, even u
     assert.ok(!('error' in day));
     const note = (id: string, status: string, stamps: string) =>
       writeFileSync(
-        join(paths(root).notes, `${id}.md`),
+        place(root, `${id}.md`),
         `---\nid: ${id}\ntitle: ${id} title\nfacets: { status: [${status}] }\n${stamps}---\n`,
         'utf8',
       );

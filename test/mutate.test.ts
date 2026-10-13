@@ -28,6 +28,7 @@ import { defaultSides, foldResult, foldRows } from '../src/schema/fold.ts';
 import type { Facets } from '../src/schema/types.ts';
 import { readAll } from '../src/index/indexer.ts';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * The write gate.
@@ -54,7 +55,7 @@ function vault(cards: Record<string, string> = {}): { root: string; cleanup: () 
     'utf8',
   );
   for (const [id, body] of Object.entries(cards)) {
-    writeFileSync(join(paths(root).notes, `${id}.md`), body, 'utf8');
+    writeFileSync(place(root, `${id}.md`), body, 'utf8');
   }
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -80,7 +81,7 @@ test('renaming a note repoints every declared reference and its saved-view ident
       'utf8',
     );
     writeFileSync(
-      join(paths(v.root).notes, 'holder.md'),
+      place(v.root, 'holder.md'),
       card('holder', 'parent: [workflow-app-evidence], depends: [workflow-app-evidence]'),
       'utf8',
     );
@@ -116,20 +117,20 @@ test('renaming a note repoints every declared reference and its saved-view ident
 test('renaming a folder note moves its whole project folder', () => {
   const v = vault({ holder: card('holder', 'parent: [workflow-app]') });
   try {
-    mkdirSync(join(paths(v.root).notes, 'workflow-app'));
+    mkdirSync(place(v.root, 'workflow-app'));
     writeFileSync(
-      join(paths(v.root).notes, 'workflow-app', 'README.md'),
+      place(v.root, 'workflow-app', 'README.md'),
       '---\nid: workflow-app\ntitle: Workflow app\nproject: {}\n---\n',
       'utf8',
     );
-    writeFileSync(join(paths(v.root).notes, 'workflow-app', 'AGENTS.md'), 'instructions', 'utf8');
-    writeFileSync(join(paths(v.root).notes, 'workflow-app', 'child.md'), '# Child\n', 'utf8');
+    writeFileSync(place(v.root, 'workflow-app', 'AGENTS.md'), 'instructions', 'utf8');
+    writeFileSync(place(v.root, 'workflow-app', 'child.md'), '# Child\n', 'utf8');
 
     renameNote(v.root, 'workflow-app', 'workflow-service');
 
-    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'README.md')));
-    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'AGENTS.md')));
-    assert.ok(existsSync(join(paths(v.root).notes, 'workflow-service', 'child.md')));
+    assert.ok(existsSync(place(v.root, 'workflow-service', 'README.md')));
+    assert.ok(existsSync(place(v.root, 'workflow-service', 'AGENTS.md')));
+    assert.ok(existsSync(place(v.root, 'workflow-service', 'child.md')));
     assert.deepEqual(facetsOf(v.root, 'holder').parent, ['workflow-service']);
   } finally {
     v.cleanup();
@@ -211,10 +212,10 @@ test('a move writes only the facet it names', () => {
 test('a move that changes nothing writes nothing', () => {
   const v = vault({ a: card('a', 'priority: [month]') });
   try {
-    const before = mtimeOf(join(paths(v.root).notes, 'a.md'));
+    const before = mtimeOf(place(v.root, 'a.md'));
     const move = [{ facet: 'priority', from: 'now', to: 'month' }];
     assert.equal(bulkMove(v.root, ['a'], move, 'add').changed, 0);
-    assert.equal(mtimeOf(join(paths(v.root).notes, 'a.md')), before, 'the file was not touched');
+    assert.equal(mtimeOf(place(v.root, 'a.md')), before, 'the file was not touched');
   } finally {
     v.cleanup();
   }
@@ -338,12 +339,12 @@ test('a narrow write touches one axis and leaves an agent’s concurrent edit al
   const v = vault({ a: card('a', 'priority: [now], tech: [kafka]') });
   try {
     // What the browser read, and what it still believes the map to be.
-    const base = mtimeOf(join(paths(v.root).notes, 'a.md'));
+    const base = mtimeOf(place(v.root, 'a.md'));
 
     // An agent edits another axis. Within the guard's tolerance, so no conflict:
     // this is the race that has no 409 to catch it.
     writeFileSync(
-      join(paths(v.root).notes, 'a.md'),
+      place(v.root, 'a.md'),
       card('a', 'priority: [now], tech: [kafka, quarkus]'),
       'utf8',
     );
@@ -388,10 +389,10 @@ test('a narrow write clears an axis by naming it empty, and validates the values
 test('a toggle removes the value it names without reverting one added beside it', () => {
   const v = vault({ a: card('a', 'tech: [kafka]') });
   try {
-    const base = mtimeOf(join(paths(v.root).notes, 'a.md'));
+    const base = mtimeOf(place(v.root, 'a.md'));
 
     // The user's panel rendered with tech: [kafka]. An agent then adds one.
-    writeFileSync(join(paths(v.root).notes, 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
+    writeFileSync(place(v.root, 'a.md'), card('a', 'tech: [kafka, quarkus]'), 'utf8');
 
     // The user clicks `kafka` off. Under `set` this would send [] and take
     // `quarkus` with it.
@@ -515,7 +516,7 @@ test('a reference facet refuses a cycle, and self-reference, given the notes', (
 test('frontmatter is written whole, and a stale mtime is a conflict', () => {
   const v = vault({ a: card('a', 'priority: [now]') });
   try {
-    const file = join(paths(v.root).notes, 'a.md');
+    const file = place(v.root, 'a.md');
     const res = putFrontmatter(v.root, 'a', 'id: a\ntitle: Renamed\nfacets: { priority: [month] }\n');
     assert.ok(typeof res.mtime === 'number');
     assert.deepEqual(facetsOf(v.root, 'a').priority, ['month']);
@@ -541,7 +542,7 @@ test('frontmatter is written whole, and a stale mtime is a conflict', () => {
 test('writing to a note that carried no frontmatter freezes the name it was going by', () => {
   const v = vault();
   try {
-    const file = join(paths(v.root).notes, 'Reading Notes.md');
+    const file = place(v.root, 'Reading Notes.md');
     writeFileSync(file, '# Monday reading\n\nWe talked about the thing.\n', 'utf8');
 
     // Found by the id the parser derived, without anything having written it.
@@ -557,7 +558,7 @@ test('writing to a note that carried no frontmatter freezes the name it was goin
 
     // Which is the whole point: the file can now be renamed without renaming the
     // note, so a reference pointing at it survives.
-    renameSync(file, join(paths(v.root).notes, 'archive-me.md'));
+    renameSync(file, place(v.root, 'archive-me.md'));
     assert.ok(readAll(paths(v.root).notes).notes.get('reading-notes'), 'still the same note');
   } finally {
     v.cleanup();
@@ -567,7 +568,7 @@ test('writing to a note that carried no frontmatter freezes the name it was goin
 test('a body written to a bare note leaves it bare until the identity lands', () => {
   const v = vault();
   try {
-    const file = join(paths(v.root).notes, 'thought.md');
+    const file = place(v.root, 'thought.md');
     writeFileSync(file, 'just prose\n', 'utf8');
     patchNote(v.root, 'thought', { body: 'different prose\n' });
 
@@ -590,7 +591,7 @@ test('an asset is stored by content hash under its note, and its type is checked
     // The path returned is relative to `notes/`, since that is where a note body
     // resolves it from.
     assert.match(first.path, /^assets\/a\/[0-9a-f]{12}\.png$/, first.path);
-    assert.ok(existsSync(join(paths(v.root).notes, first.path)), 'stored under notes/');
+    assert.ok(existsSync(place(v.root, first.path)), 'stored under notes/');
 
     // The same bytes hash to the same name rather than accumulating copies.
     assert.equal(saveAsset(v.root, 'a', 'image/png', png).path, first.path);
@@ -607,8 +608,8 @@ test('a bulk delete removes the files and reports how many', () => {
   const v = vault({ a: card('a', 'priority: [now]'), b: card('b', 'priority: [now]') });
   try {
     assert.equal(bulkDelete(v.root, ['a', 'ghost']).deleted, 1, 'a missing id is not a failure');
-    assert.ok(!existsSync(join(paths(v.root).notes, 'a.md')));
-    assert.ok(existsSync(join(paths(v.root).notes, 'b.md')));
+    assert.ok(!existsSync(place(v.root, 'a.md')));
+    assert.ok(existsSync(place(v.root, 'b.md')));
   } finally {
     v.cleanup();
   }
@@ -619,21 +620,21 @@ test('linking bumps updated, and unlinking an absent ref refuses', () => {
   try {
     mkdirSync(paths(root).config, { recursive: true });
     writeFileSync(
-      join(paths(root).notes, 'a.md'),
+      place(root, 'a.md'),
       '---\nid: a\ntitle: Card A\nupdated: 2020-01-01\n---\nbody\n',
       'utf8',
     );
     writeFileSync(paths(root).facets, 'status: { values: [planning, done] }\n', 'utf8');
 
     patchNote(root, 'a', { links: ['jira:FOO-1'] });
-    const after = readFileSync(join(paths(root).notes, 'a.md'), 'utf8');
+    const after = readFileSync(place(root, 'a.md'), 'utf8');
     assert.match(after, /links: \[jira:FOO-1\]/);
     assert.doesNotMatch(after, /updated: 2020-01-01/, 'a write that leaves `updated` alone is the bug');
     assert.match(after, /updated: \d{4}-\d{2}-\d{2}/);
 
     // Emptying the array drops the key rather than storing `links: []`.
     patchNote(root, 'a', { links: [] });
-    assert.doesNotMatch(readFileSync(join(paths(root).notes, 'a.md'), 'utf8'), /links:/);
+    assert.doesNotMatch(readFileSync(place(root, 'a.md'), 'utf8'), /links:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -709,7 +710,7 @@ test('the delete cascade takes only the dangling reference off a bystander', () 
     // Change the bystander on disk after it would have been snapshotted by an
     // earlier read, then delete. The cascade must keep what it finds there.
     writeFileSync(
-      join(paths(v.root).notes, 'holder.md'),
+      place(v.root, 'holder.md'),
       card('holder', 'parent: [target], tech: [kafka], priority: [backlog]'),
       'utf8',
     );
@@ -765,7 +766,7 @@ test('redocked rewrites the file and the asset tail, drops on a delete, and leav
 test('deleting a note takes the doc links that pointed at it and into its assets', () => {
   const v = vault({
     target: card('target', 'priority: [now]'),
-    holder: noteFile('holder', 'links: [doc:target.md, doc:assets/target/draft.md, doc:keeper.md, jira:PROJ-1]\n'),
+    holder: noteFile('holder', 'links: [doc:notes/target.md, doc:assets/target/draft.md, doc:notes/keeper.md, jira:PROJ-1]\n'),
     keeper: card('keeper', 'priority: [now]'),
   });
   try {
@@ -775,7 +776,7 @@ test('deleting a note takes the doc links that pointed at it and into its assets
     const res = deleteNote(v.root, 'target');
 
     assert.equal(res.removedEdges, 2, 'the file ref and the asset ref both counted');
-    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:keeper.md', 'jira:PROJ-1']);
+    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:notes/keeper.md', 'jira:PROJ-1']);
   } finally {
     v.cleanup();
   }
@@ -784,7 +785,7 @@ test('deleting a note takes the doc links that pointed at it and into its assets
 test('renaming a note carries every doc link with it, including its own', () => {
   const v = vault({
     'workflow-app': noteFile('workflow-app', 'links: [doc:assets/workflow-app/outline.md]\n'),
-    holder: noteFile('holder', 'facets: { parent: [workflow-app] }\nlinks: [doc:workflow-app.md, doc:assets/workflow-app/outline.md, jira:PROJ-1]\n'),
+    holder: noteFile('holder', 'facets: { parent: [workflow-app] }\nlinks: [doc:notes/workflow-app.md, doc:assets/workflow-app/outline.md, jira:PROJ-1]\n'),
   });
   try {
     mkdirSync(join(paths(v.root).assets, 'workflow-app'), { recursive: true });
@@ -795,7 +796,7 @@ test('renaming a note carries every doc link with it, including its own', () => 
     assert.equal(res.repointed, 4, 'one facet, two links on the bystander, one on the note itself');
     assert.deepEqual(linksOf(v.root, 'workflow-service'), ['doc:assets/workflow-service/outline.md']);
     assert.deepEqual(linksOf(v.root, 'holder'), [
-      'doc:workflow-service.md',
+      'doc:notes/workflow-service.md',
       'doc:assets/workflow-service/outline.md',
       'jira:PROJ-1',
     ]);
@@ -808,7 +809,7 @@ test('a merge points a bystander’s doc links at the survivor and its adopted a
   const v = vault({
     keep: noteFile('keep'),
     gone: noteFile('gone'),
-    holder: noteFile('holder', 'links: [doc:gone.md, doc:assets/gone/draft.md, jira:PROJ-1]\n'),
+    holder: noteFile('holder', 'links: [doc:notes/gone.md, doc:assets/gone/draft.md, jira:PROJ-1]\n'),
   });
   try {
     mkdirSync(join(paths(v.root).assets, 'gone'), { recursive: true });
@@ -816,7 +817,7 @@ test('a merge points a bystander’s doc links at the survivor and its adopted a
 
     mergeNotes(v.root, 'keep', ['gone']);
 
-    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:keep.md', 'doc:assets/keep/draft.md', 'jira:PROJ-1']);
+    assert.deepEqual(linksOf(v.root, 'holder'), ['doc:notes/keep.md', 'doc:assets/keep/draft.md', 'jira:PROJ-1']);
     assert.ok(existsSync(join(paths(v.root).assets, 'keep', 'draft.md')), 'and the file is where the link says');
   } finally {
     v.cleanup();
@@ -889,8 +890,8 @@ test('making a note a project moves it into a folder named for its id', () => {
   const { root, cleanup } = vault({ platform: card('platform', 'priority: [now]') });
   patchNote(root, 'platform', { project: {} });
 
-  assert.ok(existsSync(join(root, 'platform', 'README.md')), 'the note moved into its folder');
-  assert.equal(existsSync(join(root, 'platform.md')), false, 'and is not left behind');
+  assert.ok(existsSync(place(root, 'platform', 'README.md')), 'the note moved into its folder');
+  assert.equal(existsSync(place(root, 'platform.md')), false, 'and is not left behind');
 
   // The id is the point: it is the folder name now, so nothing pointing at it broke.
   const { notes, duplicates } = readAll(paths(root).notes);
@@ -902,18 +903,18 @@ test('making a note a project moves it into a folder named for its id', () => {
 
 test('the folder is named for the id, not for the filename it drifted from', () => {
   const { root, cleanup } = vault();
-  writeFileSync(join(root, 'Old Name.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
+  writeFileSync(place(root, 'Old Name.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
   patchFields(root, 'platform', { project: '{}' });
-  assert.ok(existsSync(join(root, 'platform', 'README.md')));
+  assert.ok(existsSync(place(root, 'platform', 'README.md')));
   assert.equal(readAll(paths(root).notes).notes.get('platform')?.id, 'platform');
   cleanup();
 });
 
 test('a bare note keeps the id it was answering to when it is promoted', () => {
   const { root, cleanup } = vault();
-  writeFileSync(join(root, 'Some Note.md'), '# Some Note\n\nprose\n', 'utf8');
+  writeFileSync(place(root, 'Some Note.md'), '# Some Note\n\nprose\n', 'utf8');
   patchNote(root, 'some-note', { project: {} });
-  assert.ok(existsSync(join(root, 'some-note', 'README.md')));
+  assert.ok(existsSync(place(root, 'some-note', 'README.md')));
   assert.ok(readAll(paths(root).notes).notes.has('some-note'), 'not renamed by the move');
   cleanup();
 });
@@ -922,30 +923,30 @@ test('promotion joins a folder that already exists rather than refusing it', () 
   // A vault mid-migration: `mapping/` full of notes and a flat `mapping.md`.
   const { root, cleanup } = vault({ mapping: card('mapping', 'priority: [now]') });
   mkdirSync(join(root, 'mapping'));
-  writeFileSync(join(root, 'mapping', 'sub.md'), '# Sub\n', 'utf8');
+  writeFileSync(place(root, 'mapping', 'sub.md'), '# Sub\n', 'utf8');
   patchNote(root, 'mapping', { project: {} });
-  assert.ok(existsSync(join(root, 'mapping', 'README.md')));
-  assert.ok(existsSync(join(root, 'mapping', 'sub.md')), 'what was already there is untouched');
+  assert.ok(existsSync(place(root, 'mapping', 'README.md')));
+  assert.ok(existsSync(place(root, 'mapping', 'sub.md')), 'what was already there is untouched');
   cleanup();
 });
 
 test('promotion refuses when the README is taken — two notes cannot claim one id', () => {
   const { root, cleanup } = vault({ taken: card('taken', 'priority: [now]') });
   mkdirSync(join(root, 'taken'));
-  writeFileSync(join(root, 'taken', 'README.md'), '# Squatter\n', 'utf8');
+  writeFileSync(place(root, 'taken', 'README.md'), '# Squatter\n', 'utf8');
   assert.throws(() => patchNote(root, 'taken', { project: {} }), Invalid);
-  assert.ok(existsSync(join(root, 'taken.md')), 'and leaves the note where it was');
+  assert.ok(existsSync(place(root, 'taken.md')), 'and leaves the note where it was');
   cleanup();
 });
 
 test('a note that is already a folder README is left where it is', () => {
   const { root, cleanup } = vault();
   mkdirSync(join(root, 'anything'));
-  writeFileSync(join(root, 'anything', 'README.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
+  writeFileSync(place(root, 'anything', 'README.md'), '---\nid: platform\ntitle: P\n---\n', 'utf8');
   patchNote(root, 'platform', { project: {} });
   // Renaming `anything/` would move files nobody asked about, and `AGENTS.md`
   // beside it resolves whatever the folder is called.
-  assert.ok(existsSync(join(root, 'anything', 'README.md')));
+  assert.ok(existsSync(place(root, 'anything', 'README.md')));
   assert.equal(existsSync(join(root, 'platform')), false);
   cleanup();
 });
@@ -953,21 +954,21 @@ test('a note that is already a folder README is left where it is', () => {
 test('a write that is not a promotion moves nothing', () => {
   const { root, cleanup } = vault({ plain: card('plain', 'priority: [now]') });
   patchNote(root, 'plain', { title: 'Renamed' });
-  assert.ok(existsSync(join(root, 'plain.md')), 'still flat');
+  assert.ok(existsSync(place(root, 'plain.md')), 'still flat');
   cleanup();
 });
 
 test('un-projecting leaves the folder alone', () => {
   const { root, cleanup } = vault({ platform: card('platform', 'priority: [now]') });
   patchNote(root, 'platform', { project: {} });
-  writeFileSync(join(root, 'platform', 'AGENTS.md'), '- a rule\n', 'utf8');
+  writeFileSync(place(root, 'platform', 'AGENTS.md'), '- a rule\n', 'utf8');
   patchNote(root, 'platform', { project: null });
 
   // The folder may hold anything — `AGENTS.md`, other notes — so collapsing it
   // back to a flat file would delete what nobody asked about. The note stays put
   // and simply stops being a project.
-  assert.ok(existsSync(join(root, 'platform', 'README.md')));
-  assert.ok(existsSync(join(root, 'platform', 'AGENTS.md')));
+  assert.ok(existsSync(place(root, 'platform', 'README.md')));
+  assert.ok(existsSync(place(root, 'platform', 'AGENTS.md')));
   assert.equal(readAll(paths(root).notes).notes.get('platform')?.project, undefined);
   cleanup();
 });
@@ -986,7 +987,7 @@ test('un-projecting leaves the folder alone', () => {
 test('a base from our own preceding write is accepted; one from before a foreign write is not', () => {
   const v = vault({ shared: card('shared', 'priority: [now]') });
   try {
-    const file = join(paths(v.root).notes, 'shared.md');
+    const file = place(v.root, 'shared.md');
     const first = mtimeOf(file);
 
     // Our write, carrying the mtime we read. Accepted, and it returns the new one.
@@ -1041,7 +1042,7 @@ test('a delta folds into what is on disk, so a concurrent value survives it', ()
   try {
     // Somebody else adds a value we never saw.
     writeFileSync(
-      join(paths(v.root).notes, 'shared.md'),
+      place(v.root, 'shared.md'),
       card('shared', 'tech: [kafka, aws]'),
       'utf8',
     );
@@ -1254,11 +1255,11 @@ test('absorbed assets move to the survivor and the body’s paths move with them
   const v = vault({ keep: noteFile('keep'), gone: noteFile('gone') });
   try {
     const { path } = saveAsset(v.root, 'gone', 'image/png', Buffer.from('pretend-png'));
-    writeFileSync(join(paths(v.root).notes, 'gone.md'), noteFile('gone', '', `\n![shot](${path})\n`), 'utf8');
+    writeFileSync(place(v.root, 'gone.md'), noteFile('gone', '', `\n![shot](${path})\n`), 'utf8');
     mergeNotes(v.root, 'keep', ['gone']);
     const moved = path.replace('assets/gone/', 'assets/keep/');
-    assert.equal(existsSync(join(paths(v.root).notes, moved)), true, 'the file moved');
-    assert.equal(existsSync(join(paths(v.root).notes, 'assets', 'gone')), false, 'the old folder went');
+    assert.equal(existsSync(place(v.root, moved)), true, 'the file moved');
+    assert.equal(existsSync(place(v.root, 'assets', 'gone')), false, 'the old folder went');
     assert.match(bodyOf(v.root, 'keep')!, new RegExp(moved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   } finally {
     v.cleanup();
@@ -1443,7 +1444,7 @@ test('renaming a note repoints the references written in other notes bodies', ()
   const v = vault({ target: card('target', 'priority: [now]'), holder: card('holder', '') });
   try {
     writeFileSync(
-      join(paths(v.root).notes, 'holder.md'),
+      place(v.root, 'holder.md'),
       `---\nid: holder\ntitle: HOLDER\n---\nAs argued in [TARGET](target.md), the plan holds.\n`,
       'utf8',
     );
@@ -1458,7 +1459,7 @@ test('deleting a note unwraps the body links that named it, keeping the sentence
   const v = vault({ target: card('target', 'priority: [now]'), holder: card('holder', '') });
   try {
     writeFileSync(
-      join(paths(v.root).notes, 'holder.md'),
+      place(v.root, 'holder.md'),
       `---\nid: holder\ntitle: HOLDER\n---\nAs argued in [TARGET](target.md), the plan holds.\n`,
       'utf8',
     );
@@ -1473,27 +1474,27 @@ test('deleting a note unwraps the body links that named it, keeping the sentence
 test('renaming a folder note fixes its children, whose own files move with it', () => {
   const v = vault();
   try {
-    mkdirSync(join(paths(v.root).notes, 'proj'), { recursive: true });
+    mkdirSync(place(v.root, 'proj'), { recursive: true });
     writeFileSync(
-      join(paths(v.root).notes, 'proj', 'README.md'),
+      place(v.root, 'proj', 'README.md'),
       `---\nid: proj\ntitle: PROJ\nproject: {}\n---\nthe project note\n`,
       'utf8',
     );
     // A child inside the folder, pointing at the README it sits beside. Both
     // files move, so the href that stays correct is the one that does not change.
     writeFileSync(
-      join(paths(v.root).notes, 'proj', 'child.md'),
-      `---\nid: child\ntitle: CHILD\n---\nPart of [PROJ](README.md), and see [OUT](../out.md).\n`,
+      place(v.root, 'proj', 'child.md'),
+      `---\nid: child\ntitle: CHILD\n---\nPart of [PROJ](README.md), and see [OUT](../../notes/out.md).\n`,
       'utf8',
     );
     writeFileSync(
-      join(paths(v.root).notes, 'out.md'),
-      `---\nid: out\ntitle: OUT\n---\nPoints in at [PROJ](proj/README.md).\n`,
+      place(v.root, 'out.md'),
+      `---\nid: out\ntitle: OUT\n---\nPoints in at [PROJ](../projects/proj/README.md).\n`,
       'utf8',
     );
     renameNote(v.root, 'proj', 'pw');
-    assert.equal(bodyOf(v.root, 'child'), 'Part of [PROJ](README.md), and see [OUT](../out.md).\n');
-    assert.equal(bodyOf(v.root, 'out'), 'Points in at [PROJ](pw/README.md).\n');
+    assert.equal(bodyOf(v.root, 'child'), 'Part of [PROJ](README.md), and see [OUT](../../notes/out.md).\n');
+    assert.equal(bodyOf(v.root, 'out'), 'Points in at [PROJ](../projects/pw/README.md).\n');
   } finally {
     v.cleanup();
   }
@@ -1503,14 +1504,105 @@ test('renaming rewrites the moving notes own links into its own asset folder', (
   const v = vault({ target: card('target', 'priority: [now]') });
   try {
     writeFileSync(
-      join(paths(v.root).notes, 'target.md'),
-      `---\nid: target\ntitle: TARGET\n---\nEvidence in [the handout](assets/target/h.md).\n`,
+      place(v.root, 'target.md'),
+      `---\nid: target\ntitle: TARGET\n---\nEvidence in [the handout](../assets/target/h.md).\n`,
       'utf8',
     );
     mkdirSync(join(paths(v.root).assets, 'target'), { recursive: true });
     writeFileSync(join(paths(v.root).assets, 'target', 'h.md'), '# handout\n', 'utf8');
     renameNote(v.root, 'target', 'renamed');
-    assert.equal(bodyOf(v.root, 'renamed'), 'Evidence in [the handout](assets/renamed/h.md).\n');
+    assert.equal(bodyOf(v.root, 'renamed'), 'Evidence in [the handout](../assets/renamed/h.md).\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- the layout
+
+/**
+ * Where a new note's file goes: its place says what kind of note it is.
+ *
+ * A card intake brought in is in `inbox/`, a note about a day in `daily/`, a note
+ * of exactly one project in that project's folder, and the rest in `notes/`.
+ * Membership is still the facet — the folder is where a person looks first.
+ */
+test('a new note is written to the place its kind lives in', () => {
+  const v = vault();
+  try {
+    writeFileSync(paths(v.root).facets, 'day: { type: date, single: true }\nstatus: { values: [planning, done], single: true }\n', 'utf8');
+    createNote(v.root, { title: 'Platform', id: 'platform' });
+    patchFields(v.root, 'platform', { project: '{}' });
+    createNote(v.root, { title: 'Loose', id: 'loose' });
+    createNote(v.root, { title: 'Mine', id: 'mine', facets: { project: ['platform'] } });
+    createNote(v.root, { title: 'Shared', id: 'shared', facets: { project: ['platform', 'loose'] } });
+    createNote(v.root, { title: 'Tuesday', id: 'day-2026-10-13', facets: { day: ['2026-10-13'] } });
+    createNote(v.root, { title: 'A card', id: 'card', inbox: true });
+
+    const at = (id: string) => readAll(paths(v.root).notes).notes.get(id)!.file.slice(v.root.length + 1);
+    assert.equal(at('platform'), 'projects/platform/README.md', 'a project is its folder, under projects/');
+    assert.equal(at('loose'), 'notes/loose.md');
+    assert.equal(at('mine'), 'projects/platform/mine.md', 'one project: in its folder, by preference');
+    assert.equal(at('shared'), 'notes/shared.md', 'two projects: neither folder claims it');
+    assert.equal(at('day-2026-10-13'), 'daily/day-2026-10-13.md');
+    assert.equal(at('card'), 'inbox/card.md');
+    assert.deepEqual(facetsOf(v.root, 'card').intake, ['unjudged'], 'unjudged by being in the inbox');
+    assert.doesNotMatch(readFileSync(place(v.root, 'inbox/card.md'), 'utf8'), /intake/, 'and nothing on disk says so');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * Accepting a card is taking `intake` off it, and `intake` is a place.
+ *
+ * So the file moves to wherever a note like it lives — and every reference that
+ * is a path moves with it: its own body is rebased onto the new folder, and a
+ * note that linked to the card now links to where it is.
+ */
+test('accepting a card moves it out of the inbox, and every path follows', () => {
+  const v = vault();
+  try {
+    createNote(v.root, { title: 'Platform', id: 'platform' });
+    patchFields(v.root, 'platform', { project: '{}' });
+    createNote(v.root, { title: 'Neighbour', id: 'neighbour' });
+    mkdirSync(join(paths(v.root).assets, 'card'), { recursive: true });
+    writeFileSync(join(paths(v.root).assets, 'card', 'shot.png'), 'png', 'utf8');
+    writeFileSync(
+      place(v.root, 'inbox/card.md'),
+      '---\nid: card\ntitle: A card\nfacets: { project: [platform] }\n---\nSee [the neighbour](../notes/neighbour.md) and ![shot](assets/card/shot.png).\n',
+      'utf8',
+    );
+    writeFileSync(
+      place(v.root, 'notes/holder.md'),
+      '---\nid: holder\ntitle: Holder\n---\nThe [card](../inbox/card.md) came in today.\n',
+      'utf8',
+    );
+
+    // A whole facet map that merely omits the axis is a client that never knew
+    // about it — not a judgement. The card stays where it is.
+    patchNote(v.root, 'card', { facets: { project: ['platform'] } });
+    assert.ok(existsSync(place(v.root, 'inbox/card.md')), 'omitting intake accepts nothing');
+
+    patchNote(v.root, 'card', { facet: { name: 'intake', values: [] } });
+    assert.equal(existsSync(place(v.root, 'inbox/card.md')), false, 'it left the inbox');
+    const card = readAll(paths(v.root).notes).notes.get('card')!;
+    assert.equal(card.file.slice(v.root.length + 1), 'projects/platform/card.md', 'for its one project’s folder');
+    assert.equal(card.facets.intake, undefined, 'and is judged');
+    // A link is relative to its file, so it is rebased; an image is vault-relative
+    // (the asset route resolves it), so it already survives any move.
+    assert.equal(card.body, 'See [the neighbour](../../notes/neighbour.md) and ![shot](assets/card/shot.png).\n');
+    assert.equal(bodyOf(v.root, 'holder'), 'The [card](../projects/platform/card.md) came in today.\n');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a frontmatter that still stores intake outside the inbox is not unjudged, and a write drops it', () => {
+  const v = vault({ old: card('old', 'priority: [now], intake: [unjudged]') });
+  try {
+    assert.equal(facetsOf(v.root, 'old').intake, undefined, 'the folder decides, not the leftover key');
+    patchNote(v.root, 'old', { facet: { name: 'priority', values: ['month'] } });
+    assert.doesNotMatch(readFileSync(place(v.root, 'old.md'), 'utf8'), /intake/, 'the next write cleans it up');
   } finally {
     v.cleanup();
   }

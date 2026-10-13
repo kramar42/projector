@@ -13,6 +13,7 @@ import { specFromFile } from '../src/view/spec.ts';
 import { SEED_VIEWS } from '../src/server/seed.ts';
 import { parse } from 'yaml';
 import { paths } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * A vault of its own, so these assert the engine rather than whatever the real
@@ -107,7 +108,7 @@ function vault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-query-'));
   mkdirSync(paths(root).config, { recursive: true });
   for (const [id, text] of Object.entries(CARDS)) {
-    writeFileSync(join(paths(root).notes, `${id}.md`), text, 'utf8');
+    writeFileSync(place(root, `${id}.md`), text, 'utf8');
   }
   writeFileSync(paths(root).facets, FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
@@ -234,7 +235,7 @@ test('a done blocker stops blocking', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(paths(root).notes, 'blocker.md'),
+      place(root, 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -320,7 +321,7 @@ test('grouping puts a multi-valued note in every matching column', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(paths(root).notes, 'kc-realms.md'),
+      place(root, 'kc-realms.md'),
       CARDS['kc-realms']!.replace('priority: [month]', 'priority: [now, month]'),
       'utf8',
     );
@@ -774,7 +775,7 @@ function datedVault(): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'projector-dated-'));
   mkdirSync(paths(root).config, { recursive: true });
   for (const [name, text] of Object.entries(DATED)) {
-    writeFileSync(join(paths(root).notes, `${name}.md`), text, 'utf8');
+    writeFileSync(place(root, `${name}.md`), text, 'utf8');
   }
   writeFileSync(paths(root).facets, FACETS, 'utf8');
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
@@ -867,7 +868,7 @@ test('a value naming a note that does not exist is not a reference', () => {
   const { root, cleanup } = vault();
   try {
     writeFileSync(
-      join(paths(root).notes, 'orphan.md'),
+      place(root, 'orphan.md'),
       '---\nid: orphan\ntitle: Orphan\nfacets: { project: [gone] }\n---\n',
       'utf8',
     );
@@ -919,7 +920,7 @@ test('the blocked axis names the facet that is failing, and closed stops blockin
   try {
     assert.deepEqual(ids(root, { filter: { blocked: ['blocked_by'] } }), ['blocked-card']);
     writeFileSync(
-      join(paths(root).notes, 'blocker.md'),
+      place(root, 'blocker.md'),
       CARDS.blocker!.replace('status: [active]', 'status: [done]'),
       'utf8',
     );
@@ -1137,7 +1138,7 @@ test('a negation keeps every note the axis says nothing about', () => {
 test('a positive and a negative on one axis are both applied', () => {
   const { root, cleanup } = vault();
   try {
-    const both = join(paths(root).notes, 'both.md');
+    const both = place(root, 'both.md');
     writeFileSync(
       both,
       `---\nid: both\ntitle: Both\nfacets: { project: [project-b, keycloak] }\nupdated: 2026-08-19\n---\n`,
@@ -1191,7 +1192,7 @@ test('a range can be negated', () => {
   try {
     const dated = (id: string, due: string) =>
       writeFileSync(
-        join(paths(root).notes, `${id}.md`),
+        place(root, `${id}.md`),
         `---\nid: ${id}\ntitle: ${id}\nfacets: { due: [${due}] }\nupdated: 2026-08-19\n---\n`,
         'utf8',
       );
@@ -1271,7 +1272,7 @@ test('a computed axis has no population, because it cannot be unpopulated', () =
  */
 test('the persisted index answers until a note changes', () => {
   const root = mkdtempSync(join(tmpdir(), 'projector-gate-'));
-  writeFileSync(join(root, 'one.md'), '# One\n\nfirst body\n', 'utf8');
+  writeFileSync(place(root, 'one.md'), '# One\n\nfirst body\n', 'utf8');
   const first = reindex(root);
   assert.equal(first.cached, false, 'a fresh vault has nothing to answer from');
   first.db.close();
@@ -1288,8 +1289,8 @@ test('the persisted index answers until a note changes', () => {
 
   // ensure the mtime moves even on coarse filesystems
   const later = new Date(Date.now() + 2000);
-  writeFileSync(join(root, 'one.md'), '# One renamed\n\nsecond body\n', 'utf8');
-  utimesSync(join(root, 'one.md'), later, later);
+  writeFileSync(place(root, 'one.md'), '# One renamed\n\nsecond body\n', 'utf8');
+  utimesSync(place(root, 'one.md'), later, later);
   const third = reindex(root);
   assert.equal(third.cached, false, 'a changed byte invalidates the gate');
   assert.equal(third.notes.get('one')?.title, 'One renamed');

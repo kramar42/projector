@@ -2,11 +2,10 @@
 id: intake-unjudged
 title: "Retry logic on the webhook consumer keeps firing twice"
 facets:
-  intake: ["unjudged"]
-  source: ["claude"]
+  source: [claude]
 source_fingerprint: "claude:00000000-0000-4000-8000-000000000001"
-created: 2025-07-26  # older
-updated: 2025-07-26  # older
+created: 2025-07-26 # older
+updated: 2025-07-26 # older
 ---
 
 Renders an **unjudged intake candidate**: the one state where a note carrying no

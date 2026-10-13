@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync } from 'node:fs';
+import { relative } from 'node:path';
 import { existsSync, paths, resolveCliVault, resolvePath } from '../config.ts';
 import { formatReport, probe, writeTemplate } from '../setup.ts';
 import { jiraConfig } from '../sources/jira.ts';
@@ -524,9 +525,8 @@ function cmdAdd(argv: string[]): void {
     console.log(`skipped — fingerprint already on ${res.id}`);
     return;
   }
-  // Notes land at the vault root (`paths().notes` is the root); the `cards/`
-  // prefix this used to print was a directory that never existed.
-  console.log(`created ${res.id}.md (id: ${res.id})`);
+  // Where it actually went: the place depends on what kind of note it is.
+  console.log(`created ${res.file ? relative(root, res.file) : `${res.id}.md`} (id: ${res.id})`);
 }
 
 /**

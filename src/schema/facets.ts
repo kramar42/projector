@@ -57,6 +57,11 @@ export const BUILTIN_FACETS: Facets = {
    * instead of a new page, and what lets the board, the panel, the bulk bar and
    * the cursor all reach it without one of them being taught about intake (C9).
    *
+   * **Derived, not stored.** A note in `inbox/` carries it and no other note
+   * does, whatever its frontmatter says: the indexer reads it off the folder and
+   * no write ever puts it on disk. Accepting a card is asking for the axis to be
+   * removed, and that is answered by moving the file out of the inbox.
+   *
    * Judging a candidate **removes** the axis. Nothing else about the note has to
    * change, which is why there is no `judged` value: a second value would be a
    * state the vault stores and the vault can already answer by absence (C11).

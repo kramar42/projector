@@ -21,6 +21,7 @@ import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
 import { settingsPath } from '../src/settings.ts';
+import { place } from './fixture.ts';
 
 
 /**
@@ -407,7 +408,7 @@ test('starting work records the workspace on the note, once', () => {
     git('add', '.');
     git('commit', '-m', 'first');
 
-    writeFileSync(pathJoin(root, 'ship-it.md'), '---\ntitle: Ship it\n---\n\nbody\n', 'utf8');
+    writeFileSync(place(root, 'ship-it.md'), '---\ntitle: Ship it\n---\n\nbody\n', 'utf8');
     const ctx = workCtx(project({ repos: [repo] }));
     const plan = planWork(ctx, root);
 
@@ -449,7 +450,7 @@ test('pj log narrates every single-valued axis, and closed is what finishes', ()
     git('config', 'user.email', 't@t');
     git('config', 'user.name', 'T');
 
-    const card = pathJoin(paths(root).notes, 'ship.md');
+    const card = place(root, 'ship.md');
     writeFileSync(card, '---\nid: ship\ntitle: Ship\nfacets: { status: [planning] }\n---\n', 'utf8');
     git('add', '-A');
     git('commit', '-qm', 'add ship');
@@ -504,8 +505,8 @@ test('a multi-byte note body does not derail the blob walk', () => {
 
     // The em dash sits in the first note the batch returns; the second note is
     // the one that goes missing when the walk drifts.
-    const dashed = pathJoin(paths(root).notes, 'dashed.md');
-    const plain = pathJoin(paths(root).notes, 'plain.md');
+    const dashed = place(root, 'dashed.md');
+    const plain = place(root, 'plain.md');
     writeFileSync(dashed, '---\nid: dashed\ntitle: Dashed\nfacets: { status: [planning] }\n---\n\nem — dash\n', 'utf8');
     writeFileSync(plain, '---\nid: plain\ntitle: Plain\nfacets: { status: [planning] }\n---\n', 'utf8');
     git('add', '-A');

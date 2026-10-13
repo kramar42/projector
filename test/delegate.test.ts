@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { createServer, type Server } from 'node:http';
 import { indexStamp, reindex } from '../src/index/indexer.ts';
 import { delegatedIndex } from '../src/cli/delegate.ts';
+import { place } from './fixture.ts';
 
 function vault(): string {
   const root = mkdtempSync(join(tmpdir(), 'projector-delegate-'));
-  writeFileSync(join(root, 'one.md'), '# One\n\ndelegated body\n', 'utf8');
+  writeFileSync(place(root, 'one.md'), '# One\n\ndelegated body\n', 'utf8');
   return root;
 }
 

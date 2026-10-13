@@ -16,20 +16,20 @@ can report is below, so the four warnings and the several silences are all
 reachable from one note.
 
 **Resolves, and reads as its target is titled**, so nothing is reported:
-[Nothing but the two required fields](bare.md). A folder note is reached the same
-way, by its `README.md`: [Platform](platform/README.md).
+[Nothing but the two required fields](../../notes/bare.md). A folder note is reached the same
+way, by its `README.md`: [Platform](README.md).
 
 **Resolves under a shortened title**, which is silent: prose refers to
-[Nothing but the two](bare.md) and the sentence has to read, so sharing the
+[Nothing but the two](../../notes/bare.md) and the sentence has to read, so sharing the
 title's words is enough.
 
 **Resolves, but the text has drifted** — sharing nothing with the title, which is
 what a rename leaves behind. Reported and not corrected, because only the author
-knows which of the two a difference is: [the everything note](every-facet.md).
+knows which of the two a difference is: [the everything note](../../notes/every-facet.md).
 
 **Points at nothing.** A relative link into the vault whose path has no file at
 the end of it, which is the one a rename or a delete used to leave behind:
-[a note that is not there](absent-note.md).
+[a note that is not there](../../absent-note.md).
 
 **A bare bracket that names a note** — [bare] — is the convention that predates
 the parser: it renders as literal brackets, so it is a link that was never wired
@@ -40,7 +40,7 @@ fought them would be a check nobody could satisfy.
 
 **Silences worth pinning.** A link into `assets/` points at a file rather than a
 note — the walk skips that folder — which is prose doing something reasonable:
-[the handout](assets/every-body-ref/handout.md). A link inside code is a sample of
+[the handout](../../assets/every-body-ref/handout.md). A link inside code is a sample of
 a link:
 
 ```md

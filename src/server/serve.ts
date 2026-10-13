@@ -194,7 +194,7 @@ app.post('/api/vaults', async (c) => {
     const path = normalise(body.path);
 
     // Anything without a `.projector/` has to be set up, and that includes a
-    // folder of markdown — the notes are already there, but the vocabulary and
+    // folder with a `notes/` — the notes are already there, but the vocabulary and
     // the views are not, and a vault with no board opens onto nothing. `create`
     // is still required for all of them: writing into somebody's notes folder is
     // a decision they make, not one an inspection makes for them.
@@ -205,7 +205,7 @@ app.post('/api/vaults', async (c) => {
             error: !existsSync(path)
               ? `${path} does not exist — pass create to make it a vault`
               : looksLikeVault(path)
-                ? `${path} holds markdown but has no .projector/ — pass create to set one up`
+                ? `${path} has notes but no .projector/ — pass create to set one up`
                 : `${path} is not a vault — pass create to set one up there`,
             needsCreate: true,
             path,

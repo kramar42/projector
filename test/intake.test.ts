@@ -48,6 +48,7 @@ import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
 import type { Candidate, Channel, IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
+import { place } from './fixture.ts';
 
 /**
  * Intake is the one part of projector holding state that is not derived from the
@@ -60,7 +61,10 @@ function vault(cards: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'pj-intake-'));
   mkdirSync(paths(root).config, { recursive: true });
   for (const [name, body] of Object.entries(cards)) {
-    writeFileSync(join(paths(root).notes, `${name}.md`), body, 'utf8');
+    // A card is unjudged by being in the inbox; a fixture that says so in its
+    // frontmatter is filed there, the way intake would have written it.
+    const file = /intake: \[unjudged\]/.test(body) ? place(root, 'inbox', `${name}.md`) : place(root, `${name}.md`);
+    writeFileSync(file, body, 'utf8');
   }
   return root;
 }
@@ -2056,7 +2060,7 @@ test('a card written before the reason was carried catches up, then settles', as
     );
   try {
     assert.equal((await rejudge(root, { ask: judge })).changed.length, 1);
-    assert.match(readFileSync(join(paths(root).notes, 'raw.md'), 'utf8'), /---\n\n> x\n\nAlready said\.\n$/);
+    assert.match(readFileSync(place(root, 'inbox', 'raw.md'), 'utf8'), /---\n\n> x\n\nAlready said\.\n$/);
     assert.equal((await rejudge(root, { ask: judge })).same, 1, 'and it stops moving');
   } finally {
     closeIntakeDb(root);
@@ -2103,7 +2107,7 @@ test('a rewritten body keeps the blank line the file format wants', async () => 
     );
   try {
     await rejudge(root, { ask: judge });
-    const text = readFileSync(join(paths(root).notes, 'raw.md'), 'utf8');
+    const text = readFileSync(place(root, 'inbox', 'raw.md'), 'utf8');
 
     // `patchNote` writes a body verbatim on purpose — the panel hands back the
     // bytes it read — so a model's bare prose arrives welded to the closing
@@ -2134,7 +2138,7 @@ test('a rejudge that keeps the body does not grow it a line at a time', async ()
   try {
     await rejudge(root, { ask: judge });
     await rejudge(root, { ask: judge });
-    const text = readFileSync(join(paths(root).notes, 'raw.md'), 'utf8');
+    const text = readFileSync(place(root, 'inbox', 'raw.md'), 'utf8');
     assert.match(text, /---\n\nkeep me\n$/);
   } finally {
     closeIntakeDb(root);

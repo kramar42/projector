@@ -298,13 +298,50 @@ function ignoredBy(
 }
 
 /**
- * Every `.md` in the vault, at any depth — minus what git would ignore, and
- * minus what the vault itself asks to ignore: `.projector/ignore` holds
- * patterns in the same gitignore subset, matched from the vault root. It is
- * the escape hatch for conventions that collide with note identity — a Hugo
- * tree's `_index.md` files would otherwise all be one note called `index`.
+ * The folders a note can live in, one per kind of writing.
+ *
+ * `notes/` holds notes; `projects/<id>/` holds a project's note as its
+ * `README.md`, and the notes that belong to it alone, by preference; `daily/`
+ * holds the notes that are about a day; `inbox/` holds what intake brought in
+ * and nobody has judged. Everything else at the root is something other than
+ * a note: `assets/`, `memory/` (the agent's), `.projector/`, and the vault's own
+ * `AGENTS.md` and `README.md`.
+ *
+ * A folder still says nothing about **membership**, which stays the `project`
+ * facet: a note in `notes/` may belong to three projects, and one in
+ * `projects/iam/` keeps belonging to `iam` only while its facet says so. The
+ * place is what kind of file this is, never what it belongs to.
  */
-export function listNoteFiles(cardsDir: string): string[] {
+export const NOTE_PLACES = ['notes', 'projects', 'daily', 'inbox'] as const;
+export type NotePlace = (typeof NOTE_PLACES)[number];
+
+/**
+ * Whether a vault-relative path is somewhere a note may live, or on the way to it.
+ *
+ * Shared by the walk, the watcher and `isNotePath` so the three cannot disagree
+ * about what the vault is. A file directly in `projects/` is not placed: a
+ * project is a folder, so `projects/x.md` is a note that has not been put in one.
+ */
+export function placed(segments: string[], isDir: boolean): boolean {
+  const [top, ...rest] = segments;
+  if (!(NOTE_PLACES as readonly string[]).includes(top ?? '')) return false;
+  if (top === 'projects' && rest.length === 1 && !isDir) return false;
+  return true;
+}
+
+/**
+ * Every `.md` where a note may live — minus what git would ignore, and minus
+ * what the vault itself asks to ignore: `.projector/ignore` holds patterns in
+ * the same gitignore subset, matched from the vault root. It is the escape hatch
+ * for conventions that collide with note identity — a Hugo tree's `_index.md`
+ * files would otherwise all be one note called `index`.
+ *
+ * `strays` turns the question round, for `pj check`: every `.md` *outside* the
+ * places, which in a vault with the layout is a file in the wrong folder. The
+ * vault's own `AGENTS.md`, `CLAUDE.md` and `README.md`, and anything under
+ * `assets/` or `memory/`, are not strays — they were never meant to be notes.
+ */
+export function listNoteFiles(cardsDir: string, opts: { strays?: boolean } = {}): string[] {
   const out: string[] = [];
   const rootScopes: { base: string; rules: IgnoreRule[] }[] = [];
   try {
@@ -344,6 +381,20 @@ export function listNoteFiles(cardsDir: string): string[] {
       }
       if (!isDir && !name.endsWith('.md')) continue;
       if (ignoredBy(full, isDir, scope)) continue;
+      const segments = full.slice(cardsDir.length + 1).split('/');
+      const inPlace = placed(segments, isDir);
+      if (opts.strays) {
+        // A stray is a note-shaped file the layout has no place for. Descend
+        // everywhere except the trees that hold other things on purpose.
+        if (isDir) {
+          if (segments.length === 1 && OTHER_PLACES.has(name)) continue;
+          walk(full, scope);
+        } else if (!inPlace && !(segments.length === 1 && VAULT_FILES.has(name))) {
+          out.push(full);
+        }
+        continue;
+      }
+      if (!inPlace) continue;
       if (isDir) walk(full, scope);
       else out.push(full);
     }
@@ -351,6 +402,11 @@ export function listNoteFiles(cardsDir: string): string[] {
   walk(cardsDir, rootScopes);
   return out.sort();
 }
+
+/** Root folders that hold something other than notes, deliberately. */
+const OTHER_PLACES = new Set(['assets', 'memory']);
+/** Root files that describe or instruct the vault, and are not notes. `AGENTS.md` and `CLAUDE.md` never reach here. */
+const VAULT_FILES = new Set(['README.md']);
 
 /**
  * The walk's rules as a predicate, for the server's file watcher.
@@ -404,6 +460,7 @@ export function walkIgnores(cardsDir: string): (path: string, isDir?: boolean) =
     const segments = rel.split('/');
     if (segments.some(skipped)) return true;
     const asDir = isDir ?? !path.endsWith('.md');
+    if (!placed(segments, asDir)) return true;
     // Each ancestor's scopes judge the path, exactly as the walk would have on
     // its way down to it.
     const parentDir = pathJoin(path, '..');
@@ -421,7 +478,19 @@ export function walkIgnores(cardsDir: string): (path: string, isDir?: boolean) =
  * files that are not notes.
  */
 export function isNotePath(rel: string): boolean {
-  return rel.endsWith('.md') && !rel.split('/').some(skipped);
+  const segments = rel.split('/');
+  return rel.endsWith('.md') && !segments.some(skipped) && placed(segments, false);
+}
+
+/**
+ * The facets a file stores: all of them but `intake`, which is where the note is
+ * (`inbox/`) rather than anything it says. Never written, so a record read from
+ * the index — which carries it — cannot put it back on disk through any write.
+ */
+export function stored(facets: Record<string, string[]>): Record<string, string[]> {
+  if (!('intake' in facets)) return facets;
+  const { intake: _derived, ...rest } = facets;
+  return rest;
 }
 
 export function renderNote(rec: Omit<Note, 'file'>): string {
@@ -429,7 +498,8 @@ export function renderNote(rec: Omit<Note, 'file'>): string {
     id: rec.id,
     title: rec.title,
   };
-  if (Object.keys(rec.facets).length) fm.facets = rec.facets;
+  const facets = stored(rec.facets);
+  if (Object.keys(facets).length) fm.facets = facets;
   if (rec.links.length) fm.links = rec.links.map((l) => l.raw);
   if (rec.project) fm.project = rec.project;
   if (rec.source_fingerprint) fm.source_fingerprint = rec.source_fingerprint;

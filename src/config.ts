@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -18,20 +18,27 @@ export function resolvePath(p: string, base: string): string {
  * whichever folder the user opened, the way Obsidian works. `paths()` is the only
  * place the internal layout of a vault is written down.
  *
- * **The notes are the vault.** They sit at the root, at any depth, the way a
- * folder of markdown already looks before projector ever sees it — so pointing at
- * an existing pile of notes is opening it, not importing it. Everything the app
- * adds lives under `.projector/`: the vocabulary, the saved views, and the three
- * derived databases. One dot-folder to gitignore, and a root that holds nothing
- * but what you wrote.
+ * **Each kind of writing has a folder.** `notes/`, `projects/<id>/`, `daily/`
+ * and `inbox/` hold notes; `assets/` holds the files they link; `memory/` is the
+ * agent's; `.projector/` is the app's — the vocabulary, the saved views and the
+ * derived databases. A file says what it is by where it sits. See `NOTE_PLACES`.
  *
- * `notes` is still its own key rather than a second name for `root`. Every caller
- * that reads it wants *where the notes are*, and saying so is what let this
- * change be five lines instead of forty.
+ * `notes` is where the walk starts, which is the vault root: ids and paths are
+ * measured against it, and the walk itself decides which folders under it hold
+ * notes. `places` is where each kind is written.
  */
 export const paths = (root: string) => ({
   root,
   notes: root,
+  /** Where each kind of note lives; see `NOTE_PLACES`. `notes` above is where the walk starts. */
+  places: {
+    notes: join(root, 'notes'),
+    projects: join(root, 'projects'),
+    daily: join(root, 'daily'),
+    inbox: join(root, 'inbox'),
+  },
+  /** The agent's own: never a note, never written by `pj`. */
+  memory: join(root, 'memory'),
   assets: join(root, 'assets'),
   config: join(root, '.projector'),
   facets: join(root, '.projector', 'facets.yaml'),
@@ -62,26 +69,21 @@ export function isConfigured(path: string): boolean {
 }
 
 /**
- * Whether a directory is a vault: it has been opened as one, or it is a folder
- * of markdown, which is the same thing before anyone opened it.
+ * Whether a directory is a vault: it has been opened as one, or it has the
+ * layout's shape — a `notes/`, `projects/`, `daily/` or `inbox/` in it.
  *
- * There is no exempted filename. A `README.md` is a note like every other file,
- * because a rule that holds for all but one name is a rule nobody can predict —
- * and the exemption used to be a guess about a file the app does not write.
+ * A folder of loose markdown is not one. Making it one is a rename: call the
+ * folder `notes/` and put it in a folder, which is the whole of the onboarding.
+ * The layout used to be "any folder of markdown", which made every source
+ * repository on the disk answer yes here; a required shape is almost as cheap to
+ * meet and says what every file is from where it sits.
  *
- * The consequence is deliberate and worth stating: any folder holding markdown
- * answers yes here, a source repository included. That is the honest answer to
- * *could this be opened as a vault* — it could, and it would show you its
- * markdown. It is emphatically **not** the answer to *is this the vault I should
- * write to*, which is `isConfigured`'s.
+ * Still not the answer to *is this the vault I should write to* — that is
+ * `isConfigured`'s, and the walk-up below reads it alone.
  */
 export function looksLikeVault(path: string): boolean {
   if (isConfigured(path)) return true;
-  try {
-    return readdirSync(path).some((f) => f.endsWith('.md'));
-  } catch {
-    return false;
-  }
+  return Object.values(paths(path).places).some((place) => existsSync(place));
 }
 
 /**

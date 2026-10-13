@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
 import { readAll } from '../src/index/indexer.ts';
+import { place } from './fixture.ts';
 
 /**
  * The CLI, run as a binary.
@@ -40,7 +41,7 @@ function vault(): { root: string; registry: string; cleanup: () => void } {
     'utf8',
   );
   const card = (id: string, body: string) =>
-    writeFileSync(join(paths(root).notes, `${id}.md`), body, 'utf8');
+    writeFileSync(place(root, `${id}.md`), body, 'utf8');
   card('alpha', '---\nid: alpha\ntitle: Alpha\nfacets: { status: [planning], priority: [now] }\n---\nfirst\n');
   card('beta', '---\nid: beta\ntitle: Beta\nfacets: { status: [active] }\n---\nsecond\n');
   // The registry is redirected so `pj vaults` cannot touch the real one.
@@ -136,7 +137,7 @@ test('mv renames an id and repoints references', () => {
   const v = vault();
   try {
     writeFileSync(
-      join(paths(v.root).notes, 'beta.md'),
+      place(v.root, 'beta.md'),
       '---\nid: beta\ntitle: Beta\nfacets: { parent: [alpha] }\n---\nsecond\n',
       'utf8',
     );

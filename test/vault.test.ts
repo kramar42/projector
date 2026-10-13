@@ -21,7 +21,7 @@ import { split } from '../src/schema/frontmatter.ts';
 import { loadFacets, orderValues } from '../src/schema/facets.ts';
 import { validate } from '../src/schema/validate.ts';
 import { isConfigured, paths, resolveCliVault, vaultAbove } from '../src/config.ts';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join as pathJoin, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -95,20 +95,21 @@ test('doc refs resolve against the vault, and absolutely when absolute', () => {
 /**
  * The two halves of "is this a vault", and why they are not the same question.
  *
- * A folder of markdown can be *opened* as one — that is the whole point of the
- * layout — but it cannot be *found* as one by walking up, or `pj set` run inside
- * any repository would take that repository for its vault. Only `.projector/`,
- * which somebody made by opening a vault, answers the second question.
+ * A folder with the layout's shape can be *opened* as one, but it cannot be
+ * *found* as one by walking up, or `pj set` run inside any repository would take
+ * that repository for its vault. Only `.projector/`, which somebody made by
+ * opening a vault, answers the second question.
  */
-test('markdown is enough to open a folder as a vault, and never enough to walk up to one', () => {
+test('a notes/ folder is enough to open a folder as a vault, and never enough to walk up to one', () => {
   const dir = mkdtempSync(pathJoin(tmpdir(), 'pj-vault-'));
   try {
     assert.equal(looksLikeVault(dir), false, 'an empty folder is nobody’s vault');
 
-    // A README is a note like any other file, so a folder holding only one is a
-    // folder of markdown — there is no exempted filename left.
+    // Loose markdown is somebody's documents. The layout is what makes it notes.
     writeFileSync(pathJoin(dir, 'README.md'), '# Notes\n', 'utf8');
-    assert.equal(looksLikeVault(dir), true, 'markdown is a vault you can open');
+    assert.equal(looksLikeVault(dir), false, 'a folder of markdown is not a vault until its notes are in notes/');
+    mkdirSync(pathJoin(dir, 'notes'));
+    assert.equal(looksLikeVault(dir), true, 'and then it is one you can open');
     assert.equal(isConfigured(dir), false, 'but nobody has opened it');
     assert.equal(vaultAbove(dir), null, 'so standing in it finds nothing');
 
@@ -204,22 +205,23 @@ test('a new vault is seeded with a vocabulary and views, and no prose', () => {
   try {
     initVault(root, SEED_FACETS, SEED_VIEWS);
     assert.ok(existsSync(paths(root).facets));
-    assert.ok(existsSync(paths(root).notes));
+    assert.ok(existsSync(paths(root).places.notes));
     assert.ok(existsSync(paths(root).views));
     // No note-conventions README. That text was a copy of the `pj-about` skill,
     // which an agent already has — and two places stating the format is one
     // place to drift out of date.
-    assert.equal(existsSync(pathJoin(paths(root).notes, 'README.md')), false);
+    assert.equal(existsSync(pathJoin(root, 'README.md')), false);
     // A seeded vault is a vault, and an empty one.
     assert.ok(looksLikeVault(root));
     assert.equal(countNotes(root), 0);
-    // Everything it wrote is under one directory, so the root is still only ever
-    // what you put there.
+    // The app's state under one directory, and an empty `notes/` to put notes in:
+    // the other places are made by the first note that needs one.
     assert.deepEqual(
-      readdirSync(root).filter((f) => f !== '.gitignore'),
-      ['.projector'],
-      'seeding leaves nothing at the root but the ignore file',
+      readdirSync(root).filter((f) => f !== '.gitignore').sort(),
+      ['.projector', 'notes'],
+      'seeding leaves the config, the ignore file and an empty notes/',
     );
+    assert.deepEqual(readdirSync(paths(root).places.notes), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -228,29 +230,33 @@ test('a new vault is seeded with a vocabulary and views, and no prose', () => {
 /**
  * A folder of somebody's notes, opened.
  *
- * The three properties that make this *opening* rather than importing: nothing is
- * moved, every markdown file is a note including the README, and the config
- * arrives beside them rather than around them.
+ * Opening rather than importing: the notes are already in `notes/`, nothing is
+ * moved or rewritten, and the config arrives beside them rather than around them.
+ * A folder of *loose* markdown is refused with the one step that fixes it, because
+ * guessing which of somebody's files are notes is how a tool rewrites their
+ * documentation.
  */
-test('opening a folder of markdown adds a .projector and touches nothing else', () => {
+test('opening a folder with notes/ adds a .projector and touches nothing else', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'pj-adopt-md-'));
   try {
     writeFileSync(pathJoin(root, 'README.md'), '# My notes\n', 'utf8');
     writeFileSync(pathJoin(root, 'kafka.md'), '# Kafka\n', 'utf8');
-    mkdirSync(pathJoin(root, 'archive'));
-    writeFileSync(pathJoin(root, 'archive', 'old.md'), '# Old\n', 'utf8');
+    assert.throws(() => initVault(root, SEED_FACETS, SEED_VIEWS), /move the notes into .*\/notes\//);
+
+    mkdirSync(pathJoin(root, 'notes', 'archive'), { recursive: true });
+    renameSync(pathJoin(root, 'kafka.md'), pathJoin(root, 'notes', 'kafka.md'));
+    writeFileSync(pathJoin(root, 'notes', 'archive', 'old.md'), '# Old\n', 'utf8');
     const before = readFileSync(pathJoin(root, 'README.md'), 'utf8');
 
     initVault(root, SEED_FACETS, SEED_VIEWS);
 
     // The vocabulary and views it needs to open onto something.
-    assert.ok(existsSync(paths(root).facets), 'a folder of markdown is seeded, not left blank');
+    assert.ok(existsSync(paths(root).facets), 'a folder of notes is seeded, not left blank');
     assert.ok(existsSync(pathJoin(paths(root).views, 'home.yaml')));
 
-    // Three notes: the README is one of them, and so is the one in a subfolder.
-    assert.equal(countNotes(root), 3, 'no exempted filename, and any depth');
+    // Two notes, one of them in a subfolder. The README describes the vault.
+    assert.equal(countNotes(root), 2, 'any depth inside notes/, and the vault’s README is not a note');
     assert.equal(readFileSync(pathJoin(root, 'README.md'), 'utf8'), before, 'nothing rewritten');
-    assert.equal(existsSync(pathJoin(root, 'notes')), false, 'and nothing moved');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -293,8 +299,8 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
   assert.deepEqual(duplicates, [], 'and no two notes claim one id');
   assert.ok(notes.size >= 8, 'enough of a tour to be worth opening');
 
-  // The two things the layout claims, asserted against the vault a stranger sees
-  // first: a note with no frontmatter at all, and a README that is a note.
+  // Two things the layout claims, asserted against the vault a stranger sees
+  // first: a note with no frontmatter at all, and a project that is a folder.
   const bare = [...notes.values()].filter((r) => !r.body.startsWith('---'));
   assert.ok(
     bare.some((r) => r.id === 'getting-started'),
@@ -302,7 +308,7 @@ test('the tutorial vault is a working vault, not a folder of samples', () => {
   );
   assert.ok(
     [...notes.values()].some((r) => basename(r.file) === 'README.md'),
-    'and a README that is a note like any other file',
+    'and a project whose note is its folder’s README',
   );
 
   /*
@@ -452,7 +458,8 @@ test('an existing .gitignore is appended to, not skipped and not clobbered', () 
     // A vault that is already a git repository — which is every adopted one, and
     // the case that used to get nothing at all, because the file existed.
     writeFileSync(pathJoin(root, '.gitignore'), '__pycache__/\n*.pyc\n', 'utf8');
-    writeFileSync(pathJoin(root, 'a-note.md'), '# A note\n', 'utf8');
+    mkdirSync(pathJoin(root, 'notes'));
+    writeFileSync(pathJoin(root, 'notes', 'a-note.md'), '# A note\n', 'utf8');
     initVault(root, SEED_FACETS, SEED_VIEWS);
 
     const out = readFileSync(pathJoin(root, '.gitignore'), 'utf8');
@@ -477,7 +484,8 @@ test('a vault that already ignores one of the lines gets only the rest', () => {
   const root = mkdtempSync(pathJoin(tmpdir(), 'pj-ignore-'));
   try {
     writeFileSync(pathJoin(root, '.gitignore'), '.DS_Store\n', 'utf8');
-    writeFileSync(pathJoin(root, 'a-note.md'), '# A note\n', 'utf8');
+    mkdirSync(pathJoin(root, 'notes'));
+    writeFileSync(pathJoin(root, 'notes', 'a-note.md'), '# A note\n', 'utf8');
     initVault(root, SEED_FACETS, SEED_VIEWS);
     const out = readFileSync(pathJoin(root, '.gitignore'), 'utf8');
     assert.equal(out.match(/\.DS_Store/g)?.length, 1, 'not repeated');
@@ -503,7 +511,7 @@ test('a vault with an index reports its count from the stamp, and marks it', () 
   const root = mkdtempSync(pathJoin(tmpdir(), 'pj-count-'));
   try {
     initVault(root, SEED_FACETS, SEED_VIEWS);
-    const notes = paths(root).notes;
+    const notes = paths(root).places.notes;
     for (const id of ['one', 'two', 'three']) {
       writeFileSync(pathJoin(notes, `${id}.md`), `---\nid: ${id}\ntitle: ${id}\n---\n`, 'utf8');
     }

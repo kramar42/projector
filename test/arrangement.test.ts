@@ -8,6 +8,7 @@ import { saveArrangement, saveView, deleteView } from '../src/server/mutate.ts';
 import { loadViews } from '../src/server/views.ts';
 import { applyOrder } from '../src/view/order.ts';
 import { paths, resolveCliVault, vaultAbove } from '../src/config.ts';
+import { place } from './fixture.ts';
 
 /**
  * Vault resolution reads the environment, so these tests have to start from a
@@ -29,7 +30,7 @@ function vault(views: Record<string, string> = {}, cards = ['a', 'b', 'c']): { r
   mkdirSync(paths(root).config, { recursive: true });
   mkdirSync(paths(root).views, { recursive: true });
   for (const id of cards) {
-    writeFileSync(join(paths(root).notes, `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
+    writeFileSync(place(root, `${id}.md`), `---\nid: ${id}\nkind: card\ntitle: Card ${id}\n---\n`, 'utf8');
   }
   for (const [name, body] of Object.entries(views)) {
     writeFileSync(join(paths(root).views, `${name}.yaml`), body, 'utf8');

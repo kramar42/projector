@@ -11,6 +11,7 @@ import { stringify } from 'yaml';
 import { readAll } from '../src/index/indexer.ts';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { place } from './fixture.ts';
 
 /** A facets.yaml in a temp dir, so a test can declare the vocabulary it needs. */
 function facetsFile(body: string): string {
@@ -72,13 +73,13 @@ function vault(
 ): { root: string; notes: Map<string, Note> } {
   const root = mkdtempSync(join(tmpdir(), 'projector-vault-'));
   for (const spec of projects) {
-    mkdirSync(join(root, spec.id));
+    mkdirSync(join(root, 'projects', spec.id), { recursive: true });
     const fm: string[] = ['---'];
     if (spec.belongsTo?.length) fm.push(`facets:\n  project: [${spec.belongsTo.join(', ')}]`);
     fm.push(`project:\n${stringify(spec.project ?? {}).trimEnd().split('\n').map((l) => `  ${l}`).join('\n')}`);
     fm.push('---', '');
-    writeFileSync(join(root, spec.id, 'README.md'), fm.join('\n'), 'utf8');
-    if (spec.rules) writeFileSync(join(root, spec.id, 'AGENTS.md'), spec.rules, 'utf8');
+    writeFileSync(join(root, 'projects', spec.id, 'README.md'), fm.join('\n'), 'utf8');
+    if (spec.rules) writeFileSync(join(root, 'projects', spec.id, 'AGENTS.md'), spec.rules, 'utf8');
   }
   return { root, notes: readAll(root).notes };
 }
@@ -160,8 +161,8 @@ test('a project stating no rules contributes nothing', () => {
  */
 test('the vault root AGENTS.md is not any project\'s instructions', () => {
   const root = mkdtempSync(join(tmpdir(), 'projector-vault-'));
-  writeFileSync(join(root, 'AGENTS.md'), 'how this vault is kept', 'utf8');
-  writeFileSync(join(root, 'flat.md'), '---\nid: flat\nproject: {}\n---\n', 'utf8');
+  writeFileSync(place(root, 'AGENTS.md'), 'how this vault is kept', 'utf8');
+  writeFileSync(place(root, 'flat.md'), '---\nid: flat\nproject: {}\n---\n', 'utf8');
   const { notes } = readAll(root);
   assert.deepEqual(resolveProject('flat', notes, root)!.instructions, []);
   // And it is not a note either, so it cannot arrive by the other door.

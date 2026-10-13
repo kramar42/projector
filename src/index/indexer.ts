@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { listNoteFiles, loadNote } from '../schema/note.ts';
 import type { Note } from '../schema/types.ts';
 import { isProject } from './project.ts';
@@ -37,6 +37,11 @@ export function readAll(
       continue;
     }
     const rec = res.rec;
+    // Unjudged is where a card is, not what it says: a note in `inbox/` is one,
+    // and a note anywhere else is not, whatever its frontmatter still carries
+    // from before the inbox was a place (C11).
+    if (file.startsWith(join(cardsDir, 'inbox') + sep)) rec.facets.intake = ['unjudged'];
+    else delete rec.facets.intake;
     const files = seen.get(rec.id) ?? [];
     files.push(file);
     seen.set(rec.id, files);
@@ -50,7 +55,7 @@ export function readAll(
   return { notes, unreadable, duplicates };
 }
 
-const STAMP_VERSION = 'v2'; // v2: payload stores bodiless, vault-relative records
+const STAMP_VERSION = 'v3'; // v3: a note's place is part of it, so its path is stamped
 
 /**
  * An exact stamp of everything `reindex` reads: every note file's mtime, the
@@ -71,6 +76,11 @@ export function indexStamp(notesDir: string): { stamp: string; files: string[] }
   let count = 0;
   let sum = 0n;
   let max = 0n;
+  // A move keeps its mtime, and a note's place now means something — an inbox
+  // card accepted into `notes/` is a different note state at the same mtime. So
+  // the paths are part of the stamp, not only the times.
+  let where = 0;
+  for (const f of files) for (const c of relative(notesDir, f)) where = (Math.imul(where, 31) + c.charCodeAt(0)) | 0;
   for (const f of [...files, ...extra]) {
     const st = statSync(f, { throwIfNoEntry: false });
     if (!st) continue;
@@ -79,7 +89,7 @@ export function indexStamp(notesDir: string): { stamp: string; files: string[] }
     sum += m;
     if (m > max) max = m;
   }
-  return { stamp: `${STAMP_VERSION}:${files.length}:${count}:${sum}:${max}`, files };
+  return { stamp: `${STAMP_VERSION}:${files.length}:${count}:${sum}:${max}:${where >>> 0}`, files };
 }
 
 /**
