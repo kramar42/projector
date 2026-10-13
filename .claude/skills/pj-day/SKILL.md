@@ -150,7 +150,7 @@ that disagreement is evidence about the judge.
 ## The day note
 
 One note per day holds what the user intends and what happened, and nothing else:
-`daily/day-YYYY-MM-DD.md`, id `day-YYYY-MM-DD` — `pj add` files a note carrying `day` in `daily/`
+`daily/YYYY-MM-DD.md`, id `YYYY-MM-DD` — `pj add` files a note carrying `day` in `daily/`
 itself — unless the vault's `AGENTS.md` names a different convention, which wins. The body has two
 sections, in this order:
 

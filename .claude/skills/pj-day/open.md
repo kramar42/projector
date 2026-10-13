@@ -144,7 +144,7 @@ Stop. The user picks, edits, drops, adds or answers.
 1. Create the note, with no body yet:
 
    ```bash
-   pj add "<YYYY-MM-DD Ddd> — plan: <the agreed outcomes, short>" --id day-<YYYY-MM-DD> \
+   pj add "<YYYY-MM-DD Ddd> — plan: <the agreed outcomes, short>" --id <YYYY-MM-DD> \
      --facet day=<YYYY-MM-DD> --facet private=true --facet source=brain \
      --facet project=<id> --facet project=<id>
    ```

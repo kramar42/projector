@@ -87,7 +87,7 @@ Present, together:
 **Proposed** (nothing runs until you say)
 - `pj set <id> --facet status=done` — seen: <trace>
 - today's note: `--title "<new title>"`, `status=done`, its projects and sources
-- `pj add "<YYYY-MM-DD Ddd> — plan: <tomorrow's outcomes, short>" --id day-<tomorrow> …` (step 7)
+- `pj add "<YYYY-MM-DD Ddd> — plan: <tomorrow's outcomes, short>" --id <tomorrow> …` (step 7)
 
 Worked on something this misses? Say it and I'll follow it up.
 ```
@@ -106,7 +106,7 @@ and no answer to it means no.
 3. **Tomorrow's note, only on a yes** (or a yes with edits):
 
    ```bash
-   pj add "<YYYY-MM-DD Ddd> — plan: <the agreed outcomes, short>" --id day-<YYYY-MM-DD> \
+   pj add "<YYYY-MM-DD Ddd> — plan: <the agreed outcomes, short>" --id <YYYY-MM-DD> \
      --facet day=<YYYY-MM-DD> --facet private=true --facet source=brain \
      --facet project=<id> --facet project=<id>
    ```
@@ -115,7 +115,7 @@ and no answer to it means no.
    write the body into the file `pj add` prints, with your file tools: `## Plan` as approved, one
    line plus a link each (links relative to `daily/`), and an empty `## Did`. If a note for that day
    already exists, don't add another: show its Plan beside the draft and ask which wins.
-   In today's theories file the heading becomes `## Tomorrow (approved HH:MM → day-<YYYY-MM-DD>)`,
+   In today's theories file the heading becomes `## Tomorrow (approved HH:MM → <YYYY-MM-DD>)`,
    and its lines match what was written.
 4. **On a no, or no answer**, write no `daily/` file: the draft stays under
    `## Tomorrow (draft, not approved)`, and tomorrow's open reads it as a list of candidates, not as
