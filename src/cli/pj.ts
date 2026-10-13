@@ -17,7 +17,7 @@ import { ftsPrefixQuery } from '../index/query.ts';
 import { SPEC_PARAMS } from '../view/spec.ts';
 import { queryPayload } from '../view/payload.ts';
 import { renderListing, resolveListing, type Overrides } from '../view/listing.ts';
-import { editFacets, parseFacetSpec, type FacetOp } from '../schema/edit.ts';
+import { editFacets, parseFacetSpec, parseFacetSpecs, type FacetOp } from '../schema/edit.ts';
 import { serveMcp } from '../mcp/server.ts';
 import { applySync, planSync, renderPlan } from '../sync/plan.ts';
 import type { Note } from '../schema/types.ts';
@@ -471,11 +471,11 @@ function cmdAdd(argv: string[]): void {
     process.exit(1);
   }
   ensureData();
-  const facets: Record<string, string[]> = {};
-  for (const spec of flags.get('facet') ?? []) {
-    const [f, v] = spec.split('=');
-    if (f && v) facets[f] = v.split(',').map((s) => s.trim()).filter(Boolean);
-  }
+  // Parsed as `pj set` parses it, so a repeated axis accumulates. An empty one
+  // has nothing to say on a note that does not exist yet.
+  const facets = Object.fromEntries(
+    Object.entries(parseFacetSpecs(flags.get('facet') ?? [])).filter(([f, v]) => f && v.length),
+  );
   const fingerprint = flags.get('fingerprint')?.[0];
   const res = createNote(root, {
     title,
@@ -1207,12 +1207,20 @@ if (asking) {
       }
 
       // `--facet`, then `--add`, then `--remove`, whatever order they were typed in.
-      const ops: FacetOp[] = (['facet', 'add', 'remove'] as const).flatMap((op) =>
-        (flags.get(op) ?? []).map((spec) => {
-          const [facet, values] = parseFacetSpec(spec);
-          return { op, facet, values };
-        }),
-      );
+      // Every `--facet` of one axis is one replacement holding all their values.
+      const ops: FacetOp[] = [
+        ...Object.entries(parseFacetSpecs(flags.get('facet') ?? [])).map(([facet, values]) => ({
+          op: 'facet' as const,
+          facet,
+          values,
+        })),
+        ...(['add', 'remove'] as const).flatMap((op) =>
+          (flags.get(op) ?? []).map((spec) => {
+            const [facet, values] = parseFacetSpec(spec);
+            return { op, facet, values };
+          }),
+        ),
+      ];
 
       // Every id gets the same edit, so a bulk move is one invocation rather
       // than one process per note re-reading the whole vault.

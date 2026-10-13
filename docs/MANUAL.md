@@ -1420,8 +1420,8 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--json]` | list notes. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
 | `pj did [today\|yesterday\|YYYY-MM-DD] [--only s,s] [--json]` | your own traces on one local day — notes created, closed or moved, your commits in every work repo, and the Claude sessions you worked in (that day's prompts, the files written, the session's last word), and the Jira changes, comments and worklogs you authored — as facts for the `pj-did` skill to summarise. `did: { roots: [~/Code/work] }` in the vault config says which directories count as work; the repos project notes declare always do |
-| `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note |
-| `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml` |
+| `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note. `--facet` repeated for one axis holds every value named |
+| `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml`. `--facet` repeated for one axis replaces it with every value named |
 | `pj mv <id> <new-id>` | rename a note's stable id. Its file (or project folder), assets, every declared reference facet, and saved-view focus, filters and arrangement follow the new id; the note's title stays as it was |
 | `pj merge <id>… --into <id>` | fold notes into one. The survivor keeps its facets; the rest bring their body, links, references and capture fingerprints, and their files go |
 | `pj rm <id>…` | delete, dropping every reference pointing at it |
@@ -1522,7 +1522,8 @@ the app counts them for the progress bar and never rewrites them.
 - [ ] Drop the `KAFKA_` prefix from env vars
 ```
 
-`id` and `title` are required; everything else is optional. The `id` is the join key everywhere and
+`id` and `title` are required; everything else is optional. `created` and `updated` are stamped by
+projector with your local calendar date. The `id` is the join key everywhere and
 never changes, though the filename may drift from it. Facet values are always arrays, and a facet the
 vocabulary does not know is preserved rather than dropped.
 
@@ -2057,7 +2058,9 @@ this one's, since the definition is not read from the file. So `Members` is the 
 omission, and renaming it is a vault's business like the label.
 
 `intake` holds one value, `unjudged`. A sweep writes it onto a candidate it materialised; you remove it
-when you have judged the note. Presence is the whole meaning, which is why there is no second value —
+when you have judged the note — `+` on the board, or `pj set <id> --facet intake=` (equally
+`--remove intake=unjudged`) from the shell, and either files the card out of `inbox/` to where a note
+like it lives. Presence is the whole meaning, which is why there is no second value —
 "judged" is the axis being absent, and storing it as well would be storing something the vault can
 already answer.
 

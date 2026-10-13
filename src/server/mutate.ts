@@ -34,6 +34,7 @@ import type { Note } from '../schema/types.ts';
 import { loadFacets as loadDefs } from '../schema/facets.ts';
 import { slugify, uniqueId } from '../schema/slug.ts';
 import { nextValues, type AxisMove, type DragMode } from '../view/dropOutcome.ts';
+import { localDate } from '../did/day.ts';
 
 /**
  * Every write in the app funnels through this module.
@@ -136,8 +137,12 @@ function guard(file: string, baseMtime?: number): void {
   if (Math.abs(current - baseMtime) > SELF_WRITE_WINDOW_MS) throw new Conflict(current);
 }
 
+/**
+ * The date `created` and `updated` are stamped with: the local calendar day, as
+ * `pj did` reads them back. The UTC one stamped an edit at 00:10 CEST yesterday.
+ */
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDate(new Date());
 }
 
 /**

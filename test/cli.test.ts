@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
@@ -399,6 +399,89 @@ test('--vault takes a registered name, and a vault that is not there is refused'
     assert.match(typo.out, /no vault at/);
     assert.match(typo.out, /by-name-only/, 'the registered names are the hint');
     assert.doesNotMatch(typo.out, /note\(s\)/, 'it must not report an empty vault');
+  } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- writes
+
+/**
+ * Accepting a card from the shell is the board's `+`: emptying `intake` files the
+ * card where a note like it lives. `editFacets` used to drop the emptied axis, so
+ * `patchNote` saw a map that merely omitted it — which is deliberately not a
+ * judgement — and the card stayed in `inbox/` while the command exited 0.
+ */
+test('set emptying intake accepts a card out of the inbox, by either spelling', () => {
+  const v = vault();
+  try {
+    const card = (id: string) =>
+      writeFileSync(place(v.root, `inbox/${id}.md`), `---\nid: ${id}\ntitle: ${id}\n---\nnew\n`, 'utf8');
+    card('one');
+    card('two');
+    const at = (id: string) => readAll(paths(v.root).notes).notes.get(id)!.file.slice(v.root.length + 1);
+
+    const r = run(['--vault', v.root, 'set', 'one', '--facet', 'intake=']);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(at('one'), 'notes/one.md', '--facet intake= files the card');
+    assert.equal(readAll(paths(v.root).notes).notes.get('one')!.facets.intake, undefined);
+
+    assert.equal(run(['--vault', v.root, 'set', 'two', '--remove', 'intake=unjudged']).code, 0);
+    assert.equal(at('two'), 'notes/two.md', '--remove intake=unjudged files it too');
+
+    // An edit that does not name intake judges nothing.
+    card('three');
+    assert.equal(run(['--vault', v.root, 'set', 'three', '--facet', 'status=active']).code, 0);
+    assert.equal(at('three'), 'inbox/three.md');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** `--facet` named twice for one axis means both values, on `add` as on `set`. */
+test('a repeated --facet accumulates on add and on set', () => {
+  const v = vault();
+  try {
+    writeFileSync(
+      paths(v.root).facets,
+      'status: { label: Status, values: [planning, active, done], open: false, single: true }\n' +
+        'priority: { label: Priority, values: [now, later], open: false, single: true }\n' +
+        'tag: { label: Tag, open: true }\n',
+      'utf8',
+    );
+    const added = run(['--vault', v.root, 'add', 'Both', '--id', 'both', '--facet', 'tag=a', '--facet', 'tag=b,c']);
+    assert.equal(added.code, 0, added.out);
+    assert.deepEqual(readAll(paths(v.root).notes).notes.get('both')!.facets.tag, ['a', 'b', 'c']);
+
+    const set = run(['--vault', v.root, 'set', 'alpha', '--facet', 'tag=x', '--facet', 'tag=y']);
+    assert.equal(set.code, 0, set.out);
+    assert.deepEqual(readAll(paths(v.root).notes).notes.get('alpha')!.facets.tag, ['x', 'y']);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * `created` and `updated` are the local calendar date. They were the UTC one, so
+ * at 00:10 CEST a note was stamped yesterday. The zone is picked so that local and
+ * UTC dates differ whatever the hour the suite runs at: UTC+14 once UTC is past
+ * noon, UTC−12 before it.
+ */
+test('add and mv stamp the local date, not the UTC one', () => {
+  const v = vault();
+  try {
+    const pastNoon = new Date().getUTCHours() >= 12;
+    const [TZ, offset] = pastNoon ? ['Etc/GMT-14', 14] : ['Etc/GMT+12', -12];
+    const local = new Date(Date.now() + offset * 3_600_000).toISOString().slice(0, 10);
+    assert.notEqual(local, new Date().toISOString().slice(0, 10), 'the zone has to straddle a date line');
+
+    assert.equal(run(['--vault', v.root, 'add', 'Stamped', '--id', 'stamped'], { TZ }).code, 0);
+    const text = readFileSync(place(v.root, 'stamped.md'), 'utf8');
+    assert.match(text, new RegExp(`created: ${local}`), text);
+    assert.match(text, new RegExp(`updated: ${local}`), text);
+
+    assert.equal(run(['--vault', v.root, 'mv', 'alpha', 'gamma'], { TZ }).code, 0);
+    assert.match(readFileSync(place(v.root, 'gamma.md'), 'utf8'), new RegExp(`updated: ${local}`));
   } finally {
     v.cleanup();
   }

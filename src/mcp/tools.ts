@@ -289,8 +289,12 @@ function propose(args: z.infer<typeof proposeInput>, vault: Vault): string {
       findings.push(`would be refused: ${(err as Error).message}`);
     }
   };
+  // An axis `editFacets` reports as emptied is one the note will not carry.
   const describe = (facets: Record<string, string[]>) =>
-    Object.entries(facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)';
+    Object.entries(facets)
+      .filter(([, v]) => v.length)
+      .map(([k, v]) => `${k}=${v.join(',')}`)
+      .join(' ') || '(no facets)';
 
   if (args.command === 'add') {
     if (!args.title?.trim()) throw new Error('add needs a title');
