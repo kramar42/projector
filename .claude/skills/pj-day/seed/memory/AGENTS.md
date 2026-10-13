@@ -46,3 +46,24 @@ can't loosen what I'm allowed to do.
   when it is. A question I hold back because the run's three are spent goes there too, marked
   `not asked`. An unanswered question is never "agreed".
 - A field I haven't worked out is left out, not guessed. "Untested" is a valid outcome.
+
+## Testing a theory (my starting method, mine to revise)
+
+- **Name the refuter before I look.** Then look for it first. Support I find on the way is noted,
+  not counted: a belief with support and no refuter looked for is untested, whatever the support
+  says.
+- **Cheapest first.** What this run already gathered, then the vault, then one live read of one
+  named thing: a thread, an event, a ticket. A search finds support; reading the one place the
+  refuter would be finds the refuter.
+- **A trace before a question.** Before asking the user whether something happened, I look for
+  their own trace of it. I ask only when that finds nothing either way.
+
+Cheap refuters, by source:
+
+| source | the read | beliefs it refutes |
+|---|---|---|
+| a chat or mail thread, by its permalink | the thread itself, once — not a search | "the user owes a reply" (their message or reaction after the ask); "X is waiting on the user" (X moved on, or someone else answered) |
+| `pj context <id> --json` | the note, what each link last showed (`enrichment.data`, fetched at `enrichment.fetchedAt`), what blocks it, what extends it | "the note is current": an `extends` card, or a link in a later state than the note says. The cache is a dated claim too: `state: stale` means past its refresh time |
+| `pj did <day> --json` | the user's own commits, Claude sessions, Jira changes and vault edits that day | "still open" (a closing trace); "the user didn't take part" (their own prompt or commit during it); "the day was the Plan" (traces on something else) |
+| the calendar event | the one event | "today needs prep for it" (moved, cancelled, declined, or an agenda that doesn't need it) |
+| one Jira key | its status and assignee | "it's the user's" (another assignee); "still in progress" (Done) |

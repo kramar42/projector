@@ -1,7 +1,7 @@
 # Open the day
 
 From the pile to one to three outcomes the user agreed to, written down as today's note. One stop:
-gather everything, then present the draft.
+run the loop in SKILL.md — gather, form and test theories — then present the draft.
 
 ## 1. Read what the last days left behind
 
@@ -11,7 +11,9 @@ plan notes. From each take its plan items with their checkboxes.
 
 Then read `memory/theories/<day>.md` for the last closed day and each day since, where one exists:
 its `Said` is what the user already said — never ask it again; its `Asked` entries still `waiting`
-or `not asked` are what is still asked; its T-entries are why each plan item was there.
+or `not asked` are what is still asked; its T-entries are why each plan item was there. Those are
+dated claims like any note: a theory that survived then is a prior to re-test, not a fact. Read
+`memory/patterns/` too.
 
 If the invocation says what the user worked on, that goes under `Said` in today's theories file
 (rule 3 in SKILL.md).
@@ -19,7 +21,7 @@ If the invocation says what the user worked on, that goes under `Said` in today'
 Done when you hold every plan item since the last closed day, ticked or not, and every question
 still waiting.
 
-## 2. Gather
+## 2. Gather, then test
 
 Cheapest first, each source once:
 
@@ -41,10 +43,23 @@ Cheapest first, each source once:
    it. A group mention anyone could answer is not an ask. If the workspace names the user's own
    scratchpad (a self-DM, a notes channel), read it since the last closed day as things they told
    you, and log what bears on the plan under `Said`, sourced to the scratchpad.
+5. **Form theories, then test them** (the loop in SKILL.md): one per candidate outcome or small
+   thing, and one per write you mean to propose. Most rest on one of three beliefs:
+   - *it is still open* — refuted by a closing trace: a commit or session on it, a Jira change, the
+     reply already in the thread;
+   - *it is the user's* (rule 5) — settled only by ownership evidence; without it, it can't settle;
+   - *it is today's* — refuted when its clock moved: the meeting cancelled or moved, the date
+     changed.
+
+   For each load-bearing one, name the refuter, then look for it in what steps 1–4 returned and in
+   the vault (`pj context <id> --json`) before spending a live read; `memory/AGENTS.md` lists the
+   cheap ones. Write the T-entries into today's theories file now, creating it, and each question
+   you will ask under `Asked` as `waiting`.
 
 A source that is not connected goes into a one-line **Gaps** at the end of the draft.
 
-Done when every source has returned or is in Gaps, and every plan item from step 1 has a tier.
+Done when every source has returned or is in Gaps, every load-bearing theory has a named refuter, a
+`looked:` line and an outcome, and the rest are carried untested with their as-of date.
 
 ## 3. Draft the day, then stop
 
@@ -52,21 +67,24 @@ Done when every source has returned or is in Gaps, and every plan item from step
 **<Ddd DD Mon>** — <the day's shape in one line: meetings, the free blocks>
 
 **Outcomes** (pick or replace — at most three)
-1. <outcome> — <note id> · seen/inferred: <why today: the evidence>
+1. <outcome> — <note id> · T<n> survived (<refuter looked for, not found>)
 2. …
 
 **Small things** (≤15 min)
-- <item> — <note id> or plain · <evidence>
+- <item> — <note id> or plain · T<n> <outcome>
+
+**Refuted since the notes were written**
+- T<n> <belief> — <what was found> → `pj set …` / off the plan
 
 **Asking** (one word each)
-1. <closed question> — <evidence> · yes → <what you write> / no → <what you write>
+1. <closed question> — T<n>: <what was looked for, where> · yes → <what you write> / no → <what you write>
 2. …
 
 **Proposed** (nothing runs until you say)
 - `pj set <id> --facet status=done` — seen: <trace, or "ticked in <plan note>">
 - …
 
-**Carried** — <n> unknown from <day>, <n> from <day> … (names on request)
+**Carried** — <n> untested from <day>, <n> from <day> … (names on request)
 
 Gaps: <sources not reached>
 
@@ -77,6 +95,11 @@ Worked on something this misses? Say it and I'll follow it up.
   promise, a meeting they run. Anything else is a question, never a candidate.
 - Prefer what has an external clock (a meeting, a deploy window, a promise someone holds them to)
   over what is merely overdue.
+- An outcome rests on a theory that survived its refuter. One whose theory couldn't settle is
+  offered beside its question, never as seen.
+- `Refuted` lists every theory a refuter disproved, with what was found: a reply already sent, a
+  ticket already Done. A refuted belief never becomes a plan line; where a note still claims it, the
+  edit that brings the note in line goes on the same row.
 - `Proposed` holds only writes with *seen* evidence or the user's own word. A past `due` is never
   moved without asking.
 - `Carried` is one line of counts, never a list. An unknown item that has its own note stays on that
@@ -99,12 +122,12 @@ Stop. The user picks, edits, drops, adds or answers.
    A note carrying `day` is written to `daily/`; `pj add` prints where. That is the file to edit.
 2. Write the body into it with your file tools — the two sections, links relative to `daily/`.
    `Plan`: the agreed items, one line each plus the link to its note, nothing more. `Did`: empty.
-3. Write today's theories file, `memory/theories/<YYYY-MM-DD>.md` (shape in SKILL.md, *Memory*):
-   - a T-entry per Plan item, its evidence from the draft under `looked:`;
+3. Today's theories file already holds this run's T-entries and questions. Add to it:
+   - a T-entry for any Plan item the user added, with what is known under `looked:`;
    - under `Said`, the user's answers and anything they said they worked on, timestamped —
      `<time> open — nothing said` if they only picked;
-   - under `Asked`, every question in the stop with its answer or `waiting`, and the carried
-     plain-text items as `not asked`.
+   - under `Asked`, each question's answer, or `waiting`, and the carried plain-text items as
+     `not asked`. An answer that settles a theory also becomes its `outcome:`.
 4. Run each approved `pj` command, one per note, then `pj check` once — it must report nothing
    against the day note.
 5. If the user named work the draft missed, follow it up now (rule 3), and add what it settles.
