@@ -14,11 +14,14 @@ SKILL.md).
 
 ## 2. Gather since <since>, then test
 
+- Intake's freshness first (SKILL.md, *Intake*): a tick in the background if the newest is stale.
 - `pj did today --json`, keeping activities after *since*.
 - The calendar for the rest of today and tomorrow morning, and the notes of every meeting that
   ended after *since*.
-- New asks since *since*, by the same rules as open.md step 2 — and the user's scratchpad if the
-  workspace names one.
+- Once the tick (if any) is done: intake since *since* — the inbox cards no T-entry in today's
+  theories file names (`rests on: inbox/<id>`). A card judged by an earlier run today and still in
+  `inbox/` is not judged again; it is one count line in the stop. And the user's scratchpad, live,
+  since *since*, if the workspace names one.
 
 Then test (the loop in SKILL.md), only where something can have moved:
 
@@ -47,10 +50,12 @@ One verdict, the outcome of *the day is still the Plan*, then only what supports
   Whether it still happens today can't be settled by a source: "Still today? yes / move to
   tomorrow / drop".
 
-Add, when they apply: prep for the next meeting the user organises (an agenda drawn from the notes it
-touches), a decision a meeting's notes recorded that touches one of the user's notes, a new ask
-that cannot wait until tomorrow, and any theory refuted since *since*, with its edit (open.md's
-`Refuted` block). Three questions at most across all of it, each closed and each about a theory
+Add, when they apply: the stale-intake line, as at open; prep for the next meeting the user organises
+(an agenda drawn from the notes it touches), a decision a meeting's notes recorded that touches one
+of the user's notes, any theory refuted since *since*, with its edit (open.md's `Refuted` block),
+and open.md's `Inbox` block for the new cards, with one line for the ones still waiting from
+earlier ("2 more from 09:10, as proposed then"). A new card that cannot wait until tomorrow leads
+the block. Three questions at most across all of it, each closed and each about a theory
 that can't settle. End with the optional "worked on something this misses?" line.
 
 Stop.
@@ -65,4 +70,4 @@ Stop.
   - `Asked`: this run's questions; mark the ones answered with the time and the answer, and write
     the outcome each answer settles;
   - a T-entry for each Plan item added or swapped in, with its evidence.
-- Any approved `pj` command, then `pj check`.
+- Any approved `pj` command and Inbox verdict, then `pj check`.

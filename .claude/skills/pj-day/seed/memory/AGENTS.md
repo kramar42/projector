@@ -67,3 +67,28 @@ Cheap refuters, by source:
 | `pj did <day> --json` | the user's own commits, Claude sessions, Jira changes and vault edits that day | "still open" (a closing trace); "the user didn't take part" (their own prompt or commit during it); "the day was the Plan" (traces on something else) |
 | the calendar event | the one event | "today needs prep for it" (moved, cancelled, declined, or an agenda that doesn't need it) |
 | one Jira key | its status and assignee | "it's the user's" (another assignee); "still in progress" (Done) |
+| an `inbox/` card | `pj context <id> --json`: the judge's reason, the last three lines said, the link | the card's own claim is the thing to test, not a test: its excerpt is as of the tick, so the refuter is what came after it |
+| `pj intake status --json` | each channel's `cursor` and `ranAt` | "nothing came in on X" — only as far as X's cursor |
+
+## What intake covers, and what it doesn't (my starting map, mine to revise)
+
+Intake is my instrument for Slack, Gmail, Jira, git and Claude sessions; I search none of them
+myself. It sees only part of each, so **no card is not the same as nothing happened**:
+
+| channel | what it fetches, from its cursor | what it misses |
+|---|---|---|
+| slack | two searches, `to:me` and `from:me`, merged by conversation; a candidate only when someone else spoke after the cursor | the user's own messages — the self-DM scratchpad never becomes a card; a channel reply from a third person who mentions nobody |
+| gmail | `in:inbox` and `in:sent`, by thread; a candidate only when someone else wrote after the cursor | mail that skipped the inbox; meeting-notes mail is judged like any mail, and usually dropped as info |
+| jira | issues the user is assignee, reporter or watcher on, updated since the cursor; a status or assignee change on a tracked issue arrives as an `extends` card | a ticket only a closed note tracks |
+| git | branches in the repos project notes declare (`project.repos`) | every other repo, workspaces included |
+| claude | sessions of three turns or more whose directory is a declared repo or workspace | sessions anywhere else |
+
+- **The judge keeps little.** An ask or a promise becomes a card; info only when it attaches to a
+  note; the user's own progress on git or Claude becomes a link on its note with no card; the rest
+  is declined. For the user's own traces, `pj did` is the source: it reads every repo and session
+  under its roots directly.
+- **A channel's coverage ends at its cursor, not at `ranAt`.** A cursor that holds — the relay
+  copied fewer records than the search returned — leaves a channel "run" today and read up to days
+  ago. A quiet inbox for that channel is unknown, not quiet.
+- **Not channels at all:** the calendar, the self-DM scratchpad, meeting notes in Drive. Those are
+  my live reads, one named thing each.

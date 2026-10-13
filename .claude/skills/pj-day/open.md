@@ -28,6 +28,8 @@ still waiting.
 
 Cheapest first, each source once:
 
+0. **Intake's freshness** (SKILL.md, *Intake*): `pj intake status --json`, and if the newest tick
+   is stale, `pj intake apply` in the background while steps 1–3 run.
 1. **Reconcile the unclosed days.** `pj did <day> --json` for each day since the last closed one,
    against that day's plan items:
    - an unticked item with a trace is a *seen* candidate for done;
@@ -40,14 +42,14 @@ Cheapest first, each source once:
    read their notes.
 3. **Vault.** `pj ls --view week --json`, then the actionable view, then everything with a
    non-empty `waiting_on`, oldest first.
-4. **Asks.** Chat mentions and direct messages since the last closed day ending in a question the
-   user has neither answered nor reacted to; mail threads where they were asked directly and have
-   not replied. Open each thread once before keeping it: a reply or a reaction already there drops
-   it. A group mention anyone could answer is not an ask. If the workspace names the user's own
-   scratchpad (a self-DM, a notes channel), read it since the last closed day as things they told
-   you, and log what bears on the plan under `Said`, sourced to the scratchpad.
+4. **Asks: the inbox, and the scratchpad.** Once the tick (if one started) has finished, every card
+   in `inbox/` (SKILL.md, *Intake*): the asks, promises and changes intake brought. Intake never
+   sees the user's own messages, so if the workspace names their scratchpad (a self-DM, a notes
+   channel), read it live since the last closed day as things they told you, and log what bears on
+   the plan under `Said`, sourced to the scratchpad.
 5. **Form theories, then test them** (the loop in SKILL.md): one per candidate outcome or small
-   thing, and one per write you mean to propose. Most rest on one of three beliefs:
+   thing, one per write you mean to propose, and one per inbox card. Most rest on one of three
+   beliefs:
    - *it is still open* — refuted by a closing trace: a commit or session on it, a Jira change, the
      reply already in the thread;
    - *it is the user's* (rule 5) — settled only by ownership evidence; without it, it can't settle;
@@ -59,14 +61,18 @@ Cheapest first, each source once:
    cheap ones. Write the T-entries into today's theories file now, creating it, and each question
    you will ask under `Asked` as `waiting`.
 
-A source that is not connected goes into a one-line **Gaps** at the end of the draft.
+A source that is not connected, and an intake channel that was not fetched, go into a one-line
+**Gaps** at the end of the draft.
 
-Done when every source has returned or is in Gaps, every load-bearing theory has a named refuter, a
-`looked:` line and an outcome, and the rest are carried untested with their as-of date.
+Done when every source has returned or is in Gaps, the tick (if one started) has finished, every
+inbox card has a verdict, every load-bearing theory has a named refuter, a `looked:` line and an
+outcome, and the rest are carried untested with their as-of date.
 
 ## 3. Draft the day, then stop
 
 ```markdown
+<only when intake was stale: intake last ran <MM-DD HH:MM>, the server is probably down — ran a tick now>
+
 **<Ddd DD Mon>** — <the day's shape in one line: meetings, the free blocks>
 
 **Outcomes** (pick or replace — at most three)
@@ -78,6 +84,12 @@ Done when every source has returned or is in Gaps, every load-bearing theory has
 
 **Refuted since the notes were written**
 - T<n> <belief> — <what was found> → `pj set …` / off the plan
+
+**Inbox** — <n> cards (accept <a> · fold <f> · decline <d> · yours <y>)
+1. accept  <card title> — T<n> survived (<refuter looked for, not found>) · `pj set <id> --facet intake=`
+2. fold    <card> → <target> — T<n> survived · `pj merge <id> --into <target>` + `pj set <target> --facet <axis>=<v>`
+3. decline <card> — T<n> refuted: <what was found> · `pj rm <id>`
+4. yours   <card> — T<n> can't settle: <what was looked for>
 
 **Asking** (one word each)
 1. <closed question> — T<n>: <what was looked for, where> · yes → <what you write> / no → <what you write>
@@ -105,6 +117,9 @@ Worked on something this misses? Say it and I'll follow it up.
   edit that brings the note in line goes on the same row.
 - `Proposed` holds only writes with *seen* evidence or the user's own word. A past `due` is never
   moved without asking.
+- `Inbox` has a row for every card, so "inbox as proposed" is a whole answer. An accepted card
+  that is an ask for today can also be an outcome or a small thing; a "yours" card waits on the
+  board. No cards: `**Inbox** — empty`.
 - `Carried` is one line of counts, never a list. An unknown item that has its own note stays on that
   note — the note already holds it, and the week reset asks about it. Only plain-text items, which
   live nowhere else, go under `Asked` in today's theories file, marked `not asked`: "still yours:
@@ -131,8 +146,8 @@ Stop. The user picks, edits, drops, adds or answers.
      `<time> open — nothing said` if they only picked;
    - under `Asked`, each question's answer, or `waiting`, and the carried plain-text items as
      `not asked`. An answer that settles a theory also becomes its `outcome:`.
-4. Run each approved `pj` command, one per note, then `pj check` once — it must report nothing
-   against the day note.
+4. Run each approved `pj` command, one per note, and each approved Inbox verdict, then `pj check`
+   once — it must report nothing against the day note or an accepted card.
 5. If the user named work the draft missed, follow it up now (rule 3), and add what it settles.
 
 Report what was written in one line. On a Monday, offer the week reset.
