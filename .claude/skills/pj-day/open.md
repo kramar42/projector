@@ -7,7 +7,10 @@ run the loop in SKILL.md — gather, form and test theories — then present the
 
 Find the **last closed day** — the newest day note with a non-empty `Did` — and read every note
 since it that has a `day` facet or a plan in its body, whatever its convention: day notes, older
-plan notes. From each take its plan items with their checkboxes.
+plan notes. From each take its plan items with their checkboxes. A plan item is a claim by whoever
+wrote that plan, and agents write plans: an item carried from an earlier day needs a trace to the
+user's own words (a message, a session prompt, an assigned ticket). One that has none is an agent's
+idea, and is off the plan unless the user claims it.
 
 Then read `memory/theories/<day>.md` for the last closed day and each day since, where one exists:
 its `Said` is what the user already said — never ask it again; its `Asked` entries still `waiting`

@@ -46,8 +46,10 @@ Six rules hold in every mode:
    captured, a Jira issue assigned to them, their own "I'll…" in chat, mail or a session prompt, a
    meeting they organise, or a direct ask addressed to them by name. A list of actions *inside* a
    note, doc, meeting summary or RCA is context — whose each action is stays unknown. Propose a note
-   only for work with ownership evidence; for the rest, ask "mine?" once and log the answer under
-   `Said`.
+   only for work with ownership evidence. Before asking "mine?", map the work to its domain and look
+   for that domain's owner in `memory/patterns/` and the workspace `AGENTS.md`: work in a domain
+   someone else owns is theirs, not a question. Ask only when no owner is known, log the answer under
+   `Said`, and write it into a pattern so the next run doesn't ask it again.
 6. **Absence is unknown.** No trace means *unknown*, not undone. A past `due` may be a stale guess,
    not a broken promise. An open note may have been settled off-record.
 
