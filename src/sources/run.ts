@@ -44,10 +44,15 @@ export function run(
         // stdin. The reason a caller shows has to say what actually happened.
         const timedOut = Boolean(err && (err as { killed?: boolean }).killed && (err as { signal?: string }).signal);
         const why = timedOut ? `timed out after ${Math.round((opts.timeoutMs ?? 12_000) / 1000)}s` : '';
+        const said = String(stderr ?? '').trim();
+        // A command that never started — not on PATH, not executable — prints
+        // nothing, so the error is the only account of it. Without it a relay
+        // reported "could not be run: " and stopped there.
+        const failed = err && !timedOut && !said ? err.message : '';
         resolve({
           ok: !err,
           stdout: String(stdout ?? ''),
-          stderr: [why, String(stderr ?? '').trim()].filter(Boolean).join('; '),
+          stderr: [why, failed, said].filter(Boolean).join('; '),
           code: err && typeof (err as { code?: number }).code === 'number'
             ? (err as { code?: number }).code!
             : err

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ago, firstLine } from '../src/sources/run.ts';
+import { ago, firstLine, run } from '../src/sources/run.ts';
 import { isUnavailable, unavailable } from '../src/enrich/types.ts';
 import { branchFetcher, prFetcher } from '../src/enrich/github.ts';
 import { sessionFetcher, workspaceFetcher } from '../src/enrich/claudeSession.ts';
@@ -279,4 +279,10 @@ test('a bb: link says why when bb cannot answer', async () => {
   } finally {
     restore();
   }
+});
+
+test('a command that never started says why, rather than nothing', async () => {
+  const res = await run('pj-no-such-command-anywhere', []);
+  assert.equal(res.ok, false);
+  assert.match(res.stderr, /pj-no-such-command-anywhere/, 'the spawn error is the only account of it, in either runtime');
 });
