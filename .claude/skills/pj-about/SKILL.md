@@ -143,6 +143,8 @@ pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main
 pj set <id> --set 'project={}'      # a note becomes a project — and moves to projects/<id>/README.md
 pj merge <id>... --into <id>         # folds notes into one; the survivor keeps its facets
 pj rm <id>...                       # deletes, dropping every reference pointing at it
+pj accept <id>... [--only f,g]      # files an inbox card; an extends card folds into its target
+pj decline <id|fingerprint>... --reason <why>   # the no to a card: removes it, records why
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory.
                              # Only for a session outside a pj work workspace: inside one,

@@ -165,6 +165,7 @@ test('every command refuses a flag it does not know', () => {
       ['ls'], ['log'], ['add', 'x'], ['link', 'alpha', 'jira:A-1'], ['check'], ['reindex'],
       ['search', 'x'], ['vaults'], ['enrich', 'jira:A-1'], ['intake'], ['context', 'alpha'],
       ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'], ['did'], ['mcp'],
+      ['accept', 'alpha'], ['decline', 'alpha', '--reason', 'x'],
     ];
     for (const cmd of commands) {
       const r = run(['--vault', v.root, ...cmd, '--nonsense'], { PROJECTOR_VAULTS: v.registry });
@@ -221,9 +222,11 @@ test('canonical intake verbs reach the existing intake operations', () => {
     assert.equal(declined.code, 0, declined.out);
     assert.match(declined.out, /nothing declined/);
 
-    const decline = run([...base, 'decline', 'git:example', '--reason', 'not work']);
+    // Saying no is one verb now, at the top level; the intake spelling is gone.
+    const decline = run(['--vault', v.root, 'decline', 'git:example', '--reason', 'not work']);
     assert.equal(decline.code, 0, decline.out);
-    assert.match(decline.out, /declined git:example/);
+    assert.match(decline.out, /declined git:example — not work/);
+    assert.equal(run([...base, 'decline', 'git:other', '--reason', 'x']).code, 1, 'pj intake decline is gone');
 
     const listed = run([...base, 'declined']);
     assert.match(listed.out, /git:example/);
@@ -433,6 +436,51 @@ test('set emptying intake accepts a card out of the inbox, by either spelling', 
     card('three');
     assert.equal(run(['--vault', v.root, 'set', 'three', '--facet', 'status=active']).code, 0);
     assert.equal(at('three'), 'inbox/three.md');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The inbox verbs, from the shell. `accept` files a card — moving one of its own
+ * to its place, folding an `extends` card into its target — and `decline` is the
+ * one no: the card goes and the reason is recorded where the judge reads it.
+ */
+test('accept files a card and decline refuses one, with its reason in the declined pile', () => {
+  const v = vault();
+  try {
+    const inbox = (id: string, fm: string) =>
+      writeFileSync(place(v.root, `inbox/${id}.md`), `---\nid: ${id}\ntitle: ${id}\n${fm}---\nnew\n`, 'utf8');
+    const at = (id: string) => readAll(paths(v.root).notes).notes.get(id)?.file.slice(v.root.length + 1);
+    inbox('own', 'facets: { status: [active] }\n');
+    inbox('change', 'facets: { status: [done], priority: [later], extends: [alpha] }\nsource_fingerprint: jira:A-1\n');
+    inbox('noise', 'source_fingerprint: slack:C1/1\n');
+
+    const own = run(['--vault', v.root, 'accept', 'own']);
+    assert.equal(own.code, 0, own.out);
+    assert.match(own.out, /accepted own → notes\/own\.md/);
+    assert.equal(at('own'), 'notes/own.md');
+
+    const fold = run(['--vault', v.root, 'accept', 'change', '--only', 'status']);
+    assert.equal(fold.code, 0, fold.out);
+    assert.match(fold.out, /folded change into alpha, taking status/);
+    const alpha = readAll(paths(v.root).notes).notes.get('alpha')!;
+    assert.deepEqual(alpha.facets.status, ['done']);
+    assert.deepEqual(alpha.facets.priority, ['now'], '--only left priority alone');
+    assert.ok(alpha.absorbed_fingerprints?.includes('jira:A-1'));
+    assert.equal(at('change'), undefined);
+
+    assert.equal(run(['--vault', v.root, 'decline', 'noise']).code, 1, 'a decline needs its reason');
+    const no = run(['--vault', v.root, 'decline', 'noise', '--reason', 'answered in the thread']);
+    assert.equal(no.code, 0, no.out);
+    assert.match(no.out, /declined noise \(slack:C1\/1\) — answered in the thread/);
+    assert.equal(at('noise'), undefined);
+    assert.match(run(['--vault', v.root, 'intake', 'declined']).out, /noise\s.*answered in the thread/);
+
+    const notCard = run(['--vault', v.root, 'decline', 'beta', '--reason', 'x']);
+    assert.equal(notCard.code, 1);
+    assert.match(notCard.out, /not a card — use pj rm to delete a note/);
+    assert.equal(run(['--vault', v.root, 'accept', 'beta']).code, 1, 'nor can a note be accepted twice');
   } finally {
     v.cleanup();
   }

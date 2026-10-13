@@ -98,9 +98,9 @@ outcome, and the rest are carried untested with their as-of date.
 - T<n> <belief> — <what was found> → `pj set …` / off the plan
 
 **Inbox** — <n> cards (accept <a> · fold <f> · decline <d> · yours <y>)
-1. accept  <card title> — T<n> survived (<refuter looked for, not found>) · `pj set <id> --facet intake=`
-2. fold    <card> → <target> — T<n> survived · `pj merge <id> --into <target>` + `pj set <target> --facet <axis>=<v>`
-3. decline <card> — T<n> refuted: <what was found> · `pj rm <id>`
+1. accept  <card title> — T<n> survived (<refuter looked for, not found>) · `pj accept <id>`
+2. fold    <card> → <target> — T<n> survived · `pj accept <id>` (or `--only <axis>,<axis>`)
+3. decline <card> — T<n> refuted: <what was found> · `pj decline <id> --reason "<what was found>"`
 4. yours   <card> — T<n> can't settle: <what was looked for>
 
 **Asking** (one word each)

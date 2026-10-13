@@ -988,7 +988,7 @@ pj intake status
 pj intake known claude:abc-123          # which notes already carry this
 pj intake advance --captured 2          # promote what that sweep recorded
 
-pj intake decline git:abc --reason "my own commit"    # a no, recorded
+pj decline git:abc --reason "my own commit"           # a no, recorded
 pj intake declined                                    # what a judgement hid, and why
 pj intake restore git:abc                             # offer it again, cursor and all
 ```
@@ -1052,7 +1052,7 @@ rewrites a note rather than creating one.
 What it may touch is the queue and nothing else: a card still in `inbox/` has had
 nothing confirmed, and one without it is yours — you accepted the values, which makes them yours as
 surely as typing them would. It **never deletes.** A card the pass would no longer keep is named so you
-can look; removing it is `pj rm`, which records the decline. The one thing to know: a card you corrected
+can look; refusing it is `pj decline`, which records why. The one thing to know: a card you corrected
 but did not judge is, by its own flag, still a proposal, so a rejudge would write over your correction.
 
 **Every tick judges before it writes, and writes the card while it is there.** One pass answers both
@@ -1077,6 +1077,14 @@ workspace the vault's own Slack links already use.
 it extends nothing — the card has already decided which, and the fold dialog names the target before
 anything moves. Declining is `⌫`, which deletes the file and records the fingerprint so the next sweep
 does not propose it again.
+
+From the shell it is one verb each. **`pj accept <id>`** files a card the way `+` does: one of its own
+moves to its place, and an `extends` card folds in — body, links and fingerprint — with the target
+taking every axis the card proposes: a single-valued one replaced, a many-valued one gaining the card's
+values beside its own, as both columns ticked would in the dialog. So a card's `source`, the channel it
+came through, joins the note's rather than erasing it. `--only status,due` takes some of the axes and
+leaves the rest as the note has them. **`pj decline <id> --reason "…"`** is `⌫` with
+the reason said: the card goes, and the reason is what the judge reads back.
 
 Candidates that do not deserve a note are recorded as declined, with the reason, and never become
 files — so a sweep of your own afternoon leaves the board empty and the declined pile three lines
@@ -1225,20 +1233,16 @@ one tries again; what earlier channels wrote and advanced stands. That is delibe
 writing everything down would hand you the pile the judgement exists to prevent, and you would find
 out by looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
-**Saying no is a step too, and there are three ways to do it.**
+**Saying no is a step too, and it is one verb.** **`pj decline <id> --reason "…"`** — or `⌫` on a
+card, whose reason is `declined from the queue` — removes the card and records its fingerprint as
+declined, so no later sweep offers it again. It is the same thing the classifier does to a candidate it
+drops, and it teaches the classifier the same way: your reason is the example it reads. Given a
+fingerprint no note holds, `pj decline` says no to something that never became a card.
 
-**Delete the note.** The obvious gesture, and it now sticks: deleting a note that came from a sweep
-records its fingerprint as declined on the way out, so no later sweep offers it again. Before that it
-destroyed the one thing stopping the card coming back, which made the gesture that plainly means *no*
-the one that did not work.
-
-Deleting a card still waiting to be judged is *declining the offer* — the same thing the classifier does
-to a candidate it drops, and it teaches the classifier the same way. Deleting a note you had already
-accepted says something else: the work is finished with, not that it should never have been offered. Both
-stop the sweep re-proposing it; only the first is used as an example.
-
-**`pj intake decline <fingerprint> --reason "…"`** says no to something that never became a note —
-which is what the classifier itself does, for everything it drops.
+**Deleting is not declining.** `pj rm` on a card deletes it and records nothing, so a sweep may offer it
+again. Deleting a note you had already accepted — `pj rm`, or `⌫` on it — says something else: the work
+is finished with, not that it should never have been offered. Its fingerprints are recorded so no sweep
+re-offers what you closed, and nothing learns from them.
 
 **Archive it** — keep the note and set `status: archived`. For one considered rejection you would like
 to find again; the note and its fingerprint both stay.
@@ -1435,7 +1439,9 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml`. `--facet` repeated for one axis replaces it with every value named |
 | `pj mv <id> <new-id>` | rename a note's stable id. Its file (or project folder), assets, every declared reference facet, and saved-view focus, filters and arrangement follow the new id; the note's title stays as it was |
 | `pj merge <id>… --into <id>` | fold notes into one. The survivor keeps its facets; the rest bring their body, links, references and capture fingerprints, and their files go |
-| `pj rm <id>…` | delete, dropping every reference pointing at it |
+| `pj rm <id>…` | delete, dropping every reference pointing at it. Declines nothing: a card's no is `pj decline` |
+| `pj accept <id>… [--only f,g]` | file inbox cards: one of its own moves to its place; an `extends` card folds into its target, which takes every axis the card proposes, or only those named — a many-valued axis as a union |
+| `pj decline <id\|fp>… --reason <why> [--title t]` | the no to a card: removes it and records its fingerprints, with the reason the judge learns from. A fingerprint no note holds is recorded as it is; `--title` names it in the pile |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
 | `pj context <id> [--json]` | everything known about a note, assembled |
 | `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `views`, `search`, `context`, `log`, `did`, `vault_status`, and `propose`, which answers with the `pj` command for a change and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
@@ -1446,7 +1452,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake advance [--captured n]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved |
 | `pj intake apply` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
-| `pj intake decline <fp>… --reason <why>` · `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | record a decline so sweeps stop offering it · read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
+| `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
 | `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: inspect deduplication · set a raw cursor · forget one |
 | `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
@@ -2069,9 +2075,8 @@ this one's, since the definition is not read from the file. So `Members` is the 
 omission, and renaming it is a vault's business like the label.
 
 `intake` holds one value, `unjudged`. A sweep writes it onto a candidate it materialised; you remove it
-when you have judged the note — `+` on the board, or `pj set <id> --facet intake=` (equally
-`--remove intake=unjudged`) from the shell, and either files the card out of `inbox/` to where a note
-like it lives. Presence is the whole meaning, which is why there is no second value —
+when you have judged the note — `+` on the board, or `pj accept <id>` from the shell, and either files
+the card out of `inbox/` to where a note like it lives. Presence is the whole meaning, which is why there is no second value —
 "judged" is the axis being absent, and storing it as well would be storing something the vault can
 already answer.
 

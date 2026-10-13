@@ -42,7 +42,6 @@ import { channelLine, pollOnce, tickLine } from '../server/poll.ts';
 import { rejudge } from '../intake/rejudge.ts';
 import {
   resetWatermark,
-  suppress,
   suppressions,
   unsuppress,
 } from '../intake/db.ts';
@@ -50,7 +49,16 @@ import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work
 import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
 import { ago } from '../sources/run.ts';
-import { createNote, deleteNote, mergeNotes, patchNote, patchFields, renameNote } from '../server/mutate.ts';
+import {
+  acceptCards,
+  createNote,
+  declineCards,
+  deleteNote,
+  mergeNotes,
+  patchNote,
+  patchFields,
+  renameNote,
+} from '../server/mutate.ts';
 import { execFileSync } from 'node:child_process';
 import { parseDay } from '../did/day.ts';
 import { did, renderDid } from '../did/run.ts';
@@ -240,6 +248,7 @@ Work with notes
 Intake
   intake             preview what happened elsewhere; writes nothing
   intake apply       fetch, judge, file, and advance
+  accept, decline    file an inbox card, or say no to it
   intake status      inspect channels and cursors
   intake declined    inspect declined candidates
 
@@ -294,7 +303,20 @@ Rename a note and repoint references and saved views.`,
 Fold notes into a survivor, keeping the survivor's facets.`,
   rm: `Usage: pj rm <id>...
 
-Remove notes and every reference pointing at them.`,
+Remove notes and every reference pointing at them. Deleting is not declining:
+a card removed this way may be offered again, and \`pj decline\` is the no.`,
+  accept: `Usage: pj accept <id>... [--only facet,facet]
+
+File inbox cards. A card of its own moves to where a note like it lives. A card
+that extends a note folds into it — its body, links and fingerprint — and the
+note takes every axis the card proposes, or only those \`--only\` names: a
+single-valued axis is replaced, a many-valued one gains the card's values.`,
+  decline: `Usage: pj decline <id|fingerprint>... --reason <why> [--title t]
+
+Say no to inbox cards, or to candidates that never became cards. A card is
+removed; every fingerprint is recorded with your reason, so no sweep offers it
+again and the judge learns from it. \`--title\` names a bare fingerprint in the
+pile. \`pj intake declined\` reads the pile, \`pj intake restore\` takes one back.`,
   work: `Usage: pj work <id> [--dry-run] [--no-open] [--new]
 
 Prepare the worktree workspace and briefing for a note.`,
@@ -352,22 +374,20 @@ runs the automatic path: fetch, judge, write what deserves a note, decline the
 rest, and advance fetched cursors. \`advance\` promotes the last preview after
 you resolve it. \`restore\` makes a declined candidate eligible again.
 
-Run \`pj help intake advanced\` for raw cursor, deduplication, and manual-decline
-commands.`,
+Run \`pj help intake advanced\` for raw cursor and deduplication commands.
+Judging a card is \`pj accept\` or \`pj decline\`.`,
   'intake advanced': `Advanced intake commands
 
   pj intake known <fingerprint-or-ref>...
       Check which notes already carry refs; useful to integrations before capture.
-  pj intake decline <fingerprint>... --reason <why> [--channel c] [--title t]
-      Record a candidate that never became a note as declined.
   pj intake cursor set --channel <c> --cursor <value> [--seen n] [--captured n]
       Set a channel watermark manually.
   pj intake cursor reset [--channel c]
       Forget cursor state so the next sweep uses its default window.
 
-The old \`poll\`, \`commit\`, \`suppress\`, \`suppressed\`, \`unsuppress\`, and
-\`reset\` spellings remain compatibility aliases, but are intentionally omitted
-from normal help.`,
+The old \`poll\`, \`commit\`, \`suppressed\`, \`unsuppress\`, and \`reset\`
+spellings remain compatibility aliases, but are intentionally omitted from
+normal help.`,
 };
 
 function printHelp(topic: string[]): void {
@@ -945,8 +965,6 @@ if (asking) {
         'seen',
         'captured',
         'advance',
-        'reason',
-        'title',
         'q',
       ], ['json', 'verbose', 'advance']);
       const [sub, ...channels] = rest;
@@ -1012,11 +1030,6 @@ if (asking) {
       }
 
       /**
-       * The other half of resolving a sweep. `pj add` records a yes; this records
-       * a no, so the next sweep stops offering it and the reason survives to be
-       * read back. Without it a decline left nothing behind but a moved cursor.
-       */
-      /**
        * A sweep that judges and writes, run once by hand.
        *
        * The same tick the server runs on a timer — same classifier, same
@@ -1050,7 +1063,7 @@ if (asking) {
        * The migration path for cards written by a thinner version of the pass,
        * and the way a changed `classify.md` reaches the queue without emptying it
        * by hand. It rewrites; it never deletes — a card it would no longer keep is
-       * named, and removing one is `pj rm`, which records the decline.
+       * named, and refusing one is `pj decline`, which records why.
        */
       if (sub === 'rejudge') {
         const res = await rejudge(root, {
@@ -1067,26 +1080,9 @@ if (asking) {
         console.log(
           `${res.changed.length} rewritten, ${res.same} unchanged` +
             (res.wouldDrop.length
-              ? ` — ${res.wouldDrop.length} the pass would no longer keep; remove with pj rm, which records the decline`
+              ? ` — ${res.wouldDrop.length} the pass would no longer keep; refuse with pj decline <id> --reason <why>`
               : ''),
         );
-        break;
-      }
-
-      if (sub === 'decline' || sub === 'suppress') {
-        const reason = flags.get('reason')?.[0];
-        if (!channels.length || !reason) {
-          fail('pj intake decline <fingerprint>... --reason <why> [--channel c] [--title t]');
-        }
-        for (const fp of channels) {
-          const s = suppress(root, {
-            fingerprint: fp,
-            reason: reason!,
-            ...(flags.get('channel')?.[0] ? { channel: flags.get('channel')![0]! } : {}),
-            ...(flags.get('title')?.[0] ? { title: flags.get('title')![0]! } : {}),
-          });
-          console.log(`declined ${s.fingerprint} — ${s.reason}`);
-        }
         break;
       }
 
@@ -1275,6 +1271,45 @@ if (asking) {
       break;
     }
 
+    /**
+     * Judging a card, from the shell: the board's `+` and `⌫`, through the same
+     * two functions. Each checks the whole list before it writes, so a typo in
+     * the third id leaves the first two in the inbox rather than half judged.
+     */
+    case 'accept': {
+      const { flags, rest } = argFlags(argv, ['only']);
+      if (!rest.length) fail('pj accept <id>... [--only facet,facet]');
+      const onlyRaw = flags.get('only')?.[0];
+      if (onlyRaw === 'true') fail('--only names the axes to take: --only status,priority');
+      const only = onlyRaw?.split(',').map((f) => f.trim()).filter(Boolean);
+      for (const res of acceptCards(root, rest, only ? { only } : {})) {
+        console.log(
+          res.into
+            ? `folded ${res.id} into ${res.into}` + (res.took.length ? `, taking ${res.took.join(', ')}` : ', taking no axis')
+            : `accepted ${res.id} → ${relative(root, res.file)}`,
+        );
+      }
+      break;
+    }
+
+    case 'decline': {
+      const { flags, rest } = argFlags(argv, ['reason', 'title']);
+      const reason = flags.get('reason')?.[0];
+      if (!rest.length || !reason || reason === 'true') {
+        fail('pj decline <id|fingerprint>... --reason <why> [--title t]');
+      }
+      const title = flags.get('title')?.[0];
+      const done = declineCards(root, rest, { reason: reason!, ...(title && title !== 'true' ? { title } : {}) });
+      for (const res of done) {
+        console.log(
+          res.id
+            ? `declined ${res.id}${res.fingerprints.length ? ` (${res.fingerprints.join(', ')})` : ', which had no fingerprint to record'} — ${reason}`
+            : `declined ${res.fingerprints[0]} — ${reason}`,
+        );
+      }
+      break;
+    }
+
     case 'rm': {
       const { rest } = argFlags(argv, []);
       if (!rest.length) {
@@ -1283,7 +1318,8 @@ if (asking) {
       }
       // Through `deleteNote`, which drops every reference pointing at the note.
       // Removing the file by hand leaves them dangling, which `pj check` then
-      // reports — the reason this command exists.
+      // reports — the reason this command exists. It declines nothing: a card's
+      // no is `pj decline`.
       for (const id of rest) {
         const { removedEdges } = deleteNote(root, id);
         console.log(`removed ${id}${removedEdges ? ` and ${removedEdges} reference(s) to it` : ''}`);

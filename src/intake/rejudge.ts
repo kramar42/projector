@@ -9,8 +9,8 @@ import type { Candidate } from './types.ts';
  * Running the pass again over cards nobody has judged yet.
  *
  * The pass writes a card once, on the way in, so a vault holding cards from an
- * earlier or thinner version of it keeps them — and deleting one to force a
- * re-sweep records the decline, so it does not come back either. This is the way
+ * earlier or thinner version of it keeps them — and declining one to force a
+ * re-sweep records it, so it does not come back either. This is the way
  * out of both, and the way to benefit from a changed `classify.md` without
  * emptying the queue by hand.
  *
@@ -30,7 +30,7 @@ import type { Candidate } from './types.ts';
  * **It never deletes.** A verdict of `drop` is reported and not applied, because
  * the asymmetry that governs everything else here governs this too — and the
  * damage is worse in this direction than at intake, the card having a body
- * somebody may have written on by now. Declining one is `pj rm`, which records it.
+ * somebody may have written on by now. Declining one is `pj decline`, which records it.
  */
 
 export interface Rejudged {

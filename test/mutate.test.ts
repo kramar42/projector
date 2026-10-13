@@ -23,7 +23,11 @@ import {
   putFrontmatter,
   saveAsset,
   foldInto,
+  acceptCards,
+  declineCards,
+  discard,
 } from '../src/server/mutate.ts';
+import { closeIntakeDb, suppressedFingerprints, suppressions } from '../src/intake/db.ts';
 import { defaultSides, foldResult, foldRows } from '../src/schema/fold.ts';
 import type { Facets } from '../src/schema/types.ts';
 import { readAll } from '../src/index/indexer.ts';
@@ -1604,6 +1608,199 @@ test('a frontmatter that still stores intake outside the inbox is not unjudged, 
     patchNote(v.root, 'old', { facet: { name: 'priority', values: ['month'] } });
     assert.doesNotMatch(readFileSync(place(v.root, 'old.md'), 'utf8'), /intake/, 'the next write cleans it up');
   } finally {
+    v.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- the inbox verbs
+
+/**
+ * `pj accept` and `pj decline`, and the board's `+` and `⌫` through the same two
+ * functions: one door per verb, so the shell and the board cannot disagree about
+ * what filing a card or refusing one does.
+ */
+
+const inboxCard = (root: string, id: string, frontmatter: string, body = 'what came in\n') =>
+  writeFileSync(place(root, `inbox/${id}.md`), `---\nid: ${id}\ntitle: ${id.toUpperCase()}\n${frontmatter}---\n${body}`, 'utf8');
+
+const fileOf = (root: string, id: string) =>
+  readAll(paths(root).notes).notes.get(id)?.file.slice(root.length + 1);
+
+test('accepting a card of its own files it where a note like it lives, judged', () => {
+  const v = vault();
+  try {
+    inboxCard(v.root, 'card', 'facets: { priority: [now] }\nsource_fingerprint: git:1\n');
+    const [res] = acceptCards(v.root, ['card']);
+    assert.equal(fileOf(v.root, 'card'), 'notes/card.md');
+    assert.equal(res!.file, place(v.root, 'notes/card.md'));
+    assert.equal(res!.into, undefined);
+    assert.equal(facetsOf(v.root, 'card').intake, undefined, 'out of the inbox is judged');
+    assert.deepEqual(facetsOf(v.root, 'card').priority, ['now'], 'the proposal is kept as it was');
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('accepting an extends card folds it in, and the target takes every axis it proposes', () => {
+  const v = vault({ target: card('target', 'status: [planning], priority: [month]') });
+  try {
+    inboxCard(
+      v.root,
+      'cand',
+      "facets: { status: [done], priority: [now], extends: [target] }\nlinks: ['jira:ABC-1']\nsource_fingerprint: slack:C1/1\n",
+      'it moved\n',
+    );
+    const [res] = acceptCards(v.root, ['cand']);
+    assert.equal(res!.into, 'target');
+    assert.deepEqual([...res!.took].sort(), ['priority', 'status']);
+
+    const after = readAll(paths(v.root).notes).notes.get('target')!;
+    assert.deepEqual(after.facets.status, ['done'], 'a single-valued axis is replaced');
+    // A many-valued one gains the card's values and keeps its own: this is how a
+    // card's `source` — the channel intake stamped it with — joins the note's
+    // rather than erasing where the note came from.
+    assert.deepEqual(after.facets.priority, ['month', 'now'], 'a many-valued axis is a union');
+    assert.match(after.body, /it moved/, 'the body came across');
+    assert.ok(after.links.some((l) => l.raw === 'jira:ABC-1'), 'and its links');
+    assert.ok(after.absorbed_fingerprints?.includes('slack:C1/1'), 'and its fingerprint');
+    assert.equal(fileOf(v.root, 'cand'), undefined, 'the card is gone');
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('--only narrows a fold to the axes it names, and refuses one the card does not propose', () => {
+  const v = vault({ target: card('target', 'status: [planning], priority: [month]') });
+  try {
+    inboxCard(v.root, 'cand', 'facets: { status: [done], priority: [now], extends: [target] }\n');
+    assert.throws(() => acceptCards(v.root, ['cand'], { only: ['tech'] }), /proposes nothing new for tech/);
+    assert.ok(existsSync(place(v.root, 'inbox/cand.md')), 'a refusal writes nothing');
+
+    const [res] = acceptCards(v.root, ['cand'], { only: ['status'] });
+    assert.deepEqual(res!.took, ['status']);
+    const after = facetsOf(v.root, 'target');
+    assert.deepEqual(after.status, ['done'], 'the named axis moved');
+    assert.deepEqual(after.priority, ['month'], 'the one left out did not');
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('accept refuses what is not a card, and --only on a card that extends nothing', () => {
+  const v = vault({ mine: card('mine', 'priority: [now]') });
+  try {
+    assert.throws(() => acceptCards(v.root, ['mine']), /mine is not an inbox card/);
+    inboxCard(v.root, 'loose', 'facets: { priority: [now] }\n');
+    assert.throws(() => acceptCards(v.root, ['loose'], { only: ['priority'] }), /extends nothing/);
+    // A batch is checked whole before any of it is written.
+    assert.throws(() => acceptCards(v.root, ['loose', 'mine']), /mine is not an inbox card/);
+    assert.equal(fileOf(v.root, 'loose'), 'inbox/loose.md', 'the good half of a bad batch stays put');
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('declining a card removes it and records every fingerprint with the reason, as a lesson', () => {
+  const v = vault();
+  try {
+    inboxCard(v.root, 'card', 'source_fingerprint: slack:C1/1\nabsorbed_fingerprints: [slack:C1/2]\n');
+    const [res] = declineCards(v.root, ['card'], { reason: 'answered in the thread 10-09' });
+    assert.equal(res!.id, 'card');
+    assert.equal(fileOf(v.root, 'card'), undefined, 'the card is gone');
+
+    const rows = suppressions(v.root).rows;
+    assert.deepEqual(rows.map((r) => r.fingerprint).sort(), ['slack:C1/1', 'slack:C1/2']);
+    for (const r of rows) {
+      assert.equal(r.reason, 'answered in the thread 10-09');
+      assert.equal(r.title, 'CARD');
+      assert.equal(r.decidedBy, 'person');
+      assert.equal(r.wasJudged, false, 'an offer declined: what the judge learns from');
+    }
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('a fingerprint no note holds is declined as it is; one a card holds declines that card', () => {
+  const v = vault();
+  try {
+    declineCards(v.root, ['git:repo@abc'], { reason: 'my own commit', title: 'Tidy imports' });
+    const [row] = suppressions(v.root).rows;
+    assert.equal(row!.fingerprint, 'git:repo@abc');
+    assert.equal(row!.reason, 'my own commit');
+    assert.equal(row!.title, 'Tidy imports');
+
+    inboxCard(v.root, 'card', 'source_fingerprint: jira:ABC-1\n');
+    const [res] = declineCards(v.root, ['jira:ABC-1'], { reason: 'not mine' });
+    assert.equal(res!.id, 'card', 'the card answering for it is the thing declined');
+    assert.equal(fileOf(v.root, 'card'), undefined);
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('decline refuses a note that is not a card, a name that is neither, and an empty reason', () => {
+  const v = vault({ mine: card('mine', 'priority: [now]') });
+  try {
+    writeFileSync(place(v.root, 'kept.md'), '---\nid: kept\ntitle: Kept\nsource_fingerprint: git:9\n---\nx\n', 'utf8');
+    assert.throws(() => declineCards(v.root, ['mine'], { reason: 'x' }), /not a card — use pj rm to delete a note/);
+    assert.throws(() => declineCards(v.root, ['git:9'], { reason: 'x' }), /kept.*not a card/, 'by its fingerprint too');
+    assert.throws(() => declineCards(v.root, ['typo-id'], { reason: 'x' }), /not a fingerprint/);
+    inboxCard(v.root, 'card', 'source_fingerprint: git:1\n');
+    assert.throws(() => declineCards(v.root, ['card'], { reason: '  ' }), /reason/);
+    // Checked whole before anything is written: the card survives its bad neighbour.
+    assert.throws(() => declineCards(v.root, ['card', 'mine'], { reason: 'x' }), /not a card/);
+    assert.equal(fileOf(v.root, 'card'), 'inbox/card.md');
+    assert.equal(suppressions(v.root).total, 0, 'and nothing was recorded');
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('rm only deletes: a card removed by it is not declined', () => {
+  const v = vault();
+  try {
+    inboxCard(v.root, 'card', 'source_fingerprint: git:1\n');
+    writeFileSync(place(v.root, 'kept.md'), '---\nid: kept\ntitle: Kept\nsource_fingerprint: git:2\n---\nx\n', 'utf8');
+    deleteNote(v.root, 'card');
+    assert.equal(fileOf(v.root, 'card'), undefined);
+    assert.ok(!suppressedFingerprints(v.root).has('git:1'), 'deleting is not declining — that is pj decline');
+
+    // A note you kept and then deleted is finished with, which no sweep should
+    // re-offer: still recorded, and never taught (see `was_judged`).
+    deleteNote(v.root, 'kept');
+    const [row] = suppressions(v.root).rows;
+    assert.equal(row!.fingerprint, 'git:2');
+    assert.equal(row!.reason, 'deleted from the vault');
+    assert.equal(row!.wasJudged, true);
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+test('the board’s delete declines a card and deletes anything else, one or many', () => {
+  const v = vault({ mine: card('mine', 'priority: [now]') });
+  try {
+    inboxCard(v.root, 'one', 'source_fingerprint: git:1\n');
+    inboxCard(v.root, 'two', 'source_fingerprint: git:2\n');
+    discard(v.root, 'one');
+    bulkDelete(v.root, ['two', 'mine']);
+    for (const id of ['one', 'two', 'mine']) assert.equal(fileOf(v.root, id), undefined, `${id} is gone`);
+    const rows = suppressions(v.root).rows;
+    assert.deepEqual(rows.map((r) => [r.fingerprint, r.reason, r.wasJudged]).sort(), [
+      ['git:1', 'declined from the queue', false],
+      ['git:2', 'declined from the queue', false],
+    ]);
+  } finally {
+    closeIntakeDb(v.root);
     v.cleanup();
   }
 });

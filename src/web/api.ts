@@ -130,7 +130,7 @@ export const api = {
 
   fold: (id: string, into: string, facets: Record<string, string[]>) => (
     stampSelfWrite([id, into]),
-    req<{ merged: number; changed: number }>('POST', `/api/note/${encodeURIComponent(id)}/fold`, {
+    req<unknown>('POST', `/api/note/${encodeURIComponent(id)}/fold`, {
       into,
       facets,
     })

@@ -135,14 +135,14 @@ in `pj did`, the target note already saying it (`pj context <target> --json`), o
 
 | outcome | verdict | command |
 |---|---|---|
-| survived, a card of its own | **accept** | `pj set <id> --facet intake=` — it files the card where it belongs |
-| survived, an `extends` card | **fold** | `pj merge <id> --into <target>`, then `pj set <target> --facet <axis>=<value>` for each axis the card proposes that you agree with (not `source`, not `extends`) |
-| refuted | **decline**, with what was found | `pj rm <id>` — it removes the card and records the decline the judge learns from |
+| survived, a card of its own | **accept** | `pj accept <id>` — it files the card where it belongs |
+| survived, an `extends` card | **fold** | `pj accept <id>` — it folds the card into its target, which takes every axis the card proposes (a many-valued axis keeps its own values too); `--only <axis>,<axis>` when you agree with some of them |
+| refuted | **decline**, with what was found | `pj decline <id> --reason "<what was found>"` — it removes the card and records the reason the judge learns from |
 | can't settle | **yours**, with what was looked for | none |
 
-A card is unjudged by being in `inbox/`, so accepting it is moving it out, which emptying `intake`
-does. `merge` keeps the target's facets, which is why a fold's axes are
-separate `pj set`s. The Inbox block — every card at open, the cards no earlier run today judged at
+A card is unjudged by being in `inbox/`, so accepting it is moving it out, and `pj accept` decides
+from the card which move it is. `pj rm` is not a decline: it deletes and records nothing, so the
+card can come back. The Inbox block — every card at open, the cards no earlier run today judged at
 check-in — is itself the ask: a "yours" spends no question from the budget. Where your verdict
 differs from the judge's kind, the T-entry says both (`judge: ask · me: decline — answered 10-09`);
 that disagreement is evidence about the judge.

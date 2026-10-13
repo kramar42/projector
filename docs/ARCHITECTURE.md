@@ -629,8 +629,9 @@ resolved.
 yes and leaves a note carrying the candidate's fingerprint, so no later sweep offers it again. A no
 left nothing behind but a moved cursor — which made "seen and declined" indistinguishable from "never
 fetched", except that the first could never come back, and it meant a rejection could not inform
-anything afterwards. `pj intake decline` is the missing half: a fingerprint, a reason, and a
-timestamp, dropped from the candidates of every later sweep. `restore` puts it back.
+anything afterwards. `pj decline` is the missing half: a fingerprint, a reason, and a
+timestamp, dropped from the candidates of every later sweep — named directly, or as the card that
+answers for it, which is removed. `restore` puts it back.
 
 **Un-declining is a re-offer, not an undo.** `restore` removes the row *and forgets that channel's
 cursor*, because removing the row on its own repairs nothing: every channel fetches forward of its
@@ -653,16 +654,23 @@ suppressed, so a re-sweep re-proposes almost nothing. The limit is worth stating
 **an item older than that window does not come back on its own**, and `pj intake --since` is how to
 reach further.
 
-**A decline is a decline, and two acts share the delete key.** Deleting a card still carrying `intake`
-is *declining an offer*: the same act the classifier performs when it drops a candidate, worth the same
-to it, and recorded as the same row — which is why there is one table and not two. Deleting a note you
-accepted and worked on is a different sentence. It says the work is finished with, which is no verdict
-on the offer that produced it; taught as a decline it reads as *you should not have shown me this*, and
-what a model learns from it is to withhold the kind of thing you keep for a month and then let go. Both
+**A decline is a decline, and two acts share the delete key.** Declining a card is *declining an
+offer*: the same act the classifier performs when it drops a candidate, worth the same to it, and
+recorded as the same row — which is why there is one table and not two. Deleting a note you accepted
+and worked on is a different sentence. It says the work is finished with, which is no verdict on the
+offer that produced it; taught as a decline it reads as *you should not have shown me this*, and what a
+model learns from it is to withhold the kind of thing you keep for a month and then let go. Both
 suppress, because both have to stop a later sweep re-proposing the thing. `was_judged` on the row is
-which, `deleteNote` reads it off the `intake` axis, and `calibrationFor` learns from the offers alone.
-The two sentences it writes — `declined from the queue` and `deleted from the vault` — are the whole
-reason, and deliberately name **the act and not the note**: the title is the column beside it in the
+which, and `calibrationFor` learns from the offers alone.
+
+**The verb says which, not the key.** `pj decline` is the one no — `declineCards`, refusing anything
+out of `inbox/` — and `pj rm` only deletes: a card removed by it records nothing and may be offered
+again, while a note you kept is recorded as finished with. The board has one key for both, so `⌫` goes
+through `discard`, which reads the act off the place: a card in `inbox/` is declined, anything else
+deleted. Saying no used to be three gestures — `pj rm` on a card, `pj intake decline`, and `⌫`. A
+decline from the shell carries the person's own reason (`--reason`); the two the app writes for itself
+— `declined from the queue` from `⌫`, `deleted from the vault` for a kept note — deliberately name
+**the act and not the note**: the title is the column beside it in the
 pile and the line before it in the calibration block, so a reason that quotes it back is a column and a
 prompt line spent saying nothing. It used to append `(was "⟨title⟩")`, which in a clipped cell pushed
 out the one word that distinguished the two.
@@ -1140,7 +1148,8 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
 | `POST /api/bulk` op `merge`, `pj merge` | the survivor's frontmatter and body, the frontmatter of every note that referenced an absorbed one — by facet or by `doc:` link — and `assets/<absorbed>/` moved into the survivor's folder; then the absorbed files | never writes anything until every check has passed — a merge that would leave a note reaching itself is refused whole. The survivor's own labels are never rewritten. The cycle check reads facets only; the link sweep walks every note, since a `doc:` link can be the sole thing pointing at an absorbed note |
 | `PUT /api/note/:id/frontmatter` | one note's whole frontmatter block, and the same move when it added a `project:` block | never touches the body |
-| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, `assets/<id>/`, every reference that pointed at either — reference facets, `doc:` links and body links alike — and one `suppressed` row per fingerprint the note answered for | nothing outside the vault. The suppression says whether the note had been judged, because deleting a card and deleting a note you kept are two acts (see *A decline is a decline*) |
+| `pj rm`, `DELETE /api/note/:id`, `POST /api/bulk` | note files, `assets/<id>/`, every reference that pointed at either — reference facets, `doc:` links and body links alike — and, for a note you kept, one `suppressed` row per fingerprint it answered for, judged | nothing outside the vault. `pj rm` records nothing for a card; the two routes are `⌫`, which goes through `discard` and so *declines* a card, as the row below does (see *A decline is a decline*) |
+| `pj decline`, and `⌫` on a card through `discard` | one `suppressed` row per fingerprint, unjudged, with the reason — and, when the ref is a card or a fingerprint a card answers for, that card removed as `pj rm` removes it | never a note outside `inbox/`: one is refused with `pj rm` named. Every ref is resolved before anything is written, and a name that is neither a note nor a `<channel>:` fingerprint is refused rather than recorded |
 | `PUT /api/view/:name` | one view file's query half | never touches its stored arrangement |
 | `PATCH /api/view/:name/arrangement` | one view file's `nodes`/`order`, merged by id | never drops an entry whose note still exists |
 | `DELETE /api/view/:name` | one view file | never touches the notes it selected |
@@ -1149,11 +1158,11 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake advance` / `cursor set` / `cursor reset` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
-| `pj intake decline` / `restore` | one row in `.projector/intake.db`'s `suppressed` table — and on the way back, one in `rescued` plus that channel's `watermark` row removed | never a note; records a decline by fingerprint so a later sweep stops offering it, and un-declining walks the cursor back so a later sweep can still reach it |
+| `pj intake restore` | one `suppressed` row removed, one in `rescued` written, and that channel's `watermark` row removed | never a note; un-declining walks the cursor back so a later sweep can still reach it |
 | the poller (`src/server/poll.ts`) and `pj intake apply` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
 | `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
-| the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
+| `pj accept`, and the panel's ✓ / `+` through `POST /api/note/:id/fold` | `acceptCards`: a card of its own **moved** by `relocateNote` to its place, as `PATCH` moves it; an `extends` card merged into its target, then the axes taken — every one the card proposes, those `--only` names (a single-valued axis replaced, a many-valued one unioned), or the dialog's answers — one at a time through the checked path | refuses anything out of `inbox/`, and checks every card before it files one — so the route folds a judged note that still names a target, which the panel still offers ✓ on, through `foldInto` directly. Merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, a git worktree plus its branch in each declared repo, and `workspace:<path>` appended to the note | never modifies a tracked file in a declared repo. The one note write is an append of a ref derived from the note itself, so it carries no base mtime — appending it twice is a no-op, and it cannot fail the command: the worktrees are already on disk by then, so a failure comes back as `recordError` rather than a refusal. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
 | everything else | the three databases under `.projector/` only | never touches a note file |
@@ -1201,7 +1210,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in | `pj intake advance`/`cursor`, `pj intake decline`, and a judging tick — `pj intake apply` or the poller; gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in | `pj intake advance`/`cursor`, `pj decline`, and a judging tick — `pj intake apply` or the poller; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 

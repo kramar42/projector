@@ -25,6 +25,7 @@ import { loadFacets } from '../schema/facets.ts';
 import { isRef } from '../schema/facets.ts';
 import { wouldCycle } from '../index/refs.ts';
 import { merged } from '../schema/merge.ts';
+import { foldResult, foldRows, type Side } from '../schema/fold.ts';
 import { suppress } from '../intake/db.ts';
 import { parseLink } from '../schema/links.ts';
 import { hrefBetween, hrefTarget, pathTarget, rewriteLinks } from '../schema/body.ts';
@@ -468,16 +469,22 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
   const accepted =
     (input.facet?.name === 'intake' && !applyMode([], input.facet.values, input.facet.mode ?? 'set').length) ||
     (input.facets !== undefined && 'intake' in input.facets && !input.facets.intake!.length);
-  let now = file;
-  if (accepted && inInbox(root, file)) {
-    const res = loadNote(file, paths(root).notes);
-    now = relocateNote(root, id, placeFor(root, id, res.ok ? res.rec.facets : {}));
-  }
+  const now = accepted && inInbox(root, file) ? fileCard(root, id, file) : file;
   return { mtime: mtimeOf(settleProjectFolder(root, id, now)) };
 }
 
 const inInbox = (root: string, file: string): boolean =>
   resolve(file).startsWith(resolve(paths(root).places.inbox) + sep);
+
+/**
+ * A card leaves `inbox/` for the place a note like it lives. That move is all
+ * accepting a card of its own is, `intake` being a place; `patchNote` reaches it
+ * from the board's `+`, `acceptCards` from `pj accept`.
+ */
+function fileCard(root: string, id: string, file: string): string {
+  const res = loadNote(file, paths(root).notes);
+  return relocateNote(root, id, placeFor(root, id, res.ok ? res.rec.facets : {}));
+}
 
 /**
  * Where a note's file belongs, by what kind of note it is.
@@ -974,64 +981,57 @@ export function renameNote(root: string, from: string, to: string): { repointed:
  * expensive direction: the note vanished, its asset folder vanished with it, and
  * a `doc:` link written by a note nobody was deleting kept pointing at the hole.
  *
- * **A deleted note that came from a sweep is a decline**, so its fingerprint is
- * recorded on the way out. Without that, deleting a candidate destroys the only
- * thing that stopped the next sweep proposing it again — so the card returns, and
- * the gesture that obviously means *no* is the one gesture that does not work.
- * That trap was live from the moment candidates started landing as notes.
+ * **Deleting is not declining.** A card deleted here leaves nothing behind, so a
+ * later sweep may offer it again. Saying no to one is `declineCards`, which
+ * records the fingerprint with a reason the judge learns from; the board's `⌫`
+ * reaches it through `discard`. This used to be that no as a side effect, which
+ * made "no" three gestures — this, `pj intake decline`, and `⌫` — for one act.
  *
- * Every fingerprint the note answered for, absorbed ones included: a note that
- * swallowed three candidates in a merge is the answer to all four, and deleting
- * it must not reopen the other three.
- *
- * Recorded as a person's decision, because deleting a file is one. `unsuppress`
- * is the way back if it was a mistake, and archiving is the way to keep the note
- * as a record instead.
- *
- * **Whether the note had been judged travels with the row**, because the same
- * keystroke is two different acts. Deleting a card still carrying `intake` is
- * declining an offer — the same act the classifier performs on a candidate it
- * drops, and worth exactly as much to it. Deleting a note you accepted says the
- * work is finished with, which is not a verdict on the offer that produced it.
- * Both suppress; only the first teaches. See `was_judged` in `intake/db.ts`.
+ * **A note you kept is recorded on the way out, and that is not a decline
+ * either.** Deleting it says the work is finished with, and no later sweep
+ * should re-offer what you closed — so every fingerprint it answered for,
+ * absorbed ones included, is suppressed as `deleted from the vault`. Judged,
+ * so nothing learns from it: a model taught by it would learn to withhold the
+ * kind of thing you keep for a month and then let go. See `was_judged` in
+ * `intake/db.ts`. Archiving is the way to keep the note as a record instead.
  */
 export function deleteNote(root: string, id: string): { removedEdges: number } {
+  const file = fileFor(root, id);
+  if (!inInbox(root, file)) {
+    const res = loadNote(file, paths(root).notes);
+    for (const fp of res.ok ? fingerprintsOf(res.rec) : []) {
+      /*
+       * The reason says what the act was, and nothing about *which* note it was.
+       *
+       * It used to append `(was "⟨the title⟩")` — and the title is already the row
+       * beside it in the pile and the line before it in the classifier's
+       * calibration block, so the clause restated its neighbour in both places
+       * a reason is ever read. A note with no heading has an id worth showing,
+       * so the fallback goes in the `title` field, not in the prose.
+       */
+      suppress(root, { fingerprint: fp, reason: 'deleted from the vault', title: res.ok ? res.rec.title || id : id, wasJudged: true });
+    }
+  }
+  return removeNote(root, id);
+}
+
+/** Every fingerprint a note answers for: where it came from, and what it absorbed. */
+function fingerprintsOf(rec: Pick<Note, 'source_fingerprint' | 'absorbed_fingerprints'>): string[] {
+  return [rec.source_fingerprint, ...(rec.absorbed_fingerprints ?? [])].filter((fp): fp is string => !!fp);
+}
+
+/**
+ * The delete itself, recording nothing: the file, its assets, and every
+ * reference to either. `deleteNote` and `declineCards` differ only in what they
+ * write down first.
+ */
+function removeNote(root: string, id: string): { removedEdges: number } {
   const file = fileFor(root, id);
   const p = paths(root);
   const { notes } = readAll(p.notes);
   const refFacets = refFacetsOf(root);
   const gone = new Set([id]);
   let removedEdges = 0;
-
-  const doomed = notes.get(id);
-  // Read off `intake` for the reason `rejudge` gives about the same axis:
-  // accepting is what makes a card yours, and the axis is the note-level record
-  // of whether that has happened. There is nothing else to consult.
-  const wasJudged = !doomed?.facets.intake?.length;
-  for (const fp of [doomed?.source_fingerprint, ...(doomed?.absorbed_fingerprints ?? [])]) {
-    if (!fp) continue;
-    /*
-     * The reason says what the act was, and nothing about *which* note it was.
-     *
-     * It used to append `(was "⟨the title⟩")` — and the title is already the row
-     * beside it in the pile and the line before it in the classifier's
-     * calibration block, so the clause restated its neighbour in both places
-     * a reason is ever read. In the pile that cost the reader the useful half:
-     * the two cases below are the whole content of a decline you made yourself,
-     * and the clipped cell was spending its width on the title one column over.
-     *
-     * The fallback moved to the `title` field for the same reason. A note with no
-     * heading has an id worth showing, and putting it here left the pile's *what
-     * it was* column falling back to an opaque fingerprint while the id sat in
-     * the prose beside it.
-     */
-    suppress(root, {
-      fingerprint: fp,
-      reason: wasJudged ? 'deleted from the vault' : 'declined from the queue',
-      title: doomed?.title || id,
-      wasJudged,
-    });
-  }
 
   const assets = join(p.assets, id);
   for (const rec of notes.values()) {
@@ -1244,6 +1244,163 @@ export function mergeNotes(
   return { merged: sources.length, repointed: plans.reduce((n, plan) => n + plan.changed, 0) };
 }
 
+// ---------------------------------------------------------------- the inbox
+
+/** One card filed: where its content is now, and what the target took. */
+export interface Accepted {
+  id: string;
+  /** The card's new file, or the target's when it folded in. */
+  file: string;
+  /** The note it folded into; absent for a card that became a note of its own. */
+  into?: string;
+  /** The axes the target took from the card. Empty for a card of its own. */
+  took: string[];
+}
+
+/**
+ * File inbox cards: the yes to what intake brought in.
+ *
+ * Two shapes of yes, and the card has already decided which. A card that
+ * `extends` a note is a change to something tracked, so it folds in: its body,
+ * links and fingerprint go to the target, and the target takes the axes the
+ * card proposes — every one (decision 19 of the day loop's design), or only
+ * those `only` names. The board's fold dialog answers per axis and sends those
+ * answers as `answers`, with the target it showed as `into`. Any other card
+ * moves out of `inbox/` to its place (`fileCard`).
+ *
+ * **Every card is checked before any is written**, as `mergeNotes` checks its
+ * graph: a batch with one id that is not a card leaves the rest in the inbox,
+ * rather than half filed. A note already out of the inbox is refused — there is
+ * nothing left to accept, and folding it by this verb would be a merge nobody
+ * asked for. The fold itself can still refuse, on a cycle, and does so whole.
+ */
+export function acceptCards(
+  root: string,
+  ids: readonly string[],
+  opts: { only?: readonly string[]; answers?: Record<string, string[]>; into?: string } = {},
+): Accepted[] {
+  const p = paths(root);
+  const { notes } = readAll(p.notes);
+  const defs = loadDefs(p.facets);
+
+  const plans = [...new Set(ids)].map((id) => {
+    const card = notes.get(id);
+    if (!card) throw new Invalid(`no note with id "${id}"`);
+    if (!inInbox(root, card.file)) throw new Invalid(`${id} is not an inbox card`);
+    const into = card.facets.extends?.[0];
+    if (opts.into !== undefined && opts.into !== into) {
+      throw new Invalid(into ? `${id} extends "${into}", not "${opts.into}"` : `${id} extends nothing`);
+    }
+    if (!into) {
+      if (opts.only || opts.answers) {
+        throw new Invalid(`${id} extends nothing, so there are no axes to take — accepting files it as its own note`);
+      }
+      return { id, into: null, facets: {} };
+    }
+    const target = notes.get(into);
+    if (!target) throw new Invalid(`${id} extends "${into}", which does not exist`);
+    if (opts.answers) return { id, into, facets: opts.answers };
+
+    // The same rows the dialog draws. Taking one replaces a single-valued axis
+    // and adds to a many-valued one: the card's `source` is the channel it came
+    // through, stamped by intake rather than proposed by the judge, and taking it
+    // by replacement would erase where the note itself came from. A union loses
+    // nothing, which is the dialog's own answer for an axis that holds many.
+    const rows = foldRows(card, target, defs);
+    const proposed = rows.map((r) => r.facet);
+    const only = opts.only ?? proposed;
+    const unknown = only.filter((f) => !proposed.includes(f));
+    if (unknown.length) {
+      throw new Invalid(
+        `${id} proposes nothing new for ${unknown.join(', ')} — ` +
+          (proposed.length ? `it proposes ${proposed.join(', ')}` : `${into} already says everything it proposes`),
+      );
+    }
+    const take = (r: (typeof rows)[number]): Side[] => (r.multi ? ['before', 'after'] : ['after']);
+    const sides = Object.fromEntries(rows.map((r) => [r.facet, only.includes(r.facet) ? take(r) : (['before'] as Side[])]));
+    return { id, into, facets: foldResult(rows, sides) };
+  });
+
+  return plans.map(({ id, into, facets }) => {
+    if (!into) return { id, file: settleProjectFolder(root, id, fileCard(root, id, fileFor(root, id))), took: [] };
+    foldInto(root, id, into, facets);
+    return { id, into, file: fileFor(root, into), took: Object.keys(facets) };
+  });
+}
+
+/** One no recorded: the card it removed, if it was one, and what was suppressed. */
+export interface Declined {
+  id?: string;
+  fingerprints: string[];
+  removedEdges: number;
+}
+
+/**
+ * Say no to what intake brought in: a card, or a candidate that never became one.
+ *
+ * The one "no". A ref is a card's id, a fingerprint a card answers for — both
+ * decline that card, recording every fingerprint it held — or a fingerprint no
+ * note holds, which is recorded as it is (`title` names it in the pile). A card
+ * declined is removed; every row is a person's decision about an offer, so the
+ * judge learns from it, and `reason` is what it learns (`calibrationFor`).
+ *
+ * A note out of the inbox is refused rather than deleted: that is `pj rm`, and
+ * deleting a note you kept is not a verdict on the offer that produced it. A
+ * name that is neither a note nor shaped like a fingerprint is refused too —
+ * recorded, a typo would hide nothing and say it hid something. As with
+ * `acceptCards`, every ref is checked before anything is written.
+ */
+export function declineCards(
+  root: string,
+  refs: readonly string[],
+  opts: { reason: string; title?: string },
+): Declined[] {
+  const reason = opts.reason.trim();
+  if (!reason) throw new Invalid('a decline needs a reason — it is what the judge learns from');
+  const { notes } = readAll(paths(root).notes);
+
+  const seen = new Set<string>();
+  const plans: ({ card: Note } | { fingerprint: string })[] = [];
+  for (const ref of refs) {
+    const card = notes.get(ref) ?? [...notes.values()].find((n) => fingerprintsOf(n).includes(ref));
+    if (card) {
+      if (!inInbox(root, card.file)) throw new Invalid(`"${card.id}" is not a card — use pj rm to delete a note`);
+      if (!seen.has(card.id)) plans.push({ card });
+      seen.add(card.id);
+    } else if (ref.includes(':')) {
+      plans.push({ fingerprint: ref });
+    } else {
+      throw new Invalid(`no card "${ref}", and it is not a fingerprint (<channel>:<ref>)`);
+    }
+  }
+
+  return plans.map((plan) => {
+    if ('fingerprint' in plan) {
+      suppress(root, { fingerprint: plan.fingerprint, reason, ...(opts.title ? { title: opts.title } : {}) });
+      return { fingerprints: [plan.fingerprint], removedEdges: 0 };
+    }
+    const { card } = plan;
+    const fingerprints = fingerprintsOf(card);
+    for (const fp of fingerprints) {
+      suppress(root, { fingerprint: fp, reason, title: card.title || card.id, wasJudged: false });
+    }
+    return { id: card.id, fingerprints, ...removeNote(root, card.id) };
+  });
+}
+
+/**
+ * What `⌫` means on the board: a card is declined, any other note deleted.
+ *
+ * One key for both because the board has one, and the place already says which
+ * act it is. A card declined here says why the way it always has — `declined
+ * from the queue` — since the key carries no reason of its own.
+ */
+export function discard(root: string, id: string): { removedEdges: number } {
+  if (!inInbox(root, fileFor(root, id))) return deleteNote(root, id);
+  const [res] = declineCards(root, [id], { reason: 'declined from the queue' });
+  return { removedEdges: res!.removedEdges };
+}
+
 /**
  * Move notes along one or more facets, one note at a time.
  *
@@ -1365,7 +1522,7 @@ export function bulkDelete(root: string, ids: string[]): { deleted: number } {
   let deleted = 0;
   for (const id of ids) {
     try {
-      deleteNote(root, id);
+      discard(root, id);
       deleted++;
     } catch {
       /* already gone */

@@ -37,7 +37,7 @@ import { claudeChannel, placeOf } from '../src/intake/claude.ts';
 import { jiraChannel } from '../src/intake/jira.ts';
 import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
-import { deleteNote } from '../src/server/mutate.ts';
+import { deleteNote, discard } from '../src/server/mutate.ts';
 import { firstTickIn, lastTick, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
 import { logTo } from '../src/server/log.ts';
 import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
@@ -1580,15 +1580,16 @@ test('the Gmail CLI boundary is read-only and its JSON becomes factual candidate
   }
 });
 
-test('deleting a captured note is a decline, so the sweep stops offering it', () => {
+test('deleting a card on the board is a decline, so the sweep stops offering it', () => {
   const root = vault({ a: card('a') });
   try {
     const res = materialise(root, 'git', asKept([candidate('git:1', 'A thing')]));
     const id = res.created[0]!;
 
     // The gesture that obviously means no. Before this it destroyed the one thing
-    // stopping the next sweep re-proposing the card.
-    deleteNote(root, id);
+    // stopping the next sweep re-proposing the card. `⌫` on a card is `discard`,
+    // which declines it; `pj rm` only deletes, and `pj decline` is the shell's no.
+    discard(root, id);
     const rows = suppressions(root).rows;
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.fingerprint, 'git:1');
@@ -1889,7 +1890,7 @@ test('declining an offer teaches the classifier; discarding a note you kept does
     mine: card('mine', 'source_fingerprint: git:2\n'),
   });
   try {
-    deleteNote(root, 'offered');
+    discard(root, 'offered');
     deleteNote(root, 'mine');
 
     // Both stop a later sweep re-proposing the thing. That half is the same act.

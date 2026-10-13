@@ -45,8 +45,9 @@ import {
   bulkMove,
   mergeNotes,
   createNote,
+  acceptCards,
+  discard,
   foldInto,
-  deleteNote,
   fileFor,
   mtimeOf,
   patchNote,
@@ -485,10 +486,11 @@ app.post('/api/note', async (c) => {
   }
 });
 
+// `⌫`: a card in the inbox is declined, any other note deleted — see `discard`.
 app.delete('/api/note/:id', (c) => {
   const root = vaultOf(c);
   try {
-    const res = deleteNote(root, c.req.param('id'));
+    const res = discard(root, c.req.param('id'));
     bump(root);
     return c.json(res);
   } catch (err) {
@@ -983,14 +985,25 @@ app.get('/api/note/:id/fold', (c) => {
   return c.json({ into, title: target.title, rows: foldRows(rec, target, facets) });
 });
 
+// A card goes through `pj accept`'s door, with the dialog's answers: the target
+// it showed, and the value each axis takes. A note judged before accepting
+// cleared `extends` still names a target and still draws the control, so it
+// folds as it always did — `acceptCards` refuses anything out of the inbox.
 app.post('/api/note/:id/fold', async (c) => {
   const root = vaultOf(c);
   const id = c.req.param('id');
   const body = (await c.req.json()) as { into?: string; facets?: Record<string, string[]> };
   if (!body.into) return c.json({ error: 'into is required' }, 400);
-  const res = foldInto(root, id, body.into, body.facets ?? {});
-  bump(root);
-  return c.json(res);
+  try {
+    const card = Boolean(readAll(paths(root).notes).notes.get(id)?.facets.intake?.length);
+    const res = card
+      ? acceptCards(root, [id], { into: body.into, answers: body.facets ?? {} })[0]
+      : foldInto(root, id, body.into, body.facets ?? {});
+    bump(root);
+    return c.json(res);
+  } catch (err) {
+    return fail(c, err);
+  }
 });
 
 app.get('/api/intake/declined', (c) => {
