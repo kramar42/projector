@@ -130,7 +130,8 @@ day's first run:
   where it was said, pointing at the theory it bears on. It is evidence, not a log for the user.
   Every run writes at least one timestamped line here — `<time> check-in — nothing said` when the
   user only approved — because the last timestamp in today's file is what the next run's "since"
-  means.
+  means. A stamp `HH:MM` is the file's own day; a run after midnight that writes into the day it
+  is still working on stamps `MM-DD HH:MM`, so the latest stamp stays the latest.
 - **Asked** — every question you put to the user, numbered for the day, with when it was asked;
   marked `answered HH:MM: <answer>` when it is. Unknowns over the three-question budget go here too,
   marked `not asked`. The next run starts from what is still waiting here.

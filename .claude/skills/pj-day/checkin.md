@@ -6,7 +6,8 @@ the plan? One stop: gather since the last run, then present.
 ## 1. Read today's note and today's theories
 
 The day note's `Plan`, then `memory/theories/<today>.md`: its T-entries, `Said` and `Asked`. The
-last timestamp anywhere in the theories file is **since**: everything below looks only after it. If
+latest timestamp anywhere in the theories file is **since** (a `MM-DD HH:MM` stamp from a run past
+midnight is later than every bare `HH:MM`): everything below looks only after it. If
 there is no theories file for today, since is the day note's creation, and this run creates the file.
 If the invocation says what the user worked on, log it under `Said` and follow it up (rule 3 in
 SKILL.md).

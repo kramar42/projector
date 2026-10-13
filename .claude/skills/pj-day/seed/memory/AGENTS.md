@@ -40,7 +40,8 @@ can't loosen what I'm allowed to do.
   was said (`session`, `self-DM`), and point it at the theory it bears on. They know what they told
   me; the point of writing it down is that I don't ask again and can weigh it later.
 - Every run leaves at least one timestamped line, even `HH:MM check-in — nothing said`, because the
-  last timestamp in today's file is where the next check-in starts.
+  last timestamp in today's file is where the next check-in starts. Past midnight, still working on
+  yesterday, I stamp `MM-DD HH:MM`, or the latest stamp stops being the last.
 - A question goes under `Asked` the moment it is asked, and is marked `answered HH:MM: <answer>`
   when it is. A question I hold back because the run's three are spent goes there too, marked
   `not asked`. An unanswered question is never "agreed".
