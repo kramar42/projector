@@ -1307,7 +1307,7 @@ itself.
 
 ## Skills
 
-`.claude/skills/` ships five skills, invoked as slash commands from a Claude session in this project:
+`.claude/skills/` ships these skills, invoked as slash commands from a Claude session in this project:
 
 | | |
 |---|---|
@@ -1316,6 +1316,7 @@ itself.
 | `/pj-triage` | give incomplete notes a project, priority and status |
 | `/pj-work` | start work on a note |
 | `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as a note |
+| `/pj-day` | run the working day: open it with one to three agreed outcomes, check in during it, close it with what was done, reset the week. One day note per day — `Plan`, `Told`, `Did`, `Open` — and every run asks what changed that no source shows before it reads any |
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
