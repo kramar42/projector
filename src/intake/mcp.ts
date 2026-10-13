@@ -18,6 +18,7 @@ import {
   trackedBy,
   transcribedAll,
   transcript,
+  withPermalinks,
   type Conversation,
   type RelayKind,
 } from './relay.ts';
@@ -210,6 +211,7 @@ function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string):
 
       const parsed = kind === 'slack' ? parseSlackRelay(reply) : parseGmailRelay(reply);
       if (!parsed) return held(kind, ctx, `the ${kind} relay's answer could not be read`, cost);
+      if (kind === 'slack') parsed.messages = withPermalinks(parsed.messages, ctx.links.keys());
 
       const known = knownFor(kind, ctx);
       const candidates: Candidate[] = [];

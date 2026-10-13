@@ -103,6 +103,35 @@ export function judgedBody(v: Verdict, detail: string | undefined): string | und
   return body ? `${quote}\n\n${body}` : quote;
 }
 
+/** The line that opens a card's excerpt, so a `rejudge` can tell it from the model's half. */
+export const SOURCE_EXCERPT = 'Said in the source, newest last:';
+
+/**
+ * The last few lines of the conversation the judge read, as they were said.
+ *
+ * A card used to carry only the judge's account of a message, so reading the
+ * queue was reading a summary of something you could not see without clicking
+ * away. The transcript is already in hand — it is what the judge was shown,
+ * with credential shapes redacted on the way in — so the tail of it goes on the
+ * card. Three lines, each cut short: enough to recognise the exchange, not a
+ * copy of the thread. A fence, so nothing in it is read as a link, and a fence
+ * a message itself contains is defused rather than allowed to close it.
+ */
+export function sourceExcerpt(c: Candidate, lines = 3): string | undefined {
+  const said = c.fields?.find((f) => f.k === 'conversation')?.v;
+  if (!said) return undefined;
+  const tail = said
+    .split('\n')
+    .filter((l) => l.trim() && !l.startsWith('('))
+    .slice(-lines)
+    .map((l) => l.replace(/`{3,}/g, "'''").slice(0, 240));
+  return tail.length ? `${SOURCE_EXCERPT}\n\n\`\`\`text\n${tail.join('\n')}\n\`\`\`` : undefined;
+}
+
+/** What a card's body is: the judgement, then what was actually said. */
+const cardBody = (v: Verdict, c: Candidate): string | undefined =>
+  [judgedBody(v, c.detail), sourceExcerpt(c)].filter(Boolean).join('\n\n') || undefined;
+
 export function materialise(
   root: string,
   channel: string,
@@ -157,7 +186,7 @@ export function materialise(
       },
       links: c.links,
       fingerprint: c.fingerprint,
-      ...(judgedBody(v, c.detail) ? { body: judgedBody(v, c.detail)! } : {}),
+      ...(cardBody(v, c) ? { body: cardBody(v, c)! } : {}),
     });
     if (res.existed) out.skipped++;
     else {

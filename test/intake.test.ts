@@ -10,7 +10,7 @@ import { closeIntakeDb, commitWatermark, openIntakeDb, recordPending, rescues, r
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
 import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
-import { materialise } from '../src/intake/materialise.ts';
+import { materialise, SOURCE_EXCERPT } from '../src/intake/materialise.ts';
 import { rejudge } from '../src/intake/rejudge.ts';
 import { candidateFor, linkFor } from '../src/intake/mcp.ts';
 import {
@@ -30,6 +30,7 @@ import {
   trackedBy,
   transcribedAll,
   transcript as exchangeOf,
+  withPermalinks,
 } from '../src/intake/relay.ts';
 import { markSeen, seenState } from '../src/intake/db.ts';
 import { claudeChannel, placeOf } from '../src/intake/claude.ts';
@@ -918,6 +919,50 @@ test('a materialised candidate is an ordinary note carrying the intake axis', ()
     assert.ok(rec, 'the note exists');
     assert.deepEqual(rec!.facets.intake, ['unjudged']);
     assert.equal(rec!.source_fingerprint, 'git:1', 'and it carries what it came from');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a card from a conversation keeps the last of what was said, not only the judge’s account of it', async () => {
+  const root = vault({ a: card('a') });
+  const said = [
+    '(4 earlier message(s) not shown)',
+    '10-13 14:47 Sander: shall we call in a bit to handle the key rotation?',
+    '10-13 14:50 you: okay to do so after 30 min lunch break?',
+    '10-13 14:51 Sander: just ping when you are ready! ```code```',
+    '10-13 15:18 Slava: one more item for the rotation list',
+  ].join('\n');
+  try {
+    const res = materialise(
+      root,
+      'slack',
+      asKept(
+        [
+          candidate('slack:D0AAAAAAA/1791900000.000001', 'Key rotation call', { channel: 'slack', fields: [{ k: 'conversation', v: said }] }),
+          candidate('git:2', 'A commit'),
+        ],
+        { reason: 'ask: a call is waiting on you', body: 'Sander wants to rotate the keys together.' },
+      ),
+    );
+    const notes = reindex(root).notes;
+    const slack = notes.get(res.created[0]!)!.body;
+    assert.match(slack, /^\n?> ask: a call is waiting on you\n\nSander wants to rotate the keys together\./, 'the judgement still leads');
+    assert.match(slack, new RegExp(`${SOURCE_EXCERPT}\\n\\n\`\`\`text\\n10-13 14:50 you: okay`), 'then the last three lines, newest last');
+    assert.match(slack, /Slava: one more item for the rotation list\n```/);
+    assert.doesNotMatch(slack, /14:47 Sander|earlier message/, 'three lines, not the whole exchange');
+    assert.doesNotMatch(slack, /```code```/, 'a fence inside a message cannot close the excerpt');
+    assert.doesNotMatch(notes.get(res.created[1]!)!.body, new RegExp(SOURCE_EXCERPT), 'a commit has no conversation to quote');
+
+    // The judge's half is the model's to rewrite; what was said is not.
+    const id = res.created[0]!;
+    const judge: Ask = async (_s, user) =>
+      JSON.stringify((JSON.parse(user) as { fp: string }[]).map((c) => ({ fp: c.fp, decision: 'keep', reason: 'ask: still waiting', body: 'Rewritten.' })));
+    await rejudge(root, { ask: judge });
+    const after = reindex(root).notes.get(id)!.body;
+    assert.match(after, /Rewritten\./);
+    assert.match(after, /Slava: one more item for the rotation list/, 'a rejudge keeps the excerpt');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2165,6 +2210,32 @@ test('the relay’s Slack records become conversations that say whose move it is
   assert.equal(byKey.get('C0DDDDDDD/1788349000.000001')!.thread, '1788349000.000001', 'a thread is its own conversation');
 
   assert.deepEqual(slackPermalinkParts(P('D0AAAAAAA', '1788344704.998749')), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
+});
+
+test('a Slack message the relay copied no permalink for still links back, on the workspace the vault already uses', () => {
+  const bare = (channel: string, ts: string, over: Record<string, unknown> = {}) =>
+    slackRecord(channel, ts, 'Ruud', 'how much time can you spend on TOS?', false, { permalink: null, ...over });
+  const parsed = parseSlackRelay(
+    JSON.stringify({
+      messages: [bare('D0AAAAAAA', '1788344704.998749'), bare('C0DDDDDDD', '1788350000.000002', { thread_ts: '1788349000.000001' })],
+      more: false,
+    }),
+  )!;
+  assert.equal(parsed.messages[0]!.url, undefined, 'the relay gave none');
+
+  // Off a permalink this run's relay did copy…
+  const copied = parseSlackRelay(JSON.stringify({ messages: [slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'x')], more: false }))!;
+  const fromRun = withPermalinks([...parsed.messages, ...copied.messages], []);
+  assert.equal(fromRun[0]!.url, P('D0AAAAAAA', '1788344704.998749'));
+  assert.equal(
+    fromRun[1]!.url,
+    `${P('C0DDDDDDD', '1788350000.000002')}?thread_ts=1788349000.000001&cid=C0DDDDDDD`,
+    'a reply opens in its thread, as Slack writes the link',
+  );
+  // …or off one a note already carries.
+  const fromVault = withPermalinks(parsed.messages, [`slack:${P('D0ZZZZZZZ', '1788000000.000001')}`]);
+  assert.deepEqual(slackPermalinkParts(fromVault[0]!.url!), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
+  assert.deepEqual(withPermalinks(parsed.messages, []), parsed.messages, 'with no host anywhere, nothing is invented');
 });
 
 test('a conversation on an open note is an update; on a closed one, or none, it is not', () => {

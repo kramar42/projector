@@ -1052,6 +1052,13 @@ pile explained itself and the queue did not, which put the reading on the expens
 card down meant re-deriving the model's reasoning from its description. It is prose in the body like
 everything else there, so it is yours to delete, and a `rejudge` rewrites it along with the rest.
 
+**A card from a conversation ends with what was said.** Under the judgement, a Slack or Gmail card
+keeps the last three lines of the exchange the judge read, newest last, with credential shapes
+already redacted — so the queue shows the message itself and not only an account of it. A
+`rejudge` rewrites the judgement and keeps the excerpt. A Slack card also always links back to its
+message: when the relay copies no permalink, one is assembled from the channel and the ts, on the
+workspace the vault's own Slack links already use.
+
 **Judging a card is one key.** `+` folds it into what it `extends`, or accepts it as its own note when
 it extends nothing — the card has already decided which, and the fold dialog names the target before
 anything moves. Declining is `⌫`, which deletes the file and records the fingerprint so the next sweep

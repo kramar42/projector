@@ -332,6 +332,36 @@ export function slackPermalinkParts(url: string): { channel: string; ts: string 
   return { channel: m[1]!, ts: `${m[2]!.slice(0, 10)}.${m[2]!.slice(10)}` };
 }
 
+const SLACK_HOST = /^(?:slack:)?https:\/\/([a-z0-9-]+\.slack\.com)\/archives\//;
+
+/**
+ * Every message with a permalink, assembling the ones the relay left out.
+ *
+ * The relay copies `permalink` from what the search shows, and a result does not
+ * always show one — so a card arrived with no way back to its message, and a
+ * later reply in the same DM could not find the note it extends, because
+ * tracking reads those same links. A permalink is a pure function of the
+ * workspace host, the channel and the ts; the host is read off a permalink this
+ * run did copy, or off one a note already carries. With no host anywhere,
+ * nothing is invented.
+ */
+export function withPermalinks(messages: RelayMessage[], known: Iterable<string>): RelayMessage[] {
+  const hostOf = (u: string) => SLACK_HOST.exec(u)?.[1];
+  let host = messages.map((m) => (m.url ? hostOf(m.url) : undefined)).find(Boolean);
+  if (!host) {
+    for (const raw of known) {
+      host = hostOf(raw);
+      if (host) break;
+    }
+  }
+  if (!host) return messages;
+  return messages.map((m) => {
+    if (m.url || !/^\d{10}\.\d{6}$/.test(m.id)) return m;
+    const thread = m.thread ? `?thread_ts=${m.thread}&cid=${m.channel}` : '';
+    return { ...m, url: `https://${host}/archives/${m.channel}/p${m.id.replace('.', '')}${thread}` };
+  });
+}
+
 export function parseSlackRelay(text: string): RelayResult | null {
   const env = firstObject(text);
   if (!env || !Array.isArray(env.messages)) return null;

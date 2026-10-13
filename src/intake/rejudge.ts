@@ -1,6 +1,6 @@
 import { readAll } from '../index/indexer.ts';
 import { classify, type Ask } from './classify.ts';
-import { judgedBody } from './materialise.ts';
+import { judgedBody, SOURCE_EXCERPT } from './materialise.ts';
 import { patchNote } from '../server/mutate.ts';
 import { paths } from '../config.ts';
 import type { Candidate } from './types.ts';
@@ -152,7 +152,10 @@ export async function rejudge(
      * add a line every time the pass agreed with it.
      */
     const judged = verdict.body ? judgedBody(verdict, undefined) : undefined;
-    const body = judged ? `\n${judged.trim()}\n` : note.body;
+    // What was said in the source is not the model's half, so a rewrite keeps it.
+    const at = note.body.indexOf(SOURCE_EXCERPT);
+    const said = at >= 0 ? note.body.slice(at).trim() : '';
+    const body = judged ? `\n${[judged.trim(), said].filter(Boolean).join('\n\n')}\n` : note.body;
     const facetsMoved = Object.keys({ ...facets, ...note.facets }).some(
       (k) => !same(facets[k], note.facets[k]),
     );
