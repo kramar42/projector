@@ -83,21 +83,30 @@ vocabulary that constrains them, and a view is a saved query plus the arrangemen
 else to live. Everything below the vault box is derived: delete both caches and `pj reindex` is
 always correct.
 
-**Only one of the three is at the root.** The notes are the vault — a folder of markdown, at any
-depth, with no `notes/` to put them in. The other two live under `.projector/` along with the
-databases, so removing that one directory leaves the folder of markdown you started with. This is what
-lets a directory of notes that has never heard of projector be opened rather than imported: a file
-with no frontmatter is a note whose id is its filename and whose title is its leading heading, and
-nothing is written back until you change something.
+**Each kind of writing has a folder, and the layout is required.** Notes live in `notes/` (any depth),
+`projects/<id>/`, `daily/` and `inbox/`; `assets/` holds what they link to; `memory/` is the agent's;
+the vocabulary, the views and the databases live under `.projector/`. `NOTE_PLACES` and `placed()` in
+`schema/note.ts` are the rule, shared by the walk, the watcher and `pj log`'s path filter so the three
+cannot disagree; a `.md` outside the places is not read and `pj check` reports it. The layout used to
+be "any folder of markdown, at any depth" (August 2026). It changed because a vault with projects,
+assets, day notes and a queue had no way to say which file was which, and because "any folder of
+markdown" made every source repository on the disk look like a vault. Removing `.projector/` still
+leaves plain markdown in plainly named folders — nothing in the layout needs the app to be read.
 
-**Two filenames mean something, and they are the two a folder of markdown already has.** A
-`README.md` below the root takes its *folder's* name as its id, which is what makes a project a folder
-— `platform/README.md` is the note `platform`, so the id has no second copy to disagree with (C11).
-`AGENTS.md` is not a note at all: it holds a project's instructions, and instructions are
-configuration, which is not content — the same reason `facets.yaml` is not a note. Both are
-conventions rather than requirements. A folder with no README is just a folder, a project can still be
-one flat file, and a vault that uses neither behaves exactly as it did — which is the property the
-paragraph above is protecting, not an exception to it.
+**Two derived things come from where a file is.** A `README.md` takes its *folder's* name as its id,
+which is what makes a project a folder — `projects/platform/README.md` is the note `platform`, so the
+id has no second copy to disagree with (C11). And a note in `inbox/` is unjudged: the indexer sets
+`intake` from the folder and every serialiser drops it, so no write can store what the path already
+says (C11 again). `AGENTS.md` is not a note at all: it holds a project's instructions, and instructions
+are configuration, which is not content — the same reason `facets.yaml` is not a note.
+
+**Where a note's file goes is decided once, by `placeFor` in `server/mutate.ts`**: `inbox/` for a card,
+`daily/` for a note carrying `day`, `projects/<p>/` for a note of exactly one project whose folder
+exists, `notes/` for the rest. Placement is by preference, never membership: the `project` facet stays
+the only answer to what a note belongs to, and changing it later moves nothing. `relocateNote` moves a
+file between places and carries every path-shaped reference with it — the note's own file-relative body
+links rebased, other notes' body links and `doc:` links repointed. Images are vault-relative, so they
+need nothing.
 
 **The two surfaces cannot drift, because `ViewSpec` is one object.** A URL, a view file and
 a set of `pj` flags parse into the same thing, so `pj ls --view unblocked` and opening that view in
@@ -668,7 +677,7 @@ channel, and that reading must not be available.
 **A sweep with nobody standing there writes the candidate down, and that is what earns the cursor.**
 `pj intake` and the poller run the same channels through the same code; the difference is who is
 available to answer. A person is right there, so a manual sweep proposes and stops. A timer is not, so
-the poller materialises each candidate as a note carrying `intake: unjudged` and leaves the answer for
+the poller materialises each candidate as a note in `inbox/` — unjudged by being there — and leaves the answer for
 later.
 
 That difference decides which of them may advance a watermark. The rule has always been that a cursor
@@ -1113,9 +1122,9 @@ C2 says everything external is read-only. Concretely, every operation that write
 
 | Operation | Writes | Never |
 |---|---|---|
-| `pj add` / `POST /api/note` | one new note file | never overwrites an existing file |
+| `pj add` / `POST /api/note` | one new note file, in the place `placeFor` names — `notes/`, `daily/`, or the folder of its one project | never overwrites an existing file |
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
-| `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent — plus, when the write added a `project:` block, the note file **moved** to `<id>/README.md` | a frontmatter change never touches body bytes. The move is a rename, so the bytes are the ones just written; it refuses rather than overwrites when that README exists, and it never moves a note that is already a folder's README |
+| `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent — plus, when the write added a `project:` block, the note file **moved** to `projects/<id>/README.md`; and when it removed `intake` from a card in `inbox/`, the card **moved** by `relocateNote` to its place, with every body and `doc:` link to it repointed and its own body links rebased | a frontmatter change never touches body bytes. The move is a rename, so the bytes are the ones just written; it refuses rather than overwrites when that README exists, and it never moves a note that is already a folder's README |
 | `pj mv <id> <new-id>` | the renamed note file or project folder, its asset directory, every declared reference facet that points at it, every `doc:` link naming its file or reaching into its assets — the note's own included — every **body** link doing the same, and saved-view references or arrangement entries that name it | validates every destination before it writes; relations are read from the vocabulary rather than naming `parent` or `project`, so a new reference facet follows automatically. A facet moves by id, a `doc:` link by path and a body link by a path *relative to the note holding it*, which is why they are three sweeps and not one — and why a body link is computed against where its holder will be, since renaming a folder note moves every note inside it |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
 | `POST /api/bulk` ops `facet`, `move` | many notes' frontmatter — `facet` writes one axis uniformly, `move` writes one axis per grouping axis the drag crossed | one write per note whatever the op; the `delete` and `merge` ops are the rows below |
@@ -1131,7 +1140,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
 | `pj intake advance` / `cursor set` / `cursor reset` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake decline` / `restore` | one row in `.projector/intake.db`'s `suppressed` table — and on the way back, one in `rescued` plus that channel's `watermark` row removed | never a note; records a decline by fingerprint so a later sweep stops offering it, and un-declining walks the cursor back so a later sweep can still reach it |
-| the poller (`src/server/poll.ts`) and `pj intake apply` | one note per kept candidate through `createNote`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
+| the poller (`src/server/poll.ts`) and `pj intake apply` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
 | `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
 | the panel's ✓ / `+`, through `POST /api/note/:id/fold` | the merge, then the axes the person took, one at a time through the checked path | merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |

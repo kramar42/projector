@@ -26,7 +26,7 @@ Every word below means one thing throughout this document, the code and the CLI.
 | **mention** | a pointer inside the vault written in the prose: an ordinary markdown link, `[Its title](other-note.md)`. Not a relation — it names nothing, so it does not filter, group or block — but it is maintained: `rename` and `delete` rewrite it, and `check` reports one that has gone wrong |
 | **project** | a note carrying a `project:` block of configuration, which its members inherit. Usually a folder: `platform/README.md` is the note `platform`, and `platform/AGENTS.md` is its instructions. A built-in facet points at them |
 | **frontmatter** | the YAML between `---` fences at the top of a note. Everything below is the body, preserved byte for byte |
-| **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
+| **vault** | a folder with the required layout — `notes/`, `projects/`, `daily/`, `inbox/` for notes, `assets/`, `memory/` — and the vocabulary and the saved views under `.projector/` |
 | **project folder** | a folder whose `README.md` carries a `project:` block. The folder name is the note's id; `AGENTS.md` beside it is what members inherit. Nothing else about the folder means anything — what is *in* it is not what belongs to it |
 | **view** | a saved query in `.projector/views/*.yaml`, with a name and a shape |
 | **shape** | how a query is drawn: `table`, `board`, `calendar` or `graph` |
@@ -238,20 +238,25 @@ vault.
 
 ### A project is a folder
 
-A project note is normally a folder's `README.md`:
+A project note is the `README.md` of a folder under `projects/`:
 
 ```
-platform/
+projects/platform/
 ├── README.md        the note — `project:` block above, prose below
 ├── AGENTS.md        how work on platform is done
 └── …                whatever else belongs beside it
 ```
 
-**The folder name is the id.** `platform/README.md` is the note `platform`, so there is nothing to
-keep in step — the same reason a project has no `key`. Every other `README.md` in the vault would
+**The folder name is the id.** `projects/platform/README.md` is the note `platform`, so there is
+nothing to keep in step — the same reason a project has no `key`. Every other `README.md` would
 otherwise derive the same id, `readme`, and the second one to be read would be dropped as a duplicate.
-The vault's own root `README.md` is the exception: it is the vault's front page rather than any
-folder's, and it keeps its filename. A stated `id:` still wins over both.
+A stated `id:` still wins. The vault's own root `README.md` is not a note at all: it describes the
+vault, the way its root `AGENTS.md` instructs it.
+
+**A note belonging to one project alone lives in its folder, by preference.** `pj add` with
+`--facet project=platform` writes `projects/platform/<id>.md`. The folder is where the note lives,
+not what it belongs to — membership is the `project` facet, a member in `notes/` belongs just as
+much, and editing `project` later moves nothing.
 
 **`AGENTS.md` beside it is the project's instructions** — how work here is done, inherited by every
 member. It is a file rather than a `project:` key because instructions are the one part of a project's
@@ -1021,7 +1026,10 @@ days, this is the first thing to check: `pj intake status` shows each channel's 
 run* hours old with no poller means every sweep you have had was one you typed.
 
 It starts when the vault is first opened, and each candidate that survives judgement lands as an
-ordinary note carrying `intake: unjudged` — so an open board shows it appear without doing anything.
+ordinary note in `inbox/` — so an open board shows it appear without doing anything. Being in the
+inbox is what makes it unjudged: every query sees `intake: unjudged` on it, read off the folder and
+never stored in the file. Accepting it moves the file to where a note like it lives — `notes/`, or the
+folder of its one project — and every body link to it follows.
 Running twice writes nothing twice: a fingerprint the vault already holds short-circuits. Slack and
 Gmail are skipped with a reason, having no credential here.
 
@@ -1035,7 +1043,7 @@ the way in, so cards from before you changed `.projector/classify.md` — or fro
 the app — keep whatever they were given. This is how they catch up, and it is the only command that
 rewrites a note rather than creating one.
 
-What it may touch is the queue and nothing else: a card still carrying `intake: unjudged` has had
+What it may touch is the queue and nothing else: a card still in `inbox/` has had
 nothing confirmed, and one without it is yours — you accepted the values, which makes them yours as
 surely as typing them would. It **never deletes.** A card the pass would no longer keep is named so you
 can look; removing it is `pj rm`, which records the decline. The one thing to know: a card you corrected
@@ -1338,27 +1346,42 @@ already proposed, and judging it is accepting them.
 
 # Vaults
 
-A **vault** is a folder of markdown, opened the way Obsidian opens one. The notes sit at the root, at
-any depth; the only thing the app adds is `.projector/`, holding the vocabulary, the saved views and
-three derived databases. The app has no built-in location and assumes no directory name: on first run
-it asks for a folder and remembers the choice, and the switcher at the top of the sidebar opens or
-adds others.
+A **vault** is a folder with a required layout, opened the way Obsidian opens one. Each kind of
+writing has a folder, so a file says what it is by where it sits:
 
-**Notes you already keep are a vault.** Point at an Obsidian folder or a directory of meeting notes
-and it opens: every `.md` is a note, and one with no frontmatter is titled by its leading heading and
-identified by its filename. **A key it cannot use counts as a key you did not write** — an `id:` that
+| folder | holds |
+|---|---|
+| `notes/` | notes, at any depth inside; subfolders mean nothing to the app |
+| `projects/<id>/` | a project's note as its `README.md`, its `AGENTS.md`, and — by preference — the notes of that project alone |
+| `daily/` | notes carrying `day` |
+| `inbox/` | cards intake brought in and nobody has judged; being here *is* being unjudged |
+| `assets/` | files notes link to, under `assets/<note-id>/` |
+| `memory/` | the agent's working theories and patterns — never a note |
+| `.projector/` | the vocabulary, the saved views and three derived databases |
+
+A `.md` anywhere else is not a note, and `pj check` reports it as an error with the move that fixes
+it. The root's own `AGENTS.md` and `README.md` instruct and describe the vault. The app has no
+built-in location and assumes no folder name above the vault: on first run it asks for a folder and
+remembers the choice, and the switcher at the top of the sidebar opens or adds others.
+
+**Notes you already keep become a vault by one move.** Put the folder of markdown — an Obsidian vault, a
+directory of meeting notes — in a folder of its own and call it `notes/`, then open the outer folder:
+every `.md` under `notes/` is a note, and one with no frontmatter is titled by its leading heading and
+identified by its filename. Opening a folder of *loose* markdown is refused with exactly that
+instruction, because guessing which of somebody's files are notes is how a tool rewrites their
+documentation. **A key it cannot use counts as a key you did not write** — an `id:` that
 is not a lowercase slug, or a `created:`/`updated:` a foreign tool stamped in its own format, falls
 back to the derived value rather than failing the note, so an export is never partly invisible.
 Dates are read in either ISO form, `2026-08-27` or `20260827`, with anything after the date dropped.
 Nothing is moved, converted, or written back until you change something —
 and the first change writes down the id the note was already going by, so a later rename moves a file
-rather than a note. There is no exempted filename: a `README.md` is a note like the rest.
+rather than a note.
 
 Opening a folder that has no `.projector/` sets one up — a facet vocabulary, seven starter views, and a
 `.gitignore` for the databases. If the folder already has a `.gitignore`, which an adopted repository
 usually does, the missing lines are appended to it and nothing already there is touched or repeated.
 That is all it writes: the folder's own files are not touched. A
-non-empty folder holding no markdown is refused. No prose document is written into a vault — there is
+non-empty folder without the layout is refused. No prose document is written into a vault — there is
 no seeded README, and the note format is explained in the `pj-about` skill.
 
 The folders you have opened are listed in `vaults.json` next to the app, and the server will only open
@@ -1449,11 +1472,17 @@ what should never happen. See [Rules you can check](#rules-you-can-check).
 
 ```
 <vault>/
-  fix-deploy.md                  # a note
-  eventing.md                    # a node, may carry a project: block
-  reading-list.md                # no frontmatter: still a note
-  archive/last-year.md           # any depth; folders mean nothing to the app
+  notes/fix-deploy.md            # a note
+  notes/reading-list.md          # no frontmatter: still a note
+  notes/archive/last-year.md     # any depth inside notes/; subfolders mean nothing to the app
+  projects/eventing/README.md    # a project — the note `eventing`
+  projects/eventing/AGENTS.md    # how work on it is done; not a note
+  projects/eventing/kafka-acls.md  # a note of that project alone, filed beside it
+  daily/2026-10-13.md            # a note about a day
+  inbox/retry-bug.md             # a card nobody has judged
   assets/fix-deploy/error.png
+  memory/                        # the agent's own; never a note
+  AGENTS.md  README.md           # the vault's instructions and description; not notes
   .projector/
     facets.yaml                  # facet vocabulary, order, constraints
     views/
@@ -1461,8 +1490,8 @@ what should never happen. See [Rules you can check](#rules-you-can-check).
     index.db  enrich.db  intake.db  # derived · cache · cursors — all gitignored
 ```
 
-Delete `.projector/` and what is left is the folder of markdown you started with. That is the test the
-layout is built to pass.
+Delete `.projector/` and what is left is plain markdown in plainly named folders. That is the test the
+layout is built to pass: nothing in it needs the app to be read.
 
 ## Note
 

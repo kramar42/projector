@@ -9,25 +9,44 @@ A personal work-management app. One markdown note database, projected as a board
 a table — whichever the current query asks for. The project's `README.md` describes the app; **this file is
 where the note format itself is written down**, so nothing in a vault restates it.
 
-**A vault is a folder of markdown.** The notes sit at its root, at any depth; everything the app owns
-is under `.projector/`. This skill covers all three editable things:
+**A vault has a required layout: each kind of writing has a folder.** Everything the app owns is under
+`.projector/`.
+
+```
+<vault>/
+├── notes/        notes, at any depth inside; subfolders mean nothing
+├── projects/     projects/<id>/README.md is the project note; AGENTS.md beside it; its members by preference
+├── daily/        notes carrying `day`
+├── inbox/        what intake brought in, unjudged — being here is what unjudged means
+├── assets/       files a note links to, under assets/<note-id>/
+├── memory/       the agent's working theories and patterns; never a note
+├── .projector/   facets.yaml, views/, and the derived databases
+├── AGENTS.md     the vault's instructions
+└── README.md     optional: the vault's description, not a note
+```
 
 | | | |
 |---|---|---|
-| `<vault>/**/*.md` | the notes | mostly `pj` |
+| the notes, in `notes/ projects/ daily/ inbox/` | the notes | mostly `pj` |
 | `<vault>/.projector/facets.yaml` | the vocabulary — which axes exist, in what order | hand-edit |
 | `<vault>/.projector/views/*.yaml` | saved queries and their arrangement | hand-edit |
 
-**Every markdown file is a note but one: `AGENTS.md`.** A `README.md` is a note, and so is one in a
-subfolder. `AGENTS.md` is configuration — a project's instructions — and never appears as a note.
+**A markdown file is a note when it is in one of the four places**, and `AGENTS.md` never is. A `.md`
+anywhere else is a stray, and `pj check` reports it as an error with the move that fixes it. `pj`
+writes each kind to its place: `pj add` into `notes/`, or `daily/` for a note carrying `day`, or the
+one project's folder for a note with exactly one `project`.
 
-**Folders are the user's to arrange, with one convention: a project is usually a folder.**
-`platform/README.md` carrying a `project:` block is the note `platform` — a `README.md` below the
-vault root takes its *folder's* name as its id, so the folder name is the id — and `platform/AGENTS.md`
-beside it holds the instructions its members inherit. The vault's own root `README.md` is the
-exception and keeps the id `readme`. Nothing else about a folder means anything: what is *in* it is
-**not** what belongs to it. Membership is the `project` facet and only the facet, a member can live
-anywhere, and a note sitting in `platform/` need not be a member of it.
+**A project is a folder under `projects/`.** `projects/platform/README.md` carrying a `project:` block
+is the note `platform` — a `README.md` takes its *folder's* name as its id — and `AGENTS.md` beside it
+holds the instructions its members inherit. A note belonging to `platform` alone lives in
+`projects/platform/` by preference, but the folder is only where it lives: **membership is the
+`project` facet and only the facet**, a member in `notes/` still belongs, and editing `project` later
+moves nothing.
+
+**Unjudged is a place.** A card in `inbox/` is unjudged, and carries `intake: unjudged` in every query,
+but the value is read off the folder and never written to the file. Accepting a card — removing the
+axis, the board's `+` — moves the file out of the inbox to where a note like it lives, and every body
+link to it follows. Never write `intake` into a frontmatter; it is dropped on the next write.
 
 **A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
@@ -121,7 +140,7 @@ re-derive those by reading files.
 pj add "<title>" [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]
 pj set <id>... [--title t] [--facet f=v] [--add f=v] [--remove f=v]
 pj set <id> --set project.jira=PROJ --set 'project.repos=[{path: ~/x, base: main}]'
-pj set <id> --set 'project={}'      # a note becomes a project — and moves to <id>/README.md
+pj set <id> --set 'project={}'      # a note becomes a project — and moves to projects/<id>/README.md
 pj merge <id>... --into <id>         # folds notes into one; the survivor keeps its facets
 pj rm <id>...                       # deletes, dropping every reference pointing at it
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
@@ -161,17 +180,12 @@ refilling the inbox.
   propose creating the note — do not invent membership that resolves to nothing.
 - **A project's instructions are `AGENTS.md`, not frontmatter.** There is no `project.instructions`
   key any more; `pj check` reports one as an error. Write or edit the file directly with Write/Edit —
-  `pj` has no command for it, deliberately, since it is prose. It belongs beside the project note, so
-  a project that needs instructions is a project that is a folder:
+  `pj` has no command for it, deliberately, since it is prose. It belongs beside the project note, in
+  the project's folder: `projects/<id>/AGENTS.md`.
 
-  Promotion makes the folder for you — `pj set <id> --set 'project={}'` moves `platform.md` to
-  `platform/README.md`, named for the id, so nothing pointing at the note breaks. For a project that
-  is already flat, do the move first and then write the file:
-
-  ```bash
-  git -C <vault> mv platform.md platform/README.md   # or let `pj set --set project={}` do it
-  # then write platform/AGENTS.md beside it
-  ```
+  Promotion makes the folder for you — `pj set <id> --set 'project={}'` moves `notes/platform.md` to
+  `projects/platform/README.md`, named for the id, so nothing pointing at the note breaks. Then write
+  `projects/platform/AGENTS.md` beside it.
 
   Un-projecting never moves it back, so an `AGENTS.md` left beside a note that is no longer a project
   is simply no longer read — remove it yourself if that is what you meant.

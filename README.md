@@ -104,7 +104,7 @@ The rest of the vocabulary is built out of these.
 | **project** | a note carrying a block of configuration that its members inherit |
 | **view** | a saved query, and how it is drawn |
 | **shape** | `table`, `board`, `calendar` or `graph`. A view is a query; the shape is one field of it |
-| **vault** | a folder of markdown, with the vocabulary and the saved views under `.projector/` |
+| **vault** | a folder with the required layout — `notes/`, `projects/`, `daily/`, `inbox/` for notes, `assets/`, `memory/` — and the vocabulary and the saved views under `.projector/` |
 
 An axis labelled `ƒ` is *computed* from the notes rather than stored on them: `blocked`, `triage`,
 `staleness`.
