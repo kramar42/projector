@@ -37,7 +37,7 @@ there is one, and every question still waiting.
 Cheapest first, each source once:
 
 0. **Intake's freshness** (SKILL.md, *Intake*): `pj intake status --json`, and if the newest tick
-   is stale, `pj intake apply` in the background while steps 1–3 run.
+   is stale, `pj intake` in the background while steps 1–3 run.
 1. **Reconcile the unclosed days.** `pj did <day> --json` for each day since the last closed one,
    against that day's plan items:
    - an unticked item with a trace is a *seen* candidate for done;

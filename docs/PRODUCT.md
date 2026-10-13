@@ -72,8 +72,9 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   `pj log` reads history from. Two ship in this one: `vaults/tutorial`, which a fresh clone opens
   onto, and `vaults/coverage`, the fixture.
 - **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL, Gmail through a
-  read-only CLI — plus Slack, which is read by an agent through MCP. Sweeps propose and stop;
-  `pj intake` creates no note and moves no cursor.
+  read-only CLI — plus Slack, which is read by an agent through MCP. A tick — the server's timer, or
+  `pj intake` — files what it judged worth a card into `inbox/`, which is not your notes, and nothing
+  leaves it until you accept or decline the card; `pj intake --dry-run` previews and writes nothing.
 - **`pj work`** prepares a multi-repo git worktree workspace, a briefing with the note's full context,
   and a terminal running a Claude session in it.
 - **Configuration is the vault's.** `.projector/config.yaml` says which channels this vault sweeps,

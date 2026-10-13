@@ -19,11 +19,12 @@ import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 /**
  * The sweep: every channel, from where it last got to.
  *
- * Two things are deliberately not here. It **writes no notes** — `pj add` and
- * `pj link` do that, after a human has agreed — and it **does not advance any
- * cursor**. A run that fetched is not a run that was resolved, and a sweep
- * abandoned halfway must not swallow what it had already listed. `pj intake
- * commit` is the separate, explicit step.
+ * Two things are deliberately not here. It **writes no notes** — a tick
+ * (`pollOnce`, behind both the timer and `pj intake`) files what it judged worth
+ * a card — and it **does not advance any cursor**. A run that fetched is not a
+ * run that was resolved, and a sweep abandoned halfway must not swallow what it
+ * had already listed. The tick advances a channel once it is resolved;
+ * `pj intake advance` promotes a `--dry-run` preview resolved by hand.
  */
 
 export const CHANNELS: Channel[] = [
@@ -321,8 +322,8 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     L.push(`unknown channel(s): ${s.unknown.join(', ')} — have ${channelNames().join(', ')}`);
   }
   L.push(
-    `${candidateCount(s)} candidate(s). Nothing is captured and no cursor has moved — ` +
-      `create what is worth a note, then: pj intake advance [--captured n]`,
+    `${candidateCount(s)} candidate(s). A preview: nothing is filed and no cursor has moved — ` +
+      `pj intake files them into inbox/`,
   );
   return L.join('\n');
 }
@@ -353,7 +354,8 @@ export function statusOf(root: string): ChannelStatus[] {
       channel: c.name,
       cursor: w?.cursor ?? null,
       defaultDays: c.defaultDays,
-      ranAt: w?.ranAt ?? null,
+      // Empty when only a preview has touched the channel: never run.
+      ranAt: w?.ranAt || null,
       seen: w?.seen ?? 0,
       captured: w?.captured ?? 0,
     };

@@ -83,8 +83,9 @@ pj setup
 Run it after they have edited. Report what changed. If something is still `failing`, give the
 `fix` line and stop — do not try credentials yourself, and do not loop.
 
-Finish by saying what this vault will now do on a bare `pj intake`, which is the enabled channels and
-nothing else.
+Finish by saying what a bare `pj intake` will now fetch and file into `inbox/`, which is the enabled
+channels and nothing else. A bare `pj intake` is a real tick — it files cards and moves cursors — so
+if they want to see what it would find first, `pj intake --dry-run` lists it and writes nothing.
 
 ## What the file holds, and why it is not committed
 

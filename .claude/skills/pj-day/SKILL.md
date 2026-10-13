@@ -113,7 +113,7 @@ channels is the last tick (UTC). The vault's `.projector/config.yaml` `poll:` sa
 server ticks and in which local hours.
 
 - **Under ~2h old** — intake is current. Start nothing.
-- **Older** — start `pj intake apply` in the background (your shell's background mode; a relay can
+- **Older** — start `pj intake` in the background (your shell's background mode; a relay can
   take minutes per channel) and gather the calendar, `pj did` and the vault while it runs. If the gap
   covers poll hours and `poll.enabled` is true, the server is probably down: say so in the stop's
   first line — "intake last ran 10-08 17:00, the server is probably down — ran a tick now". A gap

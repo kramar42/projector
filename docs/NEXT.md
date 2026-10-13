@@ -217,11 +217,11 @@ things.
   it also reaches a mailbox or a mention. Fetching comments is one more field and a bigger payload;
   worth it the first time a comment is the thing that was missed.
 
-- **The manual path never marks anything seen.** `pj intake` proposes and `pj intake advance`
-  promotes, and neither knows what the person did with a tracked candidate in between, so `seen` is
-  written only by a judging tick. A person who resolves a preview by hand will be offered the same
-  Jira change once more by the next `apply`, and the classifier drops it. Recording on `advance` would
-  be a guess about what was applied.
+- **The manual path never marks anything seen.** `pj intake --dry-run` proposes and
+  `pj intake advance` promotes, and neither knows what the person did with a tracked candidate in
+  between, so `seen` is written only by a judging tick. A person who resolves a preview by hand will be
+  offered the same Jira change once more by the next tick, and the classifier drops it. Recording on
+  `advance` would be a guess about what was applied.
 
 - **`pj work` does not resume a *finished* session in the workspace.** It reopens a live one and
   starts a new one otherwise, and a closed transcript in that directory stays history rather than

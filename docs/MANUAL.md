@@ -982,25 +982,32 @@ text — the row was correct, the ref was never a link. A channel with no URL to
 the `source` facet already records where the note came from.
 
 ```bash
-pj intake                    # every channel, each from where it last got to
-pj intake claude git --json
+pj intake                    # one tick: every channel from where it last got to, filed into inbox/
+pj intake claude git         # only these two
+pj intake --dry-run --json   # what a tick would find, filed nowhere
 pj intake status
 pj intake known claude:abc-123          # which notes already carry this
-pj intake advance --captured 2          # promote what that sweep recorded
 
 pj decline git:abc --reason "my own commit"           # a no, recorded
 pj intake declined                                    # what a judgement hid, and why
 pj intake restore git:abc                             # offer it again, cursor and all
 ```
 
-**`pj intake` creates no note and moves no cursor.** `pj add`/`pj link` do the first after a human
-agrees, and `pj intake advance` does the second once the proposal is resolved. A run that fetched is not
-a run that was resolved, and an abandoned sweep must not swallow what it listed.
+**`pj intake` is one tick, by hand** — the same tick the server runs on a timer (below): fetch, judge,
+file each card worth keeping into `inbox/`, record the rest as declined, and move the cursor of every
+channel it fetched. It needs no preview first, because `inbox/` is not your notes: nothing leaves it
+until you accept or decline the card. It prints a line per channel, `new <id>` per card, and the tick's
+total, the same lines the server logs.
 
-What a sweep *does* write is where it **would** move each cursor to, alongside how many items it
-examined. `pj intake advance` promotes them. A pending proposal is inert until then, and promoting it
-spends it, so a second advance re-commits nothing. `--captured` stays an argument: capture happens
-between the sweep and the commit, and nothing attributes a `pj add` back to a channel.
+**`pj intake --dry-run` is the preview**, for diagnosis: it lists the candidates, files nothing and
+moves no cursor. `--since`, `--limit`, `--json` and `--verbose` shape it and are refused without it,
+because a tick from an arbitrary `--since` would move a cursor past what it never looked at. A run that
+fetched is not a run that was resolved, so what a preview writes is only where it **would** move each
+cursor, alongside how many items it examined — not a run, so `pj intake status` reads as it did.
+Resolving a preview by hand — `pj add` or `pj decline` for each thing it listed — and then
+`pj intake advance [--captured n]` promotes those cursors; that is recovery, under
+`pj help intake advanced`. A pending proposal is inert until then, and promoting it spends it, so a
+second advance re-commits nothing.
 
 **Sweeping without being asked.** A vault can have the server sweep on a timer and write what it finds
 straight into the queue, so the intake board fills on its own:
@@ -1039,10 +1046,9 @@ folder of its one project — and every body link to it follows.
 Running twice writes nothing twice: a fingerprint the vault already holds short-circuits. Slack and
 Gmail are skipped with a reason, having no credential here.
 
-Unlike `pj intake`, a poll **does** move each channel's cursor — it can, because everything behind the
-new boundary is a file rather than a line in a terminal you have already closed.
-
-Without a server, `pj intake apply` runs exactly the same tick once, by hand.
+Unlike a preview, a tick **does** move each channel's cursor — it can, because everything behind the
+new boundary is a file rather than a line in a terminal you have already closed. Without a server,
+`pj intake` is that tick.
 
 **`pj intake rejudge` runs the pass again over what is still in the queue.** A card is written once, on
 the way in, so cards from before you changed `.projector/classify.md` — or from an earlier version of
@@ -1134,8 +1140,8 @@ because the agent saw one message at a time. Three things changed.
 - **Jira offers a change, not an update.** An issue's `updated` moves on every comment; what the sync
   compares is status and assignee, against the state the last tick judged it in. Unchanged is skipped
   with that reason. The state is recorded only by a tick that judged — the automatic path — so a tick
-  that held on the classifier sees the same change again, and `pj intake` alone never marks anything
-  seen.
+  that held on the classifier sees the same change again, and `pj intake --dry-run` never marks
+  anything seen.
 
 **The model proposes; your vocabulary disposes.** Every facet value and every merge target is checked
 against the vault before anything is written — an invented value is dropped and the rest of the card
@@ -1253,7 +1259,7 @@ forgets that channel's cursor, so the next sweep can actually reach the item aga
 stopping it being hidden. What arrives is a **new card**, written fresh from the commit or session or
 issue the source still holds — not the card you deleted, and not your edits to it. One limit worth
 knowing: the channel falls back to its default window, so something declined longer ago than that will
-not return on its own — `pj intake --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
+not return on its own — `pj intake --dry-run --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
 the search reaches the reason as well as the title, because someone hunting for a card they
 half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI; in the panel,
 a box and a pager — twenty rows to a page, `[` and `]` for the page before and after, and the search
@@ -1350,7 +1356,7 @@ itself.
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
-now a queue you walk, and `pj intake apply` runs the same tick by hand when there is no server up.
+now a queue you walk, and `pj intake` runs the same tick by hand when there is no server up.
 
 `/pj-triage` still **proposes and stops**: it presents a table and applies nothing until it is approved.
 A wrong project assignment hides a note in a column nobody will look in, which is worse than leaving it
@@ -1447,13 +1453,12 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `views`, `search`, `context`, `log`, `did`, `vault_status`, and `propose`, which answers with the `pj` command for a change and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
 | `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
-| `pj intake [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | what has happened elsewhere since each channel's cursor. Writes nothing |
+| `pj intake [<channel>…]` | one tick by hand: fetch each channel from its cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, advance what it fetched |
+| `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a tick would find since each channel's cursor. Files nothing, moves no cursor |
 | `pj intake status [--json]` | each channel's cursor, last run and counts |
-| `pj intake advance [--captured n]` | promote the cursor(s) the last sweep recorded, after the proposal is resolved |
-| `pj intake apply` | one tick by hand: sweep, judge, write what deserves a note, record the rest as declined |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
 | `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
-| `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: inspect deduplication · set a raw cursor · forget one |
+| `pj intake advance [--captured n]` · `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: promote the cursors a `--dry-run` proposed, once you resolved it by hand · inspect deduplication · set a raw cursor · forget one |
 | `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check` | validate every note file, and every saved view against the same vocabulary |

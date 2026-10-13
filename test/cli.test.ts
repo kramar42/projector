@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
+import { settingsPath } from '../src/settings.ts';
 import { readAll } from '../src/index/indexer.ts';
 import { place } from './fixture.ts';
 
@@ -227,6 +228,13 @@ test('canonical intake verbs reach the existing intake operations', () => {
     assert.equal(decline.code, 0, decline.out);
     assert.match(decline.out, /declined git:example — not work/);
     assert.equal(run([...base, 'decline', 'git:other', '--reason', 'x']).code, 1, 'pj intake decline is gone');
+    // And `apply` is what a bare `pj intake` does now. Read as a channel name, it
+    // is refused before anything is fetched.
+    for (const gone of ['apply', 'poll']) {
+      const r = run([...base, gone]);
+      assert.equal(r.code, 1, `pj intake ${gone} is gone`);
+      assert.match(r.out, new RegExp(`unknown channel\\(s\\): ${gone}`), r.out);
+    }
 
     const listed = run([...base, 'declined']);
     assert.match(listed.out, /git:example/);
@@ -243,6 +251,77 @@ test('canonical intake verbs reach the existing intake operations', () => {
     assert.equal(reset.code, 0, reset.out);
     assert.match(reset.out, /forgot 1 cursor/);
   } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * `pj intake` is the tick; `--dry-run` is the preview.
+ *
+ * Applying used to be the opt-in (`pj intake apply`) because it wrote cards among
+ * your notes. Cards land in `inbox/` now, which is not your notes, so fetching and
+ * filing is one harmless step and the preview is what has to be asked for.
+ *
+ * Driven through the git channel against a repo made here, with judging off, so
+ * the spawned CLI fetches something real and spends nothing: every candidate is
+ * kept, which is the write path with an empty verdict.
+ */
+test('pj intake files into inbox/ and advances; --dry-run files nothing and moves no cursor', () => {
+  const v = vault();
+  const repo = mkdtempSync(join(tmpdir(), 'pj-cli-repo-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd: repo, stdio: 'ignore' });
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'me@example.com');
+    git('config', 'user.name', 'Me');
+    writeFileSync(join(repo, 'a.txt'), 'a', 'utf8');
+    git('add', 'a.txt');
+    git('commit', '-qm', 'Teach the widget to count');
+    writeFileSync(
+      place(v.root, 'projects', 'proj', 'README.md'),
+      `---\nid: proj\ntitle: Proj\nproject:\n  repos:\n    - path: ${repo}\n---\n\nb\n`,
+      'utf8',
+    );
+    writeFileSync(settingsPath(v.root), 'channels: [git]\nclassify:\n  enabled: false\n', 'utf8');
+    const env = { PROJECTOR_VAULTS: v.registry, PROJECTOR_GIT_AUTHOR: 'me@example.com' };
+    const base = ['--vault', v.root, 'intake'];
+    const inbox = () => (existsSync(join(v.root, 'inbox')) ? readdirSync(join(v.root, 'inbox')) : []);
+    const status = () => run([...base, 'status', '--json'], env).out;
+
+    const before = status();
+    const preview = run([...base, '--dry-run'], env);
+    assert.equal(preview.code, 0, preview.out);
+    assert.match(preview.out, /Teach the widget to count/, 'the preview lists the candidate');
+    assert.deepEqual(inbox(), [], 'and files nothing');
+    assert.equal(status(), before, 'and pj intake status reads as it did: no cursor moved, no run recorded');
+
+    // The preview's own flags shape a preview; without --dry-run they are refused
+    // rather than ignored, because a tick from an arbitrary --since would advance
+    // a cursor past what it never looked at.
+    for (const flag of [['--since', '2026-01-01'], ['--limit', '3'], ['--json'], ['--verbose']]) {
+      const r = run([...base, ...flag], env);
+      assert.equal(r.code, 1, `${flag[0]} without --dry-run should fail`);
+      assert.match(r.out, /--dry-run/, r.out);
+    }
+    assert.deepEqual(inbox(), [], 'and a refused run fetched nothing');
+
+    const tick = run([...base, 'git'], env);
+    assert.equal(tick.code, 0, tick.out);
+    assert.match(tick.out, /^new\s+\S+/m, 'a tick names each card it wrote');
+    assert.match(tick.out, /cursor moved for git/);
+    assert.equal(inbox().length, 1, 'the card is in the inbox');
+    const git_ = (JSON.parse(status()) as { channel: string; cursor: string | null; ranAt: string | null }[]).find(
+      (s) => s.channel === 'git',
+    )!;
+    assert.ok(git_.cursor, 'the cursor moved');
+    assert.ok(git_.ranAt, 'and the run is recorded');
+
+    const again = run(base, env);
+    assert.equal(again.code, 0, again.out);
+    assert.equal(inbox().length, 1, 'running twice writes nothing twice');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
     v.cleanup();
   }
 });
@@ -282,12 +361,17 @@ test('help is progressive, and prints without a vault', () => {
       const r = run(form, { PROJECTOR_VAULTS: v.registry });
       assert.equal(r.code, 0, `pj ${form.join(' ')} should exit 0`);
       assert.match(r.out, /Usage: pj intake/);
-      assert.match(r.out, /pj intake apply/);
+      assert.match(r.out, /pj intake --dry-run/);
+      assert.doesNotMatch(r.out, /intake apply/, '`pj intake` is the tick; there is no apply');
+      assert.doesNotMatch(r.out, /pj intake advance/, 'promoting a preview is recovery, not the workflow');
       assert.doesNotMatch(r.out, /Work with notes/, 'intake help does not repeat the root');
     }
+    assert.doesNotMatch(run(['help'], { PROJECTOR_VAULTS: v.registry }).out, /intake apply/);
     const advanced = run(['help', 'intake', 'advanced'], { PROJECTOR_VAULTS: v.registry });
     assert.equal(advanced.code, 0);
     assert.match(advanced.out, /pj intake cursor set/);
+    assert.match(advanced.out, /pj intake advance/);
+    assert.doesNotMatch(advanced.out, /\bpoll\b/, 'apply is gone, and so is its old spelling');
 
     // One registered: the header names it.
     const one = join(v.root, 'solo.json');

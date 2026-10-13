@@ -246,8 +246,7 @@ Work with notes
   mcp                serve the vault read-only to MCP clients, over stdio
 
 Intake
-  intake             preview what happened elsewhere; writes nothing
-  intake apply       fetch, judge, file, and advance
+  intake             fetch, judge, file into inbox/; --dry-run previews
   accept, decline    file an inbox card, or say no to it
   intake status      inspect channels and cursors
   intake declined    inspect declined candidates
@@ -361,23 +360,27 @@ Inspect what this vault can reach, or write its initial configuration.`,
        pj vaults forget <path>
 
 List and manage the local vault registry.`,
-  intake: `Usage: pj intake [<channel>...] [--since iso] [--limit n] [--json] [--verbose]
-       pj intake apply
+  intake: `Usage: pj intake [<channel>...]
+       pj intake --dry-run [<channel>...] [--since iso] [--limit n] [--json] [--verbose]
        pj intake status [--json]
-       pj intake advance [--channel c] [--captured n]
        pj intake declined [--channel c] [--q text] [--limit n] [--json]
        pj intake restore <fingerprint>...
        pj intake rejudge [--limit n]
 
-\`pj intake\` previews candidates and records no note or cursor movement. \`apply\`
-runs the automatic path: fetch, judge, write what deserves a note, decline the
-rest, and advance fetched cursors. \`advance\` promotes the last preview after
-you resolve it. \`restore\` makes a declined candidate eligible again.
+\`pj intake\` runs one tick, the one the server runs on a timer: fetch each
+channel from its cursor, judge, file what deserves a card into inbox/, record
+the rest as declined, and advance the cursors it fetched. Naming channels runs
+only those. \`--dry-run\` previews instead: it lists the candidates, files
+nothing and moves no cursor. \`restore\` makes a declined candidate eligible
+again.
 
 Run \`pj help intake advanced\` for raw cursor and deduplication commands.
 Judging a card is \`pj accept\` or \`pj decline\`.`,
   'intake advanced': `Advanced intake commands
 
+  pj intake advance [--channel c] [--captured n]
+      Promote the cursors the last \`--dry-run\` proposed, once what it listed
+      has been filed or declined by hand.
   pj intake known <fingerprint-or-ref>...
       Check which notes already carry refs; useful to integrations before capture.
   pj intake cursor set --channel <c> --cursor <value> [--seen n] [--captured n]
@@ -385,9 +388,8 @@ Judging a card is \`pj accept\` or \`pj decline\`.`,
   pj intake cursor reset [--channel c]
       Forget cursor state so the next sweep uses its default window.
 
-The old \`poll\`, \`commit\`, \`suppressed\`, \`unsuppress\`, and \`reset\`
-spellings remain compatibility aliases, but are intentionally omitted from
-normal help.`,
+The old \`commit\`, \`suppressed\`, \`unsuppress\`, and \`reset\` spellings
+remain compatibility aliases, but are intentionally omitted from normal help.`,
 };
 
 function printHelp(topic: string[]): void {
@@ -720,6 +722,34 @@ async function cmdSync(argv: string[]): Promise<void> {
   );
 }
 
+/**
+ * `pj intake`: one tick, run by hand.
+ *
+ * The same tick the server runs on a timer — same classifier, same
+ * suppressions, same cursor rule — so a vault that does not want a server
+ * running is not a vault that has to do this by conversation instead. It files
+ * into `inbox/`, which is not your notes, so it needs no preview first.
+ */
+async function tick(root: string, only: string[]): Promise<void> {
+  const started = Date.now();
+  const res = await pollOnce(root, undefined, { only });
+  if (res.held) {
+    console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
+    process.exit(1);
+  }
+  // The same lines the poller logs, so a tick reads the same by hand and on the
+  // timer — including what each channel cost to fetch and judge.
+  for (const c of res.channels) {
+    console.log(`${pad(c.channel, 10)} ${c.unreachable ? `not fetched — ${c.unreachable}` : channelLine(c)}`);
+  }
+  for (const id of res.created) console.log(`${pad('new', 10)} ${id}`);
+  console.log(
+    tickLine(res, Date.now() - started) +
+      `, ${res.skipped} already known` +
+      (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
+  );
+}
+
 async function cmdAudit(argv: string[]): Promise<void> {
   const { flags } = argFlags(argv, ['json'], ['json']);
   const facets = loadFacets(p.facets);
@@ -949,13 +979,14 @@ if (asking) {
       break;
     }
     /**
-     * A sweep proposes; it never captures and never advances a cursor. Both are
-     * separate deliberate steps — `pj add`/`pj link` for the first, `pj intake
-     * commit` for the second — because a run that fetched is not a run that was
-     * resolved, and an abandoned sweep must not swallow what it listed.
+     * A bare `pj intake` is the tick: it files into `inbox/` and advances. Only
+     * `--dry-run` proposes and stops, and a preview never advances a cursor —
+     * `pj intake advance` promotes it once what it listed is resolved by hand,
+     * because a run that fetched is not a run that was resolved.
      */
     case 'intake': {
       const { flags, rest } = argFlags(argv, [
+        'dry-run',
         'since',
         'limit',
         'json',
@@ -966,7 +997,7 @@ if (asking) {
         'captured',
         'advance',
         'q',
-      ], ['json', 'verbose', 'advance']);
+      ], ['dry-run', 'json', 'verbose', 'advance']);
       const [sub, ...channels] = rest;
 
       if (sub === 'status') {
@@ -1026,34 +1057,6 @@ if (asking) {
         for (const row of known(root, channels)) {
           console.log(`${pad(row.ref, 46)} ${row.cards.length ? row.cards.join(', ') : '—'}`);
         }
-        break;
-      }
-
-      /**
-       * A sweep that judges and writes, run once by hand.
-       *
-       * The same tick the server runs on a timer — same classifier, same
-       * suppressions, same cursor rule — so a vault that does not want a server
-       * running is not a vault that has to do this by conversation instead.
-       */
-      if (sub === 'apply' || sub === 'poll') {
-        const started = Date.now();
-        const res = await pollOnce(root);
-        if (res.held) {
-          console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
-          process.exit(1);
-        }
-        // The same lines the poller logs, so a tick reads the same by hand and
-        // on the timer — including what each channel cost to fetch and judge.
-        for (const c of res.channels) {
-          console.log(`${pad(c.channel, 10)} ${c.unreachable ? `not fetched — ${c.unreachable}` : channelLine(c)}`);
-        }
-        for (const id of res.created) console.log(`${pad('new', 10)} ${id}`);
-        console.log(
-          tickLine(res, Date.now() - started) +
-            `, ${res.skipped} already known` +
-            (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
-        );
         break;
       }
 
@@ -1150,8 +1153,25 @@ if (asking) {
         break;
       }
 
-      // No subcommand: the positional arguments are channel names.
+      // No subcommand: the positional arguments are channel names, checked before
+      // anything is fetched — a removed verb (\`apply\`, \`decline\`) reads as one,
+      // and must not cost a relay run on its way to failing.
       const only = sub ? [sub, ...channels] : [];
+      const unknown = only.filter((c) => !channelNames().includes(c));
+      if (unknown.length) fail(`unknown channel(s): ${unknown.join(', ')} — have ${channelNames().join(', ')}`);
+
+      if (!flags.has('dry-run')) {
+        // These shape a preview. A tick from an arbitrary \`--since\` would advance
+        // a cursor past what it never looked at, so they are refused, not ignored.
+        const previewOnly = ['since', 'limit', 'json', 'verbose'].filter((f) => flags.has(f));
+        if (previewOnly.length) {
+          const named = previewOnly.map((f) => '--' + f).join(', ');
+          fail(`${named} ${previewOnly.length === 1 ? 'shapes' : 'shape'} a preview: add --dry-run, or drop ${previewOnly.length === 1 ? 'it' : 'them'} to run the tick`);
+        }
+        await tick(root, only);
+        break;
+      }
+
       const sinceRaw = flags.get('since')?.[0];
       const since = sinceRaw ? new Date(sinceRaw) : undefined;
       if (since && !Number.isFinite(since.getTime())) fail(`--since "${sinceRaw}" is not a date`);

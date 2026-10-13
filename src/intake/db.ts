@@ -219,6 +219,7 @@ export function closeIntakeDb(dataRoot: string): void {
 export interface Watermark {
   channel: string;
   cursor: string | null;
+  /** When a run last committed this channel; empty while only a preview has touched it. */
   ranAt: string;
   seen: number;
   captured: number;
@@ -269,6 +270,12 @@ export function watermarks(dataRoot: string): Watermark[] {
  * copying an opaque Slack `ts` from one process into the next by hand. It still
  * advances nothing — a pending value is inert until `commitWatermark` promotes
  * it — so an abandoned sweep swallows exactly as little as before.
+ *
+ * Nor is a preview a run. A channel with no row yet gets one with an empty
+ * `ran_at` (the column is NOT NULL, and a store that predates this keeps it), so
+ * `pj intake status` still says *never* and `lastTick` still finds no tick:
+ * stamped now, a `--dry-run` made a vault that had never ticked read as fresh to
+ * the server's first tick and to pj-day's freshness rule alike.
  */
 export function recordPending(
   dataRoot: string,
@@ -280,13 +287,13 @@ export function recordPending(
   openIntakeDb(dataRoot)
     .prepare(
       `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at)
-       VALUES (?, NULL, ?, 0, 0, ?, ?, ?)
+       VALUES (?, NULL, '', 0, 0, ?, ?, ?)
        ON CONFLICT(channel) DO UPDATE SET
          pending_cursor = excluded.pending_cursor,
          pending_seen   = excluded.pending_seen,
          pending_at     = excluded.pending_at`,
     )
-    .run(channel, now, cursor, seen, now);
+    .run(channel, cursor, seen, now);
 }
 
 export function watermarkFor(dataRoot: string, channel: string): Watermark | null {

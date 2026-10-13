@@ -620,10 +620,10 @@ untouched.
 channel that returned the *newest* N items and then advanced would step over everything older it never
 looked at. Channels therefore work **oldest-first from the cursor**, and a run truncated by its limit
 holds its cursor where it was: the next sweep resumes at the same place, and the backlog drains through
-fingerprint dedup rather than through the cursor. `pj intake` is also the only command that reads
-external state and writes nothing of its own — it rebuilds the derived index the way every read does,
-and advancing a cursor is a separate explicit step, because a run that fetched is not a run that was
-resolved.
+fingerprint dedup rather than through the cursor. `pj intake --dry-run` is also the only command that
+reads external state and writes nothing of its own — it rebuilds the derived index the way every read
+does, and notes where each cursor *would* go without moving it, because a run that fetched is not a run
+that was resolved.
 
 **A sweep has two answers, and only one of them used to have somewhere to go.** `pj add` records a
 yes and leaves a note carrying the candidate's fingerprint, so no later sweep offers it again. A no
@@ -651,8 +651,8 @@ fingerprint and its links and never the source's own clock. So the channel falls
 window, which is cheap for the reason this store already gives about losing itself: everything behind
 the cursor is either on a note, where `source_fingerprint` prevents a second capture, or still
 suppressed, so a re-sweep re-proposes almost nothing. The limit is worth stating rather than burying —
-**an item older than that window does not come back on its own**, and `pj intake --since` is how to
-reach further.
+**an item older than that window does not come back on its own**, and `pj intake --dry-run --since` is
+how to reach further.
 
 **A decline is a decline, and two acts share the delete key.** Declining a card is *declining an
 offer*: the same act the classifier performs when it drops a candidate, worth the same to it, and
@@ -683,15 +683,17 @@ the run's `skipped` list rather than dropped silently, so the count still includ
 still names it: a sweep that quietly discarded a third of what it fetched would read as a quiet
 channel, and that reading must not be available.
 
-**A sweep with nobody standing there writes the candidate down, and that is what earns the cursor.**
-`pj intake` and the poller run the same channels through the same code; the difference is who is
-available to answer. A person is right there, so a manual sweep proposes and stops. A timer is not, so
-the poller materialises each candidate as a note in `inbox/` — unjudged by being there — and leaves the answer for
-later.
+**A tick writes the candidate down, and that is what earns the cursor.** The poller and `pj intake` run
+the same tick, `pollOnce`: each candidate it keeps is materialised as a note in `inbox/` — unjudged by
+being there — and the answer is left for later. Filing there needs nobody standing by, because
+`inbox/` is not the person's notes; a sweep that proposed and stopped was the default only while cards
+landed among them. `pj intake --dry-run` still proposes and stops, for diagnosis.
 
 That difference decides which of them may advance a watermark. The rule has always been that a cursor
-may only pass a boundary with nothing unexamined behind it — and a proposing run cannot satisfy it,
-because what it examined exists only in a terminal buffer. A materialising run can: everything behind
+may only pass a boundary with nothing unexamined behind it — and a preview cannot satisfy it,
+because what it examined exists only in a terminal buffer. It notes the boundary it reached as
+pending, with `ran_at` left empty on a channel that has none, since a preview is not a run, and
+`pj intake advance` promotes it once what it listed was resolved by hand. A materialising run can: everything behind
 its new boundary is a file, or was already answered for. **So the queue now guarantees what the cursor
 was being asked to**, and the cursor is demoted to what it should always have been — where to resume
 fetching. A truncated run still holds, unchanged and for the original reason.
@@ -844,7 +846,7 @@ must not be what stalls the channel. The skip now happens before the transcript 
 board a tick that took two minutes and forty thousand tokens is indistinguishable from one that took two
 seconds. `Cost` travels on the channel report (read off the `claude -p` envelope: duration, turns,
 token counts, dollars) and on the classifier's reply (Ollama's own counts and clock; the same envelope
-for the compatibility transport), and `pollOnce` sums them per channel and per tick. `pj intake apply`
+for the compatibility transport), and `pollOnce` sums them per channel and per tick. `pj intake`
 prints the same lines the poller logs, through the same two functions, so the two surfaces cannot
 describe one tick differently.
 
@@ -1156,10 +1158,10 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj sync <view> <folder> --apply` | files in the folder named on the command line — **outside the vault**, the only write that is — and removals of files a previous run recorded writing that this view no longer shares. The record of what it owns is written in the vault, under `.projector/sync/<view>-<hash of target>.json`, never in the target | plans and prints first; `--apply` is a second decision, which is the whole guard on a membership that is computed rather than listed. The folder and the exclusion are arguments, not view keys: a view is a query, and nothing in the vault records that one is shared. **A sync owns only what it wrote** — a path no run recorded is `unmanaged` and a recorded path whose bytes changed is a `conflict`; neither is written and neither is deleted, and `--adopt` is the only way past. The front page is seeded when absent and then never regenerated or pruned |
 | `POST /api/note/:id/asset` | one file under `assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
-| `pj intake` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read | proposes; it writes no note and moves no cursor |
+| `pj intake --dry-run` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read; each channel's *pending* cursor in `.projector/intake.db` | proposes; it writes no note, moves no cursor and records no run |
 | `pj intake advance` / `cursor set` / `cursor reset` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
 | `pj intake restore` | one `suppressed` row removed, one in `rescued` written, and that channel's `watermark` row removed | never a note; un-declining walks the cursor back so a later sweep can still reach it |
-| the poller (`src/server/poll.ts`) and `pj intake apply` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
+| the poller (`src/server/poll.ts`) and `pj intake` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
 | `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
 | `pj accept`, and the panel's ✓ / `+` through `POST /api/note/:id/fold` | `acceptCards`: a card of its own **moved** by `relocateNote` to its place, as `PATCH` moves it; an `extends` card merged into its target, then the axes taken — every one the card proposes, those `--only` names (a single-valued axis replaced, a many-valued one unioned), or the dialog's answers — one at a time through the checked path | refuses anything out of `inbox/`, and checks every card before it files one — so the route folds a judged note that still names a target, which the panel still offers ✓ on, through `foldInto` directly. Merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
@@ -1210,7 +1212,7 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in | `pj intake advance`/`cursor`, `pj decline`, and a judging tick — `pj intake apply` or the poller; gitignored |
+| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in | `pj intake advance`/`cursor`, `pj decline`, a `--dry-run`'s pending cursors, and a judging tick — `pj intake` or the poller; gitignored |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
 | `$PROJECTOR_WORKSPACES/<project>-wt-<branch>/` (required; no default) | worktrees and `AGENT_BRIEFING.md` | `pj work`, and the panel's Start control through `POST /api/note/:id/work` |
 

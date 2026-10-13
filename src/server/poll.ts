@@ -11,17 +11,16 @@ import { basename } from 'node:path';
 import { count, info, tally, warn } from './log.ts';
 
 /**
- * The sweep, unattended.
+ * The sweep, unattended — and `pj intake`, which is the same tick run by hand.
  *
- * `pj intake` and this loop run the same channels through the same code, and
- * differ in exactly one thing: who is there to answer. A person running a sweep
- * is standing right there, so it proposes and stops. A timer has nobody to ask,
- * so it writes each candidate into the vault as a note carrying `intake:
- * unjudged` and leaves the answer for whenever you next look.
+ * A tick writes each candidate it keeps into `inbox/` as a card and leaves the
+ * answer for whenever you next look. `inbox/` is not your notes, so filing there
+ * needs nobody standing by: the timer does it, and so does a bare `pj intake`.
+ * Only `pj intake --dry-run` proposes and stops, for diagnosis.
  *
  * **Which is why the cursor may move here and not there.** The rule has always
  * been that a cursor may only pass a boundary with nothing unexamined behind it,
- * and `pj intake` cannot satisfy that — it wrote nothing down, so advancing would
+ * and a preview cannot satisfy that — it wrote nothing down, so advancing would
  * step over candidates that exist only in a terminal buffer. A materialising run
  * can: every candidate it passed is a file, or was already answered for. The queue
  * now guarantees what the cursor used to be asked to, so the cursor is demoted to
@@ -123,9 +122,18 @@ export interface PollResult {
 
 /**
  * One tick for one vault. Exported so a test can run it without a timer, which is
- * the only way to assert what a loop does without waiting for it.
+ * the only way to assert what a loop does without waiting for it, and so `pj
+ * intake` can run it by hand.
+ *
+ * `only` names the channels to run, as `pj intake jira` does; empty means the
+ * ones the vault turned on. Per-channel is safe because the cursor rule is per
+ * channel: a channel left out is neither fetched nor advanced.
  */
-export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
+export async function pollOnce(
+  root: string,
+  ask?: Ask,
+  opts: { only?: string[] } = {},
+): Promise<PollResult> {
   const out: PollResult = {
     vault: root,
     created: [],
@@ -140,7 +148,7 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
     notify: [],
     channels: [],
   };
-  const { reports } = await sweep(root);
+  const { reports } = await sweep(root, opts.only?.length ? { only: opts.only } : {});
   const wantsJudgement = settingsFor(root).classify.enabled;
 
   for (const report of reports) {
@@ -261,8 +269,8 @@ export async function pollOnce(root: string, ask?: Ask): Promise<PollResult> {
 }
 
 /**
- * One channel of a tick as a line, shared by the poller's log and `pj intake
- * apply`, so the two surfaces cannot describe the same tick differently.
+ * One channel of a tick as a line, shared by the poller's log and `pj intake`, so
+ * the two surfaces cannot describe the same tick differently.
  */
 export function channelLine(c: PollResult['channels'][number]): string {
   const tail = tally({

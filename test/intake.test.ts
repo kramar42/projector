@@ -408,7 +408,7 @@ test('a sweep says out loud that it captured nothing', async () => {
   try {
     const s = await sweep(root, { only: ['slack'] });
     const out = renderSweep(s);
-    assert.match(out, /Nothing is captured and no cursor has moved/);
+    assert.match(out, /nothing is filed and no cursor has moved/);
     assert.equal(candidateCount(s), 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -519,6 +519,34 @@ test('every channel reports a status, and the text is rendered from it', () => {
     for (const r of statusOf(root)) assert.match(text, new RegExp(r.channel));
     assert.match(text, /abc123/);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A preview is not a run.
+ *
+ * `pj intake --dry-run` records where it would move each cursor, so `advance` can
+ * promote it — but on a channel with no row yet that record used to be inserted
+ * with `ran_at` stamped now. `pj intake status` then read "last run: just now" for
+ * a channel nothing had fetched for, and `lastTick` — what the server's first tick
+ * and pj-day's freshness rule both read — called a vault fresh that had never
+ * ticked.
+ */
+test('recording a preview leaves a channel never run, and no tick on the vault', () => {
+  const root = vault({});
+  try {
+    recordPending(root, 'git', '2026-10-01T00:00:00.000Z', 2);
+    assert.equal(statusOf(root).find((s) => s.channel === 'git')!.ranAt, null, 'a preview is not a run');
+    assert.match(renderStatus(root), /^git\s.*\snever\s/m);
+    assert.equal(lastTick(root), null, 'and the vault has still never ticked');
+    assert.equal(watermarkFor(root, 'git')!.pending?.cursor, '2026-10-01T00:00:00.000Z', 'but the proposal is kept');
+
+    advance(root, { channel: 'git' });
+    assert.ok(statusOf(root).find((s) => s.channel === 'git')!.ranAt, 'promoting it is the run');
+    assert.ok(lastTick(root));
+  } finally {
+    closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
