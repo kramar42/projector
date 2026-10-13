@@ -13,7 +13,7 @@ their own notes. They keep it **open all day on a second monitor** — the board
 is ambient, glanced at and dragged on continuously, not visited for a session and closed.
 
 **Second, and first-class: Claude agent sessions.** Notes are plain files, so an agent creates and
-edits them directly through `pj` and the five `.claude/skills/` slash commands, with no API and no app
+edits them directly through `pj` and the `.claude/skills/` slash commands, with no API and no app
 running. Both write the same vault; the agent is not a guest.
 
 Two consequences future work must honour:
