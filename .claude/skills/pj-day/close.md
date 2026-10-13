@@ -3,15 +3,17 @@
 Every plan item leaves with an end state, `Did` gets written, and the vault's notes are brought in
 line with what the user actually finished.
 
-## 1. Read today's note, then ask
+## 1. Read today's note
 
-Read `Plan`, `Told`, `Open`. Ask: **"Anything decided, done or dropped today that I can't see?"**
-Stop and wait.
+Read `Plan`, `Told`, `Open`. If the invocation says what the user worked on, log it as `Told` and
+follow it up (rule 3 in SKILL.md).
 
-## 2. Write `Did`
+## 2. Draft `Did`
 
 Follow the `pj-did` skill's steps 1 to 3 for the day — gather, merge into tasks, categorise — and
-skip its step 4: the summary lands in this note's `Did` section, not in a note of its own.
+skip its step 4: the summary lands in this note's `Did` section, not in a note of its own. Read the
+notes of the day's meetings too: a decision recorded there that touches one of the user's notes
+belongs in `Did`, attributed to the meeting.
 
 ## 3. Reconcile the plan, then stop
 
@@ -22,7 +24,7 @@ Give every `Plan` item exactly one end state, with its tier:
 | **done** | a *seen* trace in `Did`, or the user's word in `Told` |
 | **carried** | worked on, not finished — tomorrow's open reads it |
 | **dropped** | the user said so |
-| **unknown** | nothing either way — ask; never assume undone |
+| **unknown** | nothing either way — one closed question if it is among the costliest, else `Open`; never assume undone |
 
 Then draft:
 
@@ -32,7 +34,8 @@ Then draft:
 - the new title: `<YYYY-MM-DD Ddd> — <the day's two or three biggest outcomes>`, from `Did`, not
   from the plan.
 
-Present the end states and the commands together. Stop.
+Present the draft `Did`, the end states, at most three closed questions and the commands together,
+ending with the optional "worked on something this misses?" line. Stop.
 
 ## 4. Write what was approved
 
