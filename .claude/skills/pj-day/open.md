@@ -91,10 +91,8 @@ Stop. The user picks, edits, drops, adds or answers.
      --facet project=<id> …
    ```
 
-   `pj add` writes it at the vault root; move it into the day-note folder with `mv`. The id lives in
-   its frontmatter, so the move changes nothing else.
-2. Write the body into the moved file with your file tools — the four sections, links relative to
-   its folder. `Plan`: the agreed items. `Told`: the user's answers and anything they said they
+   A note carrying `day` is written to `daily/`; `pj add` prints where. That is the file to edit.
+2. Write the body into it with your file tools — the four sections, links relative to `daily/`. `Plan`: the agreed items. `Told`: the user's answers and anything they said they
    worked on, timestamped. `Did`: empty. `Open`: the carried plain-text items and every question
    still unanswered.
 3. Run each approved `pj` command, one per note, then `pj check` once — it must report nothing

@@ -46,8 +46,8 @@ being asked. An unanswered question means leave it as it is — never "agreed".
 ## The day note
 
 One note per day holds the plan, what the user told you, what was done, and what is still asked:
-`daily/YYYY-MM-DD.md`, id `day-YYYY-MM-DD`, unless the vault's `AGENTS.md` names a different
-convention, which wins. The body has four sections, always in this order:
+`daily/day-YYYY-MM-DD.md`, id `day-YYYY-MM-DD` — `pj add` files a note carrying `day` in `daily/`
+itself — unless the vault's `AGENTS.md` names a different convention, which wins. The body has four sections, always in this order:
 
 ```markdown
 ## Plan
