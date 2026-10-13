@@ -3,11 +3,13 @@
 Short, and run as often as the user likes. The question it answers for the user: is the day still
 the plan? One stop: gather since the last run, then present.
 
-## 1. Read today's note
+## 1. Read today's note and today's theories
 
-`Plan`, `Told` and `Open`. The last timestamp in `Told` is **since**: everything below looks only
-after it. If the invocation says what the user worked on, log it as `Told` and follow it up (rule 3
-in SKILL.md).
+The day note's `Plan`, then `memory/theories/<today>.md`: its T-entries, `Said` and `Asked`. The
+last timestamp anywhere in the theories file is **since**: everything below looks only after it. If
+there is no theories file for today, since is the day note's creation, and this run creates the file.
+If the invocation says what the user worked on, log it under `Said` and follow it up (rule 3 in
+SKILL.md).
 
 ## 2. Gather since <since>
 
@@ -37,8 +39,11 @@ Stop.
 
 ## 4. Write what was said
 
-- `Told`: the user's answers and anything they said they worked on, timestamped now — or
-  `<time> check-in — nothing told`.
-- `Plan`: swap, add or drop items as agreed; tick an item the user confirms done.
-- `Open`: the questions still unanswered.
+- Day note `Plan`: swap, add or drop items as agreed, one line plus a link each; tick an item the
+  user confirms done.
+- Today's theories file:
+  - `Said`: the user's answers and anything they said they worked on, timestamped now — or
+    `<time> check-in — nothing said`;
+  - `Asked`: this run's questions; mark the ones answered with the time and the answer;
+  - a T-entry for each Plan item added or swapped in, with its evidence.
 - Any approved `pj` command, then `pj check`.

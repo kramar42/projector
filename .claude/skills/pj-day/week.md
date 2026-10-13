@@ -5,7 +5,9 @@ date or a `week` priority set a week ago may never have been a commitment.
 
 ## 1. Read
 
-- The last five day notes' `Told` and `Open` — what the user already settled stays settled.
+- The last five days' theories files in `memory/theories/` — their `Said` and `Asked`: what the
+  user already settled stays settled, and what is still waiting is asked here only if it bears on
+  a row below.
 - `pj ls --view week --json`: the overdue column first.
 - `pj ls --view actionable --json`: the `week` pile.
 - Every note with a non-empty `waiting_on`, with how long since it last changed (`pj log`).
@@ -26,4 +28,5 @@ Stop after each batch.
 ## 3. Write
 
 Each answer as its `pj set` command, one per note, then `pj check`. Log the decisions in today's
-note under `Told` as one line per batch ("week reset: 6 dates moved, 4 dropped to month").
+theories file under `Said`, one timestamped line per batch ("week reset: 6 dates moved, 4 dropped
+to month"). The day note gets nothing.
