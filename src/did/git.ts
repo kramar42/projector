@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { relative, sep } from 'node:path';
 import { originSlug } from '../intake/git.ts';
 import { settingsFor } from '../settings.ts';
 import type { IntakeContext } from '../intake/types.ts';
@@ -76,6 +77,19 @@ function bodyLines(body: string): string[] {
     .map((l) => (l.length > 160 ? l.slice(0, 157) + '…' : l));
 }
 
+/**
+ * A repo as a person finds it again: its path under the root that holds it.
+ * The basename alone is ambiguous — `archive/old/infra` and `infra` are both
+ * "infra", and a reason naming the wrong one sends the reader to a repo that
+ * works.
+ */
+function labelOf(scope: Scope, path: string): string {
+  for (const root of scope.roots) {
+    if (path.startsWith(root + sep)) return relative(root, path);
+  }
+  return path;
+}
+
 export function gitSource(ctx: IntakeContext, scope: Scope, day: Day): SourceReport {
   const configured = settingsFor(ctx.root).gitAuthor;
   const seen = new Set<string>();
@@ -83,9 +97,16 @@ export function gitSource(ctx: IntakeContext, scope: Scope, day: Day): SourceRep
   const unreadable: string[] = [];
 
   for (const repo of scope.repos) {
+    // Asked first, because every git command fails the same way in a repo that
+    // cannot be opened — a `.git` file pointing at a superproject that moved —
+    // and `config user.email` failing there says nothing about the email.
+    if (git(repo.path, ['rev-parse', '--git-dir']) === null) {
+      unreadable.push(`${labelOf(scope, repo.path)} (not a git repository)`);
+      continue;
+    }
     const author = configured ?? git(repo.path, ['config', 'user.email'])?.trim();
     if (!author) {
-      unreadable.push(`${repo.name} (no user.email)`);
+      unreadable.push(`${labelOf(scope, repo.path)} (no user.email)`);
       continue;
     }
     const out = git(repo.path, [
@@ -100,7 +121,7 @@ export function gitSource(ctx: IntakeContext, scope: Scope, day: Day): SourceRep
       `--format=${REC}%H${FIELD}%aI${FIELD}%s${FIELD}%b${FIELD}%S`,
     ]);
     if (out === null) {
-      unreadable.push(repo.name);
+      unreadable.push(labelOf(scope, repo.path));
       continue;
     }
     const slug = originSlug(repo.path);

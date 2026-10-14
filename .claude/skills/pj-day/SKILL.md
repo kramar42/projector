@@ -67,7 +67,7 @@ Open, check-in and close each run it once — close over tomorrow's draft; their
 gather and what the stop holds. The week reset consolidates what the runs wrote.
 
 ```text
-read     memory/AGENTS.md, memory/patterns/*, today's and the last closed day's theories
+read     memory/AGENTS.md, memory/patterns/*, today's theories (open reads further back)
 gather   intake's freshness first (a tick in the background if stale), then the mode's
          sources, then the inbox once the tick is done (see Intake)
 form     theories: each belief the plan, a proposed write, or an inbox card rests on
@@ -108,20 +108,26 @@ cover — the calendar, the self-DM scratchpad, a meeting's notes through its ev
 ticket by its link. **Slack and Gmail searches are intake's job, never yours.** `memory/AGENTS.md`
 says what each channel covers and what it misses.
 
-**Freshness, first thing in every gather.** `pj intake status --json`: the newest `ranAt` across
-channels is the last tick (UTC). The vault's `.projector/config.yaml` `poll:` says how often the
-server ticks and in which local hours.
+**Freshness, first thing in every gather.** `pj intake status --json` has one row per channel:
+`ranAt`, when it last ran (UTC), and `cursor`, the newest record it has read. The vault's
+`.projector/config.yaml` `poll:` says how often the server ticks (`every`, in seconds) and in which
+local `hours`. Judge each channel by its own row: the newest `ranAt` hides a channel that lags.
 
-- **Under ~2h old** — intake is current. Start nothing.
-- **Older** — start `pj intake` in the background (your shell's background mode; a relay can
+- **Every `ranAt` within `poll.every`** — intake is current. Start nothing.
+- **A `ranAt` older** — start `pj intake` in the background (your shell's background mode; a relay can
   take minutes per channel) and gather the calendar, `pj did` and the vault while it runs. If the gap
   covers poll hours and `poll.enabled` is true, the server is probably down: say so in the stop's
   first line — "intake last ran 10-08 17:00, the server is probably down — ran a tick now". A gap
   that is only overnight, or before the first morning tick, is the schedule: run the tick and say
-  nothing about the server.
+  nothing about the server. Only a stale `ranAt` starts a tick.
+- **A cursor more than a day behind its own `ranAt`** — the channel ran but read only to its
+  cursor, and a tick moves it a page at a time. It is a Gap for that channel, named with its cursor:
+  "slack read to 09-23". A cursor hours behind is a quiet channel: the cursor is the newest record,
+  not the run.
 - **When it finishes**, read its output: a line per channel, then `new <id>` per card written. A
-  channel `not fetched`, or a `held` tick (exit 1, nothing written), goes into Gaps with its reason.
-  One tick per run: a second costs the relay again and finds nothing new.
+  channel `not fetched`, a `held` tick (exit 1, nothing written), or a channel whose `ranAt` is still
+  older than `poll.every` goes into Gaps with its reason. One tick per run: a second costs the relay
+  again and finds nothing new.
 
 **The inbox** is every card in `inbox/`: `pj ls --filter intake=unjudged --json` lists them, and
 `pj context <id> --json` gives one card whole — the judge's `> kind: reason` and summary, the last
@@ -137,6 +143,7 @@ in `pj did`, the target note already saying it (`pj context <target> --json`), o
 |---|---|---|
 | survived, a card of its own | **accept** | `pj accept <id>` — it files the card where it belongs |
 | survived, an `extends` card | **fold** | `pj accept <id>` — it folds the card into its target, which takes every axis the card proposes (a many-valued axis keeps its own values too); `--only <axis>,<axis>` when you agree with some of them |
+| survived, a card of its own that belongs in an existing note | **fold** | `pj merge <id> --into <target>` — the target keeps its own facets and takes the card's body under a heading of the card's title, `> kind: reason` line included, with its links and fingerprint |
 | refuted | **decline**, with what was found | `pj decline <id> --reason "<what was found>"` — it removes the card and records the reason the judge learns from |
 | can't settle | **yours**, with what was looked for | none |
 
@@ -284,8 +291,8 @@ Pick one, then read its file and follow it:
 
 | mode | when | file |
 |---|---|---|
-| **open** | named, or no run today yet — no `memory/theories/<today>.md`, even if last night's close wrote today's note | [open.md](open.md) |
-| **checkin** | named, or today has been opened and the day is still going | [checkin.md](checkin.md) |
+| **open** | named, the user asks to plan, or today's Plan isn't agreed yet: nothing under `Said` in `memory/theories/<today>.md` records the user agreeing to it (an open writes `open — plan agreed`), even if last night's close wrote today's note | [open.md](open.md) |
+| **checkin** | named, or an open agreed today's Plan and the day is still going | [checkin.md](checkin.md) |
 | **close** | named, the user says they are wrapping up, or it is evening and `Did` is empty | [close.md](close.md) |
 | **week** | named, or offered at the end of a Monday open or a Friday close | [week.md](week.md) |
 

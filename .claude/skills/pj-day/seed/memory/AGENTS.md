@@ -110,5 +110,11 @@ myself. It sees only part of each, so **no card is not the same as nothing happe
 - **A channel's coverage ends at its cursor, not at `ranAt`.** A cursor that holds — the relay
   copied fewer records than the search returned — leaves a channel "run" today and read up to days
   ago. A quiet inbox for that channel is unknown, not quiet.
+- **Freshness is per channel.** The newest `ranAt` says intake ran, not that every channel is
+  read: a cursor more than a day behind its own `ranAt` is a Gap for that channel, named with its
+  cursor. Only a stale `ranAt` is worth a tick; a lagging cursor moves a page a tick whatever I do.
+- **Before the day's first tick** (the first of `poll.hours`), nothing has come in overnight. A
+  plan tested then rests on my own reads only: I say so in the draft's first line, and the first
+  check-in after the tick re-tests its load-bearing theories.
 - **Not channels at all:** the calendar, the self-DM scratchpad, meeting notes in Drive. Those are
   my live reads, one named thing each.

@@ -26,6 +26,8 @@ SKILL.md).
 Then test (the loop in SKILL.md), only where something can have moved:
 
 - **The Plan's theories**, against what came in: a re-test adds a `looked:` and an `outcome:`.
+  Once the day's first tick has run, a load-bearing one whose last `outcome:` is stamped before it
+  (an open before poll hours, open.md) is re-tested whether or not anything touched it.
 - **`Asked` entries still waiting**: a trace since *since* that settles one settles it — write the
   theory's outcome and mark the question settled by that trace, never ask it again.
 - **One theory for the verdict: *the day is still the Plan*.** Its refuters: traces since *since*

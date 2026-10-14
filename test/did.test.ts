@@ -121,6 +121,34 @@ test('git: your commits on the day, once, however many clones and cherry-picks r
   }
 });
 
+test('git: a repo that cannot be opened says so by its path, not as a missing user.email', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'pj-did-git-'));
+  try {
+    const work = join(base, 'work');
+    const vault = join(base, 'vault');
+    mkdirSync(paths(vault).config, { recursive: true });
+    // No `git.author`: each repo's own user.email is the author.
+    writeFileSync(join(paths(vault).config, 'config.yaml'), `did: { roots: [${work}] }\n`, 'utf8');
+    const day = parseDay('today');
+    assert.ok(!('error' in day));
+
+    const repo = repoAt(join(work, 'infra'));
+    git(repo, ['config', 'user.email', 'me@x']);
+    commitAs(repo, 'me@x', new Date(day.start.getTime() + 12 * 3600_000), 'fix: mine today');
+    // A submodule moved out of its superproject: `.git` is a file pointing nowhere.
+    const orphan = join(work, 'archive', 'old', 'infra');
+    mkdirSync(orphan, { recursive: true });
+    writeFileSync(join(orphan, '.git'), 'gitdir: ../.git/modules/bluerock-infra\n', 'utf8');
+
+    const r = await did(vault, day, ['git']);
+    const source = r.sources[0]!;
+    assert.deepEqual(source.activities.map((a) => a.title), ['fix: mine today']);
+    assert.equal(source.reason, 'could not read archive/old/infra (not a git repository)');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test('vault: a note closed today reads as closed against its last commit, even uncommitted', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pj-did-vault-'));
   try {
