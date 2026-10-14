@@ -12,7 +12,7 @@ import { editFacets, type FacetOp } from '../schema/edit.ts';
 import { checkFacets } from '../server/mutate.ts';
 import { loadViewFiles, loadViews } from '../server/views.ts';
 import { jiraConfig } from '../sources/jira.ts';
-import { queryPayload } from '../view/payload.ts';
+import { queryPayload, runRules } from '../view/payload.ts';
 import { renderListing, resolveListing, type Overrides } from '../view/listing.ts';
 import { specToParams } from '../view/spec.ts';
 import { noteContext, renderContext } from '../agent/context.ts';
@@ -219,8 +219,8 @@ const statusInput = z.object({
 });
 
 /**
- * `pj vaults`, `pj reindex`, `pj check` and `pj audit` in one answer — the four
- * a shell would run to find out whether the vault is healthy.
+ * `pj vaults`, `pj reindex` and `pj check` — validity and the rules — in one
+ * answer: what a shell would run to find out whether the vault is healthy.
  */
 function vaultStatus(args: z.infer<typeof statusInput>, vault: Vault): string {
   const { db, notes, facets, views: all } = indexed(vault.root);
@@ -237,12 +237,11 @@ function vaultStatus(args: z.infer<typeof statusInput>, vault: Vault): string {
   out.push('', `check: ${errors} error(s), ${issues.length - errors} warning(s)`);
   if (args.issues && issues.length) out.push(formatIssues(issues, vault.root));
 
-  const rules = all.filter((v) => v.expect);
+  const rules = runRules({ facets, db, notes, views: all });
   if (rules.length) {
     out.push('', 'rules (views declaring expect: empty):');
-    for (const v of rules) {
-      const { ids } = queryPayload({ facets, db, notes, views: all }, v, v);
-      out.push(`  ${ids.length ? 'BROKEN' : 'ok    '} ${(v.name ?? '').padEnd(24)} ${ids.length || ''} ${ids.join(', ')}`.trimEnd());
+    for (const { name, ids } of rules) {
+      out.push(`  ${ids.length ? 'BROKEN' : 'ok    '} ${name.padEnd(24)} ${ids.length || ''} ${ids.join(', ')}`.trimEnd());
     }
   }
   return out.join('\n');

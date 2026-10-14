@@ -1,5 +1,5 @@
 # A rule, and therefore a column. Flat and `unlisted`: it is drawn inside
-# `compose` and `triage`, and `pj audit` runs it, but it is not something to pick
+# `compose` and `triage`, and `pj check` runs it, but it is not something to pick
 # from a menu.
 #
 # `type` exempts projects, and only projects. A root project carries a `project:`

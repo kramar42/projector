@@ -164,7 +164,7 @@ test('every command refuses a flag it does not know', () => {
   try {
     const commands = [
       ['ls'], ['log'], ['add', 'x'], ['link', 'alpha', 'jira:A-1'], ['check'], ['reindex'],
-      ['search', 'x'], ['vaults'], ['enrich', 'jira:A-1'], ['intake'], ['context', 'alpha'],
+      ['search', 'x'], ['vaults'], ['intake'], ['context', 'alpha'],
       ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'], ['did'], ['mcp'],
       ['accept', 'alpha'], ['decline', 'alpha', '--reason', 'x'],
     ];
@@ -366,7 +366,13 @@ test('help is progressive, and prints without a vault', () => {
       assert.doesNotMatch(r.out, /pj intake advance/, 'promoting a preview is recovery, not the workflow');
       assert.doesNotMatch(r.out, /Work with notes/, 'intake help does not repeat the root');
     }
-    assert.doesNotMatch(run(['help'], { PROJECTOR_VAULTS: v.registry }).out, /intake apply/);
+    const root = run(['help'], { PROJECTOR_VAULTS: v.registry }).out;
+    assert.doesNotMatch(root, /intake apply/);
+    assert.doesNotMatch(root, /^\s+(enrich|audit)\s/m, 'enrich and audit folded into context and check');
+    const check = run(['help', 'check'], { PROJECTOR_VAULTS: v.registry }).out;
+    assert.match(check, /expect: empty/, 'check help says it runs the rules');
+    assert.match(check, /non-zero/, 'and that a broken rule fails it');
+    assert.match(run(['help', 'context'], { PROJECTOR_VAULTS: v.registry }).out, /--fresh/);
     const advanced = run(['help', 'intake', 'advanced'], { PROJECTOR_VAULTS: v.registry });
     assert.equal(advanced.code, 0);
     assert.match(advanced.out, /pj intake cursor set/);
@@ -415,7 +421,8 @@ test('an unknown command prints help and fails; no command prints help and does 
 test('a deleted command stays deleted', () => {
   const v = vault();
   try {
-    for (const gone of ['next', 'untriaged', 'stats', 'show', 'project', 'unlink', 'link-session']) {
+    // `enrich` is `context --fresh` and `audit` is the second half of `check`.
+    for (const gone of ['next', 'untriaged', 'stats', 'show', 'project', 'unlink', 'link-session', 'enrich', 'audit']) {
       const r = run(['--vault', v.root, gone, 'alpha']);
       assert.equal(r.code, 1, `pj ${gone} should be gone`);
     }
@@ -632,6 +639,75 @@ test('check exits 1 on an error and 0 on warnings alone', () => {
     const bad = run(['--vault', v.root, 'check']);
     assert.equal(bad.code, 1);
     assert.match(bad.out, /no facet or computed axis "kind"/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * `pj check` absorbed `pj audit`: validity first, then the vault's rules — every
+ * view declaring `expect: empty` — each under its own heading, so a dangling
+ * reference and an unprioritised note still read as different things. A broken
+ * rule fails the command, as `pj audit` did: a rule is a rule.
+ */
+test('check runs the rules after validity, under their own heading, and a broken one fails it', () => {
+  const v = vault();
+  try {
+    const none = run(['--vault', v.root, 'check']);
+    assert.equal(none.code, 0, none.out);
+    assert.match(none.out, /^Validity\n/);
+    assert.match(none.out, /^Rules\n.*no rules/m, 'a vault with no rule says so rather than staying silent');
+
+    mkdirSync(paths(v.root).views, { recursive: true });
+    writeFileSync(
+      join(paths(v.root).views, 'unprioritised.yaml'),
+      "shape: table\ntitle: Unprioritised\nexpect: empty\nfilter: { priority: ['(none)'] }\n",
+      'utf8',
+    );
+    const broken = run(['--vault', v.root, 'check']);
+    assert.equal(broken.code, 1, 'a broken rule fails check, as it failed audit');
+    assert.ok(broken.out.indexOf('Validity') < broken.out.indexOf('Rules'), 'validity first, then the rules');
+    assert.match(broken.out, /0 error\(s\), 0 warning\(s\)|no problems found/, 'validity itself is clean');
+    assert.match(broken.out, /BROKEN\s+unprioritised\s+1 Unprioritised/);
+    assert.match(broken.out, /^\s+beta$/m, 'naming the note that breaks it');
+    assert.match(broken.out, /0 of 1 rule\(s\) hold/);
+
+    const json = JSON.parse(run(['--vault', v.root, 'check', '--json']).out);
+    assert.equal(json.errors, 0);
+    assert.deepEqual(json.rules, [{ name: 'unprioritised', title: 'Unprioritised', ids: ['beta'] }]);
+
+    run(['--vault', v.root, 'set', 'beta', '--facet', 'priority=later']);
+    const held = run(['--vault', v.root, 'check']);
+    assert.equal(held.code, 0, held.out);
+    assert.match(held.out, /ok\s+unprioritised/);
+    assert.match(held.out, /1 of 1 rule\(s\) hold/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** `pj enrich` folded in: nobody resolves a link except to read a note. */
+test('context --fresh re-resolves the note\'s links before printing them', () => {
+  const v = vault();
+  try {
+    writeFileSync(place(v.root, 'assets/alpha/spec.md'), '# Written down\n', 'utf8');
+    run(['--vault', v.root, 'link', 'alpha', 'doc:assets/alpha/spec.md']);
+
+    const cached = JSON.parse(run(['--vault', v.root, 'context', 'alpha', '--json']).out);
+    assert.equal(cached.links[0].enrichment.state, 'missing', 'a plain context never fetches');
+
+    const before = Date.now();
+    const fresh = run(['--vault', v.root, 'context', 'alpha', '--fresh', '--json']);
+    assert.equal(fresh.code, 0, fresh.out);
+    const link = JSON.parse(fresh.out).links[0].enrichment;
+    assert.equal(link.state, 'fresh');
+    assert.equal(link.data.title, 'Written down');
+    assert.ok(link.fetchedAt >= before, 'fetched by this call');
+
+    assert.match(run(['--vault', v.root, 'context', 'alpha', '--fresh']).out, /Written down/);
+    const ghost = run(['--vault', v.root, 'context', 'ghost', '--fresh']);
+    assert.equal(ghost.code, 1);
+    assert.match(ghost.out, /no note with id "ghost"/);
   } finally {
     v.cleanup();
   }

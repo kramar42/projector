@@ -108,6 +108,7 @@ alias pj="bun '$PWD/src/cli/pj.ts'"   # from the projector project root: freezes
 ```bash
 pj context <id>              # everything: facets, project chain, repos, instructions, links, body
 pj context <id> --json       # same, machine-readable
+pj context <id> --fresh      # same, every link re-resolved live first (Jira, GitHub, docs, sessions)
 pj ls --group project        # or any facet
 pj ls --focus project-a --via project --dir in    # the whole portfolio, transitively
 pj ls --focus project-a --via parent --dir in     # everything decomposed under it
@@ -118,10 +119,8 @@ pj ls --filter status=active,planning
 pj ls --filter project=-project-a                 # everything *except* Project A — see below
 pj ls --view unblocked       # actionable now: open, nobody waited on, no unfinished blocker
 pj ls --view triage --json   # everything waiting on a decision, one column per question
-pj audit                     # run the vault's rules: the views declaring `expect: empty`
 pj log --since "1 week ago"  # what actually changed, out of git
 pj search <query>
-pj enrich <ref> --force      # resolve a link's live state
 ```
 
 **A filter value may be negated with `-`.** `--filter project=-project-a` is "everything except Project A", and it
@@ -132,7 +131,8 @@ negation.
 
 `pj context` is the right first move for almost any question about a note. It already resolves the
 project chain, the inherited repos and instructions, and the cached link enrichment — do not
-re-derive those by reading files.
+re-derive those by reading files. The cache is as of its `fetchedAt`; `--fresh` re-asks every link
+when what matters is the state now.
 
 ## Writing
 
@@ -149,7 +149,7 @@ pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory.
                              # Only for a session outside a pj work workspace: inside one,
                              # the note's workspace: link already finds it.
-pj check                     # validate everything; run this after a batch of edits
+pj check                     # validity, then the vault's rules; run this after a batch of edits
 pj setup                     # which channels and fetchers this vault can reach, and what is missing
 ```
 
@@ -280,7 +280,7 @@ cannot hold a layout or a rule.
 shape: board
 title: Needs status
 unlisted: true                # out of the picker; still `pj ls --view needs-status`
-expect: empty                 # `pj audit` asserts this comes back empty, and exits 1 if not
+expect: empty                 # `pj check` asserts this comes back empty, and exits 1 if not
 filter: { intake: ['(none)'], priority: ['-(none)'], status: ['(none)'] }
 
 # views/triage.yaml — the rules drawn side by side
@@ -290,9 +290,9 @@ lists: [intake, needs-project, needs-status, needs-priority]
 ```
 
 - **`expect: empty` is the only assertion.** It is an invariant, not a budget — zero is the only
-  correct state. `pj audit` runs every view that declares one; `pj check` does not, and that separation
-  is deliberate: `pj check` asks whether the vault is *valid*, which is the same question in every
-  vault, and a rule is this vault's policy.
+  correct state. `pj check` runs every view that declares one, under a `Rules` heading after its
+  `Validity` one, and kept apart on purpose: validity is the same question in every vault, and a rule
+  is this vault's policy. Either failing fails the command.
 - **`shape: lists` draws other views as columns**, one level deep, in the order named. A child may not
   itself have `lists:` and may not `groupBy:` anything — a column is one flat list. It exists because
   grouping cannot express a condition on two axes at once, which is what half these rules are.

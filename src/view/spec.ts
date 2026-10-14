@@ -85,7 +85,7 @@ export interface ViewSpec {
    * The views this one draws as columns, in order — a **composition**.
    *
    * By reference rather than inline, because the same file is then two things at
-   * once — a column here and a rule `pj audit` runs — and one object cannot
+   * once — a column here and a rule `pj check` runs — and one object cannot
    * disagree with itself. One level deep: a view named here may not name others.
    *
    * Saved-file only, like `nodes` and `order` (C9). A composition is
@@ -103,24 +103,24 @@ export interface ViewSpec {
   /**
    * Keep this view out of the picker.
    *
-   * Not hidden — `pj ls --view <name>` runs it, `pj audit` enumerates it, and it
+   * Not hidden — `pj ls --view <name>` runs it, `pj check` enumerates it, and it
    * is drawn in plain sight as a column of whatever composes it. It is absent
    * from the *index*, which is why the word is `unlisted` rather than `hidden`.
    *
    * Declared rather than derived from "is a column of something", because the
-   * rules that are a column of nothing — an audit rule standing alone — want it
+   * rules that are a column of nothing — a rule standing alone — want it
    * just as much, and a picker that silently loses entries when a composition is
    * added elsewhere is a surprise.
    */
   unlisted?: boolean;
   /**
-   * What `pj audit` asserts about this view's result.
+   * What `pj check` asserts about this view's result.
    *
    * `empty` is an *invariant*: zero is the only correct state and a violation
    * means something is inconsistent. Deliberately not an integer, which would
    * fold a *budget* — "about seven things this week" — into the same key, and a
    * budget overrun is not a defect. That distinction is the same line `pj check`
-   * and `pj audit` draw, one level down. If a cap ever earns its place this
+   * draws between validity and rules, one level down. If a cap ever earns its place this
    * becomes `{ max: n }` with `empty` kept as sugar for zero.
    */
   expect?: 'empty';
@@ -330,7 +330,7 @@ export function specFromFile(name: string, raw: Record<string, unknown>): ViewSp
   if (raw.expect === 'empty') spec.expect = 'empty';
 
   // The same pin `withSavedOnly` applies, for the callers that never see a URL:
-  // `pj ls --view`, `pj audit`, and every read of the view index. Without it a
+  // `pj ls --view`, `pj check`, and every read of the view index. Without it a
   // composition drew its columns only when it arrived through the server.
   //
   // `shape: lists` in an older file lands on `table` by itself — it is not in

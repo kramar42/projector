@@ -487,7 +487,7 @@ test('a lists view draws its children as columns, and its own query does nothing
     assert.deepEqual(payload.spec.query.groupBy, [LISTS_AXIS]);
 
     // `unlisted` keeps the columns out of the picker while leaving them
-    // addressable — the same objects `pj audit` runs.
+    // addressable — the same objects `pj check` runs.
     assert.deepEqual(
       payload.views.map((v) => v.name),
       ['triage'],

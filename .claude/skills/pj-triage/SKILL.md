@@ -27,7 +27,7 @@ view *is* the definition of untriaged, and it is the same one the board shows.
 There is no `triage` facet to filter on, and there never will be again — the columns are queries, so
 what counts as unfiled is written in the rule files rather than computed from the vocabulary. Read
 `spec.lists` in the JSON if you want to know which rules this vault runs; each name is a view file
-under `.projector/views/`, and `pj audit` runs the same files.
+under `.projector/views/`, and `pj check` runs the same files as its rules.
 
 If the user named a subset ("just the Trello ones", "only the research links"), filter that list;
 say how many you filtered out.

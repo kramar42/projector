@@ -3,9 +3,10 @@ import { readAll } from '../index/indexer.ts';
 import { isRef, loadFacets } from '../schema/facets.ts';
 import { blockingEdges, isClosed } from '../index/blocking.ts';
 import { resolveProject } from '../index/project.ts';
-import { readCached } from '../server/enrich.ts';
+import { readCached, refresh } from '../server/enrich.ts';
 import type { Note, ResolvedProject } from '../schema/types.ts';
 import type { Resolved } from '../server/enrich.ts';
+import type { Fetcher } from '../enrich/types.ts';
 
 /**
  * Everything known about one note, assembled in one place.
@@ -39,7 +40,7 @@ export interface NoteContext {
   inbound: Record<string, Related>;
   /** Notes that must finish before this one, and whether they have. */
   blockedBy: { id: string; title: string; done: boolean }[];
-  /** Links with whatever enrichment is cached. Never fetches. */
+  /** Links with whatever enrichment is cached. Never fetches — `freshNoteContext` does. */
   links: { raw: string; kind: string; ref: string; enrichment?: Resolved }[];
   /**
    * Notes sharing a container with this one.
@@ -133,6 +134,29 @@ export function noteContext(id: string, dataRoot: string): NoteContext | null {
     links: links.map((l) => ({ ...l, enrichment: byRef.get(l.raw) })),
     siblings: [...beside.values()].map(brief),
   };
+}
+
+/**
+ * The same context, after re-resolving every link the note carries.
+ *
+ * `pj enrich --force` used to be how a link was resolved by hand, and nobody
+ * resolves a link except to read a note — so it is this now, `pj context
+ * --fresh`. Forced, fresh links included: whoever asks for it wants the live
+ * state of each link, not the cache's opinion of whether that is old enough to
+ * re-ask (a Jira status moves inside a ttl). Awaited to the end, borrowed
+ * fetches included, so what is printed is what landed.
+ *
+ * `fetchers` is the seam `refresh` already has, for tests.
+ */
+export async function freshNoteContext(
+  id: string,
+  dataRoot: string,
+  opts: { fetchers?: Record<string, Fetcher> } = {},
+): Promise<NoteContext | null> {
+  const rec = readAll(paths(dataRoot).notes).notes.get(id);
+  if (!rec) return null;
+  await refresh({ dataRoot, ...(opts.fetchers ? { fetchers: opts.fetchers } : {}) }, rec.links.map((l) => l.raw), true);
+  return noteContext(id, dataRoot);
 }
 
 /**

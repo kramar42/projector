@@ -551,7 +551,7 @@ sort: [due:asc, priority:asc]
 show: [parent, project, tech]      # references first: the canvas lays out by the first
 lists: [needs-project, needs-status]  # columns that are other views — see below
 unlisted: true                     # keep it out of the picker; still openable by name
-expect: empty                      # `pj audit` asserts this view comes back empty
+expect: empty                      # `pj check` asserts this view comes back empty
 nodes: { platform: {x: 0, y: 0} }  # written by Save layout, not by hand
 order: { now: [id, id] }           # written by a drag, not by hand
 ```
@@ -659,7 +659,7 @@ bb; a page that does not know the kind ignores it. Outside a frame the row keeps
 ## Rules you can check
 
 Three of those keys are one feature. A **rule** is an ordinary saved view that says what should never
-be true, and `pj audit` runs every view that declares one:
+be true, and `pj check` runs every view that declares one, after it has checked the vault is valid:
 
 ```yaml
 # views/needs-status.yaml — planned, but never committed to as work
@@ -671,9 +671,13 @@ filter: { intake: ['(none)'], priority: ['-(none)'], status: ['(none)'] }
 ```
 
 ```console
-$ pj audit
+$ pj check
+Validity
+ok — no problems found
+
+Rules
 ok      needs-status             Needs status
-BROKEN  needs-priority        7  Needs priority
+BROKEN  needs-priority           7 Needs priority
            impl-1498-grainger-rate-calls-time
            …
 
@@ -686,10 +690,12 @@ fold a *budget* into the same key ("about seven things this week"), and being ov
 defect. If a cap ever earns its place it becomes `expect: {max: n}`, with `empty` kept as sugar for
 zero.
 
-**`pj audit` is not `pj check`, on purpose.** `pj check` asks whether the vault is loadable and
-internally consistent, which has the same right answer in every vault. A rule is *your* policy. Fused,
-a dangling reference and twelve untidy notes would leave by the same exit code with nothing to tell
-them apart.
+**Validity and rules are separate headings, on purpose.** Validity asks whether the vault is loadable
+and internally consistent, which has the same right answer in every vault. A rule is *your* policy.
+They were two commands once (`pj audit` ran the rules) so that a dangling reference and twelve untidy
+notes would not read as the same failure; the headings keep them apart now, and `pj check --json`
+counts them apart — `errors` and `warnings` for validity, `rules` for each rule and the notes breaking
+it. Both fail the command: a validity error, or any rule with a note in it.
 
 **`lists:` draws rules side by side.** Its columns are other views, named in order:
 
@@ -731,7 +737,7 @@ A composition is one level deep: a view named in `lists:` may not name others, a
 anything itself, since a column is one flat list.
 
 **`unlisted: true` keeps a view out of the picker.** Not hidden: `pj ls --view needs-status` runs it,
-`pj audit` enumerates it, and it is drawn in plain sight as a column. It is absent from the *index*,
+`pj check` runs it, and it is drawn in plain sight as a column. It is absent from the *index*,
 which is why the word is `unlisted`. Rules want it, because a dozen one-question views would otherwise
 bury the handful of views you actually open.
 
@@ -953,10 +959,9 @@ back into it. It names a *place* rather than a session, which is what makes it m
 every session that ever runs there is found by reading the directory, live or finished, and nothing
 has to register itself. `pj work` writes one at launch and it is the only thing it writes to a note.
 
-```bash
-pj enrich --all              # resolve every link on every note and print it
-pj enrich <ref> --force
-```
+A read never waits on the network: `pj context <id>` shows each link as cached, with the time it was
+fetched. `pj context <id> --fresh` re-resolves every link on that note first and waits for the
+answers — the way to ask what a ticket or a PR says *now*.
 
 ---
 
@@ -1449,10 +1454,9 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj accept <id>… [--only f,g]` | file inbox cards: one of its own moves to its place; an `extends` card folds into its target, which takes every axis the card proposes, or only those named — a many-valued axis as a union |
 | `pj decline <id\|fp>… --reason <why> [--title t]` | the no to a card: removes it and records its fingerprints, with the reason the judge learns from. A fingerprint no note holds is recorded as it is; `--title` names it in the pile |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
-| `pj context <id> [--json]` | everything known about a note, assembled |
+| `pj context <id> [--fresh] [--json]` | everything known about a note, assembled. Links show what is cached; `--fresh` re-resolves every one first and waits for it |
 | `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `views`, `search`, `context`, `log`, `did`, `vault_status`, and `propose`, which answers with the `pj` command for a change and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
-| `pj enrich [<ref>…] [--all] [--force]` | resolve link enrichment |
 | `pj intake [<channel>…]` | one tick by hand: fetch each channel from its cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, advance what it fetched |
 | `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a tick would find since each channel's cursor. Files nothing, moves no cursor |
 | `pj intake status [--json]` | each channel's cursor, last run and counts |
@@ -1461,8 +1465,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj intake advance [--captured n]` · `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: promote the cursors a `--dry-run` proposed, once you resolved it by hand · inspect deduplication · set a raw cursor · forget one |
 | `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
-| `pj check` | validate every note file, and every saved view against the same vocabulary |
-| `pj audit [--json]` | run this vault's rules: every saved view declaring `expect: empty`. Exits non-zero if one is broken |
+| `pj check [--json]` | under *Validity*, every note file and every saved view against the same vocabulary; then under *Rules*, every saved view declaring `expect: empty`, with the notes breaking it. Exits non-zero on a validity error or a broken rule — warnings alone pass |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
 **Flags use their full long spelling.** `pj ls --json`, `pj ls --group status` and
@@ -1486,8 +1489,8 @@ The CLI and the app share one query compiler *and* one payload builder, so `pj l
 opening that view in the browser mean the same thing, and `pj ls --json` is what `GET /api/query`
 returns. There is no `pj next` or `pj untriaged`: those were two queries hardcoded in TypeScript, and
 they are `views/unblocked.yaml` and `views/triage.yaml` now — askable from either surface, and checked
-by `pj check` like anything else. `pj audit` is the other half of that: it *runs* the views that say
-what should never happen. See [Rules you can check](#rules-you-can-check).
+by `pj check` like anything else. `pj check` also *runs* the views that say what should never happen,
+under their own heading. See [Rules you can check](#rules-you-can-check).
 
 ---
 

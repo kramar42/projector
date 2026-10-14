@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { readCached, refresh } from '../src/server/enrich.ts';
 import type { Fetcher } from '../src/enrich/types.ts';
 import { paths } from '../src/config.ts';
+import { freshNoteContext, noteContext } from '../src/agent/context.ts';
+import { place } from './fixture.ts';
 
 /**
  * Enrichment has two signals and they are not the same event: `onRefreshed` says
@@ -268,6 +270,46 @@ test('a fetcher that throws still settles, and unblocks a waiter', async () => {
     const item = readCached(root, ['doc:never.md'])[0]!;
     assert.equal(item.state, 'error');
     assert.match(item.error ?? '', /kaboom/);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- context --fresh
+
+/**
+ * `pj context --fresh` is the only way left to resolve a link by hand — `pj
+ * enrich` folded into it, because nobody resolves a link except to read a note.
+ * A plain context never fetches (it is assembly, C8); a fresh one re-resolves
+ * every link the note carries before it assembles, fresh ones included, which is
+ * what `enrich --force` did per ref.
+ */
+test('a fresh context re-resolves every link the note carries; a plain one never fetches', async () => {
+  const { root, cleanup } = vault();
+  try {
+    writeFileSync(place(root, 'assets/alpha/spec.md'), '# One\n', 'utf8');
+    writeFileSync(
+      place(root, 'alpha.md'),
+      '---\nid: alpha\ntitle: Alpha\nlinks: [doc:assets/alpha/spec.md]\n---\nbody\n',
+      'utf8',
+    );
+    const plain = noteContext('alpha', root)!;
+    assert.equal(plain.links[0]!.enrichment?.state, 'missing', 'a plain context reads the cache and fetches nothing');
+
+    const first = (await freshNoteContext('alpha', root))!;
+    assert.equal(first.links[0]!.enrichment?.state, 'fresh');
+    assert.equal(first.links[0]!.enrichment?.data?.title, 'One');
+    const at = first.links[0]!.enrichment!.fetchedAt!;
+
+    // Still fresh by its ttl, so only a forced resolve sees the change.
+    writeFileSync(place(root, 'assets/alpha/spec.md'), '# Two\n', 'utf8');
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(noteContext('alpha', root)!.links[0]!.enrichment?.data?.title, 'One');
+    const again = (await freshNoteContext('alpha', root))!;
+    assert.equal(again.links[0]!.enrichment?.data?.title, 'Two');
+    assert.ok(again.links[0]!.enrichment!.fetchedAt! > at, 'and its fetchedAt moved');
+
+    assert.equal(await freshNoteContext('ghost', root), null, 'a missing note is null, as it is for noteContext');
   } finally {
     cleanup();
   }

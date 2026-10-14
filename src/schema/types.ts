@@ -157,7 +157,7 @@ export interface FacetDef {
    *
    * Filing rules are conditional and belong to the vault, so they are views now
    * — one query each, drawn together by `shape: lists` and asserted by
-   * `pj audit`. This file describes what a facet *is*; what a vault wants filled
+   * `pj check`. This file describes what a facet *is*; what a vault wants filled
    * is not a property of an axis.
    */
   /**

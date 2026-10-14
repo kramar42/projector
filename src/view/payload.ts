@@ -217,3 +217,25 @@ function relationsAmong(
   }
   return out;
 }
+
+/** One rule's answer: which notes break it. Empty `ids` is a rule that holds. */
+export interface RuleResult {
+  name: string;
+  title: string;
+  ids: string[];
+}
+
+/**
+ * Run this vault's rules: every saved view that declares `expect: empty`.
+ *
+ * A rule is one view file — the same file a board draws as a column — so it is
+ * answered by the same payload builder, and there is no second place a rule is
+ * declared or a second way it is evaluated (C9). `pj check` and the MCP
+ * `vault_status` both read it through here, so they cannot disagree about which
+ * rules break.
+ */
+export function runRules(deps: PayloadDeps): RuleResult[] {
+  return deps.views
+    .filter((v) => v.expect)
+    .map((v) => ({ name: v.name ?? '', title: v.title ?? v.name ?? '', ids: queryPayload(deps, v, v).ids }));
+}

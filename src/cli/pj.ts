@@ -15,7 +15,7 @@ import { delegatedIndex } from './delegate.ts';
 import { counts, search } from '../index/queries.ts';
 import { ftsPrefixQuery } from '../index/query.ts';
 import { SPEC_PARAMS } from '../view/spec.ts';
-import { queryPayload } from '../view/payload.ts';
+import { queryPayload, runRules } from '../view/payload.ts';
 import { renderListing, resolveListing, type Overrides } from '../view/listing.ts';
 import { editFacets, parseFacetSpec, parseFacetSpecs, type FacetOp } from '../schema/edit.ts';
 import { serveMcp } from '../mcp/server.ts';
@@ -23,8 +23,7 @@ import { applySync, planSync, renderPlan } from '../sync/plan.ts';
 import type { Note } from '../schema/types.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
-import { readCached, refresh } from '../server/enrich.ts';
-import { noteContext, renderContext } from '../agent/context.ts';
+import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
 import {
   advance,
   candidateCount,
@@ -238,11 +237,10 @@ Work with notes
   search             full-text search, most relevant first
   log                what changed, from git history
   did                what you did on one day, from every source
-  context            everything known about one note
+  context            everything known about one note; --fresh re-asks its links
   add, set, link     create or change notes
   mv, merge, rm      rename, combine, or remove notes
   work               prepare a worktree workspace and briefing
-  enrich             resolve links
   mcp                serve the vault read-only to MCP clients, over stdio
 
 Intake
@@ -253,8 +251,7 @@ Intake
 
 Vault and maintenance
   setup              inspect or initialise vault integration
-  check              validate notes and saved views
-  audit              run saved views that assert \`expect: empty\`
+  check              validate notes and saved views, then run the vault's rules
   reindex            rebuild the derived index
   vaults             list and manage known vaults
 
@@ -287,9 +284,11 @@ Create one note.`,
                     [--session [id]] [--cwd dir]
 
 Add or remove links. \`--session\` names a live Claude session.`,
-  context: `Usage: pj context <id> [--json]
+  context: `Usage: pj context <id> [--fresh] [--json]
 
-Print everything projector knows about one note.`,
+Print everything projector knows about one note. Its links show what is
+cached; \`--fresh\` re-resolves every one first — Jira, GitHub, docs,
+sessions — and waits for the answers, so each is as of now.`,
   set: `Usage: pj set <id>... [--title t] [--facet f=v] [--add f=v]
                  [--remove f=v] [--set path=yaml ...]
 
@@ -324,19 +323,21 @@ Prepare the worktree workspace and briefing for a note.`,
 Serve the vault to an MCP client — Claude Desktop, claude.ai, any other — over
 stdio, until the client closes it. The tools are ls, views, search, context,
 log and did — each the command of that name, run in-process — vault_status,
-which is check, audit and the index counts in one, and propose, which prints
+which is check (validity and rules) and the index counts in one, and propose, which prints
 the \`pj\` command for a change and applies nothing.
 Saved views are resources too. \`--vault\` is required: a server outlives the
 shell that started it, so it never takes a vault it was not given.`,
-  enrich: `Usage: pj enrich [<ref>...] [--all] [--force]
+  check: `Usage: pj check [--json]
 
-Resolve link enrichment and print it.`,
-  check: `Usage: pj check
+Check the vault in two parts, each under its own heading.
 
-Validate every note file and saved view.`,
-  audit: `Usage: pj audit [--json]
+Validity: every note file and saved view against the vocabulary and the
+layout — the same rules in every vault.
+Rules: every saved view declaring \`expect: empty\`, with the notes that
+break it — this vault's own policy.
 
-Run saved views that declare \`expect: empty\`. Exits non-zero when a rule is broken.`,
+Exits non-zero on a validity error or a broken rule; warnings alone pass.
+\`--json\` prints both: { errors, warnings, issues, rules }.`,
   sync: `Usage: pj sync <view> <folder> [--exclude facet=value,value] [--apply] [--adopt]
 
 Write a view's notes into a folder as plain markdown a reader outside the vault can
@@ -621,7 +622,23 @@ function cmdLink(argv: string[]): void {
   console.log(`${id}: ${merged.length} link(s)` + (already.length ? ` (${already.length} already there)` : ''));
 }
 
-function cmdCheck(): void {
+/**
+ * Validity, then the vault's rules — `pj audit` folded in (decision 18 of the
+ * day-loop design).
+ *
+ * They were two commands so a dangling reference and twelve untidy notes would
+ * not leave by the same exit code with nothing to tell them apart. Headings do
+ * that job now: validity is the same answer in every vault, a rule is this
+ * vault's own policy, and each is printed — and counted in `--json` — on its
+ * own. Both fail the command, because a rule is a rule: `expect: empty` says
+ * zero is the only correct state.
+ *
+ * A rule is one view file, which is the same file the board draws as a column.
+ * So there is no second place to declare one, and no rule that is checked but
+ * cannot be opened and drained.
+ */
+async function cmdCheck(argv: string[]): Promise<void> {
+  const { flags } = argFlags(argv, ['json'], ['json']);
   const facets = loadFacets(p.facets);
   const { notes, unreadable, duplicates } = readAll(p.notes);
   const issues = [
@@ -634,25 +651,30 @@ function cmdCheck(): void {
     // a filter naming a deleted facet matched nothing and reported success.
     ...validateViews(loadViewFiles(root), facets),
   ];
-  console.log(formatIssues(issues, root));
-  if (issues.some((i) => i.severity === 'error')) process.exit(1);
+  const errors = issues.filter((i) => i.severity === 'error').length;
+
+  // Rules run on the index, as `pj ls --view` does: a rule is a view.
+  const { db, notes: indexed } = await currentIndex();
+  const rules = runRules({ facets, db, notes: indexed, views: loadViews(root) });
+  const broken = rules.filter((r) => r.ids.length);
+
+  if (flags.has('json')) {
+    console.log(JSON.stringify({ errors, warnings: issues.length - errors, issues, rules }, null, 2));
+  } else {
+    console.log(`Validity\n${formatIssues(issues, root)}\n\nRules`);
+    if (!rules.length) console.log('no rules — a view declares one with `expect: empty`');
+    for (const r of rules) {
+      const held = r.ids.length;
+      console.log(`${held ? 'BROKEN ' : 'ok     '} ${pad(r.name, 24)} ${held || ''} ${r.title}`);
+      // The notes themselves, because a rule that only reports a number sends you
+      // to a second command to find out what it means.
+      for (const id of r.ids) console.log(`           ${id}`);
+    }
+    if (rules.length) console.log(`\n${rules.length - broken.length} of ${rules.length} rule(s) hold`);
+  }
+  if (errors || broken.length) process.exit(1);
 }
 
-/**
- * Run this vault's filing rules: every saved view that declares `expect`.
- *
- * Deliberately *not* part of `pj check`. That command answers "is this vault
- * loadable and internally consistent", which has the same right answer in every
- * vault; this one answers "am I working the way I said I would", which is a
- * vault's own policy. Fused, a dangling reference and twelve untidy notes would
- * leave by the same exit code with nothing to tell them apart — and the
- * validator has already had this argument once, when the "no project" warning
- * moved out of it and into the view that asks the question.
- *
- * A rule is one view file, which is the same file the board draws as a column.
- * So there is no second place to declare one, and no rule that is checked but
- * cannot be opened and drained.
- */
 /**
  * Sync a view into a folder outside the vault.
  *
@@ -748,43 +770,6 @@ async function tick(root: string, only: string[]): Promise<void> {
       `, ${res.skipped} already known` +
       (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
   );
-}
-
-async function cmdAudit(argv: string[]): Promise<void> {
-  const { flags } = argFlags(argv, ['json'], ['json']);
-  const facets = loadFacets(p.facets);
-  const { db, notes } = await currentIndex();
-  const views = loadViews(root);
-
-  const rules = views.filter((v) => v.expect);
-  const results = rules.map((v) => {
-    const payload = queryPayload({ facets, db, notes, views }, v, v);
-    return { name: v.name ?? '', title: v.title ?? v.name ?? '', ids: payload.ids };
-  });
-
-  if (flags.has('json')) {
-    console.log(JSON.stringify({ rules: results }, null, 2));
-    if (results.some((r) => r.ids.length)) process.exit(1);
-    return;
-  }
-
-  if (!rules.length) {
-    console.log('no rules — a view declares one with `expect: empty`');
-    return;
-  }
-
-  for (const r of results) {
-    const held = r.ids.length;
-    console.log(`${held ? 'BROKEN ' : 'ok     '} ${pad(r.name, 24)} ${held || ''} ${r.title}`);
-    // The notes themselves, because a rule that only reports a number sends you
-    // to a second command to find out what it means.
-    for (const id of r.ids) console.log(`           ${id}`);
-  }
-  const broken = results.filter((r) => r.ids.length);
-  console.log(
-    `\n${rules.length - broken.length} of ${rules.length} rule(s) hold`,
-  );
-  if (broken.length) process.exit(1);
 }
 
 /**
@@ -886,11 +871,7 @@ if (asking) {
       cmdLink(argv);
       break;
     case 'check':
-      argFlags(argv, []);
-      cmdCheck();
-      break;
-    case 'audit':
-      await cmdAudit(argv);
+      await cmdCheck(argv);
       break;
     case 'sync':
       await cmdSync(argv);
@@ -953,30 +934,6 @@ if (asking) {
       }
       console.error(`unknown: pj vaults ${sub}`);
       process.exit(1);
-    }
-    case 'enrich': {
-      const { flags, rest } = argFlags(argv, ['all', 'force'], ['all', 'force']);
-      const { notes } = readAll(p.notes);
-      const refs = rest.length
-        ? rest
-        : flags.has('all')
-          ? [...new Set([...notes.values()].flatMap((r) => r.links.map((l) => l.raw)))]
-          : [];
-      if (!refs.length) {
-        console.error('pj enrich <ref>... | pj enrich --all');
-        process.exit(1);
-      }
-      // Kick off the fetches, wait for the queue to drain, then report.
-      await refresh({ dataRoot: root }, refs, flags.has('force'));
-      for (const item of readCached(root, refs)) {
-        const d = item.data;
-        const badges = (d?.badges ?? []).map((b) => b.label).join(' ');
-        console.log(
-          `${pad(item.state, 12)} ${pad(d?.label ?? '—', 22)} ${(d?.title ?? item.error ?? item.reason ?? '').slice(0, 62)}` +
-            (badges ? `  [${badges}]` : ''),
-        );
-      }
-      break;
     }
     /**
      * A bare `pj intake` is the tick: it files into `inbox/` and advances. Only
@@ -1193,8 +1150,12 @@ if (asking) {
     }
 
     case 'context': {
-      const { flags, rest } = argFlags(argv, ['json'], ['json']);
-      const ctx = noteContext(rest[0] ?? '', root);
+      const { flags, rest } = argFlags(argv, ['fresh', 'json'], ['fresh', 'json']);
+      // `--fresh` is what `pj enrich --force` was: the note's links
+      // re-resolved and awaited, so what prints is what landed.
+      const ctx = flags.has('fresh')
+        ? await freshNoteContext(rest[0] ?? '', root)
+        : noteContext(rest[0] ?? '', root);
       if (!ctx) {
         console.error(`no note with id "${rest[0] ?? ''}"`);
         process.exit(1);

@@ -73,8 +73,8 @@ function open(dataRoot: string): DatabaseSync {
  * fetching this" and "there is nothing to fetch" were the same answer: the ref was
  * skipped, the caller was told the queue had drained, and it read the cache back
  * before the value landed. The browser survives that — one SSE listener catches
- * the signal whenever it fires — but `pj enrich <ref>` printed `missing` for a ref
- * that was being fetched as it printed.
+ * the signal whenever it fires — but `pj enrich <ref>` (now `pj context --fresh`)
+ * printed `missing` for a ref that was being fetched as it printed.
  *
  * Waiting cannot deadlock: a borrowed promise always belongs to a fetch that
  * started earlier, so the wait graph only ever points backwards in time.
@@ -198,12 +198,12 @@ function store(dataRoot: string, ref: string, kind: string, value: Enrichment | 
  *
  * **Returns a promise that resolves when the queue has drained**, including
  * immediately when there was nothing to fetch. The server ignores it — a read
- * never waits on the network — and `pj enrich` awaits it.
+ * never waits on the network — and `pj context --fresh` awaits it.
  *
  * It used to return `void`, so the only way to know the work had finished was
  * `onRefreshed` — which fires on exactly one of this function's two exits. The
  * early return below is the other, and it is the *common* case: an already-fresh
- * ref, or a kind with no fetcher. `pj enrich` therefore raced the callback against
+ * ref, or a kind with no fetcher. `pj enrich`, as it was, raced the callback against
  * a 60-second fallback timer and lost every time, which is how a command whose
  * work took 0ms took a minute to come back.
  *

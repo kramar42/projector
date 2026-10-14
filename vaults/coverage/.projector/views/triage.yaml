@@ -7,7 +7,7 @@
 # a gap. Filing rules are conditional, and facets.yaml has nowhere to say one.
 #
 # So the question is asked by `lists:` instead. Each column is an ordinary view
-# file, which is the same file `pj audit` runs, so a rule and the place you fix it
+# file, which is the same file `pj check` runs, so a rule and the place you fix it
 # are one object rather than two that can disagree — and `rule-no-status` can
 # carry the `type:` condition that killed the axis.
 #

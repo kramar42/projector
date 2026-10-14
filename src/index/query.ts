@@ -161,7 +161,7 @@ function daysSince(date: string | undefined, today: string): number | null {
  *
  * What replaces it is not a cleverer predicate. A vault states its filing rules
  * as views — one query each, composed into a board by `shape: lists` and
- * asserted by `pj audit` — because the questions worth asking are conditions on
+ * asserted by `pj check` — because the questions worth asking are conditions on
  * *different* axes at once ("carries a priority but no status", and its mirror),
  * which no single expectation could express and no grouping could draw. The
  * queue of things nobody has judged is the `intake` axis, which a sweep writes
@@ -847,7 +847,7 @@ export interface Rollup {
  * the expectation it stood on, and nothing replaced it in kind: a per-project
  * count of half-filed notes is an *aggregate over a query*, which is what the
  * per-column summaries entry in NEXT.md describes and this module deliberately
- * does not invent a second time. `pj audit` answers it now, and
+ * does not invent a second time. `pj check` answers it now, and
  * `pj ls --view needs-status --group project` answers it per project.
  *
  * Note what it could never have counted: a note with no project is not reachable

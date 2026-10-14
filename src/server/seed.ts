@@ -300,7 +300,7 @@ shape: board
 title: Needs project
 unlisted: true
 expect: empty
-# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# \`expect: empty\` is what \`pj check\` asserts; this is what a reader sees when it
 # holds. Two questions about one view — is zero correct, and what does zero say —
 # so neither is derivable from the other.
 whenEmpty: Nothing is unfiled — every accepted note has a project.
@@ -319,12 +319,12 @@ show: [status, priority]
 #
 # One of the two halves of a note that claims to be work on one axis and not the
 # other. Both are invariants rather than piles — zero is the only correct state —
-# which is what \`expect: empty\` asserts and \`pj audit\` runs.
+# which is what \`expect: empty\` asserts and \`pj check\` runs.
 shape: board
 title: Needs status
 unlisted: true
 expect: empty
-# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# \`expect: empty\` is what \`pj check\` asserts; this is what a reader sees when it
 # holds. Two questions about one view — is zero correct, and what does zero say —
 # so neither is derivable from the other.
 whenEmpty: Nothing is planned-but-uncommitted — every note with a priority has a status.
@@ -348,7 +348,7 @@ shape: board
 title: Needs priority
 unlisted: true
 expect: empty
-# \`expect: empty\` is what \`pj audit\` asserts; this is what a reader sees when it
+# \`expect: empty\` is what \`pj check\` asserts; this is what a reader sees when it
 # holds. Two questions about one view — is zero correct, and what does zero say —
 # so neither is derivable from the other.
 whenEmpty: Nothing is committed-but-unplanned — every note with a status has a priority.
@@ -367,7 +367,7 @@ show: [project, status]
 # \`lists:\` draws other views as this one's columns. It exists because grouping
 # cannot answer this: a grouped board derives its columns from one axis over one
 # result set, and two of these four are conditions on two axes at once. Each
-# column is an ordinary view file, which is the same file \`pj audit\` runs — so a
+# column is an ordinary view file, which is the same file \`pj check\` runs — so a
 # rule and the place you fix it are one object rather than two that can disagree.
 #
 # Naming any children groups this view by \`lists\` — the one axis whose values
