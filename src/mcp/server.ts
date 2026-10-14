@@ -17,7 +17,7 @@ import { TOOLS, type Tool, type Vault } from './tools.ts';
  * **Read-only, and that is the design rather than a first version's gap.** The
  * vault's rule is that nothing is written without its owner's approval; a tool
  * call is a model's decision, so no tool writes a note. `propose` is the bridge —
- * it prints the `pj` command and stops. See `tools.ts`.
+ * it prints the `pj` commands and stops. See `tools.ts`.
  *
  * **The vault is named, never found.** `pj` resolves a vault from the
  * environment, the working directory or a lone registry entry, which is right
@@ -136,7 +136,10 @@ export function createHandler(home: Vault): (msg: Request) => Promise<Response |
     `Read-only access to the projector vault "${home.name ?? home.root}": markdown notes, each carrying facets. ` +
     (saved.length ? `Its saved views — the questions its owner asks it — are ${saved.join(', ')}; ls answers any of them. ` : '') +
     `search finds a note and context tells everything about one. ` +
-    `No tool writes: propose drafts a pj command for the owner to run, and a change is not made until they do.`;
+    `vault_status says whether the vault is healthy and how recent its intake is, and lists every view; ` +
+    `memory reads the planning agent's own memory/. ` +
+    `No tool writes: propose drafts pj commands — a batch, inbox accept and decline included — for the owner to run, ` +
+    `and a change is not made until they do.`;
 
   async function call(params: Record<string, unknown>) {
     const name = params.name;

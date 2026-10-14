@@ -1016,7 +1016,7 @@ export function deleteNote(root: string, id: string): { removedEdges: number } {
 }
 
 /** Every fingerprint a note answers for: where it came from, and what it absorbed. */
-function fingerprintsOf(rec: Pick<Note, 'source_fingerprint' | 'absorbed_fingerprints'>): string[] {
+export function fingerprintsOf(rec: Pick<Note, 'source_fingerprint' | 'absorbed_fingerprints'>): string[] {
   return [rec.source_fingerprint, ...(rec.absorbed_fingerprints ?? [])].filter((fp): fp is string => !!fp);
 }
 
@@ -1279,11 +1279,39 @@ export function acceptCards(
   ids: readonly string[],
   opts: { only?: readonly string[]; answers?: Record<string, string[]>; into?: string } = {},
 ): Accepted[] {
+  return planAccept(root, ids, opts).map(({ id, into, facets }) => {
+    if (!into) return { id, file: settleProjectFolder(root, id, fileCard(root, id, fileFor(root, id))), took: [] };
+    foldInto(root, id, into, facets);
+    return { id, into, file: fileFor(root, into), took: Object.keys(facets) };
+  });
+}
+
+/** What accepting one card would do, decided before anything is written. */
+export interface AcceptPlan {
+  id: string;
+  /** The note it folds into, or null for a card that becomes a note of its own. */
+  into: string | null;
+  /** The target's facets after the fold, on the axes it takes. Empty for a card of its own. */
+  facets: Record<string, string[]>;
+  /** Where a card of its own would be filed; null for a fold. */
+  to: string | null;
+}
+
+/**
+ * `acceptCards`' checks, and nothing else: every refusal it would make, thrown
+ * before a byte moves. Separate so that `propose` can ask the write path's own
+ * question about an accept it is only drafting (C9), and cannot drift from it.
+ */
+export function planAccept(
+  root: string,
+  ids: readonly string[],
+  opts: { only?: readonly string[]; answers?: Record<string, string[]>; into?: string } = {},
+): AcceptPlan[] {
   const p = paths(root);
   const { notes } = readAll(p.notes);
   const defs = loadDefs(p.facets);
 
-  const plans = [...new Set(ids)].map((id) => {
+  return [...new Set(ids)].map((id) => {
     const card = notes.get(id);
     if (!card) throw new Invalid(`no note with id "${id}"`);
     if (!inInbox(root, card.file)) throw new Invalid(`${id} is not an inbox card`);
@@ -1295,11 +1323,11 @@ export function acceptCards(
       if (opts.only || opts.answers) {
         throw new Invalid(`${id} extends nothing, so there are no axes to take — accepting files it as its own note`);
       }
-      return { id, into: null, facets: {} };
+      return { id, into: null, facets: {}, to: placeFor(root, id, card.facets) };
     }
     const target = notes.get(into);
     if (!target) throw new Invalid(`${id} extends "${into}", which does not exist`);
-    if (opts.answers) return { id, into, facets: opts.answers };
+    if (opts.answers) return { id, into, facets: opts.answers, to: null };
 
     // The same rows the dialog draws. Taking one replaces a single-valued axis
     // and adds to a many-valued one: the card's `source` is the channel it came
@@ -1318,13 +1346,7 @@ export function acceptCards(
     }
     const take = (r: (typeof rows)[number]): Side[] => (r.multi ? ['before', 'after'] : ['after']);
     const sides = Object.fromEntries(rows.map((r) => [r.facet, only.includes(r.facet) ? take(r) : (['before'] as Side[])]));
-    return { id, into, facets: foldResult(rows, sides) };
-  });
-
-  return plans.map(({ id, into, facets }) => {
-    if (!into) return { id, file: settleProjectFolder(root, id, fileCard(root, id, fileFor(root, id))), took: [] };
-    foldInto(root, id, into, facets);
-    return { id, into, file: fileFor(root, into), took: Object.keys(facets) };
+    return { id, into, facets: foldResult(rows, sides), to: null };
   });
 }
 
@@ -1356,11 +1378,30 @@ export function declineCards(
   opts: { reason: string; title?: string },
 ): Declined[] {
   const reason = opts.reason.trim();
-  if (!reason) throw new Invalid('a decline needs a reason — it is what the judge learns from');
+  return planDecline(root, refs, opts).map((plan) => {
+    if ('fingerprint' in plan) {
+      suppress(root, { fingerprint: plan.fingerprint, reason, ...(opts.title ? { title: opts.title } : {}) });
+      return { fingerprints: [plan.fingerprint], removedEdges: 0 };
+    }
+    const { card } = plan;
+    const fingerprints = fingerprintsOf(card);
+    for (const fp of fingerprints) {
+      suppress(root, { fingerprint: fp, reason, title: card.title || card.id, wasJudged: false });
+    }
+    return { id: card.id, fingerprints, ...removeNote(root, card.id) };
+  });
+}
+
+/** What declining one ref would do: remove a card, or record a bare fingerprint. */
+export type DeclinePlan = { card: Note } | { fingerprint: string };
+
+/** `declineCards`' checks, thrown before anything is written — `planAccept`'s twin. */
+export function planDecline(root: string, refs: readonly string[], opts: { reason: string }): DeclinePlan[] {
+  if (!opts.reason.trim()) throw new Invalid('a decline needs a reason — it is what the judge learns from');
   const { notes } = readAll(paths(root).notes);
 
   const seen = new Set<string>();
-  const plans: ({ card: Note } | { fingerprint: string })[] = [];
+  const plans: DeclinePlan[] = [];
   for (const ref of refs) {
     const card = notes.get(ref) ?? [...notes.values()].find((n) => fingerprintsOf(n).includes(ref));
     if (card) {
@@ -1373,19 +1414,7 @@ export function declineCards(
       throw new Invalid(`no card "${ref}", and it is not a fingerprint (<channel>:<ref>)`);
     }
   }
-
-  return plans.map((plan) => {
-    if ('fingerprint' in plan) {
-      suppress(root, { fingerprint: plan.fingerprint, reason, ...(opts.title ? { title: opts.title } : {}) });
-      return { fingerprints: [plan.fingerprint], removedEdges: 0 };
-    }
-    const { card } = plan;
-    const fingerprints = fingerprintsOf(card);
-    for (const fp of fingerprints) {
-      suppress(root, { fingerprint: fp, reason, title: card.title || card.id, wasJudged: false });
-    }
-    return { id: card.id, fingerprints, ...removeNote(root, card.id) };
-  });
+  return plans;
 }
 
 /**

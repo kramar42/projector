@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
+import { closeIntakeDb, commitWatermark } from '../src/intake/db.ts';
 import { createHandler } from '../src/mcp/server.ts';
 import { TOOLS } from '../src/mcp/tools.ts';
 import { place } from './fixture.ts';
@@ -77,8 +78,24 @@ async function callTool(handle: ReturnType<typeof createHandler>, name: string, 
   return { text: r.content[0]!.text, isError: r.isError ?? false };
 }
 
+/**
+ * Three cards in `inbox/`: one of its own, one extending `alpha`, one to say no to.
+ * Only the tests that judge cards file them, so the others count three notes.
+ */
+function inbox(root: string): void {
+  const card = (id: string, fm: string) =>
+    writeFileSync(place(root, `inbox/${id}.md`), `---\nid: ${id}\ntitle: ${id}\n${fm}---\nwhat came in\n`, 'utf8');
+  card('own', 'facets: { priority: [later] }\nsource_fingerprint: git:1\n');
+  card('ext', 'facets: { status: [done], priority: [later], extends: [alpha] }\nsource_fingerprint: slack:C1/1\n');
+  card('nope', 'facets: { priority: [later] }\nsource_fingerprint: slack:C1/2\n');
+}
+
+/** Every note file in the vault, byte for byte, and whether intake's store exists. */
 function snapshot(root: string): string {
-  return ['alpha', 'beta', 'gamma'].map((id) => readFileSync(place(root, `${id}.md`), 'utf8')).join('\0');
+  const files = ['notes', 'inbox']
+    .flatMap((dir) => (existsSync(join(root, dir)) ? readdirSync(join(root, dir)).map((f) => join(root, dir, f)) : []))
+    .sort();
+  return [...files.map((f) => `${f}\n${readFileSync(f, 'utf8')}`), `intake.db: ${existsSync(paths(root).intakeDb)}`].join('\0');
 }
 
 test('initialize agrees a version, and every tool says it is read-only', async () => {
@@ -93,6 +110,9 @@ test('initialize agrees a version, and every tool says it is read-only', async (
     // The views are the vault's own, read off it — the unlisted rule is not offered.
     assert.match(r.instructions, /open \(Open\)/);
     assert.doesNotMatch(r.instructions, /unprioritised/);
+    // The instructions name tools that exist, and none that went away.
+    for (const t of ['vault_status', 'memory', 'propose']) assert.match(r.instructions, new RegExp(t));
+    assert.doesNotMatch(r.instructions, /\bviews tool\b/);
 
     const unknown = await rpc(handle, 'initialize', { protocolVersion: '1999-01-01' });
     assert.ok('result' in unknown);
@@ -155,7 +175,7 @@ test('ls through a view answers what pj ls answers', async () => {
   }
 });
 
-test('context, search and views read the vault; a wrong id gets the near matches', async () => {
+test('context and search read the vault; a wrong id gets the near matches', async () => {
   const v = vault();
   try {
     const handle = createHandler({ root: v.root, name: 'scratch' });
@@ -170,9 +190,6 @@ test('context, search and views read the vault; a wrong id gets the near matches
     assert.match(miss.text, /no note with id "alpha-launch"\. Did you mean: alpha/);
 
     assert.match((await callTool(handle, 'search', { query: 'laun' })).text, /^alpha +Alpha launch/);
-    const views = (await callTool(handle, 'views')).text;
-    assert.match(views, /open — Open \(board\)/);
-    assert.match(views, /unprioritised — Unprioritised \(table\) \[unlisted; rule: expect empty\]/);
 
     // Arguments are checked before anything runs, and say what was wrong.
     const bad = await callTool(handle, 'search', {});
@@ -198,36 +215,181 @@ test('vault_status counts the index and names a broken rule', async () => {
 });
 
 /**
- * The vault's rule — nothing written without its owner — held by the one tool
- * that is about a write. It prints the command, checks it with the write path's
- * own gate, and leaves every byte where it was.
+ * What the `views` tool answered is part of the status now: the vault's
+ * questions, rules marked. And the intake half — each channel's last tick and
+ * how much waits in the inbox — is what tells a client whether the world it is
+ * about to read is stale.
  */
-test('propose prints the pj command, checks it, and writes nothing', async () => {
+test('vault_status lists every saved view, each channel\'s last tick and the inbox', async () => {
   const v = vault();
   try {
+    inbox(v.root);
+    const handle = createHandler({ root: v.root, name: 'scratch' });
+    const before = (await callTool(handle, 'vault_status')).text;
+    assert.match(before, /open — Open \(board\)/);
+    assert.match(before, /unprioritised — Unprioritised \(table\) \[unlisted; rule: expect empty\]/);
+    assert.match(before, /^inbox: 3 card\(s\)/m);
+    assert.match(before, /^intake: never ticked/m);
+    assert.match(before, /^ {2}git +never/m);
+    assert.equal(existsSync(paths(v.root).intakeDb), false, 'asking does not create intake\'s store');
+
+    commitWatermark(v.root, 'git', '2026-10-13T10:00:00.000Z');
+    const after = (await callTool(handle, 'vault_status')).text;
+    assert.match(after, /^intake: last tick \d{4}-\d{2}-\d{2}T.* \(just now\)/m);
+    assert.match(after, /^ {2}git +ran \S+ \(just now\) +cursor 2026-10-13T10:00:00\.000Z$/m);
+    assert.match(after, /^ {2}jira +never$/m);
+
+    // Folded in, not aliased.
+    assert.ok(!TOOLS.some((t) => t.name === 'views'));
+    const gone = await rpc(handle, 'tools/call', { name: 'views', arguments: {} });
+    assert.ok('error' in gone && /unknown tool "views"/.test(gone.error.message));
+  } finally {
+    closeIntakeDb(v.root);
+    v.cleanup();
+  }
+});
+
+/**
+ * The vault's rule — nothing written without its owner — held by the one tool
+ * that is about a write. It prints the commands, checks each with the write
+ * path's own gate, and leaves every byte where it was: the inbox, and intake's
+ * store, which a real decline would create.
+ */
+test('propose drafts a batch of pj commands, checks each, and writes nothing', async () => {
+  const v = vault();
+  try {
+    inbox(v.root);
     const handle = createHandler({ root: v.root, name: 'scratch' });
     const before = snapshot(v.root);
 
-    const set = (await callTool(handle, 'propose', { command: 'set', id: 'alpha', facet: { status: ['done'] } })).text;
-    assert.match(set, /Proposed, not applied/);
-    assert.match(set, /^ {2}pj --vault scratch set alpha --facet status=done$/m);
-    assert.match(set, /would become: status=done priority=now/);
-    assert.doesNotMatch(set, /would be refused/);
+    const out = await callTool(handle, 'propose', {
+      commands: [
+        { verb: 'set', id: 'alpha', facet: { status: ['done'] } },
+        { verb: 'accept', id: 'own' },
+        { verb: 'accept', id: 'ext', only: ['status'] },
+        { verb: 'decline', id: 'nope', reason: 'answered in the thread' },
+        { verb: 'decline', id: 'slack:C9/9', reason: 'noise', title: 'A bot' },
+        { verb: 'add', title: "Ship it's thing", facet: { priority: ['now'] } },
+        { verb: 'decline', id: 'alpha', reason: 'kept' },
+        { verb: 'set', id: 'nobody', facet: { status: ['done'] } },
+        { verb: 'set', id: 'gamma', facet: { status: ['blocked'] } },
+        { verb: 'accept', id: 'nope' },
+        { verb: 'decline', id: 'own', reason: ' ' },
+      ],
+    });
+    assert.equal(out.isError, false, 'an invalid entry is reported, not the whole batch refused');
+    const text = out.text;
+    assert.match(text, /Proposed, not applied/);
+    assert.match(text, /6 to run, 5 refused/);
 
-    const refused = (await callTool(handle, 'propose', { command: 'set', id: 'alpha', facet: { status: ['blocked'] } })).text;
-    assert.match(refused, /would be refused: "blocked" is not allowed for "status"/);
+    // The block is exactly the valid entries, in order, and every line runs.
+    const block = text.split('\n').filter((l) => l.startsWith('  pj '));
+    assert.deepEqual(block, [
+      '  pj --vault scratch set alpha --facet status=done',
+      '  pj --vault scratch accept own',
+      '  pj --vault scratch accept ext --only status',
+      "  pj --vault scratch decline nope --reason 'answered in the thread'",
+      "  pj --vault scratch decline slack:C9/9 --reason noise --title 'A bot'",
+      "  pj --vault scratch add 'Ship it'\\''s thing' --facet priority=now",
+    ]);
 
-    const add = (await callTool(handle, 'propose', { command: 'add', title: "Ship it's thing", facet: { priority: ['now'] } })).text;
-    assert.match(add, /pj --vault scratch add 'Ship it'\\''s thing' --facet priority=now/);
-    assert.match(add, /would create ship-it-s-thing|would create ship-its-thing/);
+    assert.match(text, /1\. set alpha\n {3}alpha now: status=planning priority=now\n {3}would become: status=done priority=now/);
+    assert.match(text, /2\. accept own\n {3}would file own as its own note in notes\//);
+    assert.match(text, /3\. accept ext\n {3}would fold ext into alpha, taking status/);
+    assert.match(text, /4\. decline nope\n {3}would remove the card and record slack:C1\/2 as declined/);
+    assert.match(text, /5\. decline slack:C9\/9\n {3}would record slack:C9\/9 as declined/);
+    assert.match(text, /6\. add\n {3}would create ship-it-s-thing|6\. add\n {3}would create ship-its-thing/);
+    // Each refusal names its entry and why, and its command stays out of the block.
+    assert.match(text, /7\. decline alpha — refused: "alpha" is not a card — use pj rm to delete a note/);
+    assert.match(text, /8\. set nobody — refused: no note with id "nobody"/);
+    assert.match(text, /9\. set gamma — refused: "blocked" is not allowed for "status"[^\n]*\n {3}not run: pj --vault scratch set gamma --facet status=blocked/);
+    assert.match(text, /10\. accept nope — refused: entry 4 already declines nope/);
+    assert.match(text, /11\. decline own — refused: a decline needs a reason/);
 
-    const unlink = (await callTool(handle, 'propose', { command: 'link', id: 'beta', links: ['jira:B-2'], unlink: true })).text;
-    assert.match(unlink, /would be refused: beta does not link jira:B-2/);
+    assert.equal(snapshot(v.root), before, 'propose must not touch a note, the inbox or intake');
 
-    const nobody = await callTool(handle, 'propose', { command: 'set', id: 'nobody', facet: { status: ['done'] } });
-    assert.equal(nobody.isError, true);
+    const single = (await callTool(handle, 'propose', { commands: [{ verb: 'link', id: 'beta', links: ['jira:B-2'], unlink: true }] })).text;
+    assert.match(single, /0 to run, 1 refused/);
+    assert.match(single, /1\. link beta — refused: beta does not link jira:B-2/);
 
-    assert.equal(snapshot(v.root), before, 'propose must not touch a note');
+    const empty = await callTool(handle, 'propose', { commands: [] });
+    assert.equal(empty.isError, true, 'a batch of nothing is a malformed call');
+    const wrong = await callTool(handle, 'propose', { commands: [{ verb: 'rm', id: 'alpha' }] });
+    assert.equal(wrong.isError, true, 'rm is not a verb propose drafts');
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** `context` fresh is `pj context --fresh`: the links re-resolved before the answer. */
+test('context with fresh re-resolves the note\'s links first', async () => {
+  const v = vault();
+  try {
+    writeFileSync(place(v.root, 'assets/gamma/spec.md'), '# Written down\n', 'utf8');
+    writeFileSync(
+      place(v.root, 'gamma.md'),
+      "---\nid: gamma\ntitle: Gamma\nfacets: { status: [done], priority: [later] }\nlinks: ['doc:assets/gamma/spec.md']\n---\nthird\n",
+      'utf8',
+    );
+    const handle = createHandler({ root: v.root, name: 'scratch' });
+    type Ctx = { links: { enrichment: { state: string; data?: { title?: string } } }[] };
+    const cached = JSON.parse((await callTool(handle, 'context', { id: 'gamma', format: 'json' })).text) as Ctx;
+    assert.equal(cached.links[0]!.enrichment.state, 'missing', 'a plain context never fetches');
+    const fresh = JSON.parse((await callTool(handle, 'context', { id: 'gamma', fresh: true, format: 'json' })).text) as Ctx;
+    assert.equal(fresh.links[0]!.enrichment.state, 'fresh');
+    assert.equal(fresh.links[0]!.enrichment.data?.title, 'Written down');
+
+    const ghost = await callTool(handle, 'context', { id: 'ghost', fresh: true });
+    assert.equal(ghost.isError, true);
+    assert.match(ghost.text, /no note with id "ghost"/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * `memory/` read through MCP, for a client with no file access. Read-only
+ * (decision 17), and closed: a day is a date and a part is one of three, so no
+ * argument can name a path.
+ */
+test('memory reads AGENTS.md, a day of theories and the patterns; none is empty, not an error', async () => {
+  const v = vault();
+  try {
+    const handle = createHandler({ root: v.root, name: 'scratch' });
+    const none = await callTool(handle, 'memory');
+    assert.equal(none.isError, false, 'a vault the scientist has not run in is not broken');
+    assert.match(none.text, /^no memory\/ in this vault/);
+
+    const m = (rel: string, body: string) => writeFileSync(place(v.root, `memory/${rel}`), body, 'utf8');
+    m('AGENTS.md', 'how to investigate\n');
+    m('theories/2026-10-12.md', 'older theory\n');
+    m('theories/2026-10-13.md', 'newest theory\n');
+    m('theories/notes.txt', 'not a day\n');
+    m('patterns/a.md', 'pattern a\n');
+    m('patterns/b.md', 'pattern b\n');
+    m('patterns/deeper/c.md', 'not read\n');
+
+    const all = (await callTool(handle, 'memory')).text;
+    assert.match(all, /## memory\/AGENTS\.md\n\nhow to investigate/);
+    assert.match(all, /## memory\/theories\/2026-10-13\.md\n\n(.*\n)*newest theory/);
+    assert.match(all, /other days: 2026-10-12/);
+    assert.doesNotMatch(all, /older theory/, 'the newest day by default');
+    assert.match(all, /## memory\/patterns\/a\.md\n\npattern a/);
+    assert.match(all, /## memory\/patterns\/b\.md\n\npattern b/);
+    assert.doesNotMatch(all, /not read|not a day/);
+
+    const day = (await callTool(handle, 'memory', { part: 'theories', day: '2026-10-12' })).text;
+    assert.match(day, /older theory/);
+    assert.doesNotMatch(day, /how to investigate|pattern a/, 'a part is only that part');
+
+    const missing = await callTool(handle, 'memory', { part: 'theories', day: '2026-10-11' });
+    assert.equal(missing.isError, true);
+    assert.match(missing.text, /no memory\/theories\/2026-10-11\.md — have 2026-10-13, 2026-10-12/);
+
+    for (const bad of [{ day: '../../.projector/config' }, { day: '2026-10-1' }, { part: '../notes' }]) {
+      const r = await callTool(handle, 'memory', bad);
+      assert.equal(r.isError, true, `${JSON.stringify(bad)} must be refused before anything is read`);
+    }
   } finally {
     v.cleanup();
   }
