@@ -77,7 +77,7 @@ traces make obvious. Order categories by number of tasks, most first.
 ### Gaps
 - <sources not fetched and why; anything ambiguous you left ungrouped>
 
-<n> traces left out as not work (chit-chat, Q&A sessions, reviews).
+Left out as not work: <each trace you dropped, by its ref, with the one-word reason> — or nothing.
 ```
 
 - Write each task in the user's own words where a trace has them: a commit subject, a prompt, a
@@ -86,6 +86,9 @@ traces make obvious. Order categories by number of tasks, most first.
   per task is enough.
 - Every claim needs a trace behind it. A date, a status or a "done" with no trace becomes
   *progressed*, or goes under Gaps.
+- The left-out line names only traces you actually dropped, each by its ref: never a count or a
+  category you didn't enumerate, and never a meeting no trace shows you attended. It stays in
+  chat; a day note's `Did` holds the tasks and Gaps only.
 
 ## 4. Offer to save, then stop
 
