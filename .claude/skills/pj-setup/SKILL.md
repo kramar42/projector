@@ -1,6 +1,6 @@
 ---
 name: pj-setup
-description: Set up a projector vault's channels and credentials — ask which sources this vault should sweep, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; the intake poller files, and pj-triage sorts.
+description: Set up a projector vault's channels and credentials — ask which sources this vault should sweep, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; the intake poller files them, and pj-day judges what it filed.
 ---
 
 # Setup

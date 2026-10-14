@@ -179,7 +179,10 @@ day went without any commentary.
 Facets: `day: YYYY-MM-DD`, `private: true`, `source: brain`, and `project:` naming the projects of
 the plan's notes (every project worked on, by close). **No `status` or `priority` until close**: a
 day note is a log, not work, so it stays off every work board. At close it takes `status: done`, which
-is what the vault's daily notes carry. Edit the body with your file tools and run `pj check` after.
+is what the vault's daily notes carry. Edit the body with your file tools, then run `pj check`,
+**read for what you wrote** (`pj-about`): nothing in it may name the day note, a card you accepted
+or a note you set. A rule some other note breaks fails the command too; that is one line in your
+report, never a fix nobody asked for.
 
 ## Memory
 

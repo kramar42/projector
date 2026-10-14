@@ -249,6 +249,31 @@ test('the dry-run briefing shows worktree paths, not the source checkouts', () =
   }
 });
 
+test('the briefing points the session at the vault’s memory/AGENTS.md only when there is one', () => {
+  const root = vaultSaying('/wt');
+  try {
+    const ctx = workCtx(project({ repos: ['/repos/api'] }));
+    const file = pathJoin(paths(root).memory, 'AGENTS.md');
+    // A vault the day agent has never run in has no memory/, and a briefing that
+    // named the file anyway would send the session to read nothing.
+    assert.equal(planWork(ctx, root).memory, null);
+    assert.ok(!plannedBriefing(ctx, planWork(ctx, root)).includes('memory/AGENTS.md'));
+    mkdirSync(paths(root).memory, { recursive: true });
+    assert.equal(planWork(ctx, root).memory, null, 'an empty memory/ has nothing to read');
+
+    writeFileSync(file, '# How I work\n', 'utf8');
+    const plan = planWork(ctx, root);
+    assert.equal(plan.memory, file);
+    // Absolute, because the workspace is outside the vault.
+    const out = plannedBriefing(ctx, plan);
+    assert.ok(out.includes(`\`${file}\``), out);
+    // Read before the note's sources, which is what it says how to read.
+    assert.ok(out.indexOf(file) < out.indexOf('# Ship it'), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('every repo failing is a refusal, so no briefing is written and nothing opens', () => {
   const root = vaultSaying('/wt');
   const parent = mkdtempSync(pathJoin(tmpdir(), 'projector-wt-'));

@@ -33,7 +33,7 @@ Stop and say so, rather than pressing on, if:
 - **It is blocked.** `blockedBy` lists unfinished blockers. Say which, and ask whether to proceed
   anyway or switch to a blocker.
 - **It carries no `status`.** Carrying a status is what makes a note work; without one it is a
-  thought, not a commitment. Offer to triage it first.
+  thought, not a commitment. Offer to give it one first (`pj set <id> --facet status=planning`).
 
 ## 3. Dry run first when anything is unusual
 

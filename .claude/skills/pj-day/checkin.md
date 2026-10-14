@@ -70,4 +70,5 @@ Stop.
   - `Asked`: this run's questions; mark the ones answered with the time and the answer, and write
     the outcome each answer settles;
   - a T-entry for each Plan item added or swapped in, with its evidence.
-- Any approved `pj` command and Inbox verdict, then `pj check`.
+- Any approved `pj` command and Inbox verdict, then `pj check`, read for what this run wrote
+  (SKILL.md, *The day note*).

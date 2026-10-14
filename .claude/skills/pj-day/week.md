@@ -2,8 +2,9 @@
 
 Two jobs. Memory first, which needs no one: the week's theory files are consolidated and the
 patterns recounted, so that what held becomes something you know rather than something you ask.
-Then the pile gets judged again — which promises are still promises — and every item there is a
-question, because a date or a `week` priority set a week ago may never have been a commitment.
+Then the pile gets judged again — which promises are still promises, and what the notes the vault's
+rules flag are missing — and every item there is a question, because a date or a `week` priority set
+a week ago may never have been a commitment.
 
 ## 1. Read
 
@@ -14,6 +15,9 @@ question, because a date or a `week` priority set a week ago may never have been
 - `pj ls --view week --json`: the overdue column first.
 - `pj ls --view actionable --json`: the `week` pile.
 - Every note with a non-empty `waiting_on`, with how long since it last changed (`pj log`).
+- `pj check --json`: each entry in `rules` with `ids` is a filing rule those notes break — the
+  `triage` view's columns after its first, which is the inbox (open's and check-in's, not this
+  reset's).
 
 ## 2. Consolidate memory
 
@@ -55,13 +59,19 @@ goes in the batch as already settled, with the pattern named, for the user to ov
    draft the message; the user sends it.
 3. **The `week` pile** — per note: *still this week?* Anything not → `month`, `backlog` or
    `archived`, as the user says.
+4. **Filing gaps** — per note a broken rule names: the value it is missing, proposed from its title
+   and `pj context <id> --json` (a linked Jira key's project is strong evidence), within `pj-about`'s
+   facet rules — an existing project id, a declared value. Where the evidence is weak, the row is the
+   question: *project `a`, `b`, or leave it?* A wrong project hides a note where nobody looks, so a
+   blank beats a guess.
 
 Stop after each batch.
 
 ## 4. Write
 
-Each answer as its `pj set` command, one per note, then `pj check`. Log the decisions in today's
-theories file under `Said`, one timestamped line per batch ("week reset: 6 dates moved, 4 dropped
-to month"); an answer that overruled a pattern is evidence against it — note it on the pattern's
+Each answer as its `pj set` command, one per note, then `pj check`, read for what this run wrote
+(SKILL.md, *The day note*); a note no batch reached stays in its rule until the next reset. Log the
+decisions in today's theories file under `Said`, one timestamped line per batch ("week reset: 6
+dates moved, 4 dropped to month"); an answer that overruled a pattern is evidence against it — note it on the pattern's
 `evidence` line. The day note gets nothing. Offer to commit the vault, naming the files written —
 `memory/` included — and staging only those.

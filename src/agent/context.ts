@@ -159,10 +159,6 @@ export async function freshNoteContext(
   return noteContext(id, dataRoot);
 }
 
-/**
- * Notes a triage pass should look at, with the reason each one needs attention.
- * Deterministic, so a skill gets its worklist rather than inventing one.
- */
 /** Render a context as markdown — what a briefing embeds and a human can read. */
 export function renderContext(ctx: NoteContext): string {
   const L: string[] = [];

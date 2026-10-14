@@ -17,9 +17,9 @@ where the note format itself is written down**, so nothing in a vault restates i
 ├── notes/        notes, at any depth inside; subfolders mean nothing
 ├── projects/     projects/<id>/README.md is the project note; AGENTS.md beside it; its members by preference
 ├── daily/        notes carrying `day`
-├── inbox/        what intake brought in, unjudged — being here is what unjudged means
+├── inbox/        intake's cards, unjudged — being here is what unjudged means
 ├── assets/       files a note links to, under assets/<note-id>/
-├── memory/       the agent's working theories and patterns; never a note
+├── memory/       the pj-day agent's own files; never a note
 ├── .projector/   facets.yaml, views/, and the derived databases
 ├── AGENTS.md     the vault's instructions
 └── README.md     optional: the vault's description, not a note
@@ -43,10 +43,19 @@ holds the instructions its members inherit. A note belonging to `platform` alone
 `project` facet and only the facet**, a member in `notes/` still belongs, and editing `project` later
 moves nothing.
 
-**Unjudged is a place.** A card in `inbox/` is unjudged, and carries `intake: unjudged` in every query,
-but the value is read off the folder and never written to the file. Accepting a card — removing the
-axis, the board's `+` — moves the file out of the inbox to where a note like it lives, and every body
-link to it follows. Never write `intake` into a frontmatter; it is dropped on the next write.
+**Unjudged is a place.** Intake writes `inbox/` — the server's poller, or `pj intake` by hand — and
+nothing else does. A card there is unjudged, and carries `intake: unjudged` in every query, but the
+value is read off the folder and never written to the file. The user judges it, or approves your
+judgement: `pj accept <id>` (the board's `+`) moves it out to where a note like it lives, and every
+body link to it follows; an `extends` card folds into its target instead. `pj decline <id> --reason`
+removes it and records the reason, which the judge learns from; the board's `⌫` declines without one. Never write `intake` into
+a frontmatter; it is dropped on the next write.
+
+**`memory/` is the `pj-day` agent's**, and never notes: `memory/AGENTS.md` is how it has decided to
+investigate this vault, `memory/theories/YYYY-MM-DD.md` its working state for one day, and
+`memory/patterns/` what has held up across days. That skill writes it with plain file tools and needs
+no one's yes; `pj` has no command for it, and the MCP `memory` tool reads it. Any other session reads
+it and leaves it as it is — `pj work`'s briefing names `memory/AGENTS.md` when there is one.
 
 **A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
@@ -68,6 +77,12 @@ guess here, and so should you: acting on the wrong vault writes real notes into 
 
 Everything is plain files: create and edit them with Write/Edit, no API and no running app. Prefer `pj`
 for notes, because it validates and keeps formatting consistent. Run `pj check` after any batch.
+
+**Read `pj check` for what you wrote.** It checks the whole vault, so its exit code is the vault's
+state, not your batch's: a rule some other note breaks exits 1 too. Your batch is clean when nothing
+under `Validity` names a file you wrote and nothing under `Rules` names a note you wrote —
+`pj check --json` carries the id on both (`issues[].id`, `rules[].ids`). Fix what does. Anything else
+was there before you: say so in one line, and leave it unless asked.
 
 ```bash
 alias pj="bun '$PWD/src/cli/pj.ts'"   # from the projector project root: freezes the path
@@ -257,7 +272,7 @@ expected asserts that every note is work — while whether a note is work is whe
 what a URL and `pj ls` flags describe, so a saved view and a live query are the same object.
 
 ```yaml
-shape: board                  # board · canvas · table · lists
+shape: board                  # table · board · calendar · graph
 title: Home
 filter:
   status: [planning, active]  # facet → any of these values. `(none)` matches absence
@@ -283,8 +298,8 @@ unlisted: true                # out of the picker; still `pj ls --view needs-sta
 expect: empty                 # `pj check` asserts this comes back empty, and exits 1 if not
 filter: { intake: ['(none)'], priority: ['-(none)'], status: ['(none)'] }
 
-# views/triage.yaml — the rules drawn side by side
-shape: lists
+# views/triage.yaml — the inbox, then the rules, drawn side by side
+shape: board
 title: Triage
 lists: [intake, needs-project, needs-status, needs-priority]
 ```
@@ -293,11 +308,12 @@ lists: [intake, needs-project, needs-status, needs-priority]
   correct state. `pj check` runs every view that declares one, under a `Rules` heading after its
   `Validity` one, and kept apart on purpose: validity is the same question in every vault, and a rule
   is this vault's policy. Either failing fails the command.
-- **`shape: lists` draws other views as columns**, one level deep, in the order named. A child may not
-  itself have `lists:` and may not `groupBy:` anything — a column is one flat list. It exists because
-  grouping cannot express a condition on two axes at once, which is what half these rules are.
-- **Nothing on a lists board is draggable.** There is no facet value a drop could write. Notes leave a
-  column by being edited.
+- **`lists:` draws other views as columns**, one level deep, in the order named, in any shape. A child
+  may not itself have `lists:` and may not `groupBy:` anything — a column is one flat list. It exists
+  because grouping cannot express a condition on two axes at once, which is what half these rules
+  are. `shape: lists` is an older spelling: it draws a table, and `pj check` names it.
+- **Only a lane is draggable** (`groupBy: [lists, priority]`). A column is a query, so there is no
+  facet value a drop across one could write. Notes leave a column by being edited.
 - **Every rule but the queue excludes the queue** with `intake: ['(none)']`. A candidate nobody has
   judged is missing nearly everything by construction, and would otherwise fill every column at once.
 

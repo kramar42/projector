@@ -120,8 +120,8 @@ and no answer to it means no.
 4. **On a no, or no answer**, write no `daily/` file: the draft stays under
    `## Tomorrow (draft, not approved)`, and tomorrow's open reads it as a list of candidates, not as
    the user's plan.
-5. The approved `pj set` commands, one per note, then `pj check` — it must report nothing against
-   either day note.
+5. The approved `pj set` commands, one per note, then `pj check`, read for what this run wrote
+   (SKILL.md, *The day note*) — both day notes and every note set.
 6. Offer to commit the vault: name every file this run wrote — the day notes, the notes set,
    `memory/theories/<today>.md`, and any `memory/patterns/` or `memory/AGENTS.md` it changed — stage
    those paths and nothing else, and commit only on an explicit yes.

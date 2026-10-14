@@ -1344,7 +1344,8 @@ prepares the workspace and prints the link instead of following it.
 The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
 before planning or writing code. It asks for nothing at the end: the note records the workspace at
 launch, so every session that ever runs there shows on the note without any of them registering
-itself.
+itself. When the vault has a `memory/AGENTS.md` — what `/pj-day` has learned about reading your
+sources — the briefing names it, to be read before the linked sources and left as it is.
 
 ## Skills
 
@@ -1354,7 +1355,6 @@ itself.
 |---|---|
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
-| `/pj-triage` | give incomplete notes a project, priority and status |
 | `/pj-work` | start work on a note |
 | `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as a note |
 | `/pj-day` | run the working day: open it with one to three agreed outcomes, check in during it, close it with what was done, reset the week. One day note per day — `Plan` and `Did`, nothing else; what you said, the questions still waiting and the evidence behind each plan line live in the vault's `memory/`, which is the agent's own and needs no approval (the first run seeds it). Close drafts tomorrow's `Plan`, written as tomorrow's note only on your yes; the week reset turns what held up into `memory/patterns/`, so a thing learned is not asked again. Every run gathers first, then asks only closed questions: a decision, an ownership call, sources that disagree |
@@ -1363,10 +1363,13 @@ itself.
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
 now a queue you walk, and `pj intake` runs the same tick by hand when there is no server up.
 
-`/pj-triage` still **proposes and stops**: it presents a table and applies nothing until it is approved.
-A wrong project assignment hides a note in a column nobody will look in, which is worse than leaving it
-blank. It is for notes you made yourself and left half-filled — a polled note arrives with its facets
-already proposed, and judging it is accepting them.
+**Nor a triage skill.** The `triage` view stays — the inbox is its first column, then one column per
+filing rule — but nothing is left for a skill of its own to do there. A card arrives with its facets
+proposed, and `/pj-day` judges every one in its stop: `pj accept`, `pj accept` folding an `extends`
+card into its target, or `pj decline --reason`. A note you made yourself and left half-filled breaks
+a rule, which `pj check` reports under *Rules* and the `/pj-day` week reset asks about. Both propose
+and stop: a wrong project assignment hides a note in a column nobody will look in, which is worse than
+leaving it blank.
 
 ---
 

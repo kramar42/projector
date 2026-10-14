@@ -16,14 +16,22 @@ import { INSTRUCTIONS_FILE } from '../index/project.ts';
  * abandoned one never would. `pj work` now records the *workspace* on the note
  * instead, once, and every session that ever runs there is read back off it
  * (`sources/claude.ts`, `sessionsUnder`). Nothing to ask the agent for.
+ *
+ * Step 1 names the vault's `memory/AGENTS.md` when the plan found one: the day
+ * agent's own account of how to read this vault's sources, which a session on a
+ * single note would otherwise relearn. It is named, not embedded — the file is
+ * that agent's to rewrite, and a copy frozen into a briefing would go stale in
+ * the workspace while the original moved on.
  */
 export function buildBriefing(input: {
   ctx: NoteContext;
   workspace: string;
   branch: string;
   repos: RepoResult[];
+  /** The vault's `memory/AGENTS.md`, absolute, or nothing when the vault has none. */
+  memory?: string | null;
 }): string {
-  const { ctx, workspace, branch, repos } = input;
+  const { ctx, workspace, branch, repos, memory } = input;
   const ok = repos.filter((r) => !r.error);
   const failed = repos.filter((r) => r.error);
 
@@ -62,6 +70,15 @@ export function buildBriefing(input: {
       'linked Jira issue, pull request and document before deciding what the work is. A title is not a brief.',
   );
   L.push('');
+  if (memory) {
+    L.push(
+      `Before the sources, read \`${memory}\`: how the agent that runs this vault's days has learned ` +
+        'to read them — which source to trust for what, and which checks are cheap. It is that ' +
+        "agent's file, so read it and leave it as it is; where it disagrees with this briefing or a " +
+        "repo's docs, they win.",
+    );
+    L.push('');
+  }
   L.push('---');
   L.push('');
   L.push(renderContext(ctx).trim());

@@ -5,8 +5,8 @@
  * The command that applies this is the one write in the system whose target is
  * *outside* the vault, and the only one whose mistake is not recoverable by
  * editing a file: a note shared once has been read. So it is planned and printed
- * first, and applying is a second decision — the shape `pj-capture` and
- * `pj-triage` already use for the same reason, one step further out.
+ * first, and applying is a second decision — the propose-and-stop every skill
+ * already keeps for the same reason, one step further out.
  *
  * Membership is the view's own query, deliberately. The alternative was a
  * hand-kept list of what to share, which is a second copy of a project to

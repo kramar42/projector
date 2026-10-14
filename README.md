@@ -106,8 +106,8 @@ The rest of the vocabulary is built out of these.
 | **shape** | `table`, `board`, `calendar` or `graph`. A view is a query; the shape is one field of it |
 | **vault** | a folder with the required layout — `notes/`, `projects/`, `daily/`, `inbox/` for notes, `assets/`, `memory/` — and the vocabulary and the saved views under `.projector/` |
 
-An axis labelled `ƒ` is *computed* from the notes rather than stored on them: `blocked`, `triage`,
-`staleness`.
+An axis labelled `ƒ` is *computed* from the notes rather than stored on them: `type`, `blocked`,
+`staleness`, `linked`.
 
 The full glossary is at the top of [docs/MANUAL.md](docs/MANUAL.md), which defines every word the app,
 the docs and the CLI use.

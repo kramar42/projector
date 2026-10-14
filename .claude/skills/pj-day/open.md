@@ -161,7 +161,7 @@ Stop. The user picks, edits, drops, adds or answers.
    - under `Asked`, each question's answer, or `waiting`, and the carried plain-text items as
      `not asked`. An answer that settles a theory also becomes its `outcome:`.
 4. Run each approved `pj` command, one per note, and each approved Inbox verdict, then `pj check`
-   once — it must report nothing against the day note or an accepted card.
+   once, read for what this run wrote (SKILL.md, *The day note*).
 5. If the user named work the draft missed, follow it up now (rule 3), and add what it settles.
 
 Report what was written in one line. On a Monday, offer the week reset.

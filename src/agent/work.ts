@@ -1,8 +1,9 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths, resolvePath } from '../config.ts';
 import { settingsFor } from '../settings.ts';
 import { readAll } from '../index/indexer.ts';
+import { INSTRUCTIONS_FILE } from '../index/project.ts';
 import { patchNote } from '../server/mutate.ts';
 import { desktopSessionFor, sessionsUnder, type SessionState } from '../sources/claude.ts';
 import type { ProjectRepo } from '../schema/types.ts';
@@ -46,6 +47,13 @@ export interface WorkPlan {
   workspace: string;
   branch: string;
   repos: ProjectRepo[];
+  /**
+   * The vault's `memory/AGENTS.md`, absolute, when there is one: how the agent
+   * that runs this vault's days has learned to read its sources. The briefing
+   * names it so a session working one note starts from the same method rather
+   * than relearning it. `null` in a vault where that agent has never run.
+   */
+  memory: string | null;
 }
 
 /**
@@ -77,10 +85,12 @@ export function planWork(ctx: NoteContext, root: string): WorkPlan {
     );
   }
 
+  const memory = join(paths(root).memory, INSTRUCTIONS_FILE);
   return {
     workspace: workspacePath(resolvePath(workspaces, process.cwd()), ctx.project?.key ?? 'no-project', branch),
     branch,
     repos,
+    memory: existsSync(memory) ? memory : null,
   };
 }
 
