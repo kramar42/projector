@@ -67,6 +67,12 @@ export interface Settings {
      * is still there at eight.
      */
     hours: { from: number; until: number } | null;
+    /**
+     * Seconds to the next tick while a channel is behind — the last tick moved
+     * its cursor and left more after it. Never longer than `everySeconds`,
+     * which it exists to shorten.
+     */
+    catchUpSeconds: number;
   };
   /**
    * Who judges the candidates a sweep found.
@@ -141,7 +147,7 @@ interface Raw {
   git?: { author?: unknown };
   doc?: { url?: unknown };
   workspaces?: unknown;
-  poll?: { enabled?: unknown; every?: unknown; hours?: unknown };
+  poll?: { enabled?: unknown; every?: unknown; hours?: unknown; catchUpSeconds?: unknown };
   classify?: {
     enabled?: unknown;
     provider?: unknown;
@@ -249,6 +255,11 @@ export function settingsFor(root: string): Settings {
   const provider: 'ollama' | 'claude' =
     namedProvider === 'claude' || legacyClaude ? 'claude' : 'ollama';
 
+  // Floored so a typo cannot turn the loop into a spin. The default is fifteen
+  // minutes: a sweep reads `git log` and a Jira search, and the things it looks
+  // for do not happen faster than that.
+  const everySeconds = Math.max(60, Number(raw.poll?.every ?? 900) || 900);
+
   const value: Settings = {
     channels: list(raw.channels),
     enrich: list(raw.enrich),
@@ -262,10 +273,12 @@ export function settingsFor(root: string): Settings {
     docUrl: str(env.PROJECTOR_DOC_URL) ?? str(raw.doc?.url),
     poll: {
       enabled: raw.poll?.enabled === true,
-      // Floored so a typo cannot turn the loop into a spin. The default is
-      // fifteen minutes: a sweep reads `git log` and a Jira search, and the
-      // things it looks for do not happen faster than that.
-      everySeconds: Math.max(60, Number(raw.poll?.every ?? 900) || 900),
+      everySeconds,
+      // Ten minutes: a relay that moves twenty messages a tick drains a busy
+      // day in an hour or two at this rate, rather than in days at `every`.
+      // Floored like `every`, and capped by it — a catch-up slower than the
+      // normal cadence would be a slow-down.
+      catchUpSeconds: Math.min(everySeconds, Math.max(60, Number(raw.poll?.catchUpSeconds ?? 600) || 600)),
       hours: (() => {
         const h = raw.poll?.hours;
         if (!Array.isArray(h) || h.length !== 2) return null;
@@ -357,6 +370,7 @@ channels: [${channels.join(', ')}]
 #   enabled: true
 #   every: 7200               # seconds between ticks
 #   hours: [8, 20]            # local hours a tick may run in, from inclusive to until exclusive
+#   catchUpSeconds: 600       # seconds to the next tick while a channel has more pages behind
 
 # Link kinds to resolve for display. \`false\` turns enrichment off entirely and
 # every link renders as its raw ref.

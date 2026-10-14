@@ -123,6 +123,21 @@ export interface ChannelReport {
    * sweep resumes exactly where this one stopped, and nothing is skipped.
    */
   truncated?: boolean;
+  /**
+   * True when the cursor moved and the source still has more after the new
+   * boundary than this run read — a Slack relay that ran out of pages. Unlike
+   * `truncated`, the next run starts somewhere new, so running it sooner reads
+   * more rather than the same again; the poller does (`poll.catchUpSeconds`).
+   */
+  moreBehind?: boolean;
+  /**
+   * Set by `sweep`, never by a channel: the stored cursor was older than the
+   * channel's window, so this run read from the window's start instead and
+   * stepped over `from` → `to`. `continued` when the span only extends the one
+   * last recorded — the cursor still sits where that skip put it — so it is
+   * recorded but not announced again.
+   */
+  skippedSpan?: { from: string; to: string; days: number; continued?: boolean };
   candidates: Candidate[];
   skipped: Skipped[];
   /** What fetching cost, when the transport says — an agent relay does, `git log` does not. */
@@ -158,7 +173,10 @@ export interface IntakeContext {
 
 export interface Channel {
   name: string;
-  /** How far back to look when there is no watermark yet. */
+  /**
+   * How far back to look: when there is no watermark yet, and when the
+   * watermark is older than this — intake is for current asks (see `sweep`).
+   */
   defaultDays: number;
   collect(ctx: IntakeContext): Promise<ChannelReport> | ChannelReport;
 }

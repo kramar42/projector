@@ -121,9 +121,15 @@ local `hours`. Judge each channel by its own row: the newest `ranAt` hides a cha
   that is only overnight, or before the first morning tick, is the schedule: run the tick and say
   nothing about the server. Only a stale `ranAt` starts a tick.
 - **A cursor more than a day behind its own `ranAt`** — the channel ran but read only to its
-  cursor, and a tick moves it a page at a time. It is a Gap for that channel, named with its cursor:
-  "slack read to 09-23". A cursor hours behind is a quiet channel: the cursor is the newest record,
-  not the run.
+  cursor; the server ticks every `poll.catchUpSeconds` until it catches up. It is a Gap for that
+  channel, named with its cursor: "slack read to 10-09". A cursor hours behind is a quiet channel:
+  the cursor is the newest record, not the run.
+- **A `skipped` span on a row** (`{ from, to, at }`) — a tick found that channel's cursor older than
+  its window and read from the window's start, on purpose: older asks are settled or come back in
+  newer messages. Report it as a Gap for that channel, with both ends: "slack skipped 09-23 → 10-07,
+  older than its window". Name it while `at` is since the last day note; an older one is history.
+  `stale: true` means the next tick will skip — the same Gap, said as "slack's cursor 09-23 is past
+  its window".
 - **When it finishes**, read its output: a line per channel, then `new <id>` per card written. A
   channel `not fetched`, a `held` tick (exit 1, nothing written), or a channel whose `ranAt` is still
   older than `poll.every` goes into Gaps with its reason. One tick per run: a second costs the relay

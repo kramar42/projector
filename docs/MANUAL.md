@@ -1023,8 +1023,17 @@ poll:
   enabled: true
   every: 900        # seconds; floored at 60, and 900 is the default
   hours: [8, 20]    # local hours a tick may run in, from inclusive to until exclusive; omit for always
+  catchUpSeconds: 600   # seconds to the next tick while a channel is behind; floored at 60, never above every
 channels: [git, claude, jira]
 ```
+
+**A tick that leaves a channel behind brings the next one forward.** A Slack relay reads a few pages
+a tick (`mcp.pages`), and when it runs out it moves the cursor to where it got and says
+`more pages behind …`. At `every` that backlog drains a few hours of a busy day per tick, so the next
+tick comes `catchUpSeconds` after this one finished instead, until no channel is behind; then the
+loop goes back to `every`. The tick's log line says which: `… 3 cursors advanced  behind — next tick
+in 10m`. `hours` still governs every tick, catch-up or not. Only a channel whose cursor moved counts:
+one held where it was would read the same pages again, so ticking sooner would only cost.
 
 `hours` is a working-day window in the machine's local time. The timer keeps its cadence through the
 night and each tick outside the window logs that it skipped — a colleague's evening reply is still there
@@ -1194,7 +1203,8 @@ It filters nothing, summarises nothing and decides nothing. Everything that foll
 channel where a mistake would be visible to other people, so there is no wildcard: name only read tools
 and everything else is refused, and the relay is told to call only the search tool. `pages` bounds
 each search per tick. A Slack run that runs out of pages moves its cursor to the last message both
-searches reached and picks up the rest next tick; a Gmail run that does holds its cursor, because Gmail
+searches reached and picks up the rest next tick — which the server brings forward to
+`poll.catchUpSeconds` while it is behind; a Gmail run that does holds its cursor, because Gmail
 pages newest-first. The relay also copies each page's result count, and a run whose records do not add
 up to it offers what it transcribed and holds its cursor — the channel's log line says so — rather than
 moving past messages nobody examined.
@@ -1286,6 +1296,22 @@ throwaway-able.
 
 Channels work **oldest-first from the cursor**, and a run truncated by `--limit` holds its cursor: a
 cursor is one value, so it may only advance to a boundary with nothing unexamined behind it.
+
+**A cursor is not followed back past its channel's window** — 7 days for most channels, 14 for Gmail,
+the same window a channel with no cursor reads. When a stored cursor is older than that, because a
+run that could not finish held it for weeks or the machine was off, the next run reads from the
+window's start instead, and the cursor moves on from there. This is deliberate, not a shortcut:
+**intake is for current asks.** An ask three weeks old has been answered somewhere since, or was
+asked again in a message the window still reads; following the cursor back a page a tick would spend
+days of relay runs on what is settled before reaching today's. What was stepped over is not silent.
+The tick's line for that channel says `skipped 2026-09-23 → 2026-10-07: older than the 7-day window`,
+and `pj intake status` keeps the last such span under its table — `skipped: { from, to, at }` in
+`--json` — until a later one replaces it. Before the run, status says the cursor is older than the
+window and where the next tick will read from (`stale: true`). A tick that holds — the classifier
+unreachable, the relay short of a page — loses nothing: the cursor and the span stay where they were
+until a tick resolves. A channel that keeps finding nothing newer sits at the window's edge, and each
+later tick's few hours are added to the same span rather than reported as a new one. To reach
+further back on purpose, `pj intake --dry-run --since` still reads from exactly where it is told.
 
 **What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
 note, a fingerprint already captured, a session too short to be work. Everything else arrives as
@@ -1462,7 +1488,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
 | `pj intake [<channel>…]` | one tick by hand: fetch each channel from its cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, advance what it fetched |
 | `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a tick would find since each channel's cursor. Files nothing, moves no cursor |
-| `pj intake status [--json]` | each channel's cursor, last run and counts |
+| `pj intake status [--json]` | each channel's cursor, last run and counts, whether the cursor is older than its window, and the last span a tick skipped for being older |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
 | `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
 | `pj intake advance [--captured n]` · `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: promote the cursors a `--dry-run` proposed, once you resolved it by hand · inspect deduplication · set a raw cursor · forget one |
@@ -2199,7 +2225,7 @@ Four areas, and each line is an **event** rather than progress:
 
 | area | one line when |
 |---|---|
-| `intake` | the server starts — one line per vault, polling or not, and when its next tick is — and a poll tick runs — one line per channel, then one for the tick. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
+| `intake` | the server starts — one line per vault, polling or not, and when its next tick is — and a poll tick runs — one line per channel, then one for the tick, which ends `behind — next tick in 10m` when a channel has more pages waiting. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
 | `watch` | a note, a view or a vocabulary file **arrives**. Edits are deliberately silent: a vault under an editor changes on every save, and a log that said so is one nobody reads |
 | `enrich` | a batch of links resolves, counted by kind — `gh:0 jira:7` says which integration is down, where a single total cannot |
 | `index` | the vault is reloaded after a change, with how long it took |

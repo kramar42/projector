@@ -14,6 +14,7 @@ import { slackChannel } from './mcp.ts';
 import { gmailChannel } from './gmail.ts';
 import { channelEnabled } from '../settings.ts';
 import { renderCost } from './relay.ts';
+import type { Watermark } from './db.ts';
 import type { Channel, ChannelReport, IntakeContext } from './types.ts';
 
 /**
@@ -93,7 +94,66 @@ export interface Sweep {
   unknown: string[];
 }
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000);
+const daysAgo = (n: number, now = Date.now()) => new Date(now - n * 86_400_000);
+
+/** Where one channel's run starts reading, and what it steps over to get there. */
+export interface Start {
+  since: Date;
+  /** The cursor the channel is handed: the stored one, or the window's start when that was skipped to. */
+  cursor: string | null;
+  skip?: NonNullable<ChannelReport['skippedSpan']>;
+}
+
+/**
+ * `--since` wins, then the watermark, then the channel's own window — and the
+ * window also bounds the watermark.
+ *
+ * The fallback is what makes losing `.intake.db` a wider sweep rather than a
+ * broken one. The bound is deliberate: **intake is for current asks.** A cursor
+ * older than the window — held for weeks by a run that could not finish, or a
+ * machine that was off — would otherwise be followed back a page a tick through
+ * asks that have since been settled, or asked again in a newer message, which
+ * the window still reads. So the run starts at the window instead, and the
+ * channel is handed that start as its cursor too: everything a channel does
+ * relative to its cursor (what counts as new, where a hold resumes, whether the
+ * boundary moved) then works from where reading actually began. What it stepped
+ * over is returned as `skip`, to be recorded rather than lost.
+ *
+ * A skip that only extends the last recorded one — the cursor still sits where
+ * that skip left it, because nothing newer has arrived since — keeps the old
+ * span's start and is marked `continued`: a quiet channel would otherwise
+ * announce a fresh hour-long "gap" every tick, each of which the previous tick
+ * had in fact read.
+ */
+export function startOf(
+  channel: Pick<Channel, 'defaultDays'>,
+  mark: Pick<Watermark, 'cursor' | 'skipped'> | null,
+  since?: Date,
+  now = Date.now(),
+): Start {
+  const window = daysAgo(channel.defaultDays, now);
+  const cursor = mark?.cursor ?? null;
+  if (since) return { since: Number.isFinite(since.getTime()) ? since : window, cursor };
+  const at = cursor ? Date.parse(cursor) : NaN;
+  // No cursor, or one that is not a date (a Slack ts typed in by hand): the
+  // window, as it always was.
+  if (!Number.isFinite(at)) return { since: window, cursor };
+  if (at >= window.getTime()) return { since: new Date(at), cursor };
+
+  const start = window.toISOString();
+  const prior = mark?.skipped;
+  const continued = !!prior && at <= Date.parse(prior.to);
+  return {
+    since: window,
+    cursor: start,
+    skip: {
+      from: continued ? prior!.from : cursor!,
+      to: start,
+      days: channel.defaultDays,
+      ...(continued ? { continued: true } : {}),
+    },
+  };
+}
 
 export async function sweep(root: string, opts: SweepOptions = {}): Promise<Sweep> {
   const wanted = opts.only?.length
@@ -106,30 +166,43 @@ export async function sweep(root: string, opts: SweepOptions = {}): Promise<Swee
 
   for (const channel of CHANNELS) {
     if (!wanted.includes(channel.name)) continue;
-    const mark = watermarkFor(root, channel.name);
-    // `--since` wins, then the watermark, then the channel's own window. The
-    // fallback is what makes losing `.intake.db` a wider sweep rather than a
-    // broken one.
-    const since = opts.since ?? (mark?.cursor ? new Date(mark.cursor) : daysAgo(channel.defaultDays));
-    const usable = Number.isFinite(since.getTime()) ? since : daysAgo(channel.defaultDays);
+    const start = startOf(channel, watermarkFor(root, channel.name), opts.since);
 
     const report = await collectSafely(channel, {
       ...vault,
-      since: usable,
-      cursor: mark?.cursor ?? null,
+      since: start.since,
+      cursor: start.cursor,
       limit,
     });
+    // A channel that could not be reached read nothing, so it stepped over
+    // nothing either: its cursor stays, and the next run decides again.
+    const skip = report.fetched ? start.skip : undefined;
     const resolved: ChannelReport = {
       ...withoutSuppressed(report, vault.suppressed),
       // The cursor may only move to a boundary with nothing unexamined behind
       // it. A truncated run has exactly that, so it keeps the old one and the
-      // next sweep resumes from the same place.
-      nextCursor: report.truncated ? null : report.nextCursor,
+      // next sweep resumes from the same place — which, after a skip, is the
+      // window's start: holding at the old cursor would undo the skip. A run
+      // that found nothing newer moves there too, for the same reason.
+      nextCursor: skip
+        ? report.truncated
+          ? start.cursor
+          : (report.nextCursor ?? start.cursor)
+        : report.truncated
+          ? null
+          : report.nextCursor,
+      ...(skip ? { skippedSpan: skip } : {}),
     };
     reports.push(resolved);
-    // Recorded, not advanced. `pj intake advance` promotes this once the
-    // proposal is resolved; until then nothing reads it.
-    recordPending(root, channel.name, resolved.nextCursor, seenIn(resolved));
+    // Recorded, not advanced. `pj intake advance` promotes this — the skip with
+    // the cursor — once the proposal is resolved; until then nothing reads it.
+    recordPending(
+      root,
+      channel.name,
+      resolved.nextCursor,
+      seenIn(resolved),
+      skip ? { from: skip.from, to: skip.to } : undefined,
+    );
   }
   return { reports, unknown };
 }
@@ -228,6 +301,7 @@ export function advance(
     const after = commitWatermark(root, w.channel, w.pending.cursor, {
       seen: w.pending.seen,
       captured: opts.captured ?? 0,
+      ...(w.pending.skipped ? { skipped: w.pending.skipped } : {}),
     });
     moved.push({
       channel: w.channel,
@@ -288,6 +362,7 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
     // itself rather than as an empty "since".
     const from = r.cursor ? `since ${ago(r.cursor) || r.cursor}` : 'no watermark — default window';
     L.push(`## ${r.channel}  (${from})`);
+    if (r.skippedSpan) L.push(`   ${skippedLine(r.skippedSpan)}`);
     if (!r.fetched) L.push(`   not fetched by pj: ${r.reason ?? 'no reason given'}`);
     else if (r.reason) L.push(`   ${r.reason}`);
 
@@ -328,6 +403,16 @@ export function renderSweep(s: Sweep, opts: { verbose?: boolean } = {}): string 
   return L.join('\n');
 }
 
+/**
+ * A skipped span as one phrase, shared by the tick's channel line, the preview
+ * and `pj intake status`, so all three say it the same way. Day-granular: the
+ * span is weeks or days, and the exact second is in `--json`.
+ */
+export function skippedLine(s: { from: string; to: string; days?: number }): string {
+  const day = (v: string) => (Number.isFinite(Date.parse(v)) ? new Date(v).toISOString().slice(0, 10) : v);
+  return `skipped ${day(s.from)} → ${day(s.to)}: older than the ${s.days ?? '?'}-day window`;
+}
+
 export interface ChannelStatus {
   channel: string;
   /** Null when the channel has never been committed, and the window applies instead. */
@@ -336,6 +421,15 @@ export interface ChannelStatus {
   ranAt: string | null;
   seen: number;
   captured: number;
+  /**
+   * True when the cursor is older than the channel's window, so the next run
+   * reads from the window's start and records the span it steps over. False
+   * while the cursor still sits where the last skip left it: that span only
+   * grows, and `skipped` already says so.
+   */
+  stale: boolean;
+  /** The last span a run stepped over rather than read, and when; null when none ever was. */
+  skipped: { from: string; to: string; at: string } | null;
 }
 
 /**
@@ -358,18 +452,43 @@ export function statusOf(root: string): ChannelStatus[] {
       ranAt: w?.ranAt || null,
       seen: w?.seen ?? 0,
       captured: w?.captured ?? 0,
+      // Derived on every read rather than stored (C11): it is the same test
+      // `sweep` makes, against the same clock. A skip that would only extend the
+      // recorded one is not a new gap, so it is not news here either.
+      stale: (() => {
+        const skip = startOf(c, w ?? null).skip;
+        return !!skip && !skip.continued;
+      })(),
+      skipped: w?.skipped ?? null,
     };
   });
 }
 
 export function renderStatus(root: string): string {
+  const all = statusOf(root);
   const L: string[] = ['channel    cursor                          last run          seen  captured'];
-  for (const s of statusOf(root)) {
+  for (const s of all) {
     L.push(
       `${line(s.channel, 10)} ${line(s.cursor ?? `— (default ${s.defaultDays}d window)`, 31)} ` +
         `${line(s.ranAt ? ago(s.ranAt) : 'never', 17)} ${String(s.seen).padStart(4)}  ${String(s.captured).padStart(8)}`,
     );
   }
+  // Under the table rather than in it: a column for a rare event would be a
+  // column of dashes, and the sentence needs the room.
+  const notes: string[] = [];
+  for (const s of all) {
+    if (s.stale) {
+      const from = daysAgo(s.defaultDays).toISOString().slice(0, 10);
+      notes.push(
+        `${line(s.channel, 10)} cursor older than the ${s.defaultDays}-day window — ` +
+          `the next tick reads from ${from} and records the span it skips`,
+      );
+    }
+    if (s.skipped) {
+      notes.push(`${line(s.channel, 10)} ${skippedLine({ ...s.skipped, days: s.defaultDays })} (${ago(s.skipped.at) || 'just now'})`);
+    }
+  }
+  if (notes.length) L.push('', ...notes);
   return L.join('\n');
 }
 

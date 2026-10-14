@@ -1,4 +1,4 @@
-import { advance } from '../intake/run.ts';
+import { advance, skippedLine } from '../intake/run.ts';
 import { classify, type Ask, type Classified } from '../intake/classify.ts';
 import { materialise } from '../intake/materialise.ts';
 import { addCost, renderCost } from '../intake/relay.ts';
@@ -117,6 +117,14 @@ export interface PollResult {
     unreachable?: string;
     /** What a channel that answered still wanted to say: records dropped, pages left, a held cursor. */
     note?: string;
+    /** The cursor moved and the source has more after it: the next tick comes sooner (`poll.catchUpSeconds`). */
+    behind?: boolean;
+    /**
+     * The span this tick stepped over rather than read, the cursor being older
+     * than the channel's window. Absent when the span only extends one already
+     * reported — recorded, in `pj intake status`, but not news twice.
+     */
+    skippedSpan?: { from: string; to: string; days: number };
   }[];
 }
 
@@ -262,10 +270,26 @@ export async function pollOnce(
       ...(report.cost ? { fetch: report.cost } : {}),
       ...(judge ? { judge } : {}),
       ...(report.reason ? { note: report.reason } : {}),
+      ...(report.moreBehind ? { behind: true } : {}),
+      ...(report.skippedSpan && !report.skippedSpan.continued
+        ? { skippedSpan: { from: report.skippedSpan.from, to: report.skippedSpan.to, days: report.skippedSpan.days } }
+        : {}),
     });
   }
 
   return out;
+}
+
+/**
+ * Whether a tick left any channel with more to read than it read.
+ *
+ * Only a channel whose cursor moved counts (`moreBehind`): a held one would
+ * read the same pages again, so ticking sooner would spend the relay for
+ * nothing. A held tick is not behind either — the judge was down, and asking it
+ * sooner is not catching up.
+ */
+export function isBehind(res: PollResult): boolean {
+  return !res.held && res.channels.some((c) => c.behind);
 }
 
 /**
@@ -285,7 +309,8 @@ export function channelLine(c: PollResult['channels'][number]): string {
   const spent = [c.fetch ? `fetch ${renderCost(c.fetch)}` : '', c.judge ? `judge ${renderCost(c.judge)}` : '']
     .filter(Boolean)
     .join(', ');
-  return `saw ${c.seen}${tail ? `  ${tail}` : ''}${spent ? `  [${spent}]` : ''}${c.note ? `  — ${c.note}` : ''}`;
+  const said = [c.skippedSpan ? skippedLine(c.skippedSpan) : '', c.note ?? ''].filter(Boolean).join('; ');
+  return `saw ${c.seen}${tail ? `  ${tail}` : ''}${spent ? `  [${spent}]` : ''}${said ? `  — ${said}` : ''}`;
 }
 
 /** The tick as one line: what was written, declined and advanced, and what it all cost. */
@@ -312,8 +337,6 @@ export function withinHours(hour: number, hours: { from: number; until: number }
   const { from, until } = hours;
   return from < until ? hour >= from && hour < until : hour >= from || hour < until;
 }
-
-type Timer = ReturnType<typeof setInterval>;
 
 /**
  * When this vault last ticked: the newest `ranAt` across its channels, or null
@@ -363,7 +386,7 @@ function nextTick(ms: number): string {
   return `next tick in ${mins < 90 ? `${mins}m` : `${Math.round(mins / 60)}h`}`;
 }
 
-/** The pending first tick and the interval after it, as one thing to cancel. */
+/** The pending next tick, as one thing to cancel. */
 const loops = new Map<string, () => void>();
 
 /**
@@ -372,6 +395,15 @@ const loops = new Map<string, () => void>();
  * Idempotent per vault: the server calls this at startup and whenever a vault is
  * used, and a second call must not double the rate. Returns whether a loop is
  * now running, so the caller can say so once rather than guessing.
+ *
+ * **Each tick schedules the next**, rather than an interval firing on its own,
+ * because how long to wait is the tick's answer: `poll.every` after it started,
+ * so a loop keeps the rhythm it had; or, when a channel is still behind —
+ * its cursor moved and the source has more after it — `poll.catchUpSeconds`
+ * after it finished, so a backlog a relay reads a page at a time drains in
+ * hours rather than days. The hours window still applies to every tick, so a
+ * catch-up never runs outside it. And two ticks never overlap, which an
+ * interval allowed whenever one took longer than the cadence.
  */
 export function startPolling(
   root: string,
@@ -384,14 +416,15 @@ export function startPolling(
 
   const name = basename(root);
 
-  const tick = async () => {
+  /** One tick; resolves to whether a channel is still behind. */
+  const tick = async (): Promise<boolean> => {
     const started = Date.now();
     // The timer keeps its cadence through the night; the tick is what stays home.
     // Local time, like every stamp in this log: the window is about a working
     // day, and a working day is where the machine is.
     if (!withinHours(new Date().getHours(), poll.hours)) {
       info('intake', `${name} outside polling hours ${poll.hours!.from}–${poll.hours!.until}, tick skipped`);
-      return;
+      return false;
     }
     try {
       const res = await pollOnce(root);
@@ -400,7 +433,7 @@ export function startPolling(
         // outside and the two mean opposite things: nothing to write, versus
         // plenty to write and no way to judge it.
         warn('intake', `${name} held — ${res.held}`);
-        return;
+        return false;
       }
 
       // One line per channel, always — a channel that answered and found nothing
@@ -419,17 +452,25 @@ export function startPolling(
       }
 
       // The tick's own line, after the channels, so the summary reads as a total
-      // of what is above it rather than as a fifth channel.
-      info('intake', `${name} ${tickLine(res, Date.now() - started)}`);
+      // of what is above it rather than as a fifth channel. A tick that brings
+      // the next one forward says so here, where the cadence is read.
+      const behind = isBehind(res);
+      info(
+        'intake',
+        `${name} ${tickLine(res, Date.now() - started)}` +
+          (behind ? `  behind — ${nextTick(poll.catchUpSeconds * 1000)}` : ''),
+      );
       // After the log, so a tick that writes and interrupts says both.
       onAttention(res.notify);
       if (res.notify.length) {
         info('intake', `${name} ${count(res.notify.length, 'note')} worth interrupting for`);
       }
+      return behind;
     } catch (e) {
-      // A tick that throws must not stop the timer: the next one may well work,
+      // A tick that throws must not stop the loop: the next one may well work,
       // and a poller that dies on one bad sweep is worse than one that is noisy.
       warn('intake', `${name} tick failed — ${e instanceof Error ? e.message : String(e)}`);
+      return false;
     }
   };
 
@@ -442,26 +483,33 @@ export function startPolling(
       ` — ${nextTick(delay)} (${last ? `last ran ${ago(last)}` : 'never ran'})`,
   );
 
-  // The cadence runs from the first tick, so a loop that waited out the rest of
-  // the interval keeps the rhythm the last process had.
-  let interval: Timer | undefined;
-  const begin = () => {
-    interval = setInterval(tick, poll.everySeconds * 1000);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const schedule = (ms: number) => {
+    if (stopped) return;
+    timer = setTimeout(run, ms);
     // Never hold the process open on our account. A timer is not a reason for a
     // server to refuse to exit.
-    interval.unref?.();
-    void tick();
+    timer.unref?.();
   };
-  let first: ReturnType<typeof setTimeout> | undefined;
-  if (delay) {
-    first = setTimeout(begin, delay);
-    first.unref?.();
-  }
+  const run = async () => {
+    const started = Date.now();
+    const behind = await tick();
+    schedule(
+      behind
+        ? poll.catchUpSeconds * 1000
+        : Math.max(0, started + poll.everySeconds * 1000 - Date.now()),
+    );
+  };
   loops.set(root, () => {
-    clearTimeout(first);
-    clearInterval(interval);
+    // A tick in flight finishes, and then schedules nothing.
+    stopped = true;
+    clearTimeout(timer);
   });
-  if (!delay) begin();
+  // The first tick waits out the rest of the interval since the last one, so a
+  // restart keeps the rhythm the last process had.
+  if (delay) schedule(delay);
+  else void run();
   return true;
 }
 

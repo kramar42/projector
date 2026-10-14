@@ -44,7 +44,17 @@ CREATE TABLE IF NOT EXISTS watermark (
   -- nothing: an abandoned one leaves a pending value nobody promotes.
   pending_cursor TEXT,
   pending_seen   INTEGER,
-  pending_at     TEXT
+  pending_at     TEXT,
+  -- The span the pending sweep would step over, its cursor being older than
+  -- the channel's window. Promoted with the cursor, like the rest of pending.
+  pending_skipped_from TEXT,
+  pending_skipped_to   TEXT,
+  -- The last span a committed run stepped over rather than read, and when.
+  -- Kept until a later skip replaces it: once the cursor has moved, nothing
+  -- else remembers where it had been, so this is not derivable (C11).
+  skipped_from TEXT,
+  skipped_to   TEXT,
+  skipped_at   TEXT
 );
 
 -- A candidate somebody judged as "not a note", so a later sweep stops offering it.
@@ -142,6 +152,11 @@ function migrate(conn: DatabaseSync): void {
     ['pending_cursor', 'TEXT'],
     ['pending_seen', 'INTEGER'],
     ['pending_at', 'TEXT'],
+    ['pending_skipped_from', 'TEXT'],
+    ['pending_skipped_to', 'TEXT'],
+    ['skipped_from', 'TEXT'],
+    ['skipped_to', 'TEXT'],
+    ['skipped_at', 'TEXT'],
   ] as const) {
     if (!have.has(col)) conn.exec(`ALTER TABLE watermark ADD COLUMN ${col} ${type}`);
   }
@@ -225,18 +240,29 @@ export interface Watermark {
   captured: number;
   /** What the last sweep proposed, unpromoted. Null cursor means "hold where it is". */
   pending?: Pending;
+  /** The last span a committed run stepped over, its cursor being older than the window. */
+  skipped?: SkippedSpan & { at: string };
+}
+
+/** From the old cursor to where reading started instead. Both ends as the cursor store holds them. */
+export interface SkippedSpan {
+  from: string;
+  to: string;
 }
 
 export interface Pending {
   cursor: string | null;
   seen: number;
   at: string;
+  /** The span this sweep stepped over, promoted with the cursor. */
+  skipped?: SkippedSpan;
 }
 
 export function watermarks(dataRoot: string): Watermark[] {
   const rows = openIntakeDb(dataRoot)
     .prepare(
-      `SELECT channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at
+      `SELECT channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at,
+              pending_skipped_from, pending_skipped_to, skipped_from, skipped_to, skipped_at
          FROM watermark ORDER BY channel`,
     )
     .all() as unknown as {
@@ -248,6 +274,11 @@ export function watermarks(dataRoot: string): Watermark[] {
     pending_cursor: string | null;
     pending_seen: number | null;
     pending_at: string | null;
+    pending_skipped_from: string | null;
+    pending_skipped_to: string | null;
+    skipped_from: string | null;
+    skipped_to: string | null;
+    skipped_at: string | null;
   }[];
   return rows.map((r) => ({
     channel: r.channel,
@@ -258,7 +289,19 @@ export function watermarks(dataRoot: string): Watermark[] {
     // `pending_at` is what makes a pending note exist: a truncated run notes
     // a null cursor on purpose, and that is not the same as never having swept.
     ...(r.pending_at
-      ? { pending: { cursor: r.pending_cursor, seen: r.pending_seen ?? 0, at: r.pending_at } }
+      ? {
+          pending: {
+            cursor: r.pending_cursor,
+            seen: r.pending_seen ?? 0,
+            at: r.pending_at,
+            ...(r.pending_skipped_from && r.pending_skipped_to
+              ? { skipped: { from: r.pending_skipped_from, to: r.pending_skipped_to } }
+              : {}),
+          },
+        }
+      : {}),
+    ...(r.skipped_from && r.skipped_to && r.skipped_at
+      ? { skipped: { from: r.skipped_from, to: r.skipped_to, at: r.skipped_at } }
       : {}),
   }));
 }
@@ -282,18 +325,22 @@ export function recordPending(
   channel: string,
   cursor: string | null,
   seen: number,
+  skipped?: SkippedSpan,
 ): void {
   const now = new Date().toISOString();
   openIntakeDb(dataRoot)
     .prepare(
-      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at)
-       VALUES (?, NULL, '', 0, 0, ?, ?, ?)
+      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at,
+                              pending_skipped_from, pending_skipped_to)
+       VALUES (?, NULL, '', 0, 0, ?, ?, ?, ?, ?)
        ON CONFLICT(channel) DO UPDATE SET
          pending_cursor = excluded.pending_cursor,
          pending_seen   = excluded.pending_seen,
-         pending_at     = excluded.pending_at`,
+         pending_at     = excluded.pending_at,
+         pending_skipped_from = excluded.pending_skipped_from,
+         pending_skipped_to   = excluded.pending_skipped_to`,
     )
-    .run(channel, cursor, seen, now);
+    .run(channel, cursor, seen, now, skipped?.from ?? null, skipped?.to ?? null);
 }
 
 export function watermarkFor(dataRoot: string, channel: string): Watermark | null {
@@ -318,13 +365,14 @@ export function commitWatermark(
   dataRoot: string,
   channel: string,
   cursor: string | null,
-  counts: { seen?: number; captured?: number } = {},
+  counts: { seen?: number; captured?: number; skipped?: SkippedSpan } = {},
 ): Watermark {
   const now = new Date().toISOString();
+  const skip = counts.skipped;
   openIntakeDb(dataRoot)
     .prepare(
-      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, skipped_from, skipped_to, skipped_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(channel) DO UPDATE SET
          -- A null cursor means "leave it where it was": a run that fetched
          -- nothing has no new boundary to note, and overwriting with null
@@ -333,13 +381,29 @@ export function commitWatermark(
          ran_at   = excluded.ran_at,
          seen     = excluded.seen,
          captured = excluded.captured,
+         -- A run that skipped nothing leaves the last skip where it was: it is
+         -- the record of a gap, and a later run reading normally closes none.
+         skipped_from = COALESCE(excluded.skipped_from, watermark.skipped_from),
+         skipped_to   = COALESCE(excluded.skipped_to, watermark.skipped_to),
+         skipped_at   = COALESCE(excluded.skipped_at, watermark.skipped_at),
          -- A promoted proposal is spent. Leaving it would let a second
          -- \`--advance\` re-commit a cursor that has already moved.
          pending_cursor = NULL,
          pending_seen   = NULL,
-         pending_at     = NULL`,
+         pending_at     = NULL,
+         pending_skipped_from = NULL,
+         pending_skipped_to   = NULL`,
     )
-    .run(channel, cursor, now, counts.seen ?? 0, counts.captured ?? 0);
+    .run(
+      channel,
+      cursor,
+      now,
+      counts.seen ?? 0,
+      counts.captured ?? 0,
+      skip?.from ?? null,
+      skip?.to ?? null,
+      skip ? now : null,
+    );
   return watermarkFor(dataRoot, channel)!;
 }
 

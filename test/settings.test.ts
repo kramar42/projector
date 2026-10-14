@@ -70,7 +70,7 @@ test('a vault with no config file behaves exactly as one did before there was on
     });
     assert.deepEqual(s.gmail, { command: 'gog', account: null, transport: 'gog' }, 'no tools named, so gog');
     assert.deepEqual(s.mcp, { slack: [], gmail: [], command: 'claude', model: 'haiku', pages: 5, timeoutSeconds: 600 });
-    assert.deepEqual(s.poll, { enabled: false, everySeconds: 900, hours: null }, 'off, and any hour, until a vault says otherwise');
+    assert.deepEqual(s.poll, { enabled: false, everySeconds: 900, catchUpSeconds: 600, hours: null }, 'off, and any hour, until a vault says otherwise');
     for (const c of ['claude', 'git', 'jira', 'slack', 'gmail']) {
       assert.equal(channelEnabled(root, c), true, c);
     }

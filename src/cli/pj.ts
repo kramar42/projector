@@ -375,6 +375,11 @@ only those. \`--dry-run\` previews instead: it lists the candidates, files
 nothing and moves no cursor. \`restore\` makes a declined candidate eligible
 again.
 
+A cursor older than its channel's window (7 days; Gmail 14) is not followed
+back: intake is for current asks, so the tick reads from the window's start
+and says what it skipped. \`status\` shows a cursor that old before the tick,
+and the last span skipped after it. \`--dry-run --since\` reads further back.
+
 Run \`pj help intake advanced\` for raw cursor and deduplication commands.
 Judging a card is \`pj accept\` or \`pj decline\`.`,
   'intake advanced': `Advanced intake commands

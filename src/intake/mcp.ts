@@ -297,6 +297,9 @@ function relayChannel(kind: RelayKind, defaultDays: number, manualHint: string):
         nextCursor,
         fetched: true,
         truncated,
+        // Behind only when the cursor actually moved: a held one would make a
+        // sooner run pay to read the same pages again.
+        ...(parsed.more && kind === 'slack' && nextCursor ? { moreBehind: true } : {}),
         ...(notes.length ? { reason: notes.join('; ') } : {}),
         candidates,
         skipped,

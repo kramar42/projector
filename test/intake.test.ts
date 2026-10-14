@@ -38,7 +38,7 @@ import { jiraChannel } from '../src/intake/jira.ts';
 import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { deleteNote, discard } from '../src/server/mutate.ts';
-import { firstTickIn, lastTick, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
+import { channelLine, firstTickIn, lastTick, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
 import { logTo } from '../src/server/log.ts';
 import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
@@ -46,7 +46,7 @@ import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
-import type { Candidate, Channel, IntakeContext } from '../src/intake/types.ts';
+import type { Candidate, Channel, ChannelReport, IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
 import { place } from './fixture.ts';
@@ -3116,6 +3116,261 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
     stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+// ------------------------------------------------------------------ the window
+
+/**
+ * A cursor is not followed back past its channel's window.
+ *
+ * The Slack cursor of 2026-09-23: a completeness hold stalled it for three weeks,
+ * and a relay moving twenty messages a tick would have spent weeks more reading
+ * asks that were settled, or asked again since, before reaching today's. Intake
+ * is for current asks, so a cursor older than the window reads from the window's
+ * start — and the span it stepped over is recorded, so the gap is a fact somebody
+ * can read rather than an absence.
+ */
+const DAY_MS = 86_400_000;
+const OLD = '2026-01-01T00:00:00.000Z';
+
+function windowed(
+  name: string,
+  answer: (ctx: IntakeContext) => Partial<ChannelReport>,
+  calls: IntakeContext[],
+): Channel {
+  return {
+    name,
+    defaultDays: 7,
+    collect: (ctx) => {
+      calls.push(ctx);
+      return { channel: name, cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [], ...answer(ctx) };
+    },
+  };
+}
+
+const statusFor = (root: string, channel: string) => statusOf(root).find((s) => s.channel === channel)!;
+
+test('a cursor older than its window reads from the window’s start, and records the span it skipped', async () => {
+  const root = vault({ a: card('a') });
+  const calls: IntakeContext[] = [];
+  const fake = windowed('fakeW', () => ({}), calls);
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'channels: [fakeW]\nclassify:\n  enabled: false\n', 'utf8');
+  try {
+    commitWatermark(root, 'fakeW', OLD);
+    assert.equal(statusFor(root, 'fakeW').stale, true, 'status says the next tick will not follow the cursor back');
+    assert.equal(statusFor(root, 'fakeW').skipped, null, 'and nothing has been skipped yet');
+    assert.match(renderStatus(root), /fakeW .*older than the 7-day window — the next tick reads from \d{4}-\d\d-\d\d/);
+
+    const before = Date.now();
+    const res = await pollOnce(root);
+    const ctx = calls[0]!;
+    assert.ok(Math.abs(ctx.since.getTime() - (before - 7 * DAY_MS)) < 5_000, 'it read from now − 7 days');
+    const start = ctx.since.toISOString();
+    assert.equal(ctx.cursor, start, 'and handed the channel that start as its cursor, so nothing older counts as new');
+
+    const line = res.channels[0]!;
+    assert.deepEqual(line.skippedSpan, { from: OLD, to: start, days: 7 });
+    assert.match(
+      channelLine(line),
+      new RegExp(`skipped 2026-01-01 → ${start.slice(0, 10)}: older than the 7-day window`),
+    );
+    assert.equal(watermarkFor(root, 'fakeW')?.cursor, start, 'nothing new: the cursor moves to where it read from');
+
+    const st = statusFor(root, 'fakeW');
+    assert.equal(st.stale, false);
+    assert.equal(st.skipped?.from, OLD);
+    assert.equal(st.skipped?.to, start);
+    assert.ok(Number.isFinite(Date.parse(st.skipped?.at ?? '')), 'with when it was recorded');
+    assert.match(renderStatus(root), new RegExp(`fakeW .*skipped 2026-01-01 → ${start.slice(0, 10)}: older than the 7-day window`));
+
+    // The next tick finds the cursor a few milliseconds older than the moved
+    // window: the same span, grown, not a second one — and not news again.
+    await new Promise((r) => setTimeout(r, 5));
+    const again = await pollOnce(root);
+    assert.equal(again.channels[0]!.skippedSpan, undefined, 'a span already reported is not announced twice');
+    assert.doesNotMatch(channelLine(again.channels[0]!), /skipped/);
+    assert.equal(statusFor(root, 'fakeW').skipped?.from, OLD, 'the record keeps where the gap began');
+    assert.ok(statusFor(root, 'fakeW').skipped!.to >= start);
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an explicit --since still wins over the window, and a preview’s skip is promoted with its cursor', async () => {
+  const root = vault({ a: card('a') });
+  const calls: IntakeContext[] = [];
+  const fake = windowed('fakeV', () => ({}), calls);
+  CHANNELS.push(fake);
+  try {
+    commitWatermark(root, 'fakeV', OLD);
+    const since = new Date('2025-12-01T00:00:00.000Z');
+    const asked = await sweep(root, { only: ['fakeV'], since });
+    assert.equal(calls[0]!.since.getTime(), since.getTime(), '--since is read as given');
+    assert.equal(calls[0]!.cursor, OLD);
+    assert.equal(asked.reports[0]!.skippedSpan, undefined, 'and nothing is skipped');
+
+    const preview = await sweep(root, { only: ['fakeV'] });
+    assert.match(renderSweep(preview), /skipped 2026-01-01 → \d{4}-\d\d-\d\d: older than the 7-day window/);
+    assert.equal(statusFor(root, 'fakeV').skipped, null, 'a preview records no skip');
+    assert.equal(watermarkFor(root, 'fakeV')?.cursor, OLD, 'nor moves the cursor');
+
+    advance(root, { channel: 'fakeV' });
+    assert.equal(statusFor(root, 'fakeV').skipped?.from, OLD, 'promoting the preview promotes its skip');
+    assert.equal(watermarkFor(root, 'fakeV')?.cursor, calls[1]!.since.toISOString());
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a held tick behind the window loses neither the cursor nor the span it would skip', async () => {
+  const root = vault({ a: card('a') });
+  const calls: IntakeContext[] = [];
+  const recent = new Date(Date.now() - DAY_MS).toISOString();
+  const fake = windowed(
+    'fakeH2',
+    () => ({ nextCursor: recent, candidates: [candidate('fakeH2:1', 'Something recent', { channel: 'fakeH2' })] }),
+    calls,
+  );
+  CHANNELS.push(fake);
+  writeFileSync(settingsPath(root), 'channels: [fakeH2]\n', 'utf8');
+  try {
+    commitWatermark(root, 'fakeH2', OLD);
+    const held = await pollOnce(root, async () => null);
+    assert.ok(held.held, 'the judge was down');
+    assert.equal(watermarkFor(root, 'fakeH2')?.cursor, OLD, 'the cursor holds where it was');
+    assert.equal(statusFor(root, 'fakeH2').skipped, null, 'nothing was skipped by a tick that did nothing');
+    assert.equal(statusFor(root, 'fakeH2').stale, true, 'and the next tick still knows to');
+
+    const judged = await pollOnce(root, keepAll);
+    assert.equal(judged.created.length, 1);
+    assert.equal(watermarkFor(root, 'fakeH2')?.cursor, recent);
+    assert.equal(statusFor(root, 'fakeH2').skipped?.from, OLD, 'the span still starts at the cursor the hold kept');
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a truncated run behind the window holds at the window’s start, not at the old cursor', async () => {
+  const root = vault({ a: card('a') });
+  const calls: IntakeContext[] = [];
+  const fake = windowed('fakeT', () => ({ truncated: true }), calls);
+  const gone = windowed('fakeU', () => ({ fetched: false, reason: 'token expired' }), calls);
+  CHANNELS.push(fake, gone);
+  writeFileSync(settingsPath(root), 'channels: [fakeT, fakeU]\nclassify:\n  enabled: false\n', 'utf8');
+  try {
+    commitWatermark(root, 'fakeT', OLD);
+    commitWatermark(root, 'fakeU', OLD);
+    await pollOnce(root);
+    // Holding means "resume from where this run started", and this run started
+    // at the window: going back to the old cursor would undo the skip.
+    assert.equal(watermarkFor(root, 'fakeT')?.cursor, calls[0]!.since.toISOString());
+    assert.equal(statusFor(root, 'fakeT').skipped?.from, OLD);
+    // A channel that could not be reached read nothing, so it skipped nothing.
+    assert.equal(watermarkFor(root, 'fakeU')?.cursor, OLD);
+    assert.equal(statusFor(root, 'fakeU').skipped, null);
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
+    CHANNELS.splice(CHANNELS.indexOf(gone), 1);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a Slack relay behind the window: its pages boundary and its completeness hold both work from the new start', async () => {
+  const root = vault({ a: card('a') });
+  const tsAt = (ms: number) => (ms / 1000).toFixed(6);
+  const now = Date.now();
+  const D = 'D0WWWWWWW';
+  // Day-granular search can hand back a message from before the window; it is
+  // behind the start, so it is not an ask.
+  const settled = slackRecord(D, tsAt(now - 8 * DAY_MS), 'Wes', 'are we still on for the review?');
+  const ask = slackRecord(D, tsAt(now - 2 * DAY_MS), 'Wes', 'can you look at the cutover plan?');
+  const mine = slackRecord(D, tsAt(now - 3 * DAY_MS), 'me', 'on it', true);
+  scriptedRelay(root, [
+    { pages: [{ query: 'to:me', results: 2 }, { query: 'from:me', results: 1 }], messages: [settled, ask, mine], more: true },
+    { pages: [{ query: 'to:me', results: 3 }], messages: [ask], more: true },
+  ]);
+  try {
+    commitWatermark(root, 'slack', OLD);
+    const first = await pollOnce(root, keepAll);
+    const row = first.channels.find((c) => c.channel === 'slack')!;
+    assert.equal(row.seen, 1, 'only the ask inside the window is offered');
+    assert.equal(row.behind, true, 'the relay left pages behind its boundary');
+    assert.equal(row.skippedSpan?.from, OLD);
+    // The boundary is where both searches reached: `from:me` stopped at `mine`.
+    assert.equal(watermarkFor(root, 'slack')?.cursor, new Date(Number(mine.ts) * 1000).toISOString());
+
+    // The completeness hold, from a stale cursor: held at the window's start.
+    commitWatermark(root, 'slack', OLD);
+    const before = Date.now();
+    const second = await pollOnce(root, keepAll);
+    const held = second.channels.find((c) => c.channel === 'slack')!;
+    assert.match(held.note ?? '', /cursor held/);
+    assert.notEqual(held.behind, true, 'a held cursor is not behind: a faster tick would read the same pages again');
+    const cursor = Date.parse(watermarkFor(root, 'slack')!.cursor!);
+    assert.ok(Math.abs(cursor - (before - 7 * DAY_MS)) < 5_000, 'held at the window’s start');
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a catch-up interval defaults to ten minutes, is floored, and never exceeds the interval', () => {
+  const root = vault({ a: card('a') });
+  try {
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 7200\n', 'utf8');
+    assert.equal(settingsFor(root).poll.catchUpSeconds, 600);
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: 5\n', 'utf8');
+    assert.equal(settingsFor(root).poll.catchUpSeconds, 60);
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: soon\n', 'utf8');
+    assert.equal(settingsFor(root).poll.catchUpSeconds, 600);
+    // A catch-up slower than the normal cadence would be a slow-down.
+    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 300\n', 'utf8');
+    assert.equal(settingsFor(root).poll.catchUpSeconds, 300);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a tick that leaves a channel behind brings the next one forward, and says so', async () => {
+  const roots = [vault({ a: card('a') }), vault({ a: card('a') })];
+  const [behindRoot, currentRoot] = roots as [string, string];
+  const calls: IntakeContext[] = [];
+  const lagging = windowed('fakeL', () => ({ moreBehind: true, nextCursor: new Date().toISOString() }), calls);
+  const current = windowed('fakeC', () => ({}), calls);
+  CHANNELS.push(lagging, current);
+  const config = (channel: string) =>
+    `poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: 60\nchannels: [${channel}]\nclassify:\n  enabled: false\n`;
+  writeFileSync(settingsPath(behindRoot), config('fakeL'), 'utf8');
+  writeFileSync(settingsPath(currentRoot), config('fakeC'), 'utf8');
+  const lines: string[] = [];
+  logTo((l) => lines.push(l));
+  try {
+    assert.equal(startPolling(behindRoot), true);
+    assert.equal(startPolling(currentRoot), true);
+    await new Promise((r) => setTimeout(r, 100));
+    const tickOf = (root: string) => lines.find((l) => l.includes(` ${basename(root)} tick in `));
+    assert.match(tickOf(behindRoot) ?? '', /behind — next tick in 60s/);
+    assert.doesNotMatch(tickOf(currentRoot) ?? '', /behind/, 'a vault that is current keeps its interval');
+  } finally {
+    logTo(null);
+    for (const root of roots) stopPolling(root);
+    CHANNELS.splice(CHANNELS.indexOf(lagging), 1);
+    CHANNELS.splice(CHANNELS.indexOf(current), 1);
+    for (const root of roots) {
+      closeIntakeDb(root);
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 
