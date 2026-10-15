@@ -92,18 +92,28 @@ Left out as not work: <each trace you dropped, by its ref, with the one-word rea
 
 ## 4. Offer to save, then stop
 
-Ask one question: **"Save this as a vault note?"** Then wait.
+Ask one question: **"Save this as the day's `Did`?"** Then wait. When the day is today, the summary
+is what happened *so far*: say so in the question, because the day's close rewrites it.
 
-Only if the user says yes, read the `pj-about` skill first. If the vault's `AGENTS.md` describes a
-daily-note convention, follow it exactly: its folder, title, facets and links. Otherwise create one
-note for the day:
+Only if the user says yes, read the `pj-about` skill first. A day lives in one note,
+`daily/YYYY-MM-DD.md` with id `YYYY-MM-DD` (the convention in the vault's `AGENTS.md` wins if it
+names another), holding `## Plan` and `## Did`. Saving writes `Did` and nothing else of the day's:
 
-```bash
-pj add "<day> <weekday> — <the day's two or three biggest outcomes>" --id did-<day> \
-  --facet status=done --body "<the summary above, without its first heading>"
-```
+- **The day's note exists** — `pj-day` wrote its Plan. Write the summary, without its first heading,
+  under `## Did`. Leave the title, `status` and the Plan's checkboxes alone: closing the day is
+  `pj-day`'s close. If `Did` already holds text, show both versions and ask: replace or append.
+  Never overwrite it silently.
+- **No note, and the day is over** — create it, with an empty Plan:
 
-Either way, give it the facets the vault's triage rules require, so it doesn't land in triage, and
-add the Jira keys and sessions it cites with `--link jira:<KEY>` and `--link claude:<uuid>`. If
-`did-<day>` already exists, show both versions and ask whether to replace or append. Don't
-overwrite it silently. A day with no traces gets no note.
+  ```bash
+  pj add "<YYYY-MM-DD Ddd> — <the day's two or three biggest outcomes>" --id <YYYY-MM-DD> \
+    --facet day=<YYYY-MM-DD> --facet private=true --facet status=done \
+    --facet source=<each source with traces> --facet project=<each project in the summary>
+  ```
+
+  then write `## Plan` (empty) and `## Did` (the summary) into the file `pj add` prints.
+- **No note, and the day is today** — create it the same way without `status`, titled
+  `<YYYY-MM-DD Ddd> — so far: <outcomes>`, so it stays off the work boards until the day closes.
+
+Either way, link the Jira keys and Claude sessions the summary cites: `pj link <YYYY-MM-DD>
+jira:<KEY> claude:<uuid> …`. A day with no traces gets no note.

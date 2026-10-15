@@ -1382,7 +1382,7 @@ sources — the briefing names it, to be read before the linked sources and left
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
 | `/pj-work` | start work on a note |
-| `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as a note |
+| `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as the `Did` of that day's note (today's is "so far"; closing the day stays `/pj-day`'s) |
 | `/pj-day` | run the working day: open it with one to three agreed outcomes, check in during it, close it with what was done, reset the week. One day note per day — `Plan` and `Did`, nothing else; what you said, the questions still waiting and the evidence behind each plan line live in the vault's `memory/`, which is the agent's own and needs no approval (the first run seeds it). Close drafts tomorrow's `Plan`, written as tomorrow's note only on your yes; the week reset turns what held up into `memory/patterns/`, so a thing learned is not asked again. Every run gathers first, then asks only closed questions: a decision, an ownership call, sources that disagree |
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
