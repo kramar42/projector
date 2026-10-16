@@ -1,8 +1,9 @@
 ;; Every intent, whatever its status, about an entity whose alias starts with ?prefix (a vault's
 ;; notes: "vault:<vault>:"), one row per intent, matching alias and piece of evidence. The latest
 ;; verdict on it, who gave it and the evidence it cites, or "" for none; the name of whoever proposed
-;; it when that was not the owner, or "". A horizon is the instant it is due, or "" for a standing
-;; intent. projector's read.ts folds the rows back into one KernelIntent each (src/kernel/state.ts).
+;; it (the source of the intent/proposed event that is its origin), or "" when the owner opened it.
+;; A horizon is the instant it is due, or "" for a standing intent. projector's read.ts folds the
+;; rows back into one KernelIntent each (src/kernel/state.ts).
 [:find ?intent ?alias ?status ?statement ?horizon ?verdict ?by ?at ?note ?evidence ?proposer
  :in ?prefix
  :where
@@ -13,30 +14,30 @@
  [?intent :intent/statement ?statement]
  [(get-else $ ?intent :intent/horizon "") ?horizon]
  (or-join [?intent ?verdict ?by ?at ?note]
-   (and (latest-observation ?intent ?o)
-        [?o :observation/verdict ?verdict]
-        [?o :observation/observer ?w]
+   (and (latest-judgment ?intent ?j)
+        [?j :judgment/verdict ?verdict]
+        [?j :judgment/by ?w]
         [?w :entity/name ?by]
-        [?o :observation/at ?at]
-        [(get-else $ ?o :observation/note "") ?note])
-   (and (not [_ :observation/targets ?intent])
+        [?j :judgment/at ?at]
+        [(get-else $ ?j :judgment/note "") ?note])
+   (and (not [_ :judgment/targets ?intent])
         [(ground "") ?verdict]
         [(ground "") ?by]
         [(ground "") ?at]
         [(ground "") ?note]))
  (or-join [?intent ?evidence]
-   (and (latest-observation ?intent ?o)
-        [?o :observation/evidence ?evidence])
+   (and (latest-judgment ?intent ?j)
+        [?j :judgment/evidence ?evidence])
    (and (not-join [?intent]
-          (latest-observation ?intent ?o)
-          [?o :observation/evidence _])
+          (latest-judgment ?intent ?j)
+          [?j :judgment/evidence _])
         [(ground "") ?evidence]))
  (or-join [?intent ?proposer]
    (and [?intent :intent/origin ?origin]
-        (not (by-owner ?origin))
-        [?origin :observation/observer ?p]
+        [?origin :event/kind :intent/proposed]
+        [?origin :event/source ?p]
         [?p :entity/name ?proposer])
    (and (not-join [?intent]
           [?intent :intent/origin ?origin]
-          (not (by-owner ?origin)))
+          [?origin :event/kind :intent/proposed])
         [(ground "") ?proposer]))]
