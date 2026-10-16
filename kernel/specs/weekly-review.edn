@@ -8,5 +8,6 @@
  :output {:observe {:targets [:id] :verdict :keyword :evidence [:id] :note :string :window {:start :date :end :date}}
           :review/summary {:observed :int :refused :int :proposed :int}}
  :criterion "Every open intent with a horizon inside this week has an observation by Sunday night."
+ :check {:query "kernel/events-in-attempt" :in {:kind :review/summary}}
  :trigger {:weekly :sunday :at "18:00"}
  :budget {:minutes 30}}
