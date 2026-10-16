@@ -95,7 +95,7 @@ behave identically — filter, group, sort, count — and carry `ƒ` to say noth
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a note carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today — and it reads as **Updated**, because that is the field it is |
-| `kernel` | `open`, `proposed-verdict`, `met`, `missed`, `dropped` | what your kernel says became of the intent about the note — only in a vault with a `kernel:` block; see [Projector over the kernel](#projector-over-the-kernel) |
+| `kernel` | `open`, `draft`, `met`, `missed`, `dropped` | what your kernel says became of the intent about the note — only in a vault with a `kernel:` block; see [Projector over the kernel](#projector-over-the-kernel) |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
 absence, a note's links, the app-written `updated` field, or a store outside the vault. Each is a count, a date comparison or
@@ -1092,7 +1092,7 @@ declined, or skipped before the judge with its reason — becomes one `intake/<c
 the connector's event. It happens at the connector event's instant, carries that event whole as its
 evidence, and names the decision, the reason and the notes it matched (as `vault:<vault>:<note id>`).
 Every card is also a *proposed* intent citing its intake event, which `bin/kernel today` lists under
-awaiting until you confirm or drop it there. A pass that judged something is one attempt of
+awaiting until you open or drop it there. A pass that judged something is one attempt of
 projector's `judge-intake` spec, so the kernel judges the judging. The card in `inbox/` is still what
 the board shows for a candidate; what the kernel says of notes you have is
 [the other direction](#projector-over-the-kernel). Sending twice lands once. A kernel that refuses the
@@ -1347,7 +1347,7 @@ registered projector's queries refuses them, and the line it leaves says to run 
 | | means |
 |---|---|
 | `open` | the intent is open, and nobody has drafted a verdict — or you have, and kept it open |
-| `proposed-verdict` | open, and its latest verdict — `met`, `missed` or `dropped` — came from somebody other than you: a draft waiting for your answer |
+| `draft` | open, and its latest verdict — `met`, `missed` or `dropped` — came from somebody other than you: a draft waiting for your answer |
 | `met` · `missed` · `dropped` | closed, with that verdict |
 
 A note with no intent has no value, so `(none)` is the ordinary refinement and a vault without a
@@ -1361,7 +1361,7 @@ by `kernel` is the queue of drafts to answer:
 title: Drafts
 shape: table
 filter:
-  kernel: [proposed-verdict]
+  kernel: [draft]
 show: [kernel, status]
 ```
 
@@ -1380,7 +1380,7 @@ When that verdict is a draft, three buttons answer it, as you:
 - **Overrule: missed** says it was not met.
 - **Not yet** says `partial`, which keeps the intent open.
 
-Each runs `<bin> observe <intent> <verdict> --note …` as the owner. A closed intent has nothing to
+Each runs `<bin> judge <intent> <verdict> --note …` as the owner. A closed intent has nothing to
 answer and is refused.
 
 **Setting a status tells the kernel too.** Name, per axis, which of your values are a verdict:
@@ -1395,8 +1395,8 @@ kernel:
 
 When you then set one of those values — a chip in the panel, a drag across a status column, the bulk
 bar, the raw frontmatter, or `pj set <id> --facet status=done` — and the note has an open intent, the
-kernel is told: `observe <intent> met --note "status set to done in projector"`. A value that is not in
-the map, or that the note already held, writes nothing; `dropped` also declines a still-*proposed*
+kernel is told: `judge <intent> met --note "status set to done in projector"`. A value that is not in
+the map, or that the note already held, writes nothing; `dropped` also drops a still-*proposed*
 intent; an intent that is already closed is left alone. The note is written first and exactly as
 before — the file is the truth for content — and the kernel write follows it: a refusal is a log line
 (in `pj set`, a line on stderr), never a failed edit. Without `verdicts:` no status reaches the kernel:
@@ -1454,8 +1454,8 @@ kernel:
 | a note in the `days` folder | one `vault/day` event, keyed `vault:<vault>:day:<date>`, at that date, its text as the payload — never a commitment. The date is the one in the file's name |
 | an inbox card, or a note with no value on the axis | nothing — the intake sink already sends cards as proposals |
 
-The kernel turns each change of state into your observation — a new `open` opens an intent, `met`
-closes it, `none` drops an open one — and the same state again into nothing, so running the import
+The kernel turns each change of status into your judgment — a new `open` opens an intent, `met`
+closes it, `none` drops an open one — and the same status again into nothing, so running the import
 twice writes nothing twice. Nothing in the vault is written, and nothing is remembered here: before it
 plans, the import asks the kernel which status events it already holds
 (`projector/vault-status-events`), which is how an unchanged status sends nothing and a return to an
@@ -1548,10 +1548,10 @@ the attempt, records `workspace:<dir>` on the note and navigates to the kernel's
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
 | `/pj-work` | retired: points to the kernel, where work on a note is an attempt for its open intent — `bin/kernel worktree <intent>`, the kernel MCP tool `worktree`, or ▶ in the app — worked under the kernel's `kernel-worktree` skill |
-| `/plan-day` | the procedure of projector's `daily-plan` spec, which the kernel's tick fires at 07:00: one proposed attempt per open intent — every open intent in the kernel, not only this vault's — a flag on the stalled ones, at most three closed questions; you read it on `bin/kernel today` |
+| `/plan-day` | the procedure of projector's `daily-plan` spec, which the kernel's tick fires at 07:00: one planned attempt per open intent — every open intent in the kernel, not only this vault's — a flag on the stalled ones, at most three closed questions; you read it on `bin/kernel today` |
 | `/review-week` | the procedure of projector's `weekly-review` spec, fired on Sunday at 18:00: a drafted verdict per open intent with the week's events as evidence, the specs that ran judged, next week's intents proposed; you read it on `bin/kernel week` |
 | `/pj-did` | retired: points to the kernel's day recap, `bin/kernel did [today\|yesterday\|YYYY-MM-DD]`, which groups the day's kernel events into tasks with an outcome (done, progressed, handled) and their refs, and names the sources that wrote nothing. `pj did` stays as the source-level report |
-| `/pj-day` | retired: points to the kernel, where the day is a loop — morning is the `kernel-tick` skill plus `bin/kernel today`, a check-in is `today`, the close is your verdicts (`bin/kernel observe`), and the week reset is `bin/kernel week`. Its discipline lives in `/plan-day`: every proposal cites evidence or says untested, and at most three closed questions a run reach you as proposed intents. Each skill says how to run the kernel from here: from its checkout, or by path with `KERNEL_DB` naming the store the vault's `kernel:` block sends to |
+| `/pj-day` | retired: points to the kernel, where the day now runs — morning is the `kernel-tick` skill plus `bin/kernel today`, a check-in is `today`, the close is your verdicts (`bin/kernel judge`), and the week reset is `bin/kernel week`. Its discipline lives in `/plan-day`: every step cites evidence or says untested, and at most three closed questions a run reach you as proposed intents. Each skill says how to run the kernel from here: from its checkout, or by path with `KERNEL_DB` naming the store the vault's `kernel:` block sends to |
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is

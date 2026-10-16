@@ -342,7 +342,7 @@ export type ThroughResult = { id: string; through: Through } & (
  * write. A note with no intent is not a skip worth reporting — most notes have
  * none — so it yields nothing. An intent that is not open is skipped with its
  * reason, with one exception: `dropped` on a proposed intent is the owner
- * declining it, which the kernel takes from the owner and only the owner.
+ * dropping it, which the kernel takes from the owner and only the owner.
  */
 export async function writeThrough(
   root: string,

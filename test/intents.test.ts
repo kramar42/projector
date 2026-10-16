@@ -331,7 +331,7 @@ test('setting a status tells the kernel after the vault, skipping what is not op
     const results = await writeThrough(v.root, before, after);
     const by = Object.fromEntries(results.map((r) => [r.id, r]));
     assert.equal(by.alpha!.outcome, 'written');
-    assert.equal(by.delta!.outcome, 'written', 'dropped on a proposed intent is the owner declining it');
+    assert.equal(by.delta!.outcome, 'written', 'dropped on a proposed intent is the owner dropping it');
     assert.equal(by.gamma!.outcome, 'skipped', 'a met intent is not reopened from a status');
     assert.equal(by.plain, undefined, 'a note with no intent is not a result');
     assert.equal(by.beta, undefined, 'planning is not a verdict');

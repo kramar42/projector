@@ -229,6 +229,14 @@ things.
   the key and records the judgment as `intake:jira/transition:<kernel id>`. The connector carrying
   `history` in the payload would make it `intake:<key>` like every other.
 
+- **Intake's verdicts are events, not judgments.** A pass's verdict on a connector event (keep,
+  extend, link, drop, skip, with its reason) is an `intake/<channel>` event by `system:projector`, while
+  the kernel's word for a verdict citing evidence is a judgment. Moving them needs the kernel to judge
+  events (item verdicts) and to tie a judgment to the attempt it was made in, since `judge-intake`'s
+  check counts intake events in the attempt; and then intake's cursor (`intake-newest`) and its
+  late-events reasoning read judgments instead of events. The kernel's rename to judgments left this
+  for the next pass, on both sides.
+
 - **One vault per kernel triages.** The intake events are keyed by the connector event alone, so a
   second vault with its kernel block on pointed at the same store reads every event as judged by the
   first. Keying by vault would let two vaults triage the same events differently, which nobody has
