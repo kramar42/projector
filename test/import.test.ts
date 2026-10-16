@@ -503,7 +503,7 @@ test('the manifest declares what projector writes and reads, and every batch it 
     assert.match(text, new RegExp(`:name "${basename(spec, '.edn')}"`));
     assert.match(text, scheduled[spec] ?? /:trigger \{:manual true[ }]/, `${spec}: ${scheduled[spec] ? 'the kernel’s tick fires it' : 'tick never fires it'}`);
   }
-  // The day and the week are planned here, where the owner plans: each loop's procedure is a projector
+  // The day and the week are planned here, where the owner plans: each scheduled spec's procedure is a projector
   // skill, read whole into the brief, and reads every open intent in the ledger, not only the vault's.
   for (const [spec, name] of [['specs/daily-plan.edn', 'plan-day'], ['specs/weekly-review.edn', 'review-week']] as const) {
     const text = readFileSync(join(dir, spec), 'utf8');
