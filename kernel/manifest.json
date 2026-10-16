@@ -39,7 +39,8 @@
     }
   ],
   "specs": [
-    "specs/note-conventions.edn"
+    "specs/note-conventions.edn",
+    "specs/work-a-note.edn"
   ],
   "sync": [
     {
@@ -51,5 +52,13 @@
   "skills": [
     "../.claude/skills/pj-about",
     "../.claude/skills/pj-work"
-  ]
+  ],
+  "develop": {
+    "repo": "..",
+    "default-branch": "main",
+    "branch": "kernel/<attempt>",
+    "test": "bun test",
+    "typecheck": "bun run typecheck",
+    "guide": "CLAUDE.md"
+  }
 }

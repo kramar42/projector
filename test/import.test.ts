@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { appRoot, paths } from '../src/config.ts';
@@ -379,11 +379,23 @@ test('the manifest declares what projector writes, and every batch it sends fits
   assert.deepEqual(m.writes, { events: ['vault/', 'intake/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
   assert.deepEqual(m.sync, [{ name: 'vault', run: 'pj kernel import', when: 'after edits, or hourly' }]);
   const dir = join(appRoot, 'kernel');
+  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/work-a-note.edn']);
   for (const spec of m.specs) {
     const text = readFileSync(join(dir, spec), 'utf8');
-    assert.match(text, /:name "note-conventions"/);
-    assert.match(text, /:trigger \{:manual true\}/);
+    assert.match(text, new RegExp(`:name "${basename(spec, '.edn')}"`));
+    assert.match(text, /:trigger \{:manual true\}/, `${spec}: tick never fires it`);
   }
+  // work-a-note is a capability: its procedure is the pj-work skill, read whole into the brief.
+  const work = readFileSync(join(dir, 'specs/work-a-note.edn'), 'utf8');
+  const skill = work.match(/:skill "([^"]+)"/)?.[1];
+  assert.ok(skill && existsSync(join(dir, 'specs', skill, 'SKILL.md')), 'work-a-note names the pj-work skill');
+  assert.equal(basename(skill), 'pj-work');
+  assert.match(work, /:executor :either/);
+  assert.match(work, /:criterion "the note's Done when line holds, as the owner judges"/);
+  assert.match(work, /:budget \{:minutes 180\}/);
+  // How the develop spec changes projector's own code.
+  assert.deepEqual(m.develop, { repo: '..', 'default-branch': 'main', branch: 'kernel/<attempt>', test: 'bun test', typecheck: 'bun run typecheck', guide: 'CLAUDE.md' });
+  assert.ok(existsSync(join(dir, m.develop.repo, m.develop.guide)));
   for (const skill of m.skills) assert.ok(existsSync(join(dir, skill, 'SKILL.md')), skill);
   for (const r of ['pj CLI', 'skill pj-about', 'skill pj-work']) assert.ok(m.reach.includes(r), r);
   // What a session capturing for the owner runs: pj add for work, the note's file for a note about it.

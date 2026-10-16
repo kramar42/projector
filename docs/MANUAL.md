@@ -1476,7 +1476,12 @@ whole.
 
 **Projector is a registered kernel system.** `kernel/manifest.json` in this checkout tells the kernel
 what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities, proposals and
-your commitments, no judgments — and brings the `note-conventions` spec, `kernel/specs/`. The kernel
+your commitments, no judgments — and brings two specs, `kernel/specs/`: `note-conventions`, the
+convention for writing a note, and `work-a-note`, a capability whose procedure is the `pj-work` skill
+(an attempt of it, started by hand and never by the kernel's tick, carries the skill whole in its brief
+and is judged by the note's `Done when` line, by you). Its `develop` block tells the kernel's `develop`
+spec how projector's own code is changed: from `main` on a `kernel/<attempt>` branch, `bun test` and
+`bun run typecheck` green, the repo's `CLAUDE.md` read first. The kernel
 checks every batch projector sends against it and refuses one that strays. `pj kernel register` hands
 it over (`<bin> register <checkout>/kernel/manifest.json`); run it once, and again after the manifest
 changes — the same manifest twice records nothing.
