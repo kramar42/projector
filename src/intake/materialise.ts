@@ -33,7 +33,7 @@ import type { Candidate } from './types.ts';
  * mechanical facts about the vault rather than judgements, so acting on them
  * costs nothing and breaks no principle.
  */
-function alreadyAnswered(c: Candidate, v: Verdict): boolean {
+export function alreadyAnswered(c: Candidate, v: Verdict): boolean {
   const e = c.evidence;
   if (e?.capturedAs?.length) return true;
   return Boolean(e?.linkedTo?.length && !v.target);

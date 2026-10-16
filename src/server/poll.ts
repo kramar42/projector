@@ -6,6 +6,7 @@ import { ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
 import { markSeen, suppress, watermarks } from '../intake/db.ts';
 import { sweep } from '../intake/run.ts';
+import { sinkToKernel, type Examined, type Runner, type Sent } from '../intake/kernel.ts';
 import type { Cost } from '../intake/types.ts';
 import { basename } from 'node:path';
 import { count, info, tally, warn } from './log.ts';
@@ -125,6 +126,12 @@ export interface PollResult {
      * reported — recorded, in `pj intake status`, but not news twice.
      */
     skippedSpan?: { from: string; to: string; days: number };
+    /**
+     * What the kernel sink did with this channel's examined candidates, when
+     * the vault turned it on: what it wrote, or why it could not. Never a
+     * reason the tick held — see `src/intake/kernel.ts`.
+     */
+    kernel?: Sent;
   }[];
 }
 
@@ -140,7 +147,8 @@ export interface PollResult {
 export async function pollOnce(
   root: string,
   ask?: Ask,
-  opts: { only?: string[] } = {},
+  /** `kernel` stands in for spawning the kernel, for a test. */
+  opts: { only?: string[]; kernel?: Runner } = {},
 ): Promise<PollResult> {
   const out: PollResult = {
     vault: root,
@@ -191,6 +199,8 @@ export async function pollOnce(
     let declinedHere = 0;
     let unansweredHere = 0;
     let judge: Cost | undefined;
+    /** Everything judged here, whatever the verdict: what the kernel sink is sent. */
+    const examined: Examined[] = [];
     let kept: Classified['keep'] = report.candidates.map((candidate) => ({
       candidate,
       verdict: { fingerprint: candidate.fingerprint, decision: 'keep', reason: '' },
@@ -209,6 +219,7 @@ export async function pollOnce(
       judge = judged.cost;
       declinedHere = judged.drop.length;
       for (const d of judged.drop) {
+        examined.push({ candidate: d.candidate, decision: 'drop', reason: d.reason });
         suppress(root, {
           fingerprint: d.candidate.fingerprint,
           reason: d.reason,
@@ -225,6 +236,7 @@ export async function pollOnce(
       // written as a card it would be the raw-material card this pass exists to
       // prevent, with "no reason given" where the reason goes.
       for (const c of judged.unjudged) {
+        examined.push({ candidate: c, decision: 'unjudged', reason: 'no verdict from the judge after two asks' });
         suppress(root, {
           fingerprint: c.fingerprint,
           reason: 'no verdict from the judge after two asks',
@@ -250,6 +262,13 @@ export async function pollOnce(
     const moved = advance(root, { channel: report.channel, captured: res.created.length });
     out.advanced.push(...moved.moved.map((m) => m.channel));
 
+    // The kernel hears about everything this channel examined, after the vault
+    // has it and the cursor has moved, so a kernel that cannot be reached costs
+    // the vault nothing: the failure is this channel's line, and the tick goes
+    // on. The card above is still the UI's view; see `src/intake/kernel.ts`.
+    examined.unshift(...kept.map(({ candidate, verdict }) => ({ candidate, verdict, decision: verdict.decision, reason: verdict.reason })));
+    const sent = await sinkToKernel(root, report.channel, examined, opts.kernel);
+
     out.created.push(...res.created);
     out.skipped += res.skipped;
     out.extending += res.extending;
@@ -274,6 +293,7 @@ export async function pollOnce(
       ...(report.skippedSpan && !report.skippedSpan.continued
         ? { skippedSpan: { from: report.skippedSpan.from, to: report.skippedSpan.to, days: report.skippedSpan.days } }
         : {}),
+      ...(sent ? { kernel: sent } : {}),
     });
   }
 
@@ -309,7 +329,12 @@ export function channelLine(c: PollResult['channels'][number]): string {
   const spent = [c.fetch ? `fetch ${renderCost(c.fetch)}` : '', c.judge ? `judge ${renderCost(c.judge)}` : '']
     .filter(Boolean)
     .join(', ');
-  const said = [c.skippedSpan ? skippedLine(c.skippedSpan) : '', c.note ?? ''].filter(Boolean).join('; ');
+  const kernel = !c.kernel
+    ? ''
+    : c.kernel.ok
+      ? `kernel ${count(c.kernel.events, 'event')}, ${c.kernel.proposals} proposed`
+      : `kernel not reached: ${c.kernel.reason}`;
+  const said = [c.skippedSpan ? skippedLine(c.skippedSpan) : '', c.note ?? '', kernel].filter(Boolean).join('; ');
   return `saw ${c.seen}${tail ? `  ${tail}` : ''}${spent ? `  [${spent}]` : ''}${said ? `  — ${said}` : ''}`;
 }
 
@@ -448,7 +473,10 @@ export function startPolling(
           warn('intake', `${name}/${c.channel} not fetched — ${c.unreachable}`);
           continue;
         }
-        info('intake', `${name}/${c.channel} ${channelLine(c)}`);
+        // A kernel that could not be reached is a warning, not a hold: the
+        // channel's notes and cursor stand, and the line above still says so.
+        if (c.kernel && !c.kernel.ok) warn('intake', `${name}/${c.channel} ${channelLine(c)}`);
+        else info('intake', `${name}/${c.channel} ${channelLine(c)}`);
       }
 
       // The tick's own line, after the channels, so the summary reads as a total

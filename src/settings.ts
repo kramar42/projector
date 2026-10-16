@@ -131,6 +131,16 @@ export interface Settings {
    * workspaces notes recorded — the narrow answer, never a guessed folder.
    */
   did: { roots: string[] };
+  /**
+   * The owner's kernel, as a second destination for what a tick examined: an
+   * `intake/<channel>` event per candidate and a proposed intent per card,
+   * through `<bin> ingest`. **Off unless the file says so**, like `poll`,
+   * because it writes to a store outside the vault. `db` is passed as
+   * `KERNEL_DB`; absent, the kernel's own default store is used. `vault`
+   * names this vault in the kernel's aliases (`vault:<vault>:<note id>`);
+   * absent, the registered name, else the folder's.
+   */
+  kernel: { enabled: boolean; bin: string | null; db: string | null; vault: string | null; timeoutSeconds: number };
 }
 
 export const CONFIG_FILE = 'config.yaml';
@@ -159,6 +169,7 @@ interface Raw {
   };
   gmail?: { command?: unknown; account?: unknown; transport?: unknown };
   did?: { roots?: unknown };
+  kernel?: { enabled?: unknown; bin?: unknown; db?: unknown; vault?: unknown; timeout?: unknown };
   mcp?: {
     slack?: unknown;
     gmail?: unknown;
@@ -323,6 +334,23 @@ export function settingsFor(root: string): Settings {
       timeoutSeconds: Math.max(60, Number(raw.mcp?.timeout ?? 600) || 600),
     },
     did: { roots: (list(raw.did?.roots) ?? []).map((r) => resolvePath(r, root)) },
+    kernel: {
+      enabled: raw.kernel?.enabled === true,
+      bin: (() => {
+        // A bare name is a command on PATH; anything with a slash or a `~` is a
+        // path, read against the vault like every other path here.
+        const b = str(raw.kernel?.bin);
+        return b && (b.includes('/') || b.startsWith('~')) ? resolvePath(b, root) : b;
+      })(),
+      db: (() => {
+        const d = str(raw.kernel?.db);
+        return d ? resolvePath(d, root) : null;
+      })(),
+      vault: str(raw.kernel?.vault),
+      // An ingest is a babashka start and one transaction, well under a second;
+      // the ceiling is for a kernel whose store is locked by another writer.
+      timeoutSeconds: Math.max(5, Number(raw.kernel?.timeout ?? 60) || 60),
+    },
   };
 
   cache.set(root, { key, value });
@@ -413,6 +441,16 @@ enrich: ${enrich ? 'true' : 'false'}
 #   transport: gog             # default: mcp when mcp.gmail names tools, gog otherwise
 #   command: gog
 #   account: you@example.com   # optional when gog has one/default account
+#
+# The owner's kernel: each tick also sends what it examined there — an
+# intake/<channel> event per candidate, a proposed intent per card — through
+# \`<bin> ingest\`. Off unless enabled; a kernel that cannot be reached is logged
+# and never holds a tick.
+# kernel:
+#   enabled: true
+#   bin: ~/Code/projects/kernel/bin/kernel
+#   db: ~/.kernel/db           # passed as KERNEL_DB; default: the kernel's own
+#   vault: work                # the name in vault:<vault>:<note id>; default: the registered name
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so
 # it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.
