@@ -15,6 +15,8 @@ import { checkFacets, fingerprintsOf, planAccept, planDecline } from '../server/
 import { loadViewFiles, loadViews } from '../server/views.ts';
 import { jiraConfig } from '../sources/jira.ts';
 import { queryPayload, runRules } from '../view/payload.ts';
+import { kernelIndex } from '../kernel/read.ts';
+import { axisValues } from '../kernel/state.ts';
 import { renderListing, resolveListing, type Overrides } from '../view/listing.ts';
 import { specToParams } from '../view/spec.ts';
 import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
@@ -106,7 +108,7 @@ const lsInput = z.object({
   format,
 });
 
-function ls(args: z.infer<typeof lsInput>, vault: Vault): string {
+async function ls(args: z.infer<typeof lsInput>, vault: Vault): Promise<string> {
   const overrides: Overrides = {};
   for (const [facet, values] of Object.entries(args.filter ?? {})) overrides[`f.${facet}`] = values.join(',');
   if (args.group?.length) overrides.group = args.group.join(',');
@@ -121,9 +123,13 @@ function ls(args: z.infer<typeof lsInput>, vault: Vault): string {
   const resolved = resolveListing(vault.root, args.view, overrides);
   if ('error' in resolved) throw new Error(`${resolved.error} — vault_status lists them`);
   const { spec, saved } = resolved;
+  // Before the index, which must not be held across an await: the same `kernel`
+  // axis `pj ls --json` and the board carry, so the three answers stay one.
+  const k = await kernelIndex(vault.root, 'mcp');
+  const kernel = k.enabled ? axisValues(k.notes) : undefined;
   const { db, notes, facets, views } = indexed(vault.root);
   const payload = queryPayload(
-    { facets, db, notes, views, jiraBase: jiraConfig(vault.root)?.url ?? null },
+    { facets, db, notes, views, jiraBase: jiraConfig(vault.root)?.url ?? null, kernel },
     spec,
     saved,
   );

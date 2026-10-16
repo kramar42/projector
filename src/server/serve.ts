@@ -60,12 +60,16 @@ import {
 import { noteContext } from '../agent/context.ts';
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
-import { info, logTo } from './log.ts';
+import { info, logTo, warn as warnLine } from './log.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import { pollAtStartup, startPolling } from './poll.ts';
 import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
+import { kernelIndex, type KernelIndex } from '../kernel/read.ts';
+import { axisValues } from '../kernel/state.ts';
+import { decide, snapshot, throughLine, watchedAxes, writeThrough, type Watched } from '../kernel/write.ts';
+import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
 
@@ -104,12 +108,15 @@ function vaultOf(c: Context): string {
   throw new NoVault(known.length ? 'pick a vault' : 'no vault has been opened yet');
 }
 
+/** Counts rebuilds, so the kernel read can be keyed on "this index" without a stat-walk. */
+let generations = 0;
+
 function build(root: string) {
   const p = paths(root);
   const facets = loadFacets(p.facets);
   const { db, notes } = reindex(root);
   const views = loadViews(root);
-  return { facets, db, notes, views, p };
+  return { facets, db, notes, views, p, generation: ++generations };
 }
 
 /**
@@ -128,6 +135,40 @@ function load(root: string) {
   // to the CLI, and it saves a stat-walk of the vault per request, which on a
   // workspace-sized one is the whole of the request's latency.
   return cached(root, build, ({ db }) => db.close(), watchReady.has(root) && !unwatchable.has(root));
+}
+
+/**
+ * The owner's kernel for this vault, read once per index rebuild and at most
+ * once per TTL after that — see `kernel/read.ts`. Awaited *before* a handler's
+ * own `load`, never between it and the last read of what that returned.
+ */
+async function kernelFor(root: string): Promise<KernelIndex> {
+  return kernelIndex(root, String(load(root).generation));
+}
+
+/**
+ * The kernel half of an owner's status write: what the watched axes held
+ * before, taken synchronously from the memo, and — once the response has gone —
+ * what they hold now, compared and written through `kernel/write.ts`. Never
+ * blocks and never fails the write it follows (C1: the file is the truth for
+ * content); every outcome is a log line, and a written one refreshes the board.
+ */
+function kernelWatch(root: string, ids: readonly string[]): Watched | null {
+  const axes = watchedAxes(settingsFor(root).kernel);
+  return axes.length ? snapshot(load(root).notes, ids, axes) : null;
+}
+
+function kernelFollow(root: string, before: Watched | null): void {
+  if (!before?.size) return;
+  setTimeout(() => {
+    const after = snapshot(load(root).notes, before.keys(), watchedAxes(settingsFor(root).kernel));
+    writeThrough(root, before, after)
+      .then((results) => {
+        for (const r of results) (r.outcome === 'written' ? info : warnLine)('kernel', throughLine(r));
+        if (results.some((r) => r.outcome === 'written')) bump(root);
+      })
+      .catch((e: unknown) => warnLine('kernel', `write-through failed: ${e instanceof Error ? e.message : String(e)}`));
+  }, 0);
 }
 
 const app = new Hono();
@@ -315,8 +356,11 @@ app.get('/api/cli/stamp', (c) => {
   return c.json({ stamp });
 });
 
-app.get('/api/query', (c) => {
+app.get('/api/query', async (c) => {
   const root = vaultOf(c);
+  // Before `load`: the read may wait on the kernel, and nothing may wait between
+  // a load and the last read of what it returned.
+  const kernel = axisValues((await kernelFor(root)).notes);
   const { facets, db, notes, views } = load(root);
 
   const resolved = resolveSpec(root, c.req.url);
@@ -324,7 +368,7 @@ app.get('/api/query', (c) => {
 
   return c.json(
     queryPayload(
-      { facets, db, notes, views, jiraBase: jiraConfig(root)?.url ?? null },
+      { facets, db, notes, views, jiraBase: jiraConfig(root)?.url ?? null, kernel },
       resolved.spec,
       resolved.saved,
     ),
@@ -332,8 +376,9 @@ app.get('/api/query', (c) => {
 });
 
 
-app.get('/api/note/:id', (c) => {
+app.get('/api/note/:id', async (c) => {
   const root = vaultOf(c);
+  const kernel = await kernelFor(root);
   const { notes, facets } = load(root);
   const rec = notes.get(c.req.param('id'));
   if (!rec) return c.json({ error: 'no such note' }, 404);
@@ -348,7 +393,7 @@ app.get('/api/note/:id', (c) => {
         // The panel edits `facets` and never `computed`, but a DTO that reports no
         // computed values at all is a DTO that lies about this card — and it is the
         // same card the board just drew.
-        computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10))(rec),
+        computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10), axisValues(kernel.notes))(rec),
         refCount: inbound.get(rec.id) ?? 0,
         blockedBy: blockedBy(rec.id, notes, facets),
         unblocks: unblocks(rec.id, notes, facets),
@@ -403,7 +448,37 @@ app.get('/api/note/:id', (c) => {
     // derived half.
     inbound: inverseOf(rec, notes, facets, inbound),
     project,
+    // What the owner's kernel says about this note, for the panel's kernel line:
+    // the intent, its status, the latest verdict and who gave it. Null for a note
+    // with no intent and for a vault with no kernel.
+    kernel: kernel.notes.get(rec.id) ?? null,
   });
+});
+
+/**
+ * The owner's answer to a note's kernel line: `accept` observes `met`;
+ * `overrule` observes `missed`, or `partial` to keep the intent open. Runs the
+ * kernel's CLI as the owner, since this is the owner's UI. Writes nothing in the
+ * vault; the answer is the note's kernel line as the kernel now reads it.
+ */
+app.post('/api/note/:id/kernel', async (c) => {
+  const root = vaultOf(c);
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: string; verdict?: string; note?: string };
+  if (body.decision !== 'accept' && body.decision !== 'overrule') {
+    return c.json({ error: 'decision must be accept or overrule' }, 400);
+  }
+  if (body.verdict !== undefined && body.verdict !== 'missed' && body.verdict !== 'partial') {
+    return c.json({ error: 'an overrule is missed or partial' }, 400);
+  }
+  const res = await decide(root, c.req.param('id'), body.decision, {
+    verdict: body.verdict as 'missed' | 'partial' | undefined,
+    note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : undefined,
+  });
+  if (!res.ok) return c.json({ error: res.reason }, 409);
+  info('kernel', `${res.note}: ${body.decision} → kernel ${res.verdict} on ${res.intent.slice(0, 8)}`);
+  // The vault did not change, but the board's kernel axis did.
+  bump(root);
+  return c.json({ kernel: res.kernel, verdict: res.verdict });
 });
 
 /**
@@ -466,8 +541,11 @@ app.patch('/api/note/:id', async (c) => {
   const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as Parameters<typeof patchNote>[2];
-    const res = patchNote(root, c.req.param('id'), body);
+    const id = c.req.param('id');
+    const before = body.facets || body.facet ? kernelWatch(root, [id]) : null;
+    const res = patchNote(root, id, body);
     bump(root);
+    kernelFollow(root, before);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -518,6 +596,9 @@ app.post('/api/bulk', async (c) => {
       dragMode?: DragMode;
     };
     const ids = b.ids ?? [];
+    // A board dragged across a status column and the bulk bar both set an axis,
+    // so both reach the kernel the way a panel edit does.
+    const before = b.op === 'facet' || b.op === 'move' ? kernelWatch(root, ids) : null;
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
     // A drag, one note at a time: the values are per note, so only the endpoints
@@ -534,6 +615,7 @@ app.post('/api/bulk', async (c) => {
     }
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
     bump(root);
+    kernelFollow(root, before);
     return c.json(res as object);
   } catch (err) {
     return fail(c, err);
@@ -608,8 +690,11 @@ app.put('/api/note/:id/frontmatter', async (c) => {
   const root = vaultOf(c);
   try {
     const body = (await c.req.json()) as { yaml: string; baseMtime?: number };
-    const res = putFrontmatter(root, c.req.param('id'), body.yaml ?? '', body.baseMtime);
+    const id = c.req.param('id');
+    const before = kernelWatch(root, [id]);
+    const res = putFrontmatter(root, id, body.yaml ?? '', body.baseMtime);
     bump(root);
+    kernelFollow(root, before);
     return c.json(res);
   } catch (err) {
     return fail(c, err);

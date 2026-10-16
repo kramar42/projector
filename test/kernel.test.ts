@@ -144,7 +144,7 @@ test('the kernel is off unless the file turns it on', () => {
   const on = vault('kernel:\n  enabled: true\n  bin: ~/k/bin/kernel\n  db: scratch/db\n  timeout: 1\n');
   const bare = vault('kernel:\n  enabled: true\n  bin: kernel\n');
   try {
-    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60 });
+    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60, verdicts: {} });
     const k = settingsFor(on).kernel;
     assert.equal(k.enabled, true);
     assert.match(k.bin!, /\/k\/bin\/kernel$/);
@@ -160,7 +160,7 @@ test('the kernel is off unless the file turns it on', () => {
 // ------------------------------------------------------------------ sending
 
 const batch: KernelBatch = { entities: [], events: [], links: [], proposals: [] };
-const cfg = { enabled: true, bin: '/k/bin/kernel', db: '/scratch/db', vault: null, timeoutSeconds: 5 };
+const cfg = { enabled: true, bin: '/k/bin/kernel', db: '/scratch/db', vault: null, timeoutSeconds: 5, verdicts: {} };
 
 test('a batch goes to `<bin> ingest` on stdin, with KERNEL_DB', async () => {
   let seen: { bin: string; args: string[]; input: string; db?: string } | null = null;

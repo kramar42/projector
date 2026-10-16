@@ -61,6 +61,10 @@ import {
 import { execFileSync } from 'node:child_process';
 import { parseDay } from '../did/day.ts';
 import { did, renderDid } from '../did/run.ts';
+import { kernelIndex } from '../kernel/read.ts';
+import { axisValues, shortId } from '../kernel/state.ts';
+import { decide, snapshot, throughLine, watchedAxes, writeThrough } from '../kernel/write.ts';
+import { settingsFor } from '../settings.ts';
 
 // ---------------------------------------------------------------- flags
 
@@ -249,6 +253,9 @@ Intake
   intake status      inspect channels and cursors
   intake declined    inspect declined candidates
 
+Kernel
+  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict
+
 Vault and maintenance
   setup              inspect or initialise vault integration
   check              validate notes and saved views, then run the vault's rules
@@ -294,6 +301,15 @@ sessions — and waits for the answers, so each is as of now.`,
                  [--remove f=v] [--set path=yaml ...]
 
 Apply the same scripted edit to one or more notes.`,
+  kernel: `Usage: pj kernel status [--json]
+       pj kernel accept <note id> [--note text]
+       pj kernel overrule <note id> [--verdict missed|partial] [--note text]
+
+The owner's kernel, read through the vault's \`kernel:\` block. \`status\` lists
+every intent about a note of this vault, with the \`kernel\` axis value it
+gives the note and its latest verdict. \`accept\` tells the kernel the note's
+intent is met; \`overrule\` says missed, or \`--verdict partial\` to keep it
+open. Both run \`<bin> observe\` as the owner and change nothing in the vault.`,
   mv: `Usage: pj mv <id> <new-id>
 
 Rename a note and repoint references and saved views.`,
@@ -456,11 +472,27 @@ async function currentIndex() {
   return (await delegatedIndex(root)) ?? reindex(root);
 }
 
+/**
+ * The `kernel` axis for this vault, read once per process — every `pj` is a
+ * fresh one, so the server's TTL has nothing to hold here. Undefined when the
+ * vault has no kernel; a kernel that cannot be read is one line on stderr and
+ * an axis no note has a value on, never a failed command.
+ */
+let kernelRead: Promise<ReadonlyMap<string, string> | undefined> | null = null;
+function kernelAxis(): Promise<ReadonlyMap<string, string> | undefined> {
+  kernelRead ??= kernelIndex(root, 'cli').then((k) => {
+    if (k.reason) console.error(`kernel: ${k.reason}`);
+    return k.enabled ? axisValues(k.notes) : undefined;
+  });
+  return kernelRead;
+}
+
 async function cmdLs(argv: string[]): Promise<void> {
   const { flags } = argFlags(argv, [
     ...SPEC_PARAMS, 'filter', 'json',
   ], ['json']);
   const facets = loadFacets(p.facets);
+  const kernel = await kernelAxis();
   const { db, notes } = await currentIndex();
 
   const overrides: Overrides = {};
@@ -484,7 +516,7 @@ async function cmdLs(argv: string[]): Promise<void> {
   // shape for the CLI is how the two surfaces would start disagreeing about the
   // answer, having been made unable to disagree about the question.
   const payload = queryPayload(
-    { facets, db, notes, views: loadViews(root), jiraBase: jiraConfig(root)?.url ?? null },
+    { facets, db, notes, views: loadViews(root), jiraBase: jiraConfig(root)?.url ?? null, kernel },
     spec,
     saved,
   );
@@ -660,8 +692,9 @@ async function cmdCheck(argv: string[]): Promise<void> {
   const errors = issues.filter((i) => i.severity === 'error').length;
 
   // Rules run on the index, as `pj ls --view` does: a rule is a view.
+  const kernel = await kernelAxis();
   const { db, notes: indexed } = await currentIndex();
-  const rules = runRules({ facets, db, notes: indexed, views: loadViews(root) });
+  const rules = runRules({ facets, db, notes: indexed, views: loadViews(root), kernel });
   const broken = rules.filter((r) => r.ids.length);
 
   if (flags.has('json')) {
@@ -715,10 +748,11 @@ async function cmdSync(argv: string[]): Promise<void> {
   }
 
   const facets = loadFacets(p.facets);
+  const kernel = await kernelAxis();
   const { db, notes } = await currentIndex();
   const jiraBase = jiraConfig(root)?.url ?? null;
   const payload = queryPayload(
-    { facets, db, notes, views: loadViews(root), jiraBase },
+    { facets, db, notes, views: loadViews(root), jiraBase, kernel },
     saved,
     saved,
   );
@@ -829,6 +863,79 @@ async function cmdSearch(argv: string[]): Promise<void> {
   const rows = search(db, q);
   for (const r of rows) console.log(`${pad(r.id, 34)} ${r.title}`);
   console.log(`\n${rows.length} match(es), most relevant first`);
+}
+
+/**
+ * `pj kernel`: the owner's kernel as it reads this vault, and the owner's two
+ * answers to a drafted verdict — thin over the same reader and writer the panel
+ * uses (`kernel/read.ts`, `kernel/write.ts`), so a session or a test can drive
+ * either without the UI.
+ */
+async function cmdKernel(argv: string[]): Promise<void> {
+  const [sub, ...more] = argv;
+  if (sub === 'status') {
+    const { flags } = argFlags(more, ['json'], ['json']);
+    const k = await kernelIndex(root, 'cli', { fresh: true });
+    if (!k.enabled) fail('this vault has no kernel: block with enabled: true — see `pj help kernel`');
+    if (k.reason) fail(`kernel: ${k.reason}`);
+    const prefix = `vault:${k.vault}:`;
+    const rows = k.intents.flatMap((i) =>
+      i.about
+        .filter((a) => a.startsWith(prefix))
+        .map((a) => {
+          const note = a.slice(prefix.length);
+          const line = k.notes.get(note);
+          // The note's own line when this intent is the one that speaks for it;
+          // an intent it outranked is shown by its status.
+          const value = line?.intent === i.id ? (line.value ?? `(${i.status})`) : `(${i.status})`;
+          return { note, value, intent: i, proposed: line?.intent === i.id && line.proposed };
+        }),
+    );
+    if (flags.has('json')) {
+      console.log(
+        JSON.stringify(
+          {
+            vault: k.vault,
+            notes: Object.fromEntries(k.notes),
+            intents: k.intents,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    if (!rows.length) {
+      console.log(`no intent in the kernel is about a note of vault:${k.vault}`);
+      return;
+    }
+    console.log(`${pad('note', 30)} ${pad('kernel', 17)} ${pad('intent', 8)}  ${pad('latest', 34)} statement`);
+    for (const r of rows) {
+      const l = r.intent.latest;
+      const latest = l ? `${l.verdict} by ${l.by ?? '?'}${l.at ? ` ${l.at.slice(0, 10)}` : ''}` : '—';
+      console.log(`${pad(r.note, 30)} ${pad(r.value, 17)} ${shortId(r.intent.id)}  ${pad(latest, 34)} ${r.intent.statement}`);
+    }
+    const drafts = rows.filter((r) => r.proposed).length;
+    if (drafts) console.log(`\n${drafts} drafted verdict(s) wait for you: \`pj kernel accept <id>\` or \`pj kernel overrule <id>\``);
+    return;
+  }
+
+  if (sub === 'accept' || sub === 'overrule') {
+    const { flags, rest } = argFlags(more, sub === 'overrule' ? ['verdict', 'note'] : ['note']);
+    const [id] = rest;
+    if (!id || rest.length > 1) fail(`pj kernel ${sub} <note id>${sub === 'overrule' ? ' [--verdict missed|partial]' : ''}`);
+    const verdict = flags.get('verdict')?.[0];
+    if (verdict !== undefined && verdict !== 'missed' && verdict !== 'partial') {
+      fail(`--verdict is missed or partial, not "${verdict}"`);
+    }
+    const res = await decide(root, id, sub, { verdict, note: flags.get('note')?.[0] });
+    if (!res.ok) fail(`pj kernel ${sub}: ${res.reason}`);
+    const now = res.kernel ? (res.kernel.value ?? res.kernel.status) : 'gone from the kernel’s answer';
+    console.log(`${id}: ${res.verdict} on intent ${shortId(res.intent)} — the kernel now reads ${now}`);
+    return;
+  }
+
+  fail(sub ? `unknown kernel command "${sub}". ${COMMAND_HELP.kernel}` : COMMAND_HELP.kernel!);
 }
 
 // ---------------------------------------------------------------- dispatch
@@ -1205,6 +1312,11 @@ if (asking) {
         ),
       ];
 
+      // What the axes `kernel.verdicts` names held before, so the kernel can be
+      // told what the owner just set — after every vault write has landed.
+      const watched = watchedAxes(settingsFor(root).kernel);
+      const before = snapshot(notes, rest, watched);
+
       // Every id gets the same edit, so a bulk move is one invocation rather
       // than one process per note re-reading the whole vault.
       for (const id of rest) {
@@ -1224,6 +1336,18 @@ if (asking) {
           `${id}: ${Object.entries(after.facets).map(([k, v]) => `${k}=${v.join(',')}`).join(' ') || '(no facets)'}`,
         );
       }
+
+      // Additional, never blocking (C1): every note above is written whatever
+      // the kernel says, and a kernel that refuses is a line on stderr.
+      if (before.size) {
+        const results = await writeThrough(root, before, snapshot(readAll(p.notes).notes, rest, watched));
+        for (const r of results) (r.outcome === 'written' ? console.log : console.error)(`kernel: ${throughLine(r)}`);
+      }
+      break;
+    }
+
+    case 'kernel': {
+      await cmdKernel(argv);
       break;
     }
 

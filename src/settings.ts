@@ -139,9 +139,26 @@ export interface Settings {
    * `KERNEL_DB`; absent, the kernel's own default store is used. `vault`
    * names this vault in the kernel's aliases (`vault:<vault>:<note id>`);
    * absent, the registered name, else the folder's.
+   *
+   * `verdicts` is the other direction: which values of which axis, set by the
+   * owner, also tell the kernel what became of a note's intent — `met`,
+   * `missed` or `dropped` through `<bin> observe`. A vault's vocabulary is its
+   * own (C4), so nothing here knows which axis is the lifecycle or which of its
+   * values means finished; absent, a status change writes nothing to the kernel.
    */
-  kernel: { enabled: boolean; bin: string | null; db: string | null; vault: string | null; timeoutSeconds: number };
+  kernel: {
+    enabled: boolean;
+    bin: string | null;
+    db: string | null;
+    vault: string | null;
+    timeoutSeconds: number;
+    verdicts: Record<string, Record<string, StatusVerdict>>;
+  };
 }
+
+/** What a status value may tell the kernel. `partial` keeps an intent open, so it is the owner's word in the panel, not a status. */
+export type StatusVerdict = 'met' | 'missed' | 'dropped';
+const STATUS_VERDICTS: readonly string[] = ['met', 'missed', 'dropped'];
 
 export const CONFIG_FILE = 'config.yaml';
 
@@ -169,7 +186,7 @@ interface Raw {
   };
   gmail?: { command?: unknown; account?: unknown; transport?: unknown };
   did?: { roots?: unknown };
-  kernel?: { enabled?: unknown; bin?: unknown; db?: unknown; vault?: unknown; timeout?: unknown };
+  kernel?: { enabled?: unknown; bin?: unknown; db?: unknown; vault?: unknown; timeout?: unknown; verdicts?: unknown };
   mcp?: {
     slack?: unknown;
     gmail?: unknown;
@@ -350,11 +367,32 @@ export function settingsFor(root: string): Settings {
       // An ingest is a babashka start and one transaction, well under a second;
       // the ceiling is for a kernel whose store is locked by another writer.
       timeoutSeconds: Math.max(5, Number(raw.kernel?.timeout ?? 60) || 60),
+      verdicts: verdictMap(raw.kernel?.verdicts),
     },
   };
 
   cache.set(root, { key, value });
   return value;
+}
+
+/**
+ * `kernel.verdicts`: `{ <axis>: { <value>: met|missed|dropped } }`. Anything
+ * else — a list, a verdict the kernel would refuse for a status — is dropped
+ * rather than guessed at, so a typo writes nothing instead of the wrong thing.
+ */
+function verdictMap(v: unknown): Record<string, Record<string, StatusVerdict>> {
+  const out: Record<string, Record<string, StatusVerdict>> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const [axis, values] of Object.entries(v as Record<string, unknown>)) {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) continue;
+    const row: Record<string, StatusVerdict> = {};
+    for (const [value, verdict] of Object.entries(values as Record<string, unknown>)) {
+      const said = str(verdict);
+      if (said && STATUS_VERDICTS.includes(said)) row[value] = said as StatusVerdict;
+    }
+    if (Object.keys(row).length) out[axis.trim()] = row;
+  }
+  return out;
 }
 
 /** Whether this vault sweeps a channel. Unconfigured vaults sweep everything. */
@@ -451,6 +489,10 @@ enrich: ${enrich ? 'true' : 'false'}
 #   bin: ~/Code/projects/kernel/bin/kernel
 #   db: ~/.kernel/db           # passed as KERNEL_DB; default: the kernel's own
 #   vault: work                # the name in vault:<vault>:<note id>; default: the registered name
+#   # When you set one of these values, the note's kernel intent is told too,
+#   # through \`<bin> observe\`. Other values write nothing to the kernel.
+#   verdicts:
+#     status: { done: met, on-hold: dropped, cancelled: dropped }
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so
 # it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.

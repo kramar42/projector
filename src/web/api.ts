@@ -1,7 +1,7 @@
 import type { DragMode } from '../view/dropOutcome.ts';
 import { currentVault } from './vault.ts';
 import type { FoldRow } from '../schema/fold.ts';
-import type { DeclinedPage, NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
+import type { DeclinedPage, KernelNote, NoteDetail, Meta, QueryResponse, Resolved, WorkResult } from './types.ts';
 import { foreignOf } from './changed.ts';
 import { createEventHub } from './events.ts';
 export { FLUSH_MS } from './changed.ts';
@@ -159,6 +159,17 @@ export const api = {
       'POST',
       `/api/intake/declined/${encodeURIComponent(fingerprint)}/restore`,
     ),
+
+  /**
+   * The owner's answer to a note's kernel line: accept is `met`, overrule is
+   * `missed` or `partial`. Writes to the kernel and nothing in the vault, so it
+   * stamps no self-write; the answer is the line as the kernel now reads it.
+   */
+  kernelDecide: (id: string, decision: 'accept' | 'overrule', verdict?: 'missed' | 'partial') =>
+    req<{ kernel: KernelNote | null; verdict: string }>('POST', `/api/note/${encodeURIComponent(id)}/kernel`, {
+      decision,
+      verdict,
+    }),
 
   patchNote: (id: string, patch: PatchCard) => (
     stampSelfWrite(id),

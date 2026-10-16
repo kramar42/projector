@@ -3401,6 +3401,9 @@ textarea { resize: vertical; font-family: inherit; }
 .titleedit textarea { width: 100%; font-size: var(--text-lg); }
 .titleedit-bar { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 
+/* The owner's answer to a drafted kernel verdict: a row of buttons, as above. */
+.kernel-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
 
 /* In flow under a heading rather than inside a list, so it spaces itself. */
 .hint { margin: 6px 0 0; }

@@ -37,9 +37,11 @@ export function logTo(fn: Sink | null): void {
  *
  * A closed set rather than a free string, so the column stays a column and
  * `grep '\bintake\b'` keeps meaning one thing. They are the four things that
- * happen on their own.
+ * happen on their own, and `kernel`: the owner's kernel read for the board and
+ * told of a status change, both of which happen after the request that caused
+ * them has answered.
  */
-export type Area = 'intake' | 'enrich' | 'watch' | 'index';
+export type Area = 'intake' | 'enrich' | 'watch' | 'index' | 'kernel';
 
 /**
  * Local time, not UTC.

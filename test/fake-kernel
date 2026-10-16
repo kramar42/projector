@@ -1,0 +1,49 @@
+#!/bin/sh
+# A stand-in for the owner's kernel CLI, for test/intents.test.ts.
+#
+# `intents --json --about <prefix>` prints a fixed JSON array — the file named by
+# FAKE_KERNEL_INTENTS when it is set, the array below otherwise — and every call
+# is appended to FAKE_KERNEL_LOG as `KERNEL_DB|arg arg …`, so a test can read
+# back exactly what projector asked and wrote. `observe` prints the line the real
+# CLI prints. FAKE_KERNEL_FAIL makes every call refuse, the way a locked store does.
+[ -n "$FAKE_KERNEL_LOG" ] && printf '%s|%s\n' "$KERNEL_DB" "$*" >> "$FAKE_KERNEL_LOG"
+if [ -n "$FAKE_KERNEL_FAIL" ]; then
+  echo "error: store is locked {}" >&2
+  exit 2
+fi
+case "$1" in
+  intents)
+    if [ -n "$FAKE_KERNEL_INTENTS" ]; then cat "$FAKE_KERNEL_INTENTS"; exit 0; fi
+    cat <<'JSON'
+[
+  {"id": "aaaaaaaa-0000-4000-8000-000000000001", "status": "open", "statement": "Ship alpha", "horizon": "2026-10-20",
+   "about": ["vault:fake:alpha"],
+   "latest": {"verdict": "met", "by": "agent:claude", "at": "2026-10-15T09:00:00Z", "note": "the PR merged", "evidence": ["ev1"]},
+   "proposed_by": null},
+  {"id": "aaaaaaaa-0000-4000-8000-000000000009", "status": "superseded", "statement": "Ship alpha, first try", "horizon": null,
+   "about": ["vault:fake:alpha"], "latest": null, "proposed_by": null},
+  {"id": "bbbbbbbb-0000-4000-8000-000000000002", "status": "open", "statement": "Write beta", "horizon": null,
+   "about": ["vault:fake:beta", "jira:B-1"], "latest": null, "proposed_by": null},
+  {"id": "cccccccc-0000-4000-8000-000000000003", "status": "met", "statement": "Finish gamma", "horizon": null,
+   "about": ["vault:fake:gamma"],
+   "latest": {"verdict": "met", "by": "kernel:owner", "at": "2026-10-14T18:00:00Z", "note": null, "evidence": []},
+   "proposed_by": null},
+  {"id": "dddddddd-0000-4000-8000-000000000004", "status": "proposed", "statement": "Look at delta", "horizon": null,
+   "about": ["vault:fake:delta"], "latest": null, "proposed_by": "agent:projector-intake"},
+  {"id": "eeeeeeee-0000-4000-8000-000000000005", "status": "open", "statement": "Epsilon, judged by its owner", "horizon": null,
+   "about": ["vault:fake:epsilon"],
+   "latest": {"verdict": "partial", "by": "kernel:owner", "at": "2026-10-13T10:00:00Z", "note": "not yet", "evidence": []},
+   "proposed_by": null},
+  {"id": "ffffffff-0000-4000-8000-000000000006", "status": "open", "statement": "Another vault's note", "horizon": null,
+   "about": ["vault:other:zeta"], "latest": null, "proposed_by": null}
+]
+JSON
+    ;;
+  observe)
+    echo "observation 12345678 intent $(printf '%s' "$2" | cut -c1-8) -> $3"
+    ;;
+  *)
+    echo "unknown command $1"
+    exit 1
+    ;;
+esac

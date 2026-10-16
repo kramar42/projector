@@ -8,6 +8,8 @@ import { computedAxes } from '../index/query.ts';
 import { enrichmentStats } from './enrich.ts';
 import { listVaults } from '../vault.ts';
 import { suppressions } from '../intake/db.ts';
+import { settingsFor } from '../settings.ts';
+import { KERNEL_AXIS } from '../kernel/state.ts';
 
 /**
  * What the client needs once per vault, rather than once per query.
@@ -66,7 +68,9 @@ export function meta(
     vault: root,
     vaultName: listVaults().find((v) => v.path === root)?.name ?? root,
     facets: deps.facets,
-    computed: computedAxes(),
+    // The kernel axis only where a kernel is: a vault without one would be
+    // offered a column every note leaves blank.
+    computed: computedAxes().filter((a) => a.name !== KERNEL_AXIS || settingsFor(root).kernel.enabled),
     counts: counts(deps.db, deps.facets),
     axisPopulation: axisPopulation(deps.db),
     enrichment: enrichmentStats(root),

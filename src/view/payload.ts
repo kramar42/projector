@@ -69,6 +69,12 @@ export interface PayloadDeps {
   today?: string;
   /** The Jira host bare `jira:` refs link to, for this vault. */
   jiraBase?: string | null;
+  /**
+   * The `kernel` axis, note id to value, from `kernel/read.ts`. Accepted rather
+   * than read for the reason everything else here is: reading it spawns the
+   * kernel, which the caller awaits *before* it loads the index.
+   */
+  kernel?: ReadonlyMap<string, string>;
 }
 
 export function queryPayload(
@@ -88,6 +94,7 @@ export function queryPayload(
   const res = runQuery(db, notes, facets, spec.query, {
     connect: layout,
     lists: composeLists(deps, spec, today),
+    kernel: deps.kernel,
   });
 
   // Ordered here, so every surface receives the view's curated order rather than
@@ -103,7 +110,7 @@ export function queryPayload(
   // One walk for every note on screen, rather than the same walk once per note.
   const inbound = inboundCounts(notes, facets);
   // Same bargain, for the aggregates every computed axis stands on.
-  const computedOf = computedReader(notes, facets, today);
+  const computedOf = computedReader(notes, facets, today, deps.kernel);
   for (const id of shown) {
     const rec = notes.get(id);
     if (!rec) continue;
@@ -182,7 +189,7 @@ function composeLists(
   for (const name of spec.lists) {
     const child = byName.get(name);
     if (!child) continue;
-    const res = runQuery(deps.db, deps.notes, deps.facets, child.query, { today });
+    const res = runQuery(deps.db, deps.notes, deps.facets, child.query, { today, kernel: deps.kernel });
     const value = child.title ?? name;
     order.push(value);
     members.set(value, new Set(res.ids));

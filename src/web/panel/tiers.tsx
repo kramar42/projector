@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Body, Facets, Frontmatter, Links, Refs, type Lit } from './blocks.tsx';
+import { KernelLine } from './kernel.tsx';
 import { plural } from '../plural.ts';
 import type { NoteWriter } from './usePanelWriter.ts';
 import type { Meta, NoteDetail } from '../types.ts';
@@ -112,6 +113,9 @@ export function NoteTiers({
     <div className="panel-body">
       <div className="panel-tier">
         <Facets defs={meta.facets} values={card.facets} write={write} lit={lit} />
+        {/* Beside the facets because it answers the question `status` asks, from
+            the kernel's side: what became of the intent. Absent without one. */}
+        <KernelLine id={card.id} kernel={data.kernel ?? null} />
       </div>
 
       <div className="panel-tier">

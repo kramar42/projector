@@ -26,6 +26,8 @@ export type { Resolved } from '../server/enrich.ts';
 
 import type { NoteDetailDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
+import type { KernelNote } from '../kernel/state.ts';
+export type { KernelNote } from '../kernel/state.ts';
 import type { QueryPayload } from '../view/payload.ts';
 import type { ViewSpec as Spec } from '../view/spec.ts';
 
@@ -71,6 +73,8 @@ export interface NoteDetail {
    */
   inbound: Record<string, { id: string; title: string; done: boolean; isProject: boolean; refCount: number }[]>;
   project: ResolvedProject | null;
+  /** What the owner's kernel says about this note, or null when it has no intent there. */
+  kernel: KernelNote | null;
 }
 
 /**

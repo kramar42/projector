@@ -4,6 +4,7 @@ import { LINK_KINDS } from '../schema/links.ts';
 import type { Facets, Note } from '../schema/types.ts';
 import { adjacency, nodesIn, walk } from './refs.ts';
 import { blockedSet, blockingFacets } from './blocking.ts';
+import { KERNEL_AXIS, KERNEL_VALUES } from '../kernel/state.ts';
 
 /**
  * One query compiler, for the server and the CLI.
@@ -126,7 +127,12 @@ interface Ctx {
   blocked: Map<string, string[]>;
   facets: Facets;
   today: string;
+  /** The `kernel` axis, read from the owner's kernel by the caller — empty when there is none. */
+  kernel: ReadonlyMap<string, string>;
 }
+
+/** No kernel: every note has no value on the axis, and the histogram drops it. */
+const NO_KERNEL: ReadonlyMap<string, string> = new Map();
 
 interface Computed {
   label: string;
@@ -252,6 +258,25 @@ export const COMPUTED: Record<string, Computed> = {
     values: () => [...LINK_KINDS],
     of: (rec) => [...new Set(rec.links.map((l) => l.kind).filter(Boolean))],
   },
+  /**
+   * What the owner's kernel says became of the intent about this note — `open`,
+   * `proposed-verdict` (open, and somebody other than the owner drafted a
+   * verdict), `met`, `missed` or `dropped`.
+   *
+   * Computed over something no facet can describe either: a store outside the
+   * vault. The caller reads it (`kernel/read.ts`) and hands it in, because this
+   * module cannot spawn and must not await; it is never written into a note
+   * (C11), and every value is a status the kernel reported (C8). A note with no
+   * intent has no value, so a vault without a kernel never offers the axis.
+   */
+  [KERNEL_AXIS]: {
+    label: 'Kernel',
+    values: () => [...KERNEL_VALUES],
+    of: (rec, ctx) => {
+      const v = ctx.kernel.get(rec.id);
+      return v ? [v] : [];
+    },
+  },
 };
 
 /**
@@ -276,8 +301,13 @@ function rawOf(rec: Note, facet: string): string[] {
   return rec.facets[facet] ?? [];
 }
 
-function buildCtx(notes: Map<string, Note>, facets: Facets, today: string): Ctx {
-  return { nodes: nodesIn(notes, facets), blocked: blockedSet(notes, facets), facets, today };
+function buildCtx(
+  notes: Map<string, Note>,
+  facets: Facets,
+  today: string,
+  kernel: ReadonlyMap<string, string> = NO_KERNEL,
+): Ctx {
+  return { nodes: nodesIn(notes, facets), blocked: blockedSet(notes, facets), facets, today, kernel };
 }
 
 /**
@@ -303,8 +333,9 @@ export function computedReader(
   notes: Map<string, Note>,
   facets: Facets,
   today: string,
+  kernel?: ReadonlyMap<string, string>,
 ): (rec: Note) => Record<string, string[]> {
-  const ctx = buildCtx(notes, facets, today);
+  const ctx = buildCtx(notes, facets, today, kernel);
   return (rec) => {
     const out: Record<string, string[]> = {};
     for (const [name, axis] of Object.entries(COMPUTED)) {
@@ -662,6 +693,12 @@ export interface RunOpts {
    * error the validator raises rather than an empty board.
    */
   lists?: { order: string[]; members: Map<string, Set<string>> };
+  /**
+   * The `kernel` axis, note id to value — supplied for the same reason `lists`
+   * is: the answer lives outside the note map, and reading it means a process
+   * this synchronous module cannot wait on. Absent, no note has a value.
+   */
+  kernel?: ReadonlyMap<string, string>;
 }
 
 export function runQuery(
@@ -671,7 +708,7 @@ export function runQuery(
   query: Query,
   opts: RunOpts = {},
 ): QueryResult {
-  const ctx = buildCtx(notes, facets, opts.today ?? new Date().toISOString().slice(0, 10));
+  const ctx = buildCtx(notes, facets, opts.today ?? new Date().toISOString().slice(0, 10), opts.kernel);
   const filter = query.filter ?? {};
 
   // Focus and full text bound the universe; the facet filter refines inside it.
