@@ -5,5 +5,6 @@
  :output {:intake/<channel> {:title :string :fingerprint :string :verdict :string :kind :string :target :string :reason :string :evidence {:event :map}}
           :attempt/ended {:result {:seen :int :created :int :extending :int :updates :int :linked :int :declined :int :unanswered :int :skipped :int :recorded :int}}}
  :criterion "Every connector event a pass read has one intake event in the attempt, keyed intake:<its key>, with a decision and a reason; no proposed facet value is outside the vault's vocabulary; a candidate the vault already tracks is only extended onto, linked onto or dropped, never filed as a new note; a pass whose judge could not be reached wrote nothing and ended failed."
+ :acts-on [:items]
  :trigger {:manual true :started-by "projector's intake pass: the server's poll at the vault's poll.every, within poll.hours, or pj intake by hand; the kernel's tick never fires it"}
  :budget {:minutes 30}}

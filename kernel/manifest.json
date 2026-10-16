@@ -42,6 +42,42 @@
       "example": "a paragraph appended to projects/kernel/route-capture.md: \"the route-capture spec landed; live check next\""
     }
   ],
+  "holds": [
+    {
+      "type": "notes",
+      "name": "work-vault",
+      "where": "~/Code/work/vault",
+      "entities": "vault:work:",
+      "events": [
+        "vault/"
+      ],
+      "about": "the owner's work notes: projects, tasks, decisions; a note with a status is work"
+    },
+    {
+      "type": "items",
+      "name": "work-inbox",
+      "where": "~/Code/work/vault/inbox",
+      "events": [
+        "intake/"
+      ],
+      "about": "inbox cards intake judged from what the connectors gathered"
+    },
+    {
+      "type": "journal",
+      "name": "work-days",
+      "where": "~/Code/work/vault/daily",
+      "events": [
+        "vault/day"
+      ],
+      "about": "the work vault's daily notes"
+    },
+    {
+      "type": "memory",
+      "name": "vault-memory",
+      "where": "~/Code/work/vault/memory",
+      "about": "what agents working in the vault learned (memory/AGENTS.md)"
+    }
+  ],
   "specs": [
     "specs/note-conventions.edn",
     "specs/work-a-note.edn",

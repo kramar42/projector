@@ -9,5 +9,6 @@
           :plan/flag {:intent :id :reason :string}}
  :criterion "By end of day, every accepted attempt has an ended timestamp and at least one event beyond start and end."
  :check {:query [:find ?e :in ?attempt :where (in-attempt ?e ?attempt) (or [?e :event/kind :plan/proposal] [?e :event/kind :plan/flag])]}
+ :acts-on [:commitments]
  :trigger {:daily "07:00"}
  :budget {:minutes 10}}
