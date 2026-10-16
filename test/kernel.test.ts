@@ -7,7 +7,8 @@ import { paths } from '../src/config.ts';
 import { closeIntakeDb, watermarkFor } from '../src/intake/db.ts';
 import { CHANNELS } from '../src/intake/run.ts';
 import { eventKey, kernelBatch, sendToKernel, vaultName, type Examined, type KernelBatch, type Runner } from '../src/intake/kernel.ts';
-import { channelLine, pollOnce, stopPolling } from '../src/server/poll.ts';
+import { channelLine, pollOnce, stopPolling, tickLine } from '../src/server/poll.ts';
+import { fileURLToPath } from 'node:url';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import type { Ask } from '../src/intake/classify.ts';
 import type { Candidate, Channel } from '../src/intake/types.ts';
@@ -281,17 +282,23 @@ test(
   'a tick sends what it examined: both candidates as events, the card as a proposal',
   withFake(async (root) => {
     const sent: KernelBatch[] = [];
-    const run: Runner = async (_bin, _args, input) => {
+    const calls: string[][] = [];
+    const run: Runner = async (_bin, args, input) => {
+      calls.push(args);
+      if (args[0] === 'attempt') {
+        return { code: 0, stdout: args[1] === 'start' ? '{"id":"a77e3f00-0000-4000-8000-000000000001"}' : '{}', stderr: '' };
+      }
       sent.push(JSON.parse(input) as KernelBatch);
       return { code: 0, stdout: '{"events-new":2,"proposals-new":1}', stderr: '' };
     };
     const res = await pollOnce(root, judge, { kernel: run });
     assert.equal(res.created.length, 1, 'the card is still written');
     assert.equal(sent.length, 1, 'one batch per channel');
-    assert.deepEqual(sent[0]!.events.map((e) => [e.key, e.kind, e.payload.verdict]), [
-      ['fake:keep', 'intake/fake', 'keep'],
-      ['fake:drop', 'intake/fake', 'drop'],
-    ]);
+    assert.deepEqual(sent[0]!.events.map((e) => [e.key, e.kind, e.payload.verdict, e.attempt]), [
+      ['fake:keep', 'intake/fake', 'keep', 'a77e3f00-0000-4000-8000-000000000001'],
+      ['fake:drop', 'intake/fake', 'drop', 'a77e3f00-0000-4000-8000-000000000001'],
+    ], 'each event lands in the tick’s attempt');
+    assert.deepEqual(calls.map((a) => a.slice(0, 2)), [['attempt', 'start'], ['ingest', '--source'], ['attempt', 'end']]);
     assert.deepEqual(sent[0]!.proposals, [{ statement: 'Answer the real ask', about: [], evidence: ['fake:keep'] }]);
     const c = res.channels.find((x) => x.channel === 'fake')!;
     assert.deepEqual(c.kernel, { ok: true, events: 2, proposals: 1 });
@@ -330,3 +337,133 @@ test(
     assert.doesNotMatch(channelLine(c), /kernel/);
   }, ''),
 );
+
+// ------------------------------------------------------------------ the tick as an attempt of judge-intake
+
+const FAKE = fileURLToPath(new URL('./fake-kernel', import.meta.url));
+
+/** Runs `body` with test/fake-kernel logging every call and batch, and hands both back. */
+async function againstFake(body: (read: () => { calls: string[]; batches: KernelBatch[] }) => Promise<void>, env: Record<string, string> = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'pj-fake-kernel-'));
+  const log = join(dir, 'log');
+  const batches = join(dir, 'batches');
+  const keys = ['FAKE_KERNEL_LOG', 'FAKE_KERNEL_BATCHES', 'FAKE_KERNEL_ATTEMPT_FAIL', 'FAKE_KERNEL_FAIL'];
+  const before = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  Object.assign(process.env, { FAKE_KERNEL_LOG: log, FAKE_KERNEL_BATCHES: batches, ...env });
+  const lines = (f: string) => {
+    try {
+      return readFileSync(f, 'utf8').split('\n').filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+  try {
+    await body(() => ({ calls: lines(log).map((l) => l.slice(l.indexOf('|') + 1)), batches: lines(batches).map((l) => JSON.parse(l) as KernelBatch) }));
+  } finally {
+    for (const k of keys) {
+      if (before[k] === undefined) delete process.env[k];
+      else process.env[k] = before[k];
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const ID = 'a77e3f00-0000-4000-8000-000000000001';
+
+test(
+  'a tick that judges is an attempt of judge-intake: started, its events in it, ended with the counts',
+  withFake(
+    (root) =>
+      againstFake(async (read) => {
+        const res = await pollOnce(root, judge);
+        const { calls, batches } = read();
+        assert.equal(calls[0], 'attempt start judge-intake --executor agent:projector-intake --json', 'started before judging, by the judge, no intent named');
+        assert.match(calls[1]!, /^ingest --source system:projector --json$/);
+        const end = calls[2]!.match(/^attempt end (\S+) (\S+) --result (.*) --json$/);
+        assert.ok(end, calls[2]);
+        assert.equal(end![1], ID);
+        assert.equal(end![2], 'done');
+        assert.deepEqual(JSON.parse(end![3]!), { seen: 2, created: 1, extending: 0, updates: 0, linked: 0, declined: 1, unanswered: 0, skipped: 0, advanced: 1 });
+        assert.equal(calls.length, 3);
+        assert.deepEqual(batches[0]!.events.map((e) => [e.key, e.attempt]), [['fake:keep', ID], ['fake:drop', ID]], 'the events are the attempt’s evidence');
+        assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'done' });
+        assert.match(tickLine(res, 1000), /kernel attempt a77e3f00 done$/);
+      }),
+    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
+  ),
+);
+
+test(
+  'a held tick ends its attempt failed, with why',
+  withFake(
+    (root) =>
+      againstFake(async (read) => {
+        const res = await pollOnce(root, async () => null);
+        assert.ok(res.held, 'the judge could not be reached');
+        const { calls, batches } = read();
+        assert.equal(calls.length, 2, 'started and ended, nothing sent');
+        assert.equal(batches.length, 0);
+        const end = calls[1]!.match(/^attempt end (\S+) failed --result (.*) --json$/);
+        assert.ok(end, calls[1]);
+        assert.equal(JSON.parse(end![2]!).held, res.held);
+        assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'failed' });
+      }),
+    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
+  ),
+);
+
+test(
+  'an attempt the kernel will not start is a line: the events go without one and the tick goes on',
+  withFake(
+    (root) =>
+      againstFake(
+        async (read) => {
+          const res = await pollOnce(root, judge);
+          assert.equal(res.created.length, 1);
+          const { calls, batches } = read();
+          assert.deepEqual(calls.map((c) => c.split(' ')[0]), ['attempt', 'ingest'], 'no end for an attempt that never started');
+          assert.deepEqual(batches[0]!.events.map((e) => e.attempt), [undefined, undefined]);
+          assert.equal(res.attempt?.ok, false);
+          assert.match(tickLine(res, 1000), /kernel attempt not recorded: kernel attempt start exited 1: error: no spec named judge-intake/);
+        },
+        { FAKE_KERNEL_ATTEMPT_FAIL: '1' },
+      ),
+    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
+  ),
+);
+
+test(
+  'off when the kernel block is: no attempt, and the tick line is as it was',
+  withFake(
+    (root) =>
+      againstFake(async (read) => {
+        const res = await pollOnce(root, judge);
+        assert.deepEqual(read().calls, []);
+        assert.equal(res.attempt, undefined);
+        assert.doesNotMatch(tickLine(res, 1000), /kernel/);
+      }),
+    `kernel:\n  enabled: false\n  bin: ${FAKE}\n`,
+  ),
+);
+
+test('a tick with nothing to judge starts no attempt, so a quiet hour is no verdict', async () => {
+  const root = vault(`channels: [quiet]\nkernel:\n  enabled: true\n  bin: ${FAKE}\n`);
+  const quiet: Channel = {
+    name: 'quiet',
+    defaultDays: 1,
+    collect: (ctx) => ({ channel: 'quiet', cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [] }),
+  };
+  CHANNELS.push(quiet);
+  try {
+    await againstFake(async (read) => {
+      const res = await pollOnce(root, judge);
+      assert.deepEqual(read().calls, []);
+      assert.equal(res.attempt, undefined);
+    });
+  } finally {
+    CHANNELS.splice(CHANNELS.indexOf(quiet), 1);
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});

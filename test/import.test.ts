@@ -376,15 +376,35 @@ test('pj kernel register hands the kernel this checkout’s manifest', async () 
 test('the manifest declares what projector writes, and every batch it sends fits it', () => {
   const m = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   assert.equal(m.system, 'projector');
-  assert.deepEqual(m.writes, { events: ['vault/', 'intake/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
+  assert.deepEqual(m.writes, { events: ['vault/', 'intake/', 'plan/', 'review/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
   assert.deepEqual(m.sync, [{ name: 'vault', run: 'pj kernel import', when: 'after edits, or hourly' }]);
   const dir = join(appRoot, 'kernel');
-  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/work-a-note.edn']);
+  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/work-a-note.edn', 'specs/daily-plan.edn', 'specs/weekly-review.edn', 'specs/judge-intake.edn']);
+  const scheduled: Record<string, RegExp> = {
+    'specs/daily-plan.edn': /:trigger \{:daily "07:00"\}/,
+    'specs/weekly-review.edn': /:trigger \{:weekly :sunday :at "18:00"\}/,
+  };
   for (const spec of m.specs) {
     const text = readFileSync(join(dir, spec), 'utf8');
     assert.match(text, new RegExp(`:name "${basename(spec, '.edn')}"`));
-    assert.match(text, /:trigger \{:manual true\}/, `${spec}: tick never fires it`);
+    assert.match(text, scheduled[spec] ?? /:trigger \{:manual true[ }]/, `${spec}: ${scheduled[spec] ? 'the kernel’s tick fires it' : 'tick never fires it'}`);
   }
+  // The day and the week are planned here, where the owner plans: each loop's procedure is a projector
+  // skill, read whole into the brief, and reads every open intent in the ledger, not only the vault's.
+  for (const [spec, name] of [['specs/daily-plan.edn', 'plan-day'], ['specs/weekly-review.edn', 'review-week']] as const) {
+    const text = readFileSync(join(dir, spec), 'utf8');
+    const skill = text.match(/:skill "([^"]+)"/)?.[1];
+    assert.ok(skill && existsSync(join(dir, 'specs', skill, 'SKILL.md')), `${spec} names its skill`);
+    assert.equal(basename(skill), name);
+    assert.match(text, /:executor :agent/);
+    assert.match(readFileSync(join(dir, 'specs', skill, 'SKILL.md'), 'utf8'), /every open intent in the ledger, not only the vault's/);
+    assert.ok(m.skills.includes(`../.claude/skills/${name}`), name);
+  }
+  // Intake's judgment is a spec too: each tick that judges is an attempt of it, started by projector.
+  const judgeIntake = readFileSync(join(dir, 'specs/judge-intake.edn'), 'utf8');
+  assert.match(judgeIntake, /:executor :agent/);
+  assert.match(judgeIntake, /:budget \{:minutes \d+\}/);
+  assert.match(judgeIntake, /classify\.ts/);
   // work-a-note is a capability: its procedure is the pj-work skill, read whole into the brief.
   const work = readFileSync(join(dir, 'specs/work-a-note.edn'), 'utf8');
   const skill = work.match(/:skill "([^"]+)"/)?.[1];

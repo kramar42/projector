@@ -1,18 +1,22 @@
 {
   "system": "projector",
   "name": "Projector",
-  "role": "The owner's notes over a markdown vault: a note with a status is work, one without a thought. The owner's commitments are the notes the vault's kernel.commitments axis calls open or answered; the days are its daily notes; intake gathers what happened elsewhere into inbox cards and proposals.",
+  "role": "The owner's notes over a markdown vault: a note with a status is work, one without a thought. The owner's commitments are the notes the vault's kernel.commitments axis calls open or answered; the days are its daily notes; intake gathers what happened elsewhere into inbox cards and proposals, each tick an attempt of judge-intake. The owner plans here, so projector publishes the daily plan and the weekly review, over every open intent in the ledger.",
   "where": "~/Code/projects/projector; vaults listed in its vaults.json, each configured in <vault>/.projector/config.yaml",
   "reach": [
     "pj CLI",
     "the app at localhost:8092",
     "skill pj-about",
-    "skill pj-work"
+    "skill pj-work",
+    "skill plan-day",
+    "skill review-week"
   ],
   "writes": {
     "events": [
       "vault/",
-      "intake/"
+      "intake/",
+      "plan/",
+      "review/"
     ],
     "entities": [
       "vault:"
@@ -40,7 +44,10 @@
   ],
   "specs": [
     "specs/note-conventions.edn",
-    "specs/work-a-note.edn"
+    "specs/work-a-note.edn",
+    "specs/daily-plan.edn",
+    "specs/weekly-review.edn",
+    "specs/judge-intake.edn"
   ],
   "sync": [
     {
@@ -51,7 +58,9 @@
   ],
   "skills": [
     "../.claude/skills/pj-about",
-    "../.claude/skills/pj-work"
+    "../.claude/skills/pj-work",
+    "../.claude/skills/plan-day",
+    "../.claude/skills/review-week"
   ],
   "develop": {
     "repo": "..",

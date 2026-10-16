@@ -1,0 +1,12 @@
+{:name "weekly-review"
+ :purpose "Judge the week: one observation per intent touched, one per spec that ran, and next week's intents, reviewed where the owner plans."
+ :executor :agent
+ :skill "../../.claude/skills/review-week"
+ :inputs {:intents {:status :open}
+          :events {:last-hours 168}}
+ :procedure "Follow the review-week skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger, the vault's and every other system's alike. Observe each for the week, with a verdict and this week's events as evidence; standing intents take partial or not-applicable, never met. Observe each spec that ran more than twice by name. Propose next week's intents through opens and name any intent to drop. The owner confirms or overrules each verdict. Finish with one review/summary event and end the attempt."
+ :output {:observe {:targets [:id] :verdict :keyword :evidence [:id] :note :string :window {:start :date :end :date}}
+          :review/summary {:observed :int :refused :int :proposed :int}}
+ :criterion "Every open intent with a horizon inside this week has an observation by Sunday night."
+ :trigger {:weekly :sunday :at "18:00"}
+ :budget {:minutes 30}}

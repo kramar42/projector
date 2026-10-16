@@ -1,0 +1,12 @@
+{:name "daily-plan"
+ :purpose "Turn the open intents into today's attempts, and surface the ones that have stalled: the owner's day, planned where the owner plans."
+ :executor :agent
+ :skill "../../.claude/skills/plan-day"
+ :inputs {:intents {:status :open :horizon-within-days 14 :standing false}
+          :events {:last-hours 24}}
+ :procedure "Follow the plan-day skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger with a horizon inside 14 days, the vault's and every other system's alike. For each, propose at most one attempt for today and name the spec it would run; flag any intent with no attempt in the last 7 days; keep the list short enough to finish. Record each item as one event into the attempt (plan/proposal, plan/flag), then end the attempt. Each proposal cites the events that support it or says it is untested, names what would refute it before looking, and reads a missing event as unknown, never as undone. Open at most three proposed intents per run, each a closed question the owner answers with opened or dropped. When the window's events show an intent's criterion is satisfied, observe it met with those events as evidence: a draft the owner confirms, never a closed intent."
+ :output {:plan/proposal {:intent :id :spec :string :note :string :evidence [:id]}
+          :plan/flag {:intent :id :reason :string}}
+ :criterion "By end of day, every accepted attempt has an ended timestamp and at least one event beyond start and end."
+ :trigger {:daily "07:00"}
+ :budget {:minutes 10}}

@@ -6,7 +6,7 @@ import { ago } from '../sources/run.ts';
 import { settingsFor } from '../settings.ts';
 import { markSeen, suppress, watermarks } from '../intake/db.ts';
 import { sweep } from '../intake/run.ts';
-import { sinkToKernel, type Examined, type Runner, type Sent } from '../intake/kernel.ts';
+import { ATTEMPT_DONE, endAttempt, sinkToKernel, startAttempt, type AttemptStatus, type Examined, type Runner, type Sent, type TickCounts } from '../intake/kernel.ts';
 import type { Cost } from '../intake/types.ts';
 import { basename } from 'node:path';
 import { count, info, tally, warn } from './log.ts';
@@ -56,6 +56,14 @@ import { count, info, tally, warn } from './log.ts';
  * item. That record is written here and only here, after judgement: a held tick
  * must see the same change again, or the change is lost to a table nobody reads.
  *
+ * **With the kernel on, a tick that judges is an attempt.** Intake's judgment
+ * is projector's spec `judge-intake`, so before the first channel with
+ * candidates is judged the tick starts an attempt of it in the owner's kernel,
+ * every `intake/<channel>` event goes into that attempt, and the tick ends it
+ * with its counts — `failed` when it held or threw — so the kernel judges the
+ * judging (`src/intake/kernel.ts`). Like the sink, it never holds a tick: an
+ * attempt the kernel would not start is a line, and the events go without one.
+ *
  * **And it says what it cost.** Two of the channels run an agent and the
  * classifier runs a model; a tick that takes two minutes and forty thousand tokens
  * looks, from the board, exactly like one that took two seconds. So every channel
@@ -86,6 +94,12 @@ export interface PollResult {
   held?: string;
   /** Everything the tick spent, fetching and judging, where the transports said. */
   cost?: Cost;
+  /**
+   * The tick as an attempt of `judge-intake` in the owner's kernel, when the
+   * vault turned the kernel on and a channel had something to judge: its id and
+   * how it ended, or why the kernel would not start or end it.
+   */
+  attempt?: { ok: true; id: string; status: AttemptStatus } | { ok: false; reason: string };
   /**
    * The same tick, per channel.
    *
@@ -164,8 +178,64 @@ export async function pollOnce(
     notify: [],
     channels: [],
   };
+  const settings = settingsFor(root);
+  /** The tick's attempt: undefined until a channel has something to judge, null when the kernel would not start it. */
+  let attempt: string | null | undefined;
+  let failure: string | undefined;
+  try {
+    await tickBody(root, ask, opts, out, settings, async () => {
+      if (attempt !== undefined || !settings.kernel.enabled) return attempt ?? undefined;
+      const started = await startAttempt(settings.kernel, opts.kernel);
+      attempt = started.ok ? started.id : null;
+      if (!started.ok) out.attempt = started;
+      return attempt ?? undefined;
+    });
+  } catch (e) {
+    failure = e instanceof Error ? e.message : String(e);
+    throw e;
+  } finally {
+    if (attempt) {
+      const status: AttemptStatus = out.held || failure ? 'failed' : ATTEMPT_DONE;
+      const ended = await endAttempt(settings.kernel, attempt, status, countsOf(out, failure), opts.kernel);
+      out.attempt = ended.ok ? { ok: true, id: attempt, status } : ended;
+    }
+  }
+  return out;
+}
+
+/** What a tick counted, as its attempt's result. */
+function countsOf(out: PollResult, error?: string): TickCounts {
+  const sum = (k: 'seen' | 'skipped') => out.channels.reduce((n, c) => n + c[k], 0);
+  return {
+    seen: sum('seen'),
+    created: out.created.length,
+    extending: out.extending,
+    updates: out.updates,
+    linked: out.linked,
+    declined: out.declined,
+    unanswered: out.unanswered,
+    skipped: sum('skipped'),
+    advanced: out.advanced.length,
+    ...(out.held ? { held: out.held } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
+/**
+ * The tick's channels, written into `out`. `attempt` starts the tick's attempt
+ * the first time a channel has candidates to judge, and answers its id (or
+ * nothing, with the kernel off or refusing) every time after.
+ */
+async function tickBody(
+  root: string,
+  ask: Ask | undefined,
+  opts: { only?: string[]; kernel?: Runner },
+  out: PollResult,
+  settings: ReturnType<typeof settingsFor>,
+  attempt: () => Promise<string | undefined>,
+): Promise<void> {
   const { reports } = await sweep(root, opts.only?.length ? { only: opts.only } : {});
-  const wantsJudgement = settingsFor(root).classify.enabled;
+  const wantsJudgement = settings.classify.enabled;
 
   for (const report of reports) {
     if (!report.fetched) {
@@ -206,6 +276,9 @@ export async function pollOnce(
       verdict: { fingerprint: candidate.fingerprint, decision: 'keep', reason: '' },
     }));
 
+    // Something to judge: this tick is an attempt from here on.
+    const attemptId = report.candidates.length ? await attempt() : undefined;
+
     if (wantsJudgement && report.candidates.length) {
       const judged = await classify(root, report.candidates, ask);
       if (!judged) {
@@ -213,7 +286,7 @@ export async function pollOnce(
         // channel or those after it, so the next tick sees exactly what this
         // one saw there. What earlier channels wrote and advanced stands.
         out.held = `the classifier could not be reached for ${report.channel}`;
-        return out;
+        return;
       }
       kept = judged.keep;
       judge = judged.cost;
@@ -267,7 +340,7 @@ export async function pollOnce(
     // the vault nothing: the failure is this channel's line, and the tick goes
     // on. The card above is still the UI's view; see `src/intake/kernel.ts`.
     examined.unshift(...kept.map(({ candidate, verdict }) => ({ candidate, verdict, decision: verdict.decision, reason: verdict.reason })));
-    const sent = await sinkToKernel(root, report.channel, examined, opts.kernel);
+    const sent = await sinkToKernel(root, report.channel, examined, opts.kernel, attemptId);
 
     out.created.push(...res.created);
     out.skipped += res.skipped;
@@ -296,8 +369,6 @@ export async function pollOnce(
       ...(sent ? { kernel: sent } : {}),
     });
   }
-
-  return out;
 }
 
 /**
@@ -346,7 +417,13 @@ export function tickLine(res: PollResult, elapsedMs: number): string {
     (res.updates ? ` (${count(res.updates, 'update')})` : '') +
     (res.linked ? `, ${count(res.linked, 'link')} attached` : '') +
     `, ${res.declined + res.unanswered} declined, ${count(res.advanced.length, 'cursor')} advanced` +
-    (res.cost ? `  [${renderCost(res.cost)}]` : '')
+    (res.cost ? `  [${renderCost(res.cost)}]` : '') +
+    // The tick as the kernel's attempt, when it was one: what the kernel judges next.
+    (!res.attempt
+      ? ''
+      : res.attempt.ok
+        ? `  — kernel attempt ${res.attempt.id.slice(0, 8)} ${res.attempt.status}`
+        : `  — kernel attempt not recorded: ${res.attempt.reason}`)
   );
 }
 

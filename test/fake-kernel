@@ -7,8 +7,11 @@
 # back exactly what projector asked and wrote. `observe` prints the line the real
 # CLI prints. `ingest` appends the batch it was given on stdin, one line per
 # batch, to FAKE_KERNEL_BATCHES and answers with a JSON object as the real one
-# does; `register` says what it registered. FAKE_KERNEL_FAIL makes every call
-# refuse, the way a locked store does.
+# does; `register` says what it registered; `attempt start <spec> … --json`
+# answers a running attempt with a fixed id (FAKE_KERNEL_ATTEMPT_FAIL makes it
+# refuse, as a kernel without the spec does) and `attempt end <id> <status>`
+# echoes the two back. FAKE_KERNEL_FAIL makes every call refuse, the way a
+# locked store does.
 [ -n "$FAKE_KERNEL_LOG" ] && printf '%s|%s\n' "$KERNEL_DB" "$*" >> "$FAKE_KERNEL_LOG"
 if [ -n "$FAKE_KERNEL_FAIL" ]; then
   echo "error: store is locked {}" >&2
@@ -52,6 +55,21 @@ JSON
     ;;
   register)
     echo "registered system:projector from $2"
+    ;;
+  attempt)
+    case "$2" in
+      start)
+        if [ -n "$FAKE_KERNEL_ATTEMPT_FAIL" ]; then echo "error: no spec named $3 {}" >&2; exit 1; fi
+        echo "{\"id\": \"a77e3f00-0000-4000-8000-000000000001\", \"spec\": \"$3\", \"status\": \"running\", \"executor\": \"projector-intake\"}"
+        ;;
+      end)
+        echo "{\"id\": \"$3\", \"status\": \"$4\"}"
+        ;;
+      *)
+        echo "attempt start|end" >&2
+        exit 1
+        ;;
+    esac
     ;;
   *)
     echo "unknown command $1"

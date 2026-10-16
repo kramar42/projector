@@ -38,6 +38,15 @@ import type { Note } from '../schema/types.ts';
  * board read commitment from the kernel, and until then the card and the
  * proposal are two drafts of one decision, the card being the one the UI shows.
  *
+ * **Each tick that judged something is an attempt.** Intake's judgment is
+ * projector's spec `judge-intake` (`kernel/specs/judge-intake.edn`), so the
+ * kernel judges the judging the way it judges any work: the tick starts an
+ * attempt of it before the first channel with candidates is judged
+ * (`startAttempt`, executor `agent:projector-intake`, the judge), every event
+ * a channel sends carries that attempt, and the tick ends it with its counts
+ * as the result (`endAttempt`) — `failed` when the judge could not be reached.
+ * A tick with nothing to judge starts none, so a quiet hour is no verdict.
+ *
  * **It never holds a tick.** The kernel is a second destination, not a
  * precondition: the cursor rule is about what the vault has written down, and a
  * kernel that cannot be reached changes nothing there. So a failure is logged
@@ -56,6 +65,8 @@ export interface KernelEvent {
   key: string;
   kind: string;
   at?: string;
+  /** The running attempt of `judge-intake` this tick is, when the kernel started one. */
+  attempt?: string;
   about: string[];
   payload: Record<string, unknown>;
 }
@@ -88,6 +99,16 @@ export const noteAlias = (vault: string, id: string): string => `vault:${vault}:
 
 /** The system `kernel/manifest.json` registers, and the source of every batch projector sends. */
 export const KERNEL_SOURCE = 'system:projector';
+
+/** The spec a tick is an attempt of, published in `kernel/specs/judge-intake.edn`. */
+export const INTAKE_SPEC = 'judge-intake';
+
+/**
+ * Who works that attempt: the judge, an agent of projector's. Not `agent:claude`,
+ * whose running attempts an executor session picks up and works — this one is
+ * projector's own, running inside the tick.
+ */
+export const INTAKE_EXECUTOR = 'agent:projector-intake';
 
 /**
  * The key a candidate's event goes by: its fingerprint, and the state the
@@ -123,6 +144,8 @@ export function kernelBatch(
   channel: string,
   examined: Examined[],
   notes: Map<string, Pick<Note, 'id' | 'title'>>,
+  /** The tick's attempt: every event lands in it, as the attempt's evidence. */
+  attempt?: string,
 ): KernelBatch {
   const entities = new Map<string, KernelEntity>();
   const entity = (id: string, fallback?: string): string => {
@@ -154,6 +177,7 @@ export function kernelBatch(
       key,
       kind: `intake/${channel}`,
       ...(c.when ? { at: c.when } : {}),
+      ...(attempt ? { attempt } : {}),
       about,
       payload: {
         title: c.title,
@@ -218,8 +242,31 @@ export const spawnRunner: Runner = (bin, args, input, env, timeoutMs) =>
     child.stdin.end(input);
   });
 
-/** What `<bin> ingest --json` answered, as its own keys, or why there is no answer. */
+/** What a `--json` kernel command answered, as its own keys, or why there is no answer. */
 export type Ingested = { ok: true; answer: Record<string, unknown> } | { ok: false; reason: string };
+
+/**
+ * Run one kernel command that answers with a JSON object on its last line:
+ * `<bin> <args>`, `input` on stdin, `KERNEL_DB` from `kernel.db` when the file
+ * sets it. Never throws: every way of failing is a `reason`.
+ */
+async function call(cfg: Settings['kernel'], args: string[], input: string, run: Runner): Promise<Ingested> {
+  if (!cfg.bin) return { ok: false, reason: 'kernel.bin is not set' };
+  const env = { ...process.env, ...(cfg.db ? { KERNEL_DB: cfg.db } : {}) };
+  const what = `kernel ${args[0]}${args[0] === 'attempt' ? ` ${args[1]}` : ''}`;
+  try {
+    const { code, stdout, stderr } = await run(cfg.bin, args, input, env, cfg.timeoutSeconds * 1000);
+    if (code !== 0) {
+      const said = (stderr || stdout).trim().split('\n').pop() ?? '';
+      return { ok: false, reason: `${what} exited ${code ?? 'on a signal'}${said ? `: ${said.slice(0, 300)}` : ''}` };
+    }
+    const r = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as unknown;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: `${what} answered something other than a JSON object` };
+    return { ok: true, answer: r as Record<string, unknown> };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 /**
  * Send one batch: `<bin> ingest --source system:projector [--owner] --json`,
@@ -234,26 +281,58 @@ export async function ingest(
   opts: { owner?: boolean } = {},
   run: Runner = spawnRunner,
 ): Promise<Ingested> {
-  if (!cfg.bin) return { ok: false, reason: 'kernel.bin is not set' };
-  const env = { ...process.env, ...(cfg.db ? { KERNEL_DB: cfg.db } : {}) };
-  try {
-    const { code, stdout, stderr } = await run(
-      cfg.bin,
-      ['ingest', '--source', KERNEL_SOURCE, ...(opts.owner ? ['--owner'] : []), '--json'],
-      JSON.stringify(batch),
-      env,
-      cfg.timeoutSeconds * 1000,
-    );
-    if (code !== 0) {
-      const said = (stderr || stdout).trim().split('\n').pop() ?? '';
-      return { ok: false, reason: `kernel ingest exited ${code ?? 'on a signal'}${said ? `: ${said.slice(0, 300)}` : ''}` };
-    }
-    const r = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as unknown;
-    if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: 'kernel ingest answered something other than a JSON object' };
-    return { ok: true, answer: r as Record<string, unknown> };
-  } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
-  }
+  return call(cfg, ['ingest', '--source', KERNEL_SOURCE, ...(opts.owner ? ['--owner'] : []), '--json'], JSON.stringify(batch), run);
+}
+
+/** The tick's attempt, as the kernel started it, or why it did not. */
+export type Started = { ok: true; id: string } | { ok: false; reason: string };
+
+/**
+ * Start the tick's attempt: `<bin> attempt start judge-intake --executor
+ * agent:projector-intake --json`. No intent is named, so the kernel picks the
+ * open intent that owns the spec, else the owner's standing intent. Never throws.
+ */
+export async function startAttempt(cfg: Settings['kernel'], run: Runner = spawnRunner): Promise<Started> {
+  const r = await call(cfg, ['attempt', 'start', INTAKE_SPEC, '--executor', INTAKE_EXECUTOR, '--json'], '', run);
+  if (!r.ok) return r;
+  const id = r.answer.id;
+  return typeof id === 'string' && id ? { ok: true, id } : { ok: false, reason: 'kernel attempt start answered no id' };
+}
+
+/** How the kernel's attempt ends: the kernel's own words, not a status axis of a vault. */
+export type AttemptStatus = 'done' | 'failed';
+export const ATTEMPT_DONE: AttemptStatus = 'done';
+
+/** What a tick counted, the attempt's result. */
+export interface TickCounts {
+  seen: number;
+  created: number;
+  extending: number;
+  updates: number;
+  linked: number;
+  declined: number;
+  unanswered: number;
+  skipped: number;
+  advanced: number;
+  /** Why the tick held, when it did: the judge could not be reached. */
+  held?: string;
+  /** Why the tick failed, when it threw. */
+  error?: string;
+}
+
+/**
+ * End the tick's attempt: `<bin> attempt end <id> done|failed --result <counts>
+ * --json`. The kernel judges it on its next tick, by the events the channels put
+ * in it. Never throws.
+ */
+export async function endAttempt(
+  cfg: Settings['kernel'],
+  id: string,
+  status: AttemptStatus,
+  result: TickCounts,
+  run: Runner = spawnRunner,
+): Promise<Ingested> {
+  return call(cfg, ['attempt', 'end', id, status, '--result', JSON.stringify(result), '--json'], '', run);
 }
 
 /** The intake sink's send: one tick's batch, as the system and never as the owner. */
@@ -276,12 +355,14 @@ export async function sinkToKernel(
   channel: string,
   examined: Examined[],
   run: Runner = spawnRunner,
+  /** The tick's attempt, when the kernel started one. */
+  attempt?: string,
 ): Promise<Sent | null> {
   const settings = settingsFor(root);
   if (!settings.kernel.enabled || !examined.length) return null;
   try {
     const notes = readAll(paths(root).notes).notes;
-    return await sendToKernel(settings.kernel, kernelBatch(vaultName(root, settings), channel, examined, notes), run);
+    return await sendToKernel(settings.kernel, kernelBatch(vaultName(root, settings), channel, examined, notes, attempt), run);
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }

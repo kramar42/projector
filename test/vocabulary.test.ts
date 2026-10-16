@@ -72,6 +72,7 @@ const ALLOWED: { file: string; word: string; why: string }[] = [
   { file: 'cli/pj.ts', word: 'status', why: '`pj intake status` — a subcommand, not an axis' },
   { file: 'setup.ts', word: 'status', why: '`gh auth status` — the gh CLI\'s subcommand' },
   { file: 'web/views/CanvasView.tsx', word: 'source', why: "React Flow's handle type" },
+  { file: 'intake/kernel.ts', word: 'done', why: "the kernel's attempt status, `bin/kernel attempt end <id> done`" },
 ];
 
 test('no facet a vault declares is named in the code that serves every vault', () => {
