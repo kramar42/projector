@@ -305,7 +305,7 @@ test('a command that never started says why, rather than nothing', async () => {
 
 test('claude is found where its installer puts it when PATH does not say', () => {
   // A server started from a launcher or a non-login shell often has no
-  // `~/.local/bin` on PATH, and every judged tick then held on a binary that was
+  // `~/.local/bin` on PATH, and every judged pass then held on a binary that was
   // installed all along.
   const home = mkdtempSync(join(tmpdir(), 'pj-home-'));
   const elsewhere = mkdtempSync(join(tmpdir(), 'pj-path-'));

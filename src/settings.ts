@@ -68,14 +68,14 @@ export interface Settings {
     enabled: boolean;
     everySeconds: number;
     /**
-     * Local hours a tick may run in, `[from, until)`, or null for always. A
+     * Local hours a pass may run in, `[from, until)`, or null for always. A
      * window that wraps midnight is written `[22, 6]`. Outside it the timer
-     * still fires and the tick says it skipped — a colleague's evening reply
+     * still fires and the pass says it skipped — a colleague's evening reply
      * is still there at eight.
      */
     hours: { from: number; until: number } | null;
     /**
-     * Seconds to the next tick while a channel is behind — the last pass judged
+     * Seconds to the next pass while a channel is behind — the last pass judged
      * one slice of a longer backlog. Never longer than `everySeconds`, which it
      * exists to shorten.
      */
@@ -105,7 +105,7 @@ export interface Settings {
      * that six commits are one afternoon.
      */
     batch: number;
-    /** How long one call may take before the tick holds. */
+    /** How long one call may take before the pass holds. */
     timeoutSeconds: number;
   };
   /**
@@ -304,7 +304,7 @@ export function settingsFor(root: string): Settings {
     poll: {
       enabled: raw.poll?.enabled === true,
       everySeconds,
-      // Ten minutes: a week of sessions synced at once drains a slice a tick
+      // Ten minutes: a week of sessions synced at once drains a slice a pass
       // in an hour or two at this rate, rather than in days at `every`.
       // Floored like `every`, and capped by it — a catch-up slower than the
       // normal cadence would be a slow-down.
@@ -454,9 +454,9 @@ channels: [${channels.join(', ')}]
 # Triage on a timer, in the server, and write what deserves a note.
 # poll:
 #   enabled: true
-#   every: 7200               # seconds between ticks
-#   hours: [8, 20]            # local hours a tick may run in, from inclusive to until exclusive
-#   catchUpSeconds: 600       # seconds to the next tick while a channel has more waiting
+#   every: 7200               # seconds between passes
+#   hours: [8, 20]            # local hours a pass may run in, from inclusive to until exclusive
+#   catchUpSeconds: 600       # seconds to the next pass while a channel has more waiting
 
 # Link kinds to resolve for display. \`false\` turns enrichment off entirely and
 # every link renders as its raw ref.
@@ -482,7 +482,7 @@ enrich: ${enrich ? 'true' : 'false'}
 #   url: http://127.0.0.1:11434
 #   model: qwen3.5:9b-q4_K_M
 #   batch: 8                   # candidates per call; a slow local model wants fewer
-#   timeout: 300               # seconds one call may take before the tick holds
+#   timeout: 300               # seconds one call may take before the pass holds
 #
 # The owner's kernel: intake reads what its connectors gathered there and
 # records what it judged — an intake/<channel> event per connector event, a

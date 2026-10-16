@@ -4,7 +4,7 @@ import type { Cost } from './types.ts';
  * What a model call cost, read and summed. The judge is the one part of a pass
  * that spends anything, and a pass that took two minutes and forty thousand
  * tokens looks, from the board, exactly like one that took two seconds — so
- * every channel line and the tick line carry it.
+ * every channel line and the pass line carry it.
  */
 
 /**

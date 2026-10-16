@@ -741,7 +741,7 @@ test('the server starts every vault that asked to be polled, and says so for eac
     pollAtStartup([on, off, bare]);
     const said = (root: string) => lines.filter((l) => l.includes(` ${basename(root)} `));
     assert.equal(said(on).length, 1, 'one line for the polled vault');
-    assert.match(said(on)[0]!, /polling every 120s, 8–20 local time — triaging what the kernel’s connectors gathered; next tick now/);
+    assert.match(said(on)[0]!, /polling every 120s, 8–20 local time — triaging what the kernel’s connectors gathered; next pass now/);
     assert.equal(said(off).length, 1, 'and one for the vault that did not ask');
     assert.match(said(off)[0]!, /not polling — poll\.enabled is off/);
     assert.match(said(bare)[0]!, /not polling — the kernel block is off, so there is nothing to triage/);
@@ -834,7 +834,7 @@ test('a fenced reply is still a reply', async () => {
   }
 });
 
-test('an unreachable or unparseable classifier holds the whole tick', async () => {
+test('an unreachable or unparseable classifier holds the whole pass', async () => {
   const root = vault({ a: card('a') });
   try {
     assert.equal(await classify(root, [candidate('git:1', 'a')], async () => null), null);
@@ -867,7 +867,7 @@ test('the local classifier uses Ollama without exposing tools', async () => {
     const reply = await ollamaAsk('http://127.0.0.1:11434/', 'local-model')('rules', '[{"fp":"x"}]');
     assert.ok(reply && typeof reply === 'object', 'the answer carries what it cost');
     assert.match(reply.text, /"decision":"keep"/);
-    // Ollama's own clock and counts, so a tick can say what judging cost.
+    // Ollama's own clock and counts, so a pass can say what judging cost.
     assert.deepEqual(reply.cost, { ms: 2500, inputTokens: 1200, outputTokens: 40 });
     assert.ok(request);
     const seen = request as unknown as { url: string; body: Record<string, unknown> };
@@ -1964,7 +1964,7 @@ test('an unjudged card tracks nothing itself; one that extends a note stands in 
 });
 
 
-test('a tick outside the polling hours stays home, and the timer keeps its cadence', async () => {
+test('a pass outside the polling hours stays home, and the timer keeps its cadence', async () => {
   // The window arithmetic, including the one that wraps midnight.
   assert.equal(withinHours(9, { from: 8, until: 20 }), true);
   assert.equal(withinHours(20, { from: 8, until: 20 }), false, 'until is exclusive');
@@ -1975,7 +1975,7 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
   assert.equal(withinHours(3, null), true, 'no window means always');
 
   // A vault whose window excludes this very hour: the loop starts, the first
-  // tick is skipped, and the kernel is not even asked.
+  // pass is skipped, and the kernel is not even asked.
   const root = vault({ a: card('a') });
   const h = new Date().getHours();
   writeFileSync(settingsPath(root), `poll:\n  enabled: true\n  hours: [${(h + 1) % 24}, ${(h + 2) % 24}]\n${kernelOn()}`, 'utf8');
@@ -1983,7 +1983,7 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
     await againstFake(async (read) => {
       assert.equal(startPolling(root), true, 'the loop is running');
       await new Promise((r) => setTimeout(r, 100));
-      assert.deepEqual(read().calls, [], 'but the tick did not run');
+      assert.deepEqual(read().calls, [], 'but the pass did not run');
       assert.deepEqual([...reindex(root).notes.keys()].filter((id) => id !== 'a'), [], 'and wrote nothing');
     });
   } finally {
@@ -2068,7 +2068,7 @@ test('a catch-up interval defaults to ten minutes, is floored, and never exceeds
   }
 });
 
-test('a tick that leaves a channel behind brings the next one forward, and says so', async () => {
+test('a pass that leaves a channel behind brings the next one forward, and says so', async () => {
   const root = vault({ a: card('a') });
   writeFileSync(settingsPath(root), `poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: 60\nclassify:\n  enabled: false\n${kernelOn()}`, 'utf8');
   const events = Array.from({ length: 45 }, (_, i) => gitEvent('r', `sha${i}`, `commit ${i}`, `b${i}`, recent(100 - i)));
@@ -2077,14 +2077,14 @@ test('a tick that leaves a channel behind brings the next one forward, and says 
   try {
     await againstFake(
       async () => {
-        // The loop's first tick reads one slice of the backlog and says it is behind.
+        // The loop's first pass reads one slice of the backlog and says it is behind.
         assert.equal(startPolling(root), true);
-        let tick: string | undefined;
-        for (let i = 0; i < 50 && !tick; i++) {
+        let passLine: string | undefined;
+        for (let i = 0; i < 50 && !passLine; i++) {
           await new Promise((r) => setTimeout(r, 100));
-          tick = lines.find((l) => l.includes(` ${basename(root)} tick in `));
+          passLine = lines.find((l) => l.includes(` ${basename(root)} pass in `));
         }
-        assert.match(tick ?? '', /behind — next tick in 60s/);
+        assert.match(passLine ?? '', /behind — next pass in 60s/);
         const line = lines.find((l) => l.includes(`${basename(root)}/git `));
         assert.match(line ?? '', /read 25, judged 25 .*more behind this slice/);
         stopPolling(root);
@@ -2264,9 +2264,9 @@ test('a candidate the judge leaves out is asked again, and then declined rather 
     writeFileSync(settingsPath(root), kernelOn(), 'utf8');
     await againstFake(
       async () => {
-        const tick = await pollOnce(root, forgetful);
-        assert.equal(tick.created.length, 0);
-        assert.equal(tick.unanswered, 1);
+        const pass = await pollOnce(root, forgetful);
+        assert.equal(pass.created.length, 0);
+        assert.equal(pass.unanswered, 1);
         const row = suppressions(root).rows.find((r) => r.fingerprint === 'git:r@2')!;
         assert.match(row.reason, /no verdict from the judge after two asks/);
         assert.equal(row.decidedBy, 'model');

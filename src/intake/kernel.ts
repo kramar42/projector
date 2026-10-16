@@ -101,13 +101,13 @@ export const noteAlias = (vault: string, id: string): string => `vault:${vault}:
 /** The system `kernel/manifest.json` registers, and the source of every batch projector sends. */
 export const KERNEL_SOURCE = 'system:projector';
 
-/** The spec a tick is an attempt of, published in `kernel/specs/judge-intake.edn`. */
+/** The spec a pass is an attempt of, published in `kernel/specs/judge-intake.edn`. */
 export const INTAKE_SPEC = 'judge-intake';
 
 /**
  * Who works that attempt: the judge, an agent of projector's. Not `agent:claude`,
  * whose running attempts an executor session picks up and works — this one is
- * projector's own, running inside the tick.
+ * projector's own, running inside the pass.
  */
 export const INTAKE_EXECUTOR = 'agent:projector-intake';
 
@@ -284,11 +284,11 @@ export async function ingest(
   return call(cfg, ['ingest', '--source', KERNEL_SOURCE, ...(opts.owner ? ['--owner'] : []), '--json'], JSON.stringify(batch), run);
 }
 
-/** The tick's attempt, as the kernel started it, or why it did not. */
+/** The pass's attempt, as the kernel started it, or why it did not. */
 export type Started = { ok: true; id: string } | { ok: false; reason: string };
 
 /**
- * Start the tick's attempt: `<bin> attempt start judge-intake --executor
+ * Start the pass's attempt: `<bin> attempt start judge-intake --executor
  * agent:projector-intake --json`. No intent is named, so the kernel picks the
  * open intent that owns the spec, else the owner's standing intent. Never throws.
  */
@@ -324,7 +324,7 @@ export interface TickCounts {
 }
 
 /**
- * End the tick's attempt: `<bin> attempt end <id> done|failed --result <counts>
+ * End the pass's attempt: `<bin> attempt end <id> done|failed --result <counts>
  * --json`. The kernel judges it on its next tick, by the events the channels put
  * in it. Never throws.
  */

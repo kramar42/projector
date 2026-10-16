@@ -815,7 +815,7 @@ async function cmdSync(argv: string[]): Promise<void> {
  * server running is not a vault that has to do this by conversation instead. It
  * files into `inbox/`, which is not your notes, so it needs no preview first.
  */
-async function tick(root: string, only: string[]): Promise<void> {
+async function intakePass(root: string, only: string[]): Promise<void> {
   const started = Date.now();
   const res = await pollOnce(root, undefined, { only });
   if (res.idle) {
@@ -1260,7 +1260,7 @@ if (asking) {
           const named = previewOnly.map((f) => '--' + f).join(', ');
           fail(`${named} ${previewOnly.length === 1 ? 'shapes' : 'shape'} a preview: add --dry-run, or drop ${previewOnly.length === 1 ? 'it' : 'them'} to run the pass`);
         }
-        await tick(root, only);
+        await intakePass(root, only);
         break;
       }
 

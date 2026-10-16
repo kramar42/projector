@@ -511,11 +511,11 @@ export interface Classified {
  * afternoon's commits on a branch — and a model shown all of them can say so,
  * where a model shown each in isolation cannot. It used to be one call per
  * channel, and a local model generating at six tokens a second cannot answer for
- * eighteen conversations inside any timeout a tick can afford — so a channel's
+ * eighteen conversations inside any timeout a pass can afford — so a channel's
  * candidates are split into batches of `classify.batch`, judged in order, and
  * the verdicts merged. Cost is summed across the calls.
  *
- * Returns null when the classifier could not be reached for any batch: the tick
+ * Returns null when the classifier could not be reached for any batch: the pass
  * holds, and the batches already answered are not written, because a half-judged
  * channel would advance its cursor past candidates nobody judged. A candidate the
  * model failed to mention is **kept**, which is the safe direction of the two:

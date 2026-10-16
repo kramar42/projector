@@ -373,7 +373,7 @@ test('help is progressive, and prints without a vault', () => {
       assert.equal(r.code, 0, `pj ${form.join(' ')} should exit 0`);
       assert.match(r.out, /Usage: pj intake/);
       assert.match(r.out, /pj intake --dry-run/);
-      assert.doesNotMatch(r.out, /intake apply/, '`pj intake` is the tick; there is no apply');
+      assert.doesNotMatch(r.out, /intake apply/, '`pj intake` is the pass; there is no apply');
       assert.doesNotMatch(r.out, /pj intake advance/, 'promoting a preview is recovery, not the workflow');
       assert.doesNotMatch(r.out, /Work with notes/, 'intake help does not repeat the root');
     }

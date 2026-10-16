@@ -198,7 +198,7 @@ things.
 
 - **A DM is one conversation, however many things it is about.** Tracking is by container for DMs and
   group DMs — a message an open note links makes the whole DM tracked — and fingerprints are by the
-  first new ask since the cursor. Two unrelated asks in one DM inside one tick become one candidate;
+  first new ask since the cursor. Two unrelated asks in one DM inside one pass become one candidate;
   an ask in a DM where an unrelated open note links an old message is offered as an update to that
   note, and the classifier has to drop it. Splitting a DM into episodes needs a gap threshold nobody
   can defend yet; do it when a real DM produces the wrong card, with that DM as the test.

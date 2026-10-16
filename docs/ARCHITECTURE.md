@@ -733,22 +733,22 @@ omits) goes by `intake:<kind>:<kernel id>`. `pj intake --dry-run` reads and stop
 records nothing.
 
 **The server starts the loop, not a request.** `serve.ts` hands every registered vault to
-`pollAtStartup` once it is listening, so running the server is enough for intake to tick; the loop
+`pollAtStartup` once it is listening, so running the server is enough for intake to poll; the loop
 used to start on the first request naming a vault, and a server with no board open polled nothing for
 days. Each request still calls `startPolling`, idempotent per vault, so a vault that turns
 `poll.enabled` on later starts without a restart. A vault whose kernel block is off starts no loop,
-and the startup line says why. The first tick runs at once: it used to wait out the interval since the
-last, because a tick then fetched and `bun run dev` restarts on every save, and a pass with nothing new
+and the startup line says why. The first pass runs at once: it used to wait out the interval since the
+last, because a pass then fetched and `bun run dev` restarts on every save, and a pass with nothing new
 now costs two kernel queries.
 
-**Each tick schedules the next.** The loop is a self-rescheduling timeout rather than an interval,
-because how long to wait is the tick's own answer: `poll.every` after it started, keeping the rhythm;
+**Each pass schedules the next.** The loop is a self-rescheduling timeout rather than an interval,
+because how long to wait is the pass's own answer: `poll.every` after it started, keeping the rhythm;
 or `poll.catchUpSeconds` after it finished when `isBehind` — some channel read a slice of a longer
 backlog and its batch was taken. A held pass does not count, nor one whose batch the kernel refused:
-a sooner tick would read the same slice. Ticks no longer overlap, `hours` is still checked by every
-tick, and `stopPolling` cancels the pending timeout and stops a tick in flight from scheduling another.
+a sooner pass would read the same slice. Passes no longer overlap, `hours` is still checked by every
+pass, and `stopPolling` cancels the pending timeout and stops a pass in flight from scheduling another.
 
-**A tick judges before it writes, and describes what it keeps.** `src/intake/classify.ts` answers two
+**A pass judges before it writes, and describes what it keeps.** `src/intake/classify.ts` answers two
 questions in one pass — does this candidate deserve a note, and what is the note — because the model
 has to read the candidate to judge it and having read it can also say what to call it, what it is
 about, and which axes it sits on. Asking only *keep or drop* wasted the call and produced cards nobody
@@ -787,7 +787,7 @@ fixing them first.
 One call per batch, not per candidate. A pass's candidates arrive together and are frequently *one
 thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
 alone cannot. It was one call per channel until a channel of eighteen conversations met a local model
-generating at six tokens a second and no timeout a tick can afford was long enough; a channel's
+generating at six tokens a second and no timeout a pass can afford was long enough; a channel's
 candidates are now judged `classify.batch` at a time and the verdicts merged, with the cost summed. One
 batch the model cannot answer holds the whole channel, because a half-judged channel would record
 intake events — and so move its cursor — past candidates nobody judged. The default transport is Ollama's local chat API in JSON mode,

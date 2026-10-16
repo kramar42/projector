@@ -1028,7 +1028,7 @@ function ensureWatched(root: string): void {
  * Start this vault's poll loop, if it asked for one and has not got one.
  *
  * The server starts every registered vault at startup (`pollAtStartup`, below),
- * so intake ticks with no board open. This is the other half: it is also called
+ * so intake polls with no board open. This is the other half: it is also called
  * on **every** request that resolves a vault, rather than once beside the
  * watcher, and that placement is the whole point. The watcher is set up the first
  * time a vault is used and never again — so turning `poll.enabled` on in a vault

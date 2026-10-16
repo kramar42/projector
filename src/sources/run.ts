@@ -77,7 +77,7 @@ export function run(
  *
  * Claude Code's installer puts `claude` in `~/.local/bin`, and a server started
  * from a launcher, a service manager or a non-login shell often has no
- * `~/.local/bin` on PATH. Every judged tick then held, warning that the judge
+ * `~/.local/bin` on PATH. Every judged pass then held, warning that the judge
  * could not be reached, for a binary that was installed all along. Only commands
  * with one well-known home are listed: a guess is worse than the error.
  */

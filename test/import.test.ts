@@ -514,7 +514,7 @@ test('the manifest declares what projector writes and reads, and every batch it 
     assert.match(readFileSync(join(dir, 'specs', skill, 'SKILL.md'), 'utf8'), /every open intent in the ledger, not only the vault's/);
     assert.ok(m.skills.includes(`../.claude/skills/${name}`), name);
   }
-  // Intake's judgment is a spec too: each tick that judges is an attempt of it, started by projector.
+  // Intake's judgment is a spec too: each pass that judges is an attempt of it, started by projector.
   const judgeIntake = readFileSync(join(dir, 'specs/judge-intake.edn'), 'utf8');
   assert.match(judgeIntake, /:executor :agent/);
   assert.match(judgeIntake, /:budget \{:minutes \d+\}/);

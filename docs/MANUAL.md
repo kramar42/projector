@@ -1049,21 +1049,21 @@ it judges straight into the queue, so the intake board fills on its own once you
 poll:
   enabled: true
   every: 900        # seconds; floored at 60, and 900 is the default
-  hours: [8, 20]    # local hours a tick may run in, from inclusive to until exclusive; omit for always
-  catchUpSeconds: 600   # seconds to the next tick while a channel is behind; floored at 60, never above every
+  hours: [8, 20]    # local hours a pass may run in, from inclusive to until exclusive; omit for always
+  catchUpSeconds: 600   # seconds to the next pass while a channel is behind; floored at 60, never above every
 channels: [git, claude, jira]   # which channels this vault triages; omit for all, false for none
 ```
 
 **A pass judges a slice at a time.** Each channel sends the judge at most twenty-five candidates a pass,
 the oldest first, and never cuts between two events of one instant; skips do not count, since they cost
 the judge nothing. A sync that brought a week of sessions is judged a slice per pass, the cursor moving
-to the end of each. While a channel is behind, the next tick
-comes `catchUpSeconds` after this one finished instead of at `every`, and the tick's log line says so:
-`… 40 recorded in the kernel  behind — next tick in 10m`. `hours` still governs every tick, catch-up
+to the end of each. While a channel is behind, the next pass
+comes `catchUpSeconds` after this one finished instead of at `every`, and the pass's log line says so:
+`… 40 recorded in the kernel  behind — next pass in 10m`. `hours` still governs every pass, catch-up
 or not.
 
 `hours` is a working-day window in the machine's local time. The timer keeps its cadence through the
-night and each tick outside the window logs that it skipped — a colleague's evening reply is still there
+night and each pass outside the window logs that it skipped — a colleague's evening reply is still there
 at eight, and a judge running at three in the morning is a judge nobody asked for. A window that wraps
 midnight is written `[22, 6]`.
 
@@ -1076,7 +1076,7 @@ nothing has been synced.
 
 It starts with the server: `bun run serve` or `bun run dev` starts every registered vault that sets
 `poll.enabled` and has a kernel, with no board open, and logs one line per vault saying whether it is
-polling. The first tick runs at once — a pass with nothing new since the last judges nothing, so a
+polling. The first pass runs at once — a pass with nothing new since the last judges nothing, so a
 restart costs two kernel queries. Turning `poll.enabled` on later needs no restart: the next request
 that opens the vault starts it.
 Each candidate that survives judgment lands as an ordinary note in `inbox/` — so an open board shows
@@ -1217,7 +1217,7 @@ classify:
   url: http://127.0.0.1:11434
   model: qwen3.5:9b-q4_K_M
   batch: 8            # candidates per call — a local model generating at a few tokens a second wants fewer
-  timeout: 300        # seconds one call may take before the tick holds
+  timeout: 300        # seconds one call may take before the pass holds
 # provider: claude
 # model: haiku
 # command: claude
@@ -1225,11 +1225,11 @@ classify:
 
 `command` is spawned as written. A bare `claude` that is not on the
 server's PATH — a server started from a launcher or a non-login shell often has no `~/.local/bin` there —
-falls back to `~/.local/bin/claude`, where Claude Code's installer puts it, before the tick gives up and
+falls back to `~/.local/bin/claude`, where Claude Code's installer puts it, before the pass gives up and
 holds.
 
 A channel's candidates are judged in batches of `batch`, so a slow model answers for eight at a time
-rather than for eighteen in one breath, and the tick line shows what judging cost. If a pass still
+rather than for eighteen in one breath, and the pass line shows what judging cost. If a pass still
 holds on the classifier, the channels judged before the hold keep their cards and their record in the
 kernel — only the one that held, and those after it, are read again next pass.
 
@@ -1555,7 +1555,7 @@ the attempt, records `workspace:<dir>` on the note and navigates to the kernel's
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
-now a queue you walk, and `pj intake` runs the same tick by hand when there is no server up.
+now a queue you walk, and `pj intake` runs the same pass by hand when there is no server up.
 
 **Nor a triage skill.** The `triage` view stays — the inbox is its first column, then one column per
 filing rule — but nothing is left for a skill of its own to do there. A card arrives with its facets
@@ -2379,13 +2379,13 @@ things that happen with nobody watching, which are the things you cannot otherwi
 server that is doing nothing at all:
 
 ```
-[INFO] 2026-08-28 13:51:03 intake pollvault polling every 900s, 8–20 local time — next tick now (last ran 2h ago)
+[INFO] 2026-08-28 13:51:03 intake pollvault polling every 900s, 8–20 local time — next pass now (last ran 2h ago)
 [INFO] 2026-08-28 13:51:03 intake coverage not polling — poll.enabled is off
 [INFO] 2026-08-28 13:52:02 intake pollvault/claude saw 25  new:25  [judge 6.1s · 4.0k in / 610 out tok]
 [INFO] 2026-08-28 13:52:02 intake pollvault/git saw 0
 [INFO] 2026-08-28 13:52:02 intake pollvault/slack saw 3  declined:2 updates:1  [fetch 48.2s · 31k in / 2.9k out tok · 6 turns · $0.052, judge 4.4s · 3.1k in / 240 out tok]
 [WARN] 2026-08-28 13:52:02 intake pollvault/gmail not fetched — no Gmail tools named for this vault…
-[INFO] 2026-08-28 13:52:02 intake pollvault tick in 59.3s  26 notes written (1 update), 2 declined, 3 cursors advanced  [58.7s · 38k in / 3.8k out tok · 6 turns · $0.052]
+[INFO] 2026-08-28 13:52:02 intake pollvault pass in 59.3s  26 notes written (1 update), 2 declined, 3 cursors advanced  [58.7s · 38k in / 3.8k out tok · 6 turns · $0.052]
 [INFO] 2026-08-28 13:51:01 watch  coverage new note  log-probe.md
 [INFO] 2026-08-28 13:51:26 enrich 3 links in 478ms  doc:1 gh:branch:1 gh:pr:1
 [INFO] 2026-08-28 13:50:50 index  coverage rebuilt in 52ms
@@ -2395,13 +2395,13 @@ Four areas, and each line is an **event** rather than progress:
 
 | area | one line when |
 |---|---|
-| `intake` | the server starts — one line per vault, polling or not, and when its next tick is — and a poll tick runs — one line per channel, then one for the tick, which ends `behind — next tick in 10m` when a channel has more pages waiting. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the tick spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the tick line — a tick that took two minutes and forty thousand tokens must not read like one that took two seconds |
+| `intake` | the server starts — one line per vault, polling or not, and when its next pass is — and a poll pass runs — one line per channel, then one for the pass, which ends `behind — next pass in 10m` when a channel has more pages waiting. A channel that answered and found nothing is a row of zeroes, because *quiet* and *broken* are the two readings this exists to separate. The bracket at the end is what the pass spent: fetch time and tokens where an agent did the fetching, judge time and tokens from the classifier, summed on the pass line — a pass that took two minutes and forty thousand tokens must not read like one that took two seconds |
 | `watch` | a note, a view or a vocabulary file **arrives**. Edits are deliberately silent: a vault under an editor changes on every save, and a log that said so is one nobody reads |
 | `enrich` | a batch of links resolves, counted by kind — `gh:0 jira:7` says which integration is down, where a single total cannot |
 | `index` | the vault is reloaded after a change, with how long it took |
 
 `WARN` is for something that did not work while the run carried on anyway — an unreachable channel, a
-fetcher that threw, a tick that held because the classifier could not be answered. Every one of those
+fetcher that threw, a pass that held because the classifier could not be answered. Every one of those
 is survivable by design, which is also how a system rots quietly, so they are visible without being
 fatal.
 

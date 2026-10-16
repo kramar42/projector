@@ -70,7 +70,7 @@ export function info(area: Area, msg: string): void {
  * Something did not work, and the run carried on anyway.
  *
  * Every background path here is built to survive its own failures — a channel
- * that cannot be reached, a fetcher that throws, a tick that holds — which is
+ * that cannot be reached, a fetcher that throws, a pass that holds — which is
  * correct and is also exactly how a system rots quietly. This is the level that
  * makes "it has been failing for a week" visible without making it fatal.
  */

@@ -46,7 +46,7 @@ import { count, info, tally, warn } from './log.ts';
  * **And it says what it cost.** The classifier runs a model; a pass that takes
  * two minutes and forty thousand tokens looks, from the board, exactly like one
  * that took two seconds. So every channel line carries what judging cost, and
- * the tick line carries the sum.
+ * the pass line carries the sum.
  */
 
 export interface PollResult {
@@ -111,7 +111,7 @@ export interface PollResult {
     judge?: Cost;
     /** What the channel still wanted to say: a cursor older than its window, keys it could not recover. */
     note?: string;
-    /** More events wait behind this slice: the next tick comes sooner (`poll.catchUpSeconds`). */
+    /** More events wait behind this slice: the next pass comes sooner (`poll.catchUpSeconds`). */
     behind?: boolean;
     /** What the kernel took of this channel's intake events, or why it could not. */
     kernel?: Sent;
@@ -358,7 +358,7 @@ export function channelLine(c: PollResult['channels'][number]): string {
 /** The pass as one line: what was written, declined and recorded, and what judging cost. */
 export function tickLine(res: PollResult, elapsedMs: number): string {
   return (
-    `tick in ${(elapsedMs / 1000).toFixed(1)}s  ` +
+    `pass in ${(elapsedMs / 1000).toFixed(1)}s  ` +
     `${count(res.created.length, 'note')} written` +
     (res.updates ? ` (${count(res.updates, 'update')})` : '') +
     (res.linked ? `, ${count(res.linked, 'link')} attached` : '') +
@@ -386,16 +386,16 @@ export function withinHours(hour: number, hours: { from: number; until: number }
   return from < until ? hour >= from && hour < until : hour >= from || hour < until;
 }
 
-/** `next tick now`, `… in 40s`, `… in 12m`, `… in 3h`: for the line a loop starts with. */
+/** `next pass now`, `… in 40s`, `… in 12m`, `… in 3h`: for the line a loop starts with. */
 function nextTick(ms: number): string {
-  if (ms <= 0) return 'next tick now';
+  if (ms <= 0) return 'next pass now';
   const secs = Math.ceil(ms / 1000);
-  if (secs < 90) return `next tick in ${secs}s`;
+  if (secs < 90) return `next pass in ${secs}s`;
   const mins = Math.round(secs / 60);
-  return `next tick in ${mins < 90 ? `${mins}m` : `${Math.round(mins / 60)}h`}`;
+  return `next pass in ${mins < 90 ? `${mins}m` : `${Math.round(mins / 60)}h`}`;
 }
 
-/** The pending next tick, as one thing to cancel. */
+/** The pending next pass, as one thing to cancel. */
 const loops = new Map<string, () => void>();
 
 /**
@@ -407,21 +407,21 @@ const loops = new Map<string, () => void>();
  * kernel block is off has nothing for a pass to read, so it starts no loop
  * (`pollAtStartup` says why).
  *
- * **Each tick schedules the next**, rather than an interval firing on its own,
- * because how long to wait is the tick's answer: `poll.every` after it started,
+ * **Each pass schedules the next**, rather than an interval firing on its own,
+ * because how long to wait is the pass's answer: `poll.every` after it started,
  * so a loop keeps the rhythm it had; or, when a channel is still behind — a
  * synced backlog longer than one slice — `poll.catchUpSeconds` after it
- * finished. The hours window still applies to every tick. And two ticks never
+ * finished. The hours window still applies to every pass. And two passes never
  * overlap, which an interval allowed whenever one took longer than the cadence.
  *
- * The first tick runs at once. It used to wait out the rest of the interval
- * since the last one, because a tick then fetched — minutes of relay and judge
+ * The first pass runs at once. It used to wait out the rest of the interval
+ * since the last one, because a pass then fetched — minutes of relay and judge
  * calls — and `bun run dev` restarts on every save; a pass now reads the kernel,
  * and with nothing new since the last one it judges nothing.
  */
 export function startPolling(
   root: string,
-  /** Called with what a tick judged worth interrupting for. Local delivery only. */
+  /** Called with what a pass judged worth interrupting for. Local delivery only. */
   onAttention: (notes: { id: string; title: string }[]) => void = () => {},
 ): boolean {
   if (loops.has(root)) return true;
@@ -430,26 +430,26 @@ export function startPolling(
 
   const name = basename(root);
 
-  /** One tick; resolves to whether a channel is still behind. */
-  const tick = async (): Promise<boolean> => {
+  /** One pass; resolves to whether a channel is still behind. */
+  const pass = async (): Promise<boolean> => {
     const started = Date.now();
-    // The timer keeps its cadence through the night; the tick is what stays home.
+    // The timer keeps its cadence through the night; the pass is what stays home.
     // Local time, like every stamp in this log: the window is about a working
     // day, and a working day is where the machine is.
     if (!withinHours(new Date().getHours(), poll.hours)) {
-      info('intake', `${name} outside polling hours ${poll.hours!.from}–${poll.hours!.until}, tick skipped`);
+      info('intake', `${name} outside polling hours ${poll.hours!.from}–${poll.hours!.until}, pass skipped`);
       return false;
     }
     try {
       const res = await pollOnce(root);
       if (res.idle) {
         // The kernel could not answer: nothing was judged, and nothing is lost —
-        // the next tick reads the same events.
+        // the next pass reads the same events.
         warn('intake', `${name} read nothing — ${res.idle}`);
         return false;
       }
       if (res.held) {
-        // Loud, because a held tick looks exactly like a quiet channel from the
+        // Loud, because a held pass looks exactly like a quiet channel from the
         // outside and the two mean opposite things: nothing to write, versus
         // plenty to write and no way to judge it.
         warn('intake', `${name} held — ${res.held}`);
@@ -466,24 +466,24 @@ export function startPolling(
         else info('intake', `${name}/${c.channel} ${channelLine(c)}`);
       }
 
-      // The tick's own line, after the channels, so the summary reads as a total
-      // of what is above it. A tick that brings the next one forward says so here.
+      // The pass's own line, after the channels, so the summary reads as a total
+      // of what is above it. A pass that brings the next one forward says so here.
       const behind = isBehind(res);
       info(
         'intake',
         `${name} ${tickLine(res, Date.now() - started)}` +
           (behind ? `  behind — ${nextTick(poll.catchUpSeconds * 1000)}` : ''),
       );
-      // After the log, so a tick that writes and interrupts says both.
+      // After the log, so a pass that writes and interrupts says both.
       onAttention(res.notify);
       if (res.notify.length) {
         info('intake', `${name} ${count(res.notify.length, 'note')} worth interrupting for`);
       }
       return behind;
     } catch (e) {
-      // A tick that throws must not stop the loop: the next one may well work,
+      // A pass that throws must not stop the loop: the next one may well work,
       // and a poller that dies on one bad pass is worse than one that is noisy.
-      warn('intake', `${name} tick failed — ${e instanceof Error ? e.message : String(e)}`);
+      warn('intake', `${name} pass failed — ${e instanceof Error ? e.message : String(e)}`);
       return false;
     }
   };
@@ -492,7 +492,7 @@ export function startPolling(
     'intake',
     `${name} polling every ${poll.everySeconds}s` +
       (poll.hours ? `, ${poll.hours.from}–${poll.hours.until} local time` : '') +
-      ' — triaging what the kernel’s connectors gathered; next tick now',
+      ' — triaging what the kernel’s connectors gathered; next pass now',
   );
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -506,7 +506,7 @@ export function startPolling(
   };
   const run = async () => {
     const started = Date.now();
-    const behind = await tick();
+    const behind = await pass();
     schedule(
       behind
         ? poll.catchUpSeconds * 1000
@@ -514,7 +514,7 @@ export function startPolling(
     );
   };
   loops.set(root, () => {
-    // A tick in flight finishes, and then schedules nothing.
+    // A pass in flight finishes, and then schedules nothing.
     stopped = true;
     clearTimeout(timer);
   });
@@ -527,7 +527,7 @@ export function startPolling(
  * is polling.
  *
  * Before this the loop started on the first request that named a vault, so a
- * server with no board open polled nothing: intake went days without a tick
+ * server with no board open polled nothing: intake went days without a pass
  * while the process ran, and nothing said so. Running the server is now enough.
  * A vault that did not opt in gets its one line here and nowhere else — at
  * startup it answers "why is nothing polling", and on a request it is not news.

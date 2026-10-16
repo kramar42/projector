@@ -99,7 +99,7 @@ export async function rejudge(
 
   const judged = await classify(root, candidates, opts.ask);
   if (!judged) {
-    // Held, on the same reasoning a tick holds: a pass that cannot judge must not
+    // Held, on the same reasoning a pass holds: a pass that cannot judge must not
     // fall back to writing something, and here "something" would be an overwrite.
     out.held = 'the classifier could not be reached';
     return out;

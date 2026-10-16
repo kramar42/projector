@@ -54,7 +54,7 @@ export { CHANNELS, channelNames };
 /**
  * Candidates sent to the judge per channel per pass. A backlog — a week of
  * sessions synced at once — is judged a slice at a time, oldest first, the cursor
- * moving to the end of each, and the server's next tick comes sooner while a
+ * moving to the end of each, and the server's next pass comes sooner while a
  * channel is behind (`poll.catchUpSeconds`). Skips do not count: they cost the
  * judge nothing, and a backlog of the app's own sessions must not take a pass
  * per forty of them.
