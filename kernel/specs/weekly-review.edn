@@ -1,13 +1,13 @@
 {:name "weekly-review"
- :purpose "Judge the week: one observation per intent touched, one per spec that ran, and next week's intents, reviewed where the owner plans."
+ :purpose "Judge the week: one judgment per intent touched, one per spec that ran, and next week's intents, reviewed where the owner plans."
  :executor :agent
  :skill "../../.claude/skills/review-week"
  :inputs {:intents {:status :open}
           :events {:last-hours 168}}
- :procedure "Follow the review-week skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger, the vault's and every other system's alike. Observe each for the week, with a verdict and this week's events as evidence; standing intents take partial or not-applicable, never met. Observe each spec that ran more than twice by name. Propose next week's intents through opens and name any intent to drop. The owner confirms or overrules each verdict. Finish with one review/summary event and end the attempt."
- :output {:observe {:targets [:id] :verdict :keyword :evidence [:id] :note :string :window {:start :date :end :date}}
-          :review/summary {:observed :int :refused :int :proposed :int}}
- :criterion "Every open intent with a horizon inside this week has an observation by Sunday night."
+ :procedure "Follow the review-week skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger, the vault's and every other system's alike. Judge each for the week, with a verdict and this week's events as evidence; standing intents take partial or not-applicable, never met. Judge each spec that ran more than twice by name. Propose next week's intents with propose and name any intent to drop. Each verdict on an intent is a draft the owner accepts or overrules, and each proposal one the owner opens or drops. Finish with one review/summary event and end the attempt."
+ :output {:judge {:targets [:id] :verdict :keyword :evidence [:id] :note :string :window {:start :date :end :date}}
+          :review/summary {:judged :int :refused :int :proposed :int}}
+ :criterion "Every open intent with a horizon inside this week has a judgment by Sunday night."
  :check {:query "kernel/events-in-attempt" :in {:kind :review/summary}}
  :acts-on [:commitments :activity]
  :trigger {:weekly :sunday :at "18:00"}

@@ -4,11 +4,11 @@
  :skill "../../.claude/skills/plan-day"
  :inputs {:intents {:status :open :horizon-within-days 14 :standing false}
           :events {:last-hours 24}}
- :procedure "Follow the plan-day skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger with a horizon inside 14 days, the vault's and every other system's alike. For each, propose at most one attempt for today and name the spec it would run; flag any intent with no attempt in the last 7 days; keep the list short enough to finish. Record each item as one event into the attempt (plan/proposal, plan/flag), then end the attempt. Each proposal cites the events that support it or says it is untested, names what would refute it before looking, and reads a missing event as unknown, never as undone. Open at most three proposed intents per run, each a closed question the owner answers with opened or dropped. When the window's events show an intent's criterion is satisfied, observe it met with those events as evidence: a draft the owner confirms, never a closed intent."
- :output {:plan/proposal {:intent :id :spec :string :note :string :evidence [:id]}
+ :procedure "Follow the plan-day skill, carried in full in the brief. In short: the brief's open intents are every open intent in the ledger with a horizon inside 14 days, the vault's and every other system's alike. For each, plan at most one attempt for today and name the spec it would run; flag any intent with no attempt in the last 7 days; keep the list short enough to finish. Record each item as one event into the attempt (plan/step, plan/flag), then end the attempt. Each step cites the events that support it or says it is untested, names what would refute it before looking, and reads a missing event as unknown, never as undone. Propose at most three intents per run with propose, each a closed question the owner answers with opened or dropped. When the window's events show an intent's criterion is satisfied, judge it met with those events as evidence: a draft the owner accepts or overrules, never a closed intent."
+ :output {:plan/step {:intent :id :spec :string :note :string :evidence [:id]}
           :plan/flag {:intent :id :reason :string}}
  :criterion "By end of day, every accepted attempt has an ended timestamp and at least one event beyond start and end."
- :check {:query [:find ?e :in ?attempt :where (in-attempt ?e ?attempt) (or [?e :event/kind :plan/proposal] [?e :event/kind :plan/flag])]}
+ :check {:query [:find ?e :in ?attempt :where (in-attempt ?e ?attempt) (or [?e :event/kind :plan/step] [?e :event/kind :plan/flag])]}
  :acts-on [:commitments]
  :trigger {:daily "07:00"}
  :budget {:minutes 10}}
