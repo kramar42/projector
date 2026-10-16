@@ -493,7 +493,7 @@ test('the manifest declares what projector writes and reads, and every batch it 
   assert.deepEqual(m.writes, { events: ['vault/', 'intake/', 'plan/', 'review/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
   assert.deepEqual(m.sync, [{ name: 'vault', run: 'pj kernel import', when: 'after edits, or hourly' }]);
   const dir = join(appRoot, 'kernel');
-  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/daily-plan.edn', 'specs/weekly-review.edn', 'specs/judge-intake.edn']);
+  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/work-a-note.edn', 'specs/daily-plan.edn', 'specs/weekly-review.edn', 'specs/judge-intake.edn']);
   const scheduled: Record<string, RegExp> = {
     'specs/daily-plan.edn': /:trigger \{:daily "07:00"\}/,
     'specs/weekly-review.edn': /:trigger \{:weekly :sunday :at "18:00"\}/,
@@ -521,7 +521,9 @@ test('the manifest declares what projector writes and reads, and every batch it 
   assert.match(judgeIntake, /classify\.ts/);
   // Work on a note is the kernel's worktree spec, not one of projector's: projector answers the kernel's
   // question about the note through its context command, the vault resolved from the alias.
-  assert.equal(existsSync(join(dir, 'specs/work-a-note.edn')), false, 'work-a-note is retired to the kernel');
+  // work-a-note stays listed once, retired: its last version says the kernel's worktree took over.
+  assert.match(readFileSync(join(dir, 'specs/work-a-note.edn'), 'utf8'), /:superseded-by "worktree"/);
+  assert.ok(m.specs.includes('specs/work-a-note.edn'));
   assert.deepEqual(m.context, { run: '~/.local/bin/pj context --alias {alias} --json-kernel' });
   assert.ok(!m.skills.includes('../.claude/skills/pj-work'), 'pj-work is a redirect, not a procedure');
   // How the develop spec changes projector's own code.

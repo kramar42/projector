@@ -44,6 +44,7 @@
   ],
   "specs": [
     "specs/note-conventions.edn",
+    "specs/work-a-note.edn",
     "specs/daily-plan.edn",
     "specs/weekly-review.edn",
     "specs/judge-intake.edn"
