@@ -1,6 +1,9 @@
 import { settingsFor, type Settings, type StatusVerdict } from '../settings.ts';
 import { spawnRunner, type Runner } from '../intake/kernel.ts';
 import type { Note } from '../schema/types.ts';
+import { paths } from '../config.ts';
+import { readAll } from '../index/indexer.ts';
+import { patchNote } from '../server/mutate.ts';
 import { forgetKernel, kernelEnv, kernelIndex, said, type KernelIndex } from './read.ts';
 import { shortId, type KernelNote } from './state.ts';
 
@@ -51,14 +54,33 @@ export async function observe(
 
 export type Decision = 'accept' | 'overrule';
 
+/** What an overrule may say. `partial` keeps the intent open; the other two close it. */
+export type OverruleVerdict = 'missed' | 'dropped' | 'partial';
+export const OVERRULE_VERDICTS: readonly OverruleVerdict[] = ['missed', 'dropped', 'partial'];
+
 export type Decided =
-  | { ok: true; note: string; intent: string; verdict: ObserveVerdict; said: string; kernel: KernelNote | null }
+  | {
+      ok: true;
+      note: string;
+      intent: string;
+      verdict: ObserveVerdict;
+      said: string;
+      kernel: KernelNote | null;
+      /** What became of the note's file: null for `partial`, which closes nothing and so writes nothing. */
+      file: Filed | null;
+    }
   | { ok: false; note: string; reason: string };
 
 /**
  * The owner's answer to a note's kernel line: accept is `met` (or the drafted
- * verdict, when there is a draft); overrule is `missed`, or `partial` to say
- * "not yet" and keep the intent open.
+ * verdict, when there is a draft); overrule is `missed` or `dropped`, or
+ * `partial` to say "not yet" and keep the intent open.
+ *
+ * A verdict that closes the intent is then written into the note too —
+ * `kernel.verdicts` read backwards (`fileVerdict`) — so the status chip and the
+ * `kernel` axis say the same thing. The kernel goes first: a refusal there
+ * writes nothing anywhere, and a file that cannot be written after an accepted
+ * observation is a reason in `file`, not a failed answer.
  *
  * Refused, not attempted, when there is nothing to answer: the vault has no
  * kernel, the note has no intent, or the intent is no longer open — the kernel
@@ -70,7 +92,7 @@ export async function decide(
   root: string,
   id: string,
   decision: Decision,
-  opts: { verdict?: 'missed' | 'partial'; note?: string; run?: Runner } = {},
+  opts: { verdict?: OverruleVerdict; note?: string; run?: Runner } = {},
 ): Promise<Decided> {
   const cfg = settingsFor(root).kernel;
   if (!cfg.enabled) return { ok: false, note: id, reason: 'this vault has no kernel: block with enabled: true' };
@@ -99,8 +121,157 @@ export async function decide(
   const res = await observe(cfg, k.intent, verdict, note, run);
   forgetKernel(root);
   if (!res.ok) return { ok: false, note: id, reason: res.reason };
+  // Straight to the validated note write, beneath the status write-through
+  // that wraps it in `PATCH /api/note/:id` and `pj set`: this value *is* the
+  // kernel's answer, so it must not travel back to the kernel as a second
+  // observation. (Were it to, the intent is closed by now and `writeThrough`
+  // skips a closed intent — but the guard is not having the path at all.)
+  const file = verdict === 'partial' ? null : fileVerdict(root, id, verdict);
   const after = await kernelIndex(root, 'owner-answer', { fresh: true, run });
-  return { ok: true, note: id, intent: k.intent, verdict, said: res.said, kernel: after.notes.get(id) ?? null };
+  return { ok: true, note: id, intent: k.intent, verdict, said: res.said, kernel: after.notes.get(id) ?? null, file };
+}
+
+// ------------------------------------------------------------ the verdict, back into the note
+
+/** A value on an axis: where a verdict lands in a note. */
+export interface Mapped {
+  axis: string;
+  value: string;
+}
+
+/**
+ * The value a verdict writes into a note: `kernel.verdicts` read backwards.
+ *
+ * The first axis in the map's order with any value mapping to the verdict — the
+ * same axis `verdictFor` lets speak first — and on it, `kernel.onVerdict`'s
+ * choice when it names one, else the first value that maps to the verdict. No
+ * value is named here (C4): with no map, or none that maps to this verdict,
+ * there is nothing to write.
+ */
+export function valueFor(cfg: Settings['kernel'], verdict: StatusVerdict): Mapped | null {
+  for (const [axis, map] of Object.entries(cfg.verdicts)) {
+    const values = Object.keys(map).filter((v) => map[v] === verdict);
+    if (!values.length) continue;
+    const chosen = cfg.onVerdict[axis]?.[verdict];
+    return { axis, value: chosen && values.includes(chosen) ? chosen : values[0]! };
+  }
+  return null;
+}
+
+export type Filed =
+  | { outcome: 'written'; axis: string; value: string; was: string[] }
+  | { outcome: 'already'; axis: string; value: string }
+  | { outcome: 'unmapped' | 'failed'; reason: string };
+
+/**
+ * Write the value a verdict maps to into the note, through `patchNote` — the
+ * write `PATCH /api/note/:id` makes, so the vocabulary validates it exactly as
+ * it would a chip. The axis is *set* to that one value: it is the lifecycle,
+ * and a note is not both active and done. Never throws; a note already holding
+ * the value is left byte-for-byte alone.
+ */
+export function fileVerdict(root: string, id: string, verdict: StatusVerdict): Filed {
+  const cfg = settingsFor(root).kernel;
+  const target = valueFor(cfg, verdict);
+  if (!target) {
+    const axes = Object.keys(cfg.verdicts);
+    return {
+      outcome: 'unmapped',
+      reason: axes.length
+        ? `no ${axes.join(' or ')} value maps to ${verdict} in kernel.verdicts`
+        : 'kernel.verdicts is not set',
+    };
+  }
+  try {
+    const was = readAll(paths(root).notes).notes.get(id)?.facets[target.axis] ?? [];
+    if (was.length === 1 && was[0] === target.value) return { outcome: 'already', ...target };
+    patchNote(root, id, { facet: { name: target.axis, values: [target.value], mode: 'set' } });
+    return { outcome: 'written', ...target, was: [...was] };
+  } catch (e) {
+    return { outcome: 'failed', reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** One line for what `fileVerdict` did, for `pj` and the server log. */
+export function filedLine(id: string, verdict: StatusVerdict, f: Filed): string {
+  if (f.outcome === 'written') {
+    return `${id}: ${f.axis} ${f.was.length ? f.was.join(',') : '(none)'} → ${f.value} in the file (kernel ${verdict})`;
+  }
+  if (f.outcome === 'already') return `${id}: the file already says ${f.axis}=${f.value} (kernel ${verdict})`;
+  if (f.outcome === 'unmapped') return `${id}: the file is unchanged — ${f.reason}`;
+  return `${id}: the file could not be written — ${f.reason}`;
+}
+
+// ------------------------------------------------------------ reconciliation
+
+const CLOSED: readonly string[] = ['met', 'missed', 'dropped'];
+
+/** A note the kernel has closed while its file still reads as open. */
+export interface Disagreement {
+  id: string;
+  intent: string;
+  verdict: StatusVerdict;
+  axis: string;
+  /** What the file holds on `axis` — none of it a value `kernel.verdicts` maps. */
+  holds: string[];
+  /** What `pj kernel sync` would write, or null when no value maps to the verdict. */
+  target: Mapped | null;
+}
+
+/**
+ * Every note where the kernel reads `met`, `missed` or `dropped` and the file
+ * holds no value the map names on the axis that verdict lands on — a status the
+ * map leaves unmapped (`active`), or none at all. A file that already says a
+ * closed value, even a different one, is the owner's own word and is not
+ * second-guessed. Without `kernel.verdicts` there is no axis to compare, so
+ * there is never a disagreement. Pure; the reconciliation is `reconcile`.
+ */
+export function disagreements(
+  cfg: Settings['kernel'],
+  kernel: Map<string, KernelNote>,
+  notes: Map<string, Pick<Note, 'facets'>>,
+): Disagreement[] {
+  const axes = Object.keys(cfg.verdicts);
+  if (!axes.length) return [];
+  const out: Disagreement[] = [];
+  for (const id of [...kernel.keys()].sort()) {
+    const k = kernel.get(id)!;
+    const rec = notes.get(id);
+    if (!rec || !CLOSED.includes(k.status)) continue;
+    const verdict = k.status as StatusVerdict;
+    const target = valueFor(cfg, verdict);
+    const axis = target?.axis ?? axes[0]!;
+    const holds = rec.facets[axis] ?? [];
+    if (holds.some((v) => cfg.verdicts[axis]![v])) continue;
+    out.push({ id, intent: k.intent, verdict, axis, holds: [...holds], target });
+  }
+  return out;
+}
+
+/** One line per disagreement, for `pj kernel status`. */
+export function disagreementLine(d: Disagreement): string {
+  const file = d.holds.length ? `the file says ${d.axis}=${d.holds.join(',')}` : `the file has no ${d.axis}`;
+  const fix = d.target ? `\`pj kernel sync\` writes ${d.target.value}` : `no ${d.axis} value maps to ${d.verdict}`;
+  return `${d.id}: kernel reads ${d.verdict} on ${shortId(d.intent)}, ${file} — ${fix}`;
+}
+
+export type Reconciled =
+  | { ok: true; results: { id: string; verdict: StatusVerdict; file: Filed }[] }
+  | { ok: false; reason: string };
+
+/**
+ * `pj kernel sync`: write the kernel's verdict into every file that disagrees
+ * with it, and nothing else. Only when the owner asks — nothing runs this on a
+ * schedule or a read, because a file the kernel disagrees with may be the one
+ * that is right, and only the owner can say which.
+ */
+export async function reconcile(root: string, opts: { run?: Runner } = {}): Promise<Reconciled> {
+  const cfg = settingsFor(root).kernel;
+  if (!cfg.enabled) return { ok: false, reason: 'this vault has no kernel: block with enabled: true' };
+  const index = await kernelIndex(root, 'reconcile', { fresh: true, run: opts.run ?? spawnRunner });
+  if (index.reason) return { ok: false, reason: index.reason };
+  const found = disagreements(cfg, index.notes, readAll(paths(root).notes).notes);
+  return { ok: true, results: found.map((d) => ({ id: d.id, verdict: d.verdict, file: fileVerdict(root, d.id, d.verdict) })) };
 }
 
 // ------------------------------------------------------------ status write-through

@@ -145,6 +145,12 @@ export interface Settings {
    * `missed` or `dropped` through `<bin> observe`. A vault's vocabulary is its
    * own (C4), so nothing here knows which axis is the lifecycle or which of its
    * values means finished; absent, a status change writes nothing to the kernel.
+   *
+   * The same map, read backwards, is what the owner's answer in the kernel
+   * writes into the note: for a verdict, the first value that maps to it.
+   * `onVerdict` (`{ <axis>: { <verdict>: <value> } }`) chooses when several do
+   * — `{ status: { dropped: cancelled } }` — and names only values `verdicts`
+   * already maps to that verdict, so the two can never disagree.
    */
   kernel: {
     enabled: boolean;
@@ -153,6 +159,7 @@ export interface Settings {
     vault: string | null;
     timeoutSeconds: number;
     verdicts: Record<string, Record<string, StatusVerdict>>;
+    onVerdict: Record<string, Partial<Record<StatusVerdict, string>>>;
   };
 }
 
@@ -186,7 +193,15 @@ interface Raw {
   };
   gmail?: { command?: unknown; account?: unknown; transport?: unknown };
   did?: { roots?: unknown };
-  kernel?: { enabled?: unknown; bin?: unknown; db?: unknown; vault?: unknown; timeout?: unknown; verdicts?: unknown };
+  kernel?: {
+    enabled?: unknown;
+    bin?: unknown;
+    db?: unknown;
+    vault?: unknown;
+    timeout?: unknown;
+    verdicts?: unknown;
+    onVerdict?: unknown;
+  };
   mcp?: {
     slack?: unknown;
     gmail?: unknown;
@@ -368,6 +383,7 @@ export function settingsFor(root: string): Settings {
       // the ceiling is for a kernel whose store is locked by another writer.
       timeoutSeconds: Math.max(5, Number(raw.kernel?.timeout ?? 60) || 60),
       verdicts: verdictMap(raw.kernel?.verdicts),
+      onVerdict: onVerdictMap(raw.kernel?.onVerdict, verdictMap(raw.kernel?.verdicts)),
     },
   };
 
@@ -391,6 +407,33 @@ function verdictMap(v: unknown): Record<string, Record<string, StatusVerdict>> {
       if (said && STATUS_VERDICTS.includes(said)) row[value] = said as StatusVerdict;
     }
     if (Object.keys(row).length) out[axis.trim()] = row;
+  }
+  return out;
+}
+
+/**
+ * `kernel.onVerdict`: `{ <axis>: { <verdict>: <value> } }`, the tie-break for
+ * a verdict several values map to. A choice `verdicts` does not back — an axis
+ * it does not name, a value it maps elsewhere or not at all — is dropped, so
+ * reading the map backwards always lands on a value that reads forwards to the
+ * same verdict.
+ */
+function onVerdictMap(
+  v: unknown,
+  verdicts: Record<string, Record<string, StatusVerdict>>,
+): Record<string, Partial<Record<StatusVerdict, string>>> {
+  const out: Record<string, Partial<Record<StatusVerdict, string>>> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const [rawAxis, choices] of Object.entries(v as Record<string, unknown>)) {
+    const axis = rawAxis.trim();
+    const forwards = verdicts[axis];
+    if (!forwards || !choices || typeof choices !== 'object' || Array.isArray(choices)) continue;
+    const row: Partial<Record<StatusVerdict, string>> = {};
+    for (const [verdict, value] of Object.entries(choices as Record<string, unknown>)) {
+      const chosen = str(value);
+      if (chosen && STATUS_VERDICTS.includes(verdict) && forwards[chosen] === verdict) row[verdict as StatusVerdict] = chosen;
+    }
+    if (Object.keys(row).length) out[axis] = row;
   }
   return out;
 }
@@ -493,6 +536,10 @@ enrich: ${enrich ? 'true' : 'false'}
 #   # through \`<bin> observe\`. Other values write nothing to the kernel.
 #   verdicts:
 #     status: { done: met, on-hold: dropped, cancelled: dropped }
+#   # Accepting or overruling a verdict writes it back into the note: the first
+#   # value that maps to it, or the one named here when several do.
+#   onVerdict:
+#     status: { dropped: cancelled }
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so
 # it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.

@@ -63,7 +63,19 @@ import { parseDay } from '../did/day.ts';
 import { did, renderDid } from '../did/run.ts';
 import { kernelIndex } from '../kernel/read.ts';
 import { axisValues, shortId } from '../kernel/state.ts';
-import { decide, snapshot, throughLine, watchedAxes, writeThrough } from '../kernel/write.ts';
+import {
+  decide,
+  disagreementLine,
+  disagreements,
+  filedLine,
+  OVERRULE_VERDICTS,
+  reconcile,
+  snapshot,
+  throughLine,
+  watchedAxes,
+  writeThrough,
+  type OverruleVerdict,
+} from '../kernel/write.ts';
 import { settingsFor } from '../settings.ts';
 
 // ---------------------------------------------------------------- flags
@@ -254,7 +266,7 @@ Intake
   intake declined    inspect declined candidates
 
 Kernel
-  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict
+  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict; sync files to it
 
 Vault and maintenance
   setup              inspect or initialise vault integration
@@ -303,13 +315,17 @@ sessions — and waits for the answers, so each is as of now.`,
 Apply the same scripted edit to one or more notes.`,
   kernel: `Usage: pj kernel status [--json]
        pj kernel accept <note id> [--note text]
-       pj kernel overrule <note id> [--verdict missed|partial] [--note text]
+       pj kernel overrule <note id> [--verdict missed|dropped|partial] [--note text]
+       pj kernel sync
 
 The owner's kernel, read through the vault's \`kernel:\` block. \`status\` lists
 every intent about a note of this vault, with the \`kernel\` axis value it
-gives the note and its latest verdict. \`accept\` tells the kernel the note's
-intent is met; \`overrule\` says missed, or \`--verdict partial\` to keep it
-open. Both run \`<bin> observe\` as the owner and change nothing in the vault.`,
+gives the note and its latest verdict, then every note whose file still reads
+open where the kernel has closed it. \`accept\` tells the kernel the note's
+intent is met (or what the draft said); \`overrule\` says missed, dropped, or
+\`--verdict partial\` to keep it open. Both run \`<bin> observe\` as the owner,
+then write the value \`kernel.verdicts\` maps that verdict to into the note.
+\`sync\` writes those values into the files \`status\` lists as disagreeing.`,
   mv: `Usage: pj mv <id> <new-id>
 
 Rename a note and repoint references and saved views.`,
@@ -891,6 +907,8 @@ async function cmdKernel(argv: string[]): Promise<void> {
           return { note, value, intent: i, proposed: line?.intent === i.id && line.proposed };
         }),
     );
+    const kcfg = settingsFor(root).kernel;
+    const differ = disagreements(kcfg, k.notes, readAll(p.notes).notes);
     if (flags.has('json')) {
       console.log(
         JSON.stringify(
@@ -898,6 +916,7 @@ async function cmdKernel(argv: string[]): Promise<void> {
             vault: k.vault,
             notes: Object.fromEntries(k.notes),
             intents: k.intents,
+            disagreements: differ,
           },
           null,
           2,
@@ -917,21 +936,44 @@ async function cmdKernel(argv: string[]): Promise<void> {
     }
     const drafts = rows.filter((r) => r.proposed).length;
     if (drafts) console.log(`\n${drafts} drafted verdict(s) wait for you: \`pj kernel accept <id>\` or \`pj kernel overrule <id>\``);
+    // Only where the vault named its lifecycle: without \`kernel.verdicts\` there is no axis to disagree on.
+    if (Object.keys(kcfg.verdicts).length) {
+      if (!differ.length) console.log('\nno file disagrees with the kernel');
+      else {
+        console.log(`\n${differ.length} file(s) disagree with the kernel:`);
+        for (const d of differ) console.log(`  ${disagreementLine(d)}`);
+      }
+    }
+    return;
+  }
+
+  if (sub === 'sync') {
+    const { rest } = argFlags(more, []);
+    if (rest.length) fail('pj kernel sync takes no arguments');
+    const res = await reconcile(root);
+    if (!res.ok) fail(`pj kernel sync: ${res.reason}`);
+    if (!res.results.length) console.log('nothing to sync — no file disagrees with the kernel');
+    for (const r of res.results) {
+      (r.file.outcome === 'failed' ? console.error : console.log)(filedLine(r.id, r.verdict, r.file));
+    }
     return;
   }
 
   if (sub === 'accept' || sub === 'overrule') {
     const { flags, rest } = argFlags(more, sub === 'overrule' ? ['verdict', 'note'] : ['note']);
     const [id] = rest;
-    if (!id || rest.length > 1) fail(`pj kernel ${sub} <note id>${sub === 'overrule' ? ' [--verdict missed|partial]' : ''}`);
+    if (!id || rest.length > 1) fail(`pj kernel ${sub} <note id>${sub === 'overrule' ? ' [--verdict missed|dropped|partial]' : ''}`);
     const verdict = flags.get('verdict')?.[0];
-    if (verdict !== undefined && verdict !== 'missed' && verdict !== 'partial') {
-      fail(`--verdict is missed or partial, not "${verdict}"`);
+    if (verdict !== undefined && !(OVERRULE_VERDICTS as readonly string[]).includes(verdict)) {
+      fail(`--verdict is ${OVERRULE_VERDICTS.join(', ')}, not "${verdict}"`);
     }
-    const res = await decide(root, id, sub, { verdict, note: flags.get('note')?.[0] });
+    const res = await decide(root, id, sub, { verdict: verdict as OverruleVerdict | undefined, note: flags.get('note')?.[0] });
     if (!res.ok) fail(`pj kernel ${sub}: ${res.reason}`);
     const now = res.kernel ? (res.kernel.value ?? res.kernel.status) : 'gone from the kernel’s answer';
     console.log(`${id}: ${res.verdict} on intent ${shortId(res.intent)} — the kernel now reads ${now}`);
+    if (res.file && res.verdict !== 'partial') {
+      (res.file.outcome === 'failed' ? console.error : console.log)(filedLine(id, res.verdict, res.file));
+    }
     return;
   }
 

@@ -12,9 +12,11 @@ import type { KernelNote } from '../types.ts';
  * here: **Accept** tells the kernel what the draft said — `met`, usually;
  * **Overrule** says `missed`; **Not yet** says `partial`, which keeps the
  * intent open. These are the owner's acts
- * in the owner's UI, so the server runs them as the owner. None of them writes
- * the note: the file stays the truth for content (C1), and the `kernel` axis on
- * the board is recomputed from the kernel's answer (C11).
+ * in the owner's UI, so the server runs them as the owner. A verdict that
+ * closes the intent is then written into the note as the value the vault's
+ * `kernel.verdicts` maps it to, so the status chip agrees with the `kernel`
+ * axis; the server does that (C4 — nothing here names a status), and the line
+ * it reports — written, already so, or why not — is drawn under the row.
  *
  * The kernel answers with the line as it now reads, which this draws at once
  * rather than waiting for the refetch the server's change event starts.
@@ -31,6 +33,7 @@ export function KernelLine({ id, kernel }: { id: string; kernel: KernelNote | nu
   const [line, setLine] = useState(kernel);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [filed, setFiled] = useState<string | null>(null);
   // A refetch is newer than what the last answer said.
   useEffect(() => setLine(kernel), [kernel]);
   if (!line) return null;
@@ -38,9 +41,13 @@ export function KernelLine({ id, kernel }: { id: string; kernel: KernelNote | nu
   const answer = (decision: 'accept' | 'overrule', verdict?: 'missed' | 'partial') => {
     setBusy(decision);
     setProblem(null);
+    setFiled(null);
     api
       .kernelDecide(id, decision, verdict)
-      .then((res) => setLine(res.kernel))
+      .then((res) => {
+        setLine(res.kernel);
+        setFiled(res.fileLine);
+      })
       .catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(null));
   };
@@ -105,6 +112,7 @@ export function KernelLine({ id, kernel }: { id: string; kernel: KernelNote | nu
           {busy && <span className="panel-busy">telling the kernel…</span>}
         </div>
       )}
+      {filed && <div className="panel-busy">{filed}</div>}
       {problem && <div className="banner is-bad">{problem}</div>}
     </section>
   );

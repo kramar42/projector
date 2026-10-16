@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -14,7 +14,7 @@ import { settingsFor, settingsPath } from '../src/settings.ts';
 import { logTo } from '../src/server/log.ts';
 import { forgetKernel, kernelIndex } from '../src/kernel/read.ts';
 import { axisValues, isOwner, KERNEL_VALUES, notesOf, parseIntents } from '../src/kernel/state.ts';
-import { decide, snapshot, verdictFor, writeThrough } from '../src/kernel/write.ts';
+import { decide, snapshot, valueFor, verdictFor, writeThrough } from '../src/kernel/write.ts';
 import type { Runner } from '../src/intake/kernel.ts';
 import { place } from './fixture.ts';
 
@@ -354,6 +354,203 @@ test('pj set writes the note first and tells the kernel second; a refusing kerne
     assert.match(refused.err, /kernel: alpha: status=on-hold → kernel dropped not written: .*store is locked/);
     assert.deepEqual(readAll(paths(v.root).notes).notes.get('alpha')!.facets.status, ['on-hold'], 'C1: the file is written regardless');
   } finally {
+    v.cleanup();
+  }
+});
+
+// ------------------------------------------------------------------ the verdict, back into the note
+
+const status = (root: string, id: string) => readAll(paths(root).notes).notes.get(id)!.facets.status;
+const bytes = (root: string, id: string) => readFileSync(place(root, `${id}.md`), 'utf8');
+const observes = (v: { calls: () => string[] }) => v.calls().filter((c) => c.includes('|observe '));
+
+test('the map read backwards: the first value for a verdict, or the one onVerdict chooses', () => {
+  const v = vault(
+    `kernel:\n  enabled: true\n  bin: ${FAKE}\n  vault: fake\n${VERDICTS}` +
+      '  onVerdict:\n    status: { dropped: cancelled, met: cancelled }\n    nope: { met: done }\n',
+  );
+  try {
+    const cfg = settingsFor(v.root).kernel;
+    assert.deepEqual(cfg.onVerdict, { status: { dropped: 'cancelled' } }, 'a choice the forward map does not back is dropped');
+    assert.deepEqual(valueFor(cfg, 'met'), { axis: 'status', value: 'done' });
+    assert.deepEqual(valueFor(cfg, 'dropped'), { axis: 'status', value: 'cancelled' }, 'onVerdict chooses');
+    assert.equal(valueFor(cfg, 'missed'), null, 'nothing maps to missed');
+    assert.deepEqual(valueFor({ ...cfg, onVerdict: {} }, 'dropped'), { axis: 'status', value: 'on-hold' }, 'else the first');
+    assert.equal(valueFor({ ...cfg, verdicts: {} }, 'met'), null);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('accept writes the mapped value into the file, and the kernel is observed exactly once', () => {
+  const v = vault();
+  try {
+    const accept = pj(v.root, ['kernel', 'accept', 'alpha']);
+    assert.equal(accept.code, 0, accept.err);
+    assert.match(accept.out, /alpha: met on intent aaaaaaaa/);
+    assert.match(accept.out, /alpha: status active → done in the file \(kernel met\)/);
+    assert.deepEqual(status(v.root, 'alpha'), ['done'], 'the status chip now agrees with the kernel');
+    assert.deepEqual(observes(v), [`${join(v.root, 'kdb')}|observe ${ALPHA} met --note accepted agent:claude's met in projector`]);
+
+    // An overrule that closes the intent writes too; one nothing maps to says so and writes nothing.
+    const dropped = pj(v.root, ['kernel', 'overrule', 'beta', '--verdict', 'dropped']);
+    assert.equal(dropped.code, 0, dropped.err);
+    assert.deepEqual(status(v.root, 'beta'), ['on-hold'], 'the first value mapping to dropped');
+    const before = bytes(v.root, 'epsilon');
+    const missed = pj(v.root, ['kernel', 'overrule', 'epsilon']);
+    assert.equal(missed.code, 0, missed.err);
+    assert.match(missed.out, /^epsilon: the file is unchanged — no status value maps to missed in kernel\.verdicts$/m);
+    assert.equal(bytes(v.root, 'epsilon'), before);
+    assert.equal(observes(v).length, 3, 'one observation per answer, none from the file writes');
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('partial keeps the intent open and leaves the file untouched', async () => {
+  const v = vault();
+  try {
+    const before = bytes(v.root, 'alpha');
+    const res = await decide(v.root, 'alpha', 'overrule', { verdict: 'partial' });
+    assert.equal(res.ok, true);
+    assert.equal((res as { file: unknown }).file, null);
+    const cli = pj(v.root, ['kernel', 'overrule', 'beta', '--verdict', 'partial']);
+    assert.equal(cli.code, 0, cli.err);
+    assert.doesNotMatch(cli.out, /file/, 'partial says nothing about the file, because it writes nothing');
+    assert.equal(bytes(v.root, 'alpha'), before);
+    assert.deepEqual(status(v.root, 'beta'), ['active']);
+    assert.equal(observes(v).length, 2);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/** The fixed answer with some intents closed while their files still read open. */
+function closedWhileOpen(root: string): string {
+  const intents = JSON.parse(fixed()) as { id: string; status: string; about: string[] }[];
+  const extra = [
+    { id: 'bbbbbbbb-0000-4000-8000-000000000002', status: 'met', statement: 'Write beta', about: ['vault:fake:beta'], latest: { verdict: 'met', by: 'kernel:owner' } },
+    { id: '11111111-0000-4000-8000-000000000007', status: 'dropped', statement: 'Plain', about: ['vault:fake:plain'], latest: { verdict: 'dropped', by: 'kernel:owner' } },
+    { id: '22222222-0000-4000-8000-000000000008', status: 'missed', statement: 'Epsilon', about: ['vault:fake:epsilon'], latest: { verdict: 'missed', by: 'kernel:owner' } },
+  ];
+  const file = join(root, 'intents.json');
+  writeFileSync(file, JSON.stringify([...intents.filter((i) => !['beta', 'epsilon'].some((n) => i.about.includes(`vault:fake:${n}`))), ...extra]), 'utf8');
+  return file;
+}
+
+test('pj kernel status lists what disagrees, and pj kernel sync writes the files without observing', () => {
+  const v = vault(`kernel:\n  enabled: true\n  bin: ${FAKE}\n  vault: fake\n${VERDICTS}  onVerdict:\n    status: { dropped: cancelled }\n`);
+  try {
+    const env = { FAKE_KERNEL_INTENTS: closedWhileOpen(v.root) };
+    const listed = pj(v.root, ['kernel', 'status'], env);
+    assert.equal(listed.code, 0, listed.err);
+    assert.match(listed.out, /3 file\(s\) disagree with the kernel:/);
+    assert.match(listed.out, /beta: kernel reads met on bbbbbbbb, the file says status=active — `pj kernel sync` writes done/);
+    assert.match(listed.out, /plain: kernel reads dropped on 11111111, the file says status=active — `pj kernel sync` writes cancelled/);
+    assert.match(listed.out, /epsilon: kernel reads missed on 22222222, the file says status=active — no status value maps to missed/);
+    assert.doesNotMatch(listed.out, /gamma: kernel reads/, 'met in the kernel and done in the file agree');
+    assert.equal(JSON.parse(pj(v.root, ['kernel', 'status', '--json'], env).out).disagreements.length, 3);
+
+    const epsilon = bytes(v.root, 'epsilon');
+    const sync = pj(v.root, ['kernel', 'sync'], env);
+    assert.equal(sync.code, 0, sync.err);
+    assert.deepEqual(sync.out.trim().split('\n'), [
+      'beta: status active → done in the file (kernel met)',
+      'epsilon: the file is unchanged — no status value maps to missed in kernel.verdicts',
+      'plain: status active → cancelled in the file (kernel dropped)',
+    ]);
+    assert.deepEqual(status(v.root, 'beta'), ['done']);
+    assert.deepEqual(status(v.root, 'plain'), ['cancelled']);
+    assert.equal(bytes(v.root, 'epsilon'), epsilon);
+    assert.deepEqual(observes(v), [], 'sync reads the kernel; it never observes');
+
+    const after = pj(v.root, ['kernel', 'status'], env);
+    assert.match(after.out, /1 file\(s\) disagree/, 'only the one nothing maps to is left');
+    assert.match(pj(v.root, ['kernel', 'sync'], env).out, /^epsilon: the file is unchanged/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('a vault without kernel.verdicts never touches a file', () => {
+  const v = vault(`kernel:\n  enabled: true\n  bin: ${FAKE}\n  db: ./kdb\n  vault: fake\n`);
+  try {
+    const env = { FAKE_KERNEL_INTENTS: closedWhileOpen(v.root) };
+    const ids = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'plain'];
+    const before = ids.map((id) => bytes(v.root, id));
+
+    const accept = pj(v.root, ['kernel', 'accept', 'alpha']);
+    assert.equal(accept.code, 0, accept.err);
+    assert.match(accept.out, /^alpha: the file is unchanged — kernel\.verdicts is not set$/m);
+    assert.equal(observes(v).length, 1, 'the kernel is still told');
+
+    const status = pj(v.root, ['kernel', 'status'], env);
+    assert.doesNotMatch(status.out, /disagree/, 'no lifecycle named, nothing to disagree on');
+    assert.match(pj(v.root, ['kernel', 'sync'], env).out, /nothing to sync/);
+    assert.deepEqual(ids.map((id) => bytes(v.root, id)), before);
+  } finally {
+    v.cleanup();
+  }
+});
+
+const SERVE = fileURLToPath(new URL('../src/server/serve.ts', import.meta.url));
+
+/** The real server on a free port, against one registered vault. */
+async function server(root: string): Promise<{ url: string; stop: () => void }> {
+  const registry = join(root, 'registry.json');
+  writeFileSync(registry, JSON.stringify({ vaults: [{ path: root, name: 'fake', addedAt: 0 }] }), 'utf8');
+  const env: Record<string, string | undefined> = { ...process.env, PROJECTOR_PORT: '0', PROJECTOR_VAULTS: registry };
+  delete env.PROJECTOR_DATA;
+  const child = spawn(process.execPath, [SERVE], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const url = await new Promise<string>((resolve, reject) => {
+    let out = '';
+    const timer = setTimeout(() => reject(new Error(`server did not start: ${out}`)), 15_000);
+    child.stdout!.on('data', (d: Buffer) => {
+      out += d.toString();
+      const m = out.match(/projector\s+(http:\/\/127\.0\.0\.1:\d+)/);
+      if (m) {
+        clearTimeout(timer);
+        resolve(m[1]!);
+      }
+    });
+    child.on('exit', (code) => reject(new Error(`server exited ${code}: ${out}`)));
+  });
+  return { url, stop: () => child.kill() };
+}
+
+test('the panel’s route does what the CLI does: one observation, then the mapped value in the file', async () => {
+  const v = vault();
+  const s = await server(v.root);
+  try {
+    const post = (id: string, body: object) =>
+      fetch(`${s.url}/api/note/${id}/kernel`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Projector-Vault': v.root },
+        body: JSON.stringify(body),
+      }).then(async (r) => ({ status: r.status, json: (await r.json()) as Record<string, unknown> }));
+
+    const accept = await post('alpha', { decision: 'accept' });
+    assert.equal(accept.status, 200, JSON.stringify(accept.json));
+    assert.equal(accept.json.verdict, 'met');
+    assert.deepEqual(accept.json.file, { outcome: 'written', axis: 'status', value: 'done', was: ['active'] });
+    assert.equal(accept.json.fileLine, 'alpha: status active → done in the file (kernel met)');
+    assert.deepEqual(status(v.root, 'alpha'), ['done']);
+
+    const before = bytes(v.root, 'beta');
+    const partial = await post('beta', { decision: 'overrule', verdict: 'partial' });
+    assert.equal(partial.status, 200);
+    assert.equal(partial.json.file, null);
+    assert.equal(bytes(v.root, 'beta'), before);
+    assert.equal((await post('beta', { decision: 'overrule', verdict: 'met' })).status, 400);
+
+    // The write-through runs after a response, so give it the moment it would take.
+    await new Promise((r) => setTimeout(r, 300));
+    assert.deepEqual(observes(v), [
+      `${join(v.root, 'kdb')}|observe ${ALPHA} met --note accepted agent:claude's met in projector`,
+      `${join(v.root, 'kdb')}|observe ${BETA} partial --note partial, said in projector`,
+    ]);
+  } finally {
+    s.stop();
     v.cleanup();
   }
 });

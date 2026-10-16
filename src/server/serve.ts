@@ -68,7 +68,17 @@ import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
 import { kernelIndex, type KernelIndex } from '../kernel/read.ts';
 import { axisValues } from '../kernel/state.ts';
-import { decide, snapshot, throughLine, watchedAxes, writeThrough, type Watched } from '../kernel/write.ts';
+import {
+  decide,
+  filedLine,
+  OVERRULE_VERDICTS,
+  snapshot,
+  throughLine,
+  watchedAxes,
+  writeThrough,
+  type OverruleVerdict,
+  type Watched,
+} from '../kernel/write.ts';
 import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
@@ -456,10 +466,14 @@ app.get('/api/note/:id', async (c) => {
 });
 
 /**
- * The owner's answer to a note's kernel line: `accept` observes `met`;
- * `overrule` observes `missed`, or `partial` to keep the intent open. Runs the
- * kernel's CLI as the owner, since this is the owner's UI. Writes nothing in the
- * vault; the answer is the note's kernel line as the kernel now reads it.
+ * The owner's answer to a note's kernel line: `accept` observes `met` (or what
+ * the draft said); `overrule` observes `missed` or `dropped`, or `partial` to
+ * keep the intent open. Runs the kernel's CLI as the owner, since this is the
+ * owner's UI — `decide`, the same call `pj kernel` makes. A verdict that closes
+ * the intent is then written into the note as the value `kernel.verdicts` maps
+ * it to, through `patchNote` and not through this server's PATCH route, so the
+ * status write-through never sends it back to the kernel. The answer is the
+ * note's kernel line as the kernel now reads it, and what became of the file.
  */
 app.post('/api/note/:id/kernel', async (c) => {
   const root = vaultOf(c);
@@ -467,18 +481,20 @@ app.post('/api/note/:id/kernel', async (c) => {
   if (body.decision !== 'accept' && body.decision !== 'overrule') {
     return c.json({ error: 'decision must be accept or overrule' }, 400);
   }
-  if (body.verdict !== undefined && body.verdict !== 'missed' && body.verdict !== 'partial') {
-    return c.json({ error: 'an overrule is missed or partial' }, 400);
+  if (body.verdict !== undefined && !(OVERRULE_VERDICTS as readonly string[]).includes(body.verdict)) {
+    return c.json({ error: `an overrule is ${OVERRULE_VERDICTS.join(', ')}` }, 400);
   }
   const res = await decide(root, c.req.param('id'), body.decision, {
-    verdict: body.verdict as 'missed' | 'partial' | undefined,
+    verdict: body.verdict as OverruleVerdict | undefined,
     note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : undefined,
   });
   if (!res.ok) return c.json({ error: res.reason }, 409);
   info('kernel', `${res.note}: ${body.decision} → kernel ${res.verdict} on ${res.intent.slice(0, 8)}`);
-  // The vault did not change, but the board's kernel axis did.
+  const file = res.file && res.verdict !== 'partial' ? filedLine(res.note, res.verdict, res.file) : null;
+  if (file) (res.file!.outcome === 'failed' ? warnLine : info)('kernel', file);
+  // The board's kernel axis changed, and the note's file with it.
   bump(root);
-  return c.json({ kernel: res.kernel, verdict: res.verdict });
+  return c.json({ kernel: res.kernel, verdict: res.verdict, file: res.file, fileLine: file });
 });
 
 /**

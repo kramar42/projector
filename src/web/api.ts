@@ -165,11 +165,15 @@ export const api = {
    * `missed` or `partial`. Writes to the kernel and nothing in the vault, so it
    * stamps no self-write; the answer is the line as the kernel now reads it.
    */
-  kernelDecide: (id: string, decision: 'accept' | 'overrule', verdict?: 'missed' | 'partial') =>
-    req<{ kernel: KernelNote | null; verdict: string }>('POST', `/api/note/${encodeURIComponent(id)}/kernel`, {
-      decision,
-      verdict,
-    }),
+  // A verdict that closes the intent is written into the note too, so it is this tab's write.
+  kernelDecide: (id: string, decision: 'accept' | 'overrule', verdict?: 'missed' | 'dropped' | 'partial') => (
+    stampSelfWrite(id),
+    req<{ kernel: KernelNote | null; verdict: string; fileLine: string | null }>(
+      'POST',
+      `/api/note/${encodeURIComponent(id)}/kernel`,
+      { decision, verdict },
+    )
+  ),
 
   patchNote: (id: string, patch: PatchCard) => (
     stampSelfWrite(id),

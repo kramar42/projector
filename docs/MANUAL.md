@@ -1391,8 +1391,8 @@ When that verdict is a draft, three buttons answer it, as you:
 - **Overrule: missed** says it was not met.
 - **Not yet** says `partial`, which keeps the intent open.
 
-Each runs `<bin> observe <intent> <verdict> --note …` as the owner and writes nothing in the vault. A
-closed intent has nothing to answer and is refused.
+Each runs `<bin> observe <intent> <verdict> --note …` as the owner. A closed intent has nothing to
+answer and is refused.
 
 **Setting a status tells the kernel too.** Name, per axis, which of your values are a verdict:
 
@@ -1414,12 +1414,36 @@ before — the file is the truth for content — and the kernel write follows it
 which axis is your lifecycle, and which of its values means finished, is your vocabulary's to say,
 not the app's.
 
+**Answering the kernel sets the status too.** The same `verdicts:` map, read backwards, is what an
+answer writes into the note, so the status chip and the `kernel` axis say the same thing. When Accept
+or an overrule closes the intent — `met`, `missed` or `dropped` — and the kernel has taken it, the
+note's axis is set to the first value that maps to that verdict: `met` writes `done` above. When
+several values map to one verdict, `onVerdict:` says which to write:
+
+```yaml
+kernel:
+  verdicts:
+    status: { done: met, on-hold: dropped, cancelled: dropped }
+  onVerdict:
+    status: { dropped: cancelled }   # without it, dropped writes on-hold, the first
+```
+
+It is the same validated write a status chip makes, and it does not tell the kernel a second time.
+**Not yet** writes nothing to the file; nor does a verdict no value maps to — `missed`, above — which
+says so in one line (`the file is unchanged — no status value maps to missed`). Without `verdicts:`
+no answer touches a file. If the two still disagree — a verdict given in the kernel's own UI, or
+before this existed — `pj kernel status` ends with one line per note the kernel has closed while its
+file holds no mapped value, and `pj kernel sync` writes the mapped values into those files, one line
+per note. A file that already holds a mapped value, even a different one, is your word and is left
+alone. Neither runs on its own; you ask.
+
 **From a shell**, the same reader and writer, so a session can drive it without the UI:
 
 ```
-pj kernel status [--json]                                  every intent about this vault's notes, and the value each gives its note
-pj kernel accept <note id> [--note text]                   the draft's verdict, or met
-pj kernel overrule <note id> [--verdict missed|partial]    missed by default; partial keeps it open
+pj kernel status [--json]                                          every intent about this vault's notes, the value each gives its note, and the files that disagree
+pj kernel accept <note id> [--note text]                           the draft's verdict, or met
+pj kernel overrule <note id> [--verdict missed|dropped|partial]    missed by default; partial keeps it open
+pj kernel sync                                                     write the kernel's verdict into the files that disagree
 ```
 
 ---
@@ -1592,7 +1616,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check [--json]` | under *Validity*, every note file and every saved view against the same vocabulary; then under *Rules*, every saved view declaring `expect: empty`, with the notes breaking it. Exits non-zero on a validity error or a broken rule — warnings alone pass |
-| `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|partial]` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner. See [Projector over the kernel](#projector-over-the-kernel) |
+| `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel sync` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner · write the kernel's verdicts into files that disagree. See [Projector over the kernel](#projector-over-the-kernel) |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
 **Flags use their full long spelling.** `pj ls --json`, `pj ls --group status` and
