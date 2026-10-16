@@ -79,7 +79,7 @@ function bucketsOf(rec: Note, facets: Facets, today: string): Record<string, str
 
 const TASK = /^\s*[-*]\s+\[( |x|X)\]\s+/gm;
 
-/** Count markdown task list items. Deterministic — the board's progress bar is a count, not a judgement. */
+/** Count markdown task list items. Deterministic — the board's progress bar is a count, not a judgment. */
 export function progressOf(body: string): { done: number; total: number } | null {
   const matches = [...body.matchAll(TASK)];
   if (!matches.length) return null;

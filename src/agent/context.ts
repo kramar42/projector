@@ -13,7 +13,7 @@ import type { Fetcher } from '../enrich/types.ts';
  *
  * This is the layer the skills consume: instead of an agent re-deriving a note's
  * project, repos, instructions and link state by reading files, it asks once and
- * gets a complete, deterministic picture. Nothing here is a judgement — it is
+ * gets a complete, deterministic picture. Nothing here is a judgment — it is
  * assembly (C8).
  */
 export interface NoteContext {

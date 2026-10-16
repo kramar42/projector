@@ -181,7 +181,7 @@ function daysSince(date: string | undefined, today: string): number | null {
 /**
  * Computed axes, offered in the filter panel exactly like the facets in
  * `facets.yaml`. Every one of them is deterministic (C8): a count, a date
- * comparison or the presence of an edge — never a judgement.
+ * comparison or the presence of an edge — never a judgment.
  *
  * Every one of them *computes*, and every one computes over something a facet
  * cannot describe: a `project:` block, the reference graph, an absence, or the

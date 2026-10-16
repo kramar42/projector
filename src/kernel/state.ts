@@ -9,7 +9,7 @@
  * (C1).** Nothing here is stored in a note. The `kernel` axis is computed from
  * the kernel's own answer every time the index is rebuilt (C11), and every value
  * it takes is a status the kernel reported or a comparison of who gave the
- * latest verdict against the owner — never a judgement (C8).
+ * latest verdict against the owner — never a judgment (C8).
  */
 
 /** The computed axis that carries this. Its key in a view, a URL and `pj ls --filter`. */

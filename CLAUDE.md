@@ -49,7 +49,7 @@ today. So `bun run redate` first, then register it before the server will open i
 `docs/ARCHITECTURE.md` opens with principles `C1`–`C11`. They are decided, the source cites them by
 number, and most of the design is one of them being applied. Read them before adding a mechanism, and
 cite the one you are applying in the comment. If a change seems to require breaking one, that is a
-conversation, not a judgement call.
+conversation, not a judgment call.
 
 ## Which document to update
 

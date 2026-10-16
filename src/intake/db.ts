@@ -9,7 +9,7 @@ import { paths } from '../config.ts';
  *
  * `.index.db` is derived from the note files and rebuilt from scratch whenever
  * they change. `.enrich.db` is a cache: TTL'd, clearable, and losing it costs one
- * refetch. A decline is neither — it is a judgement, not reproducible, and the
+ * refetch. A decline is neither — it is a judgment, not reproducible, and the
  * reason it needs somewhere to live. Different lifecycles, different stores,
  * which is the same argument `server/enrich.ts` makes for not being a table in
  * the index.
@@ -29,10 +29,10 @@ import { paths } from '../config.ts';
 const SCHEMA = `
 -- A candidate somebody judged as "not a note", so a later pass stops offering it.
 --
--- Only *judgements* land here, never a channel's own mechanical skip. The
+-- Only *judgments* land here, never a channel's own mechanical skip. The
 -- difference is reproducibility: a channel declining a merge commit or a session
 -- with no prompt re-derives that answer identically on every pass, so storing it
--- would be storing something derivable (C11). A judgement about whether work
+-- would be storing something derivable (C11). A judgment about whether work
 -- matters is not reproducible — a different threshold or a different model
 -- answers differently — and that is precisely why it needs somewhere to live.
 --
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS suppressed (
 -- A decline somebody took back.
 --
 -- The most valuable row in this file, and the one that had nowhere to go: an
--- un-suppression means the judgement was wrong in the expensive direction, and
+-- un-suppression means the judgment was wrong in the expensive direction, and
 -- that is worth more than any number of declines it got right. A dismissal only
 -- says the reader agreed; this says they did not.
 --
@@ -217,7 +217,7 @@ export interface Suppression {
  * rejection could not inform anything later.
  *
  * Re-suppressing the same fingerprint replaces the reason rather than failing:
- * the second judgement is the current one, and a caller judging again should not
+ * the second judgment is the current one, and a caller judging again should not
  * have to care whether it already answered for this item.
  */
 export function suppress(
@@ -302,7 +302,7 @@ export function unsuppress(dataRoot: string, fingerprint: string): Restored | nu
 
   /**
    * Recorded before the delete, and kept after it. A rescue is the one signal
-   * that says the judgement was wrong the expensive way.
+   * that says the judgment was wrong the expensive way.
    *
    * **And it is what brings the item back within reach.** The connector event was
    * judged, so it sits behind intake's cursor, and lifting the decline alone would
@@ -426,7 +426,7 @@ export interface SuppressionPage {
 const DEFAULT_PAGE = 50;
 
 /**
- * A page of the declined pile, newest judgement first.
+ * A page of the declined pile, newest judgment first.
  *
  * Paged because it never shrinks: every pass that declines something adds to it
  * and nothing removes a row but an explicit rescue. A surface that read the whole

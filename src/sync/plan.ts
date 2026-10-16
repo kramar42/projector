@@ -169,7 +169,7 @@ export interface SyncPlan {
    * text, which is the only honest outcome — so this list is the strongest signal
    * that a set is drawn too small. It is reported rather than acted on: a note
    * with eight references into it probably belongs in the view, and a note with
-   * one is probably an aside. Neither is a judgement a planner should make.
+   * one is probably an aside. Neither is a judgment a planner should make.
    */
   cut: { id: string; title: string; from: string[] }[];
 }

@@ -328,7 +328,7 @@ things.
 
 [Watchtower](https://github.com/Ruben-M-D/Watchtower) is a public MIT-licensed triage agent: it polls
 Jira, Gmail, IMAP and GitHub read-only, scores every item with a local model, and pushes what clears a
-threshold to a private bot. Its two big ideas — the durable queue, and calibrating the judgement from
+threshold to a private bot. Its two big ideas — the durable queue, and calibrating the judgment from
 the decisions a person already made — landed with intake. What follows is the smaller, separable
 things it still does better.
 

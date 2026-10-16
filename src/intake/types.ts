@@ -51,7 +51,7 @@ export interface Evidence {
 }
 
 /**
- * What a judgement cost, when the transport can say.
+ * What a judgment cost, when the transport can say.
  *
  * Recorded because an unattended pass that spends two minutes and forty thousand
  * tokens looks exactly like one that spent two seconds, and the poller is the one

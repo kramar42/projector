@@ -22,9 +22,9 @@ import type { Candidate, Cost } from './types.ts';
  * **This is the one place a model decides anything, and C8 does not move.** C8
  * governs *signals*: every count and badge the UI draws as fact is computed.
  * Whether a candidate deserves a note, and what to call it, were never signals —
- * they are judgements, made until now by whoever ran a sweep, which
+ * they are judgments, made until now by whoever ran a sweep, which
  * `src/intake/types.ts` has said since the channels were written. What changes is
- * when and where the judgement runs, not who makes it.
+ * when and where the judgment runs, not who makes it.
  *
  * What the constraint does forbid is the residue leaking outward, and two rules
  * hold it in. A verdict gates a candidate and its reason is stored as prose on a
@@ -139,10 +139,10 @@ ONLY a JSON array, no prose and no code fences. One object per candidate, every 
 [{"fp":"…","decision":"ask"|"promise"|"info"|"area"|"progress"|"change"|"drop","reason":"<under 12 words>","title":"…","body":"…","facets":{"axis":["value"]},"target":"<note id, when one applies>","notify":false}]`;
 
 /**
- * The judgements already made, as examples.
+ * The judgments already made, as examples.
  *
  * Three kinds, and they are not equal. A **rescue** is a decline somebody took
- * back, which is the only signal that says the judgement was wrong in the
+ * back, which is the only signal that says the judgment was wrong in the
  * expensive direction — so it leads, and it is the one the instruction points at.
  * A **decline** confirms the reader agreed. A **kept** note shows what surviving
  * looks like in this vault's own words.
@@ -494,7 +494,7 @@ export interface Classified {
   drop: { candidate: Candidate; reason: string }[];
   /**
    * Candidates the model gave no verdict for, after being asked twice. Neither
-   * written nor kept: a card written from no judgement is the raw-material card
+   * written nor kept: a card written from no judgment is the raw-material card
    * the whole pass exists to prevent, so the caller records these as declined
    * with that reason, where they can be seen and taken back.
    */
@@ -596,7 +596,7 @@ async function classifyBatch(
     const r = byFp.get(c.fingerprint);
     const said = str(r?.decision, 20);
     // Nothing said, or a word that is not one of the seven and not one of the two
-    // older spellings a vault's own prompt may still use: no judgement was made.
+    // older spellings a vault's own prompt may still use: no judgment was made.
     if (!r || !said || !(KINDS as readonly string[]).includes(said) && said !== 'keep' && said !== 'extend') {
       out.unjudged.push(c);
       continue;

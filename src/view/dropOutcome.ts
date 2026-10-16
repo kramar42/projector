@@ -40,7 +40,7 @@ export function modeFor(input: { altKey?: boolean; shiftKey?: boolean }): DragMo
  * such a note that makes a plain drop into `(none)` return exactly what `⇧`
  * returns — the two gestures agree where the prose above says they differ.
  *
- * Left as it is on purpose, pending a judgement about how it feels in use: the
+ * Left as it is on purpose, pending a judgment about how it feels in use: the
  * alternative (`return []` here) would clear every value of the axis, and because
  * `bulkMove` applies this per `AxisMove`, a diagonal drop into a `(none)` column
  * and a `(none)` lane would clear both axes at once. `test/gesture.test.ts` pins

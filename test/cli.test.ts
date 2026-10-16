@@ -515,7 +515,7 @@ test('--vault takes a registered name, and a vault that is not there is refused'
  * Accepting a card from the shell is the board's `+`: emptying `intake` files the
  * card where a note like it lives. `editFacets` used to drop the emptied axis, so
  * `patchNote` saw a map that merely omitted it — which is deliberately not a
- * judgement — and the card stayed in `inbox/` while the command exited 0.
+ * judgment — and the card stayed in `inbox/` while the command exited 0.
  */
 test('set emptying intake accepts a card out of the inbox, by either spelling', () => {
   const v = vault();

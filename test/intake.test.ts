@@ -509,7 +509,7 @@ test('suppressing again replaces the reason rather than failing', () => {
     suppress(root, { fingerprint: 'git:abc', reason: 'second answer' });
     const rows = suppressions(root).rows;
     assert.equal(rows.length, 1, 'one row per fingerprint');
-    assert.equal(rows[0]!.reason, 'second answer', 'the current judgement wins');
+    assert.equal(rows[0]!.reason, 'second answer', 'the current judgment wins');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -582,7 +582,7 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
 
 /**
  * Candidates paired with a bare "keep" verdict — for the materialise tests, whose
- * subject is the write and not the judgement.
+ * subject is the write and not the judgment.
  */
 const asKept = (candidates: Candidate[], over: Partial<Verdict> = {}) =>
   candidates.map((candidate) => ({
@@ -637,7 +637,7 @@ test('a card from a conversation keeps the last of what was said, not only the j
     );
     const notes = reindex(root).notes;
     const slack = notes.get(res.created[0]!)!.body;
-    assert.match(slack, /^\n?> ask: a call is waiting on you\n\nSander wants to rotate the keys together\./, 'the judgement still leads');
+    assert.match(slack, /^\n?> ask: a call is waiting on you\n\nSander wants to rotate the keys together\./, 'the judgment still leads');
     assert.match(slack, new RegExp(`${SOURCE_EXCERPT}\\n\\n\`\`\`text\\n10-13 14:50 you: okay`), 'then the last three lines, newest last');
     assert.match(slack, /Slava: one more item for the rotation list\n```/);
     assert.doesNotMatch(slack, /14:47 Sander|earlier message/, 'three lines, not the whole exchange');
@@ -686,7 +686,7 @@ test('a candidate the vault already answers for is not written again', () => {
         candidate('git:2', 'Already captured', { evidence: { capturedAs: ['a'] } }),
       ]),
     );
-    // Both are mechanical facts about the vault rather than judgements about
+    // Both are mechanical facts about the vault rather than judgments about
     // whether the work matters, which is why acting on them here is allowed.
     assert.deepEqual(res.created, []);
     assert.equal(res.skipped, 2);
@@ -881,7 +881,7 @@ test('the local classifier uses Ollama without exposing tools', async () => {
   }
 });
 
-test('a vault may override the judgement without editing the app', () => {
+test('a vault may override the judgment without editing the app', () => {
   const root = vault({ a: card('a') });
   try {
     let seen = '';
@@ -1189,7 +1189,7 @@ test('a rescue is kept after the decline it corrects is gone', () => {
     assert.ok(unsuppress(root, 'git:1'));
 
     // The suppression is gone and the correction is not. This is the signal that
-    // says the judgement was wrong the expensive way, and it existed nowhere
+    // says the judgment was wrong the expensive way, and it existed nowhere
     // before — the row it corrects was simply deleted.
     assert.equal(suppressions(root).rows.length, 0);
     const back = rescues(root);

@@ -1583,7 +1583,7 @@ test('accepting a card moves it out of the inbox, and every path follows', () =>
     );
 
     // A whole facet map that merely omits the axis is a client that never knew
-    // about it — not a judgement. The card stays where it is.
+    // about it — not a judgment. The card stays where it is.
     patchNote(v.root, 'card', { facets: { project: ['platform'] } });
     assert.ok(existsSync(place(v.root, 'inbox/card.md')), 'omitting intake accepts nothing');
 

@@ -112,7 +112,7 @@ export async function rejudge(
     if (note) out.wouldDrop.push({ id: note.id, title: note.title, reason: d.reason });
   }
   // No verdict twice over is left exactly as it is: this pass rewrites on a
-  // judgement and there was none.
+  // judgment and there was none.
   out.same += judged.unjudged.length;
 
   for (const { candidate, verdict } of judged.keep) {

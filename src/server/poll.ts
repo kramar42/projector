@@ -219,11 +219,11 @@ async function passBody(
     out.idle = read.reason;
     return;
   }
-  const wantsJudgement = settings.classify.enabled;
+  const wantsJudgment = settings.classify.enabled;
 
   for (const report of read.reports) {
     /**
-     * With no judgement wanted, every candidate is kept with an empty verdict —
+     * With no judgment wanted, every candidate is kept with an empty verdict —
      * so the write path is one path. The card is then as thin as the connector
      * event made it, which is what `classify.enabled: false` is asking for.
      */
@@ -240,7 +240,7 @@ async function passBody(
     // Something to judge: this pass is an attempt from here on.
     const attemptId = report.candidates.length ? await attempt() : undefined;
 
-    if (wantsJudgement && report.candidates.length) {
+    if (wantsJudgment && report.candidates.length) {
       const judged = await classify(root, report.candidates, ask);
       if (!judged) {
         // Held, not failed. Nothing written or recorded for this channel or

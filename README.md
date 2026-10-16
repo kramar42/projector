@@ -126,7 +126,7 @@ leaf and a tracked task the same file.
 Each one is fetched, cached and shown inline, and none of them is ever written to.
 
 **An agent is a first-class writer.** Notes are plain files, so a Claude session creates and edits
-them directly, with no API and nothing running. Judgement is where the agent earns its place: sweeping
+them directly, with no API and nothing running. Judgment is where the agent earns its place: sweeping
 the intake, filling in facets, triage. The deterministic parts stay deterministic, so enrichment is
 plain fetching and every count on screen is computed rather than guessed. Starting work on a note
 (▶) hands it to the owner's kernel, which lays out a git worktree per repository and briefs the

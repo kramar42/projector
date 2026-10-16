@@ -46,7 +46,7 @@ moves nothing.
 **Unjudged is a place.** Intake writes `inbox/` — the server's poller, or `pj intake` by hand — and
 nothing else does. A card there is unjudged, and carries `intake: unjudged` in every query, but the
 value is read off the folder and never written to the file. The user judges it, or approves your
-judgement: `pj accept <id>` (the board's `+`) moves it out to where a note like it lives, and every
+judgment: `pj accept <id>` (the board's `+`) moves it out to where a note like it lives, and every
 body link to it follows; an `extends` card folds into its target instead. `pj decline <id> --reason`
 removes it and records the reason, which the judge learns from; the board's `⌫` declines without one. Never write `intake` into
 a frontmatter; it is dropped on the next write.
@@ -357,4 +357,4 @@ shows its sessions — one you invented points at nothing.
 ## Don't compute what a query already answers
 
 Board badges, blocker state, progress counts and "what's actionable" are SQL over the index, not
-judgement calls. Ask `pj` and report what it says. Narrate; do not decide.
+judgment calls. Ask `pj` and report what it says. Narrate; do not decide.

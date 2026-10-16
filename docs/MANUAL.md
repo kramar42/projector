@@ -99,7 +99,7 @@ behave identically — filter, group, sort, count — and carry `ƒ` to say noth
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
 absence, a note's links, the app-written `updated` field, or a store outside the vault. Each is a count, a date comparison or
-the presence of a reference — never a judgement. `type=project` *is* the projects view. The three
+the presence of a reference — never a judgment. `type=project` *is* the projects view. The three
 `type` values are exclusive — a project that something is part of stays a `project` — so the counts
 always add up.
 
@@ -1009,7 +1009,7 @@ pj intake status                   # how far each channel got, and what waits be
 pj intake known claude:abc-123     # which notes already carry this
 
 pj decline git:abc --reason "my own commit"           # a no, recorded
-pj intake declined                                    # what a judgement hid, and why
+pj intake declined                                    # what a judgment hid, and why
 pj intake restore git:abc                             # take the no back
 ```
 
@@ -1079,7 +1079,7 @@ It starts with the server: `bun run serve` or `bun run dev` starts every registe
 polling. The first tick runs at once — a pass with nothing new since the last judges nothing, so a
 restart costs two kernel queries. Turning `poll.enabled` on later needs no restart: the next request
 that opens the vault starts it.
-Each candidate that survives judgement lands as an ordinary note in `inbox/` — so an open board shows
+Each candidate that survives judgment lands as an ordinary note in `inbox/` — so an open board shows
 it appear without doing anything. Being in the
 inbox is what makes it unjudged: every query sees `intake: unjudged` on it, read off the folder and
 never stored in the file. Accepting it moves the file to where a note like it lives — `notes/`, or the
@@ -1133,10 +1133,10 @@ pile explained itself and the queue did not, which put the reading on the expens
 card down meant re-deriving the model's reasoning from its description. It is prose in the body like
 everything else there, so it is yours to delete, and a `rejudge` rewrites it along with the rest.
 
-**A card from a conversation ends with what was said.** Under the judgement, a Slack or Gmail card
+**A card from a conversation ends with what was said.** Under the judgment, a Slack or Gmail card
 keeps the last three lines of the exchange the judge read, newest last, with credential shapes
 already redacted — so the queue shows the message itself and not only an account of it. A
-`rejudge` rewrites the judgement and keeps the excerpt. A Slack card also always links back to its
+`rejudge` rewrites the judgment and keeps the excerpt. A Slack card also always links back to its
 message: when the connector copied no permalink, one is assembled from the channel and the ts, on the
 workspace the vault's own Slack links already use.
 
@@ -1234,7 +1234,7 @@ holds on the classifier, the channels judged before the hold keep their cards an
 kernel — only the one that held, and those after it, are read again next pass.
 
 **It learns from what you decide.** Every decline you take back is the strongest example there is —
-it says the judgement was wrong in the direction that costs you the item, where a decline you leave
+it says the judgment was wrong in the direction that costs you the item, where a decline you leave
 alone only says you agreed. Recent rescues, recent declines and recently kept notes go into the prompt,
 rescues first. Nothing is configured for this; using the queue is what trains it.
 
@@ -1258,7 +1258,7 @@ costs you nothing: the note is on the board either way.
 **If it cannot judge, it does not write.** A pass that cannot reach the classifier holds the channel
 it was judging and every one after it — nothing more written or recorded — and the next one reads the
 same events and tries again; what earlier channels wrote and recorded stands. That is deliberate: falling back to
-writing everything down would hand you the pile the judgement exists to prevent, and you would find
+writing everything down would hand you the pile the judgment exists to prevent, and you would find
 out by looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
 **Saying no is a step too, and it is one verb.** **`pj decline <id> --reason "…"`** — or `⌫` on a

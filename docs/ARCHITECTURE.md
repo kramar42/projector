@@ -621,7 +621,7 @@ thing the collapse gave up.
 **Three SQLite files, three lifecycles.** `.projector/index.db` is derived from the note files and
 rebuilt from scratch whenever they change — C1 means it can never be the authority, so it needs no
 migration. `.projector/enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of
-data that took a second to fetch. `.projector/intake.db` is neither: it holds judgements, which are not
+data that took a second to fetch. `.projector/intake.db` is neither: it holds judgments, which are not
 reproducible — a different threshold or a different reader answers differently — so it cannot be
 rebuilt from anything.
 
@@ -799,7 +799,7 @@ classification rather than an agent, since a classifier able to read files would
 parse what came back, writes and records nothing for that channel or those after it; the next pass
 reads exactly what it read there. Channels judged before the hold keep their cards, their declines and
 their intake events, because the cursor is per channel and each was resolved on its own terms — and
-their judging must not be paid again because the *last* channel's judgement timed out. Materialising everything instead would reach the bad outcome by
+their judging must not be paid again because the *last* channel's judgment timed out. Materialising everything instead would reach the bad outcome by
 accident, and no reading of "the judge is down" makes writing down everything the right answer. `classify.enabled: false` is how a vault asks for that on purpose —
 reachable by decision, never by omission. A candidate the model failed to mention is **asked about once more, alone**; one still unanswered is
 handed back as `unjudged` and the pass declines it with exactly that reason. The rule used to be
@@ -932,9 +932,9 @@ deciding how much to trust an empty board.
 
 **Who decides what deserves a note has never been the deterministic half.** C8 says a derived signal is
 computed and never inferred by a model, and that governs *signals* — the counts and badges the UI draws
-as fact. It has never governed the judgement of whether a candidate is worth filing: that belongs to
+as fact. It has never governed the judgment of whether a candidate is worth filing: that belongs to
 a skill run by hand and always has, which is a model making the call. So classifying candidates at
-fetch time rather than in a conversation moves **when and where** the judgement runs, not who makes it,
+fetch time rather than in a conversation moves **when and where** the judgment runs, not who makes it,
 and no principle moves with it.
 
 What C8 does constrain is the residue. A relevance score may gate a candidate and order a queue; it may
@@ -947,7 +947,7 @@ and returns thread JSON. Every invocation carries `--readonly`, `--gmail-no-send
 the safety boundary is enforced by the transport rather than requested from a model. Jira already has
 this shape through its GET-only REST client. Slack still shells out to the Claude CLI with only the
 MCP tools the vault names. Both return candidates in the shape every other channel returns, so fetch
-stays separate from judgement and one classification policy still covers every channel.
+stays separate from judgment and one classification policy still covers every channel.
 
 **The agent is asked for an id and a permalink, and they are two fields because they answer two
 questions.** A fingerprint is a dedup key — never resolved, never drawn — and a link is a place a
@@ -968,7 +968,7 @@ tools is a wildcard over its write tools. `mcp.gmail` remains only as a compatib
 borrowing the local classifier's model name.
 
 **A rescue is the signal worth keeping.** `unsuppress` writes the row it removes into `rescued`,
-because an un-suppression says the judgement was wrong in the direction that costs the item, and a
+because an un-suppression says the judgment was wrong in the direction that costs the item, and a
 dismissal only says the reader agreed. It had nowhere to go before: the row it corrected was deleted
 and that was the whole record. `classify` renders the recent ones into its prompt ahead of the declines
 that stood and the notes that were kept, with the instruction pointing at them — order fixed rather

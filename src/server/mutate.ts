@@ -465,7 +465,7 @@ export function patchNote(root: string, id: string, input: PatchCardInput): { mt
   // Accepting a card is taking `intake` off it, and `intake` is a place: so a
   // card in `inbox/` asked to stop being unjudged moves to wherever a note like
   // it lives. Only an explicit removal counts — a whole facet map that merely
-  // omits the axis is a client that never knew about it, not a judgement.
+  // omits the axis is a client that never knew about it, not a judgment.
   const accepted =
     (input.facet?.name === 'intake' && !applyMode([], input.facet.values, input.facet.mode ?? 'set').length) ||
     (input.facets !== undefined && 'intake' in input.facets && !input.facets.intake!.length);

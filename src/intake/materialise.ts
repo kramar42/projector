@@ -18,7 +18,7 @@ import type { Candidate } from './types.ts';
  * the file and records the fingerprint. Nothing here decides which — this
  * function has no opinion about whether the candidate was worth writing down, and
  * that is deliberate: **the poller proposes at whatever rate the channels
- * produce.** Making the queue quiet is a judgement, and there is not one here yet.
+ * produce.** Making the queue quiet is a judgment, and there is not one here yet.
  */
 
 /**
@@ -30,7 +30,7 @@ import type { Candidate } from './types.ts';
  * it. Without a target, which is what a tracked candidate looks like when the
  * classifier is switched off, writing it would stand a second note beside the
  * first, which is the duplicate the tracking exists to prevent. Both are
- * mechanical facts about the vault rather than judgements, so acting on them
+ * mechanical facts about the vault rather than judgments, so acting on them
  * costs nothing and breaks no principle.
  */
 export function alreadyAnswered(c: Candidate, v: Verdict): boolean {
@@ -128,7 +128,7 @@ export function sourceExcerpt(c: Candidate, lines = 3): string | undefined {
   return tail.length ? `${SOURCE_EXCERPT}\n\n\`\`\`text\n${tail.join('\n')}\n\`\`\`` : undefined;
 }
 
-/** What a card's body is: the judgement, then what was actually said. */
+/** What a card's body is: the judgment, then what was actually said. */
 const cardBody = (v: Verdict, c: Candidate): string | undefined =>
   [judgedBody(v, c.detail), sourceExcerpt(c)].filter(Boolean).join('\n\n') || undefined;
 
