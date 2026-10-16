@@ -3,15 +3,41 @@
   "name": "Projector",
   "role": "The owner's notes over a markdown vault: a note with a status is work, one without a thought. The owner's commitments are the notes the vault's kernel.commitments axis calls open or answered; the days are its daily notes; intake gathers what happened elsewhere into inbox cards and proposals.",
   "where": "~/Code/projects/projector; vaults listed in its vaults.json, each configured in <vault>/.projector/config.yaml",
-  "reach": ["pj CLI", "the app at localhost:8092", "skill pj-about", "skill pj-work"],
+  "reach": [
+    "pj CLI",
+    "the app at localhost:8092",
+    "skill pj-about",
+    "skill pj-work"
+  ],
   "writes": {
-    "events": ["vault/", "intake/"],
-    "entities": ["vault:"],
+    "events": [
+      "vault/",
+      "intake/"
+    ],
+    "entities": [
+      "vault:"
+    ],
     "proposals": true,
     "commitments": true,
-    "judgments": false
+    "judgments": false,
+    "conversations": [
+      "intake/slack",
+      "intake/gmail",
+      "intake/claude"
+    ]
   },
-  "specs": ["specs/note-conventions.edn"],
-  "sync": [{"name": "vault", "run": "pj kernel import", "when": "after edits, or hourly"}],
-  "skills": ["../.claude/skills/pj-about", "../.claude/skills/pj-work"]
+  "specs": [
+    "specs/note-conventions.edn"
+  ],
+  "sync": [
+    {
+      "name": "vault",
+      "run": "pj kernel import",
+      "when": "after edits, or hourly"
+    }
+  ],
+  "skills": [
+    "../.claude/skills/pj-about",
+    "../.claude/skills/pj-work"
+  ]
 }
