@@ -26,7 +26,7 @@ export const KERNEL_AXIS = 'kernel';
 export const KERNEL_VALUES = ['open', 'proposed-verdict', 'met', 'missed', 'dropped'] as const;
 export type KernelValue = (typeof KERNEL_VALUES)[number];
 
-/** An intent's status, as `bin/kernel intents --json` reports it. */
+/** An intent's status, as the kernel's `vault-intents` query reports it. */
 export type IntentStatus = 'open' | 'proposed' | 'met' | 'missed' | 'dropped' | 'superseded';
 const STATUSES: readonly string[] = ['open', 'proposed', 'met', 'missed', 'dropped', 'superseded'];
 
@@ -93,33 +93,63 @@ function observation(v: unknown): Observation | null {
   };
 }
 
+/** A local `YYYY-MM-DD` for the instant a horizon is due, the day the kernel's own views print. */
+function localDay(v: unknown): string | null {
+  const t = text(v);
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
- * `bin/kernel intents --json`, read leniently: a row without an id or with a
- * status this module does not know is skipped rather than failing the whole
- * answer, because one odd intent should cost one line, not the board's axis.
- * Anything that is not a JSON array is an error, which the reader reports.
+ * The kernel's `projector/vault-intents` answer, as intents.
+ *
+ * The query returns one row per intent and matching alias, with `""` where a
+ * value is absent — no verdict yet, a standing intent, the owner's own intent —
+ * and, for the latest verdict, one row per piece of evidence it cites. Rows are
+ * folded back into one intent each, in the order the kernel returned them. A row
+ * without an id, or with a status this module does not know, is skipped rather
+ * than failing the whole answer, because one odd intent should cost one line,
+ * not the board's axis.
  */
-export function parseIntents(json: string): KernelIntent[] {
-  const parsed: unknown = JSON.parse(json);
-  if (!Array.isArray(parsed)) throw new Error('kernel intents --json did not print an array');
-  const out: KernelIntent[] = [];
-  for (const row of parsed) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const id = text(r.id);
+export function intentsOf(rows: Record<string, unknown>[]): KernelIntent[] {
+  const by = new Map<string, { intent: KernelIntent; about: Set<string>; evidence: Set<string> }>();
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    const id = text(r.intent);
     const status = text(r.status)?.replace(/^:/, '');
     if (!id || !status || !STATUSES.includes(status)) continue;
-    out.push({
-      id,
-      status: status as IntentStatus,
-      statement: text(r.statement) ?? '',
-      horizon: text(r.horizon),
-      about: Array.isArray(r.about) ? r.about.filter((a): a is string => typeof a === 'string') : [],
-      latest: observation(r.latest),
-      proposedBy: text(r.proposed_by),
-    });
+    let had = by.get(id);
+    if (!had) {
+      const latest = observation({ verdict: r.verdict, by: r.by, at: r.at, note: r.note });
+      had = {
+        intent: {
+          id,
+          status: status as IntentStatus,
+          statement: text(r.statement) ?? '',
+          horizon: localDay(r.horizon),
+          about: [],
+          latest,
+          proposedBy: text(r.proposer),
+        },
+        about: new Set(),
+        evidence: new Set(),
+      };
+      by.set(id, had);
+    }
+    const alias = text(r.alias);
+    if (alias) had.about.add(alias);
+    const ev = text(r.evidence);
+    if (ev) had.evidence.add(ev);
   }
-  return out;
+  return [...by.values()].map(({ intent, about, evidence }) => ({
+    ...intent,
+    about: [...about].sort(),
+    latest: intent.latest && { ...intent.latest, evidence: evidence.size },
+  }));
 }
 
 /** What a verdict's standing is read from. */

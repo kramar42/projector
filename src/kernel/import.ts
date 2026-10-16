@@ -2,10 +2,10 @@ import { statSync } from 'node:fs';
 import { basename, relative, sep } from 'node:path';
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
-import { recordStatusesSent, statusesSent, type StatusSent } from '../intake/db.ts';
 import { ingest, noteAlias, spawnRunner, vaultName, type KernelEntity, type KernelEvent, type Runner } from '../intake/kernel.ts';
 import { settingsFor, type Settings } from '../settings.ts';
 import type { Note } from '../schema/types.ts';
+import { ask, eventId, QUERIES, type Row } from './query.ts';
 
 /**
  * `pj kernel import`: the vault as the owner's commitments and days, sent to the
@@ -29,7 +29,10 @@ import type { Note } from '../schema/types.ts';
  *   notes, so a store that imported this vault before stays continuous;
  * - a `vault/status` event per status change since the last import, keyed
  *   `vault:<vault>:<id>:<status>` (`none` when the value went away), with `@<n>`
- *   — the count of changes before it — on a status the note held before;
+ *   — the count of changes before it — on a status the note held before. What
+ *   was sent before is the kernel's to say: the plan reads this system's status
+ *   events back through the saved query `projector/vault-status-events`, so the
+ *   kernel is the only record of them (C11) and nothing here keeps a copy;
  * - a commitment per note carrying a value on the axis, keyed by its alias, with
  *   the state the vault's map gives that value, citing the note's latest status
  *   event. The kernel turns a change of state into the owner's observation and
@@ -41,8 +44,8 @@ import type { Note } from '../schema/types.ts';
  * Inbox cards are not reported: an unjudged card is intake's proposal, which
  * the intake sink already sends.
  *
- * Deterministic (C8): the same vault and the same record of what was sent give
- * the same batch byte for byte.
+ * Deterministic (C8): the same vault and the same status events in the kernel
+ * give the same batch byte for byte.
  */
 
 export type CommitmentState = 'open' | 'met' | 'missed' | 'dropped' | 'none';
@@ -74,19 +77,16 @@ export interface ImportNote {
   mtime: number;
 }
 
-/** A status event this batch carries, for the record once the kernel has taken it. */
-export interface StatusRow {
-  note: string;
+/** What the kernel holds of one note's status events: every key, oldest first, and the latest status and time. */
+export interface StatusSent {
+  keys: string[];
   status: string | null;
-  key: string;
   at: string;
 }
 
 export interface Planned {
   vault: string;
   batch: ImportBatch;
-  /** The status events in the batch, to record as sent once the kernel takes it. */
-  rows: StatusRow[];
   /** Notes read and left out, with why — a day note with no date in its name. */
   skipped: { id: string; why: string }[];
 }
@@ -126,8 +126,9 @@ function criterionOf(cfg: Settings['kernel'], body: string): string {
 }
 
 /**
- * The batch, from the notes and the record of what earlier imports sent. Pure:
- * no file is read and nothing is written, so the mapping is testable whole.
+ * The batch, from the notes and the status events the kernel already holds.
+ * Pure: no file is read, the kernel is not asked and nothing is written, so the
+ * mapping is testable whole.
  */
 export function importBatch(
   vault: string,
@@ -138,7 +139,6 @@ export function importBatch(
   const entities: KernelEntity[] = [];
   const events: KernelEvent[] = [];
   const commitments: Commitment[] = [];
-  const rows: StatusRow[] = [];
   const skipped: { id: string; why: string }[] = [];
   const days = cfg.days ? `${cfg.days}/` : null;
 
@@ -191,7 +191,6 @@ export function importBatch(
           ...(before ? { previous: before.status } : {}),
         },
       });
-      rows.push({ note: note.id, status, key, at });
       evidence = key;
     }
 
@@ -207,7 +206,7 @@ export function importBatch(
     });
   }
 
-  return { vault, batch: { entities, events, links: [], proposals: [], commitments }, rows, skipped };
+  return { vault, batch: { entities, events, links: [], proposals: [], commitments }, skipped };
 }
 
 /** The vault's notes as the import reads them: projector's own walk, with each file's place and time. */
@@ -220,8 +219,79 @@ export function importNotes(root: string): ImportNote[] {
   }));
 }
 
-/** The batch for this vault, as it stands now. Refused when the vault has asked for nothing to import. */
-export function planImport(root: string): { ok: true; plan: Planned } | { ok: false; reason: string } {
+/**
+ * Status events the read lets the kernel return, one per change of every note
+ * in the vault. The kernel refuses more rather than cutting them, so a vault
+ * past it is a refused import, never one keyed from half the record.
+ */
+const SENT_LIMIT = 10_000;
+
+/**
+ * Which key the kernel holds an event under. The kernel keeps an event's id,
+ * derived from its key, not the key: of the two keys the import could have
+ * given the note's `n`th change — the bare one, or `@n` for a status it held
+ * before — the one whose id is this event's. One that matches neither (an event
+ * keyed some other way) is read as the import would key it today.
+ */
+function keyOf(alias: string, status: string | null, n: number, earlier: string[], id: unknown): string {
+  const base = `${alias}:${status ?? 'none'}`;
+  const repeat = `${base}@${n}`;
+  if (id === eventId(base)) return base;
+  if (id === eventId(repeat)) return repeat;
+  return earlier.includes(base) ? repeat : base;
+}
+
+/**
+ * The kernel's `projector/vault-status-events` answer for a vault, as the
+ * record `importBatch` keys the next change from: by note id, every key oldest
+ * first, the status the latest one moved to and when.
+ */
+export function statusesOf(vault: string, rows: Row[]): Map<string, StatusSent> {
+  const prefix = `vault:${vault}:`;
+  const by = new Map<string, { at: string; id: unknown; status: string | null }[]>();
+  for (const r of rows) {
+    const alias = typeof r.note === 'string' ? r.note : '';
+    const id = alias.startsWith(prefix) ? alias.slice(prefix.length) : '';
+    const at = typeof r.at === 'string' ? r.at : '';
+    if (!id || !at) continue;
+    const p = r.payload && typeof r.payload === 'object' ? (r.payload as Record<string, unknown>) : {};
+    const status = typeof p.status === 'string' && p.status ? p.status : null;
+    const list = by.get(id) ?? [];
+    list.push({ at, id: r.event, status });
+    by.set(id, list);
+  }
+  const out = new Map<string, StatusSent>();
+  for (const [id, list] of [...by].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    // Newest first from the kernel; the keys are counted from the first change.
+    list.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const keys: string[] = [];
+    for (const [n, e] of list.entries()) keys.push(keyOf(`${prefix}${id}`, e.status, n, keys, e.id));
+    const last = list[list.length - 1]!;
+    out.set(id, { keys, status: last.status, at: new Date(Date.parse(last.at)).toISOString() });
+  }
+  return out;
+}
+
+/** What the kernel holds of this vault's status events, or why it could not say. Never throws. */
+export async function statusesSent(
+  cfg: Settings['kernel'],
+  vault: string,
+  run?: Runner,
+): Promise<{ ok: true; sent: Map<string, StatusSent> } | { ok: false; reason: string }> {
+  const r = await ask(cfg, QUERIES.vaultStatusEvents, { alias: `vault:${vault}:` }, { run, limit: SENT_LIMIT });
+  return r.ok ? { ok: true, sent: statusesOf(vault, r.rows) } : r;
+}
+
+/**
+ * The batch for this vault, as it stands now against what the kernel holds.
+ * Refused when the vault has asked for nothing to import, and when the kernel
+ * cannot say what it holds: a batch keyed without the record would send a
+ * return to an earlier status under a key the kernel already has.
+ */
+export async function planImport(
+  root: string,
+  run?: Runner,
+): Promise<{ ok: true; plan: Planned } | { ok: false; reason: string }> {
   const settings = settingsFor(root);
   const cfg = settings.kernel;
   if (!cfg.enabled) return { ok: false, reason: 'this vault has no kernel: block with enabled: true — see `pj help kernel`' };
@@ -229,7 +299,10 @@ export function planImport(root: string): { ok: true; plan: Planned } | { ok: fa
     return { ok: false, reason: 'nothing to import: the kernel: block names neither commitments (axis, open) nor days' };
   }
   const vault = vaultName(root, settings);
-  return { ok: true, plan: importBatch(vault, cfg, importNotes(root), statusesSent(root, vault)) };
+  // Days carry no status, so a vault that names only days has nothing to ask.
+  const sent = cfg.commitments ? await statusesSent(cfg, vault, run) : { ok: true as const, sent: new Map<string, StatusSent>() };
+  if (!sent.ok) return sent;
+  return { ok: true, plan: importBatch(vault, cfg, importNotes(root), sent.sent) };
 }
 
 export type Imported =
@@ -238,17 +311,17 @@ export type Imported =
 
 /**
  * Plan, and unless `dryRun`, send as the owner: `<bin> ingest --source
- * system:projector --owner --json`. The status events are recorded as sent only
- * once the kernel has taken the batch, so a refused import is tried again whole.
+ * system:projector --owner --json`. Nothing is recorded here: the next plan
+ * asks the kernel again, so a refused import is tried again whole and a taken
+ * one is never sent twice.
  */
 export async function runImport(root: string, opts: { dryRun?: boolean; run?: Runner } = {}): Promise<Imported> {
-  const planned = planImport(root);
+  const planned = await planImport(root, opts.run);
   if (!planned.ok) return planned;
   const { plan } = planned;
   if (opts.dryRun) return { ok: true, plan, answer: null };
   const r = await ingest(settingsFor(root).kernel, plan.batch, { owner: true }, opts.run ?? spawnRunner);
   if (!r.ok) return r;
-  recordStatusesSent(root, plan.vault, plan.rows);
   return { ok: true, plan, answer: r.answer };
 }
 

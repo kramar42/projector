@@ -1,0 +1,17 @@
+;; This system's vault/status events about a note, newest first: ?alias is the note's alias
+;; (vault:<vault>:<id>), or an alias prefix (vault:<vault>:) for every note at once, each row naming
+;; its note. ?event is the event's kernel id, derived from its key; ?payload is what the import sent,
+;; with the status the note moved to (null for none). projector's import.ts reads it back to key the
+;; next change (@n) and to send nothing for a status unchanged; it orders the rows by ?at itself.
+[:find ?note ?event ?at ?payload
+ :in ?alias
+ :where
+ [?event :event/kind :vault/status]
+ [?event :event/about ?n]
+ [?n :entity/aliases ?note]
+ [(clojure.string/starts-with? ?note ?alias)]
+ (of-system ?event ?s)
+ (alias ?s "system:projector")
+ [?event :event/at ?at]
+ [?event :event/payload ?payload]
+ :order-by [?at :desc]]

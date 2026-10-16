@@ -1,0 +1,6 @@
+{
+ "columns": ["note", "event", "at", "payload"],
+ "rows": [],
+ "count": 0,
+ "query": "projector/vault-status-events"
+}

@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { appRoot, paths } from '../src/config.ts';
-import { closeIntakeDb, statusesSent } from '../src/intake/db.ts';
-import { commitmentState, importBatch, importNotes, planImport, type ImportBatch } from '../src/kernel/import.ts';
+import { DatabaseSync } from 'node:sqlite';
+import { closeIntakeDb, openIntakeDb } from '../src/intake/db.ts';
+import { commitmentState, importBatch, importNotes, planImport, statusesOf, type ImportBatch } from '../src/kernel/import.ts';
+import { eventId, parseAnswer } from '../src/kernel/query.ts';
 import { MANIFEST, register } from '../src/kernel/register.ts';
 import { kernelBatch } from '../src/intake/kernel.ts';
 import { forgetSettings, settingsFor, settingsPath, type Settings } from '../src/settings.ts';
@@ -18,9 +20,11 @@ import { place } from './fixture.ts';
  * system that owns its adapter. Pinned here: the batch a vault maps to — which
  * notes are commitments and in which state, the status events and their keys,
  * the days — through the vault's own configuration and nothing the code knows
- * about any facet value (C4); the record that makes a repeated status `@n`; the
- * command against `test/fake-kernel`, which records every batch it is given;
- * and the manifest the batches must fit.
+ * about any facet value (C4); the status events read back from the kernel
+ * through `projector/vault-status-events`, which make a repeated status `@n`
+ * and an unchanged one nothing; the command against `test/fake-kernel`, which
+ * records every batch it is given and answers that query with what a test says
+ * the kernel holds; and the manifest the batches and the queries must fit.
  */
 
 const FAKE = fileURLToPath(new URL('./fake-kernel', import.meta.url));
@@ -78,13 +82,18 @@ function scratch(config = CONFIG()) {
   writeFileSync(settingsPath(root), config, 'utf8');
   const log = join(root, 'kernel-calls.log');
   const batches = join(root, 'batches.jsonl');
+  const answers = join(root, 'kernel-answers');
+  mkdirSync(answers, { recursive: true });
+  const taken = (): ImportBatch[] =>
+    existsSync(batches) ? readFileSync(batches, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
   return {
     root,
     log,
     calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : []),
-    batches: (): ImportBatch[] =>
-      existsSync(batches) ? readFileSync(batches, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [],
-    env: { FAKE_KERNEL_LOG: log, FAKE_KERNEL_BATCHES: batches },
+    batches: taken,
+    /** The fake kernel now answers `vault-status-events` with every status event of the batches it took, as the real one would. */
+    holds: () => writeFileSync(join(answers, 'vault-status-events.json'), statusAnswer(taken().flatMap((b) => b.events)), 'utf8'),
+    env: { FAKE_KERNEL_LOG: log, FAKE_KERNEL_BATCHES: batches, FAKE_KERNEL_QUERIES: answers },
     cleanup: () => {
       closeIntakeDb(root);
       rmSync(root, { recursive: true, force: true });
@@ -92,11 +101,26 @@ function scratch(config = CONFIG()) {
   };
 }
 
+/**
+ * `projector/vault-status-events` as the kernel answers it for these events:
+ * once per key, newest first, each event by the id the kernel derives from its
+ * key and never by the key itself.
+ */
+function statusAnswer(events: ImportBatch['events']): string {
+  const once = new Map(events.filter((e) => e.kind === 'vault/status').map((e) => [e.key, e]));
+  const rows = [...once.values()]
+    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))
+    .map((e) => [e.about[0], eventId(e.key), new Date(e.at!).toISOString().replace('.000Z', 'Z'), e.payload]);
+  return JSON.stringify({ columns: ['note', 'event', 'at', 'payload'], rows, count: rows.length });
+}
+
 const CLI = fileURLToPath(new URL('../src/cli/pj.ts', import.meta.url));
 
 function pj(root: string, args: string[], env: Record<string, string> = {}): { out: string; err: string; code: number } {
   const clean: Record<string, string | undefined> = { ...process.env, PROJECTOR_NO_DELEGATE: '1' };
-  for (const key of ['PROJECTOR_DATA', 'PROJECTOR_VAULTS', 'FAKE_KERNEL_FAIL', 'FAKE_KERNEL_LOG', 'FAKE_KERNEL_BATCHES']) delete clean[key];
+  for (const key of ['PROJECTOR_DATA', 'PROJECTOR_VAULTS', 'FAKE_KERNEL_FAIL', 'FAKE_KERNEL_LOG', 'FAKE_KERNEL_BATCHES', 'FAKE_KERNEL_QUERIES', 'FAKE_KERNEL_QUERY_FAIL']) {
+    delete clean[key];
+  }
   const r = spawnSync(process.execPath, [CLI, '--vault', root, ...args], {
     encoding: 'utf8',
     env: { ...clean, PROJECTOR_VAULTS: join(root, 'registry.json'), ...env },
@@ -106,12 +130,12 @@ function pj(root: string, args: string[], env: Record<string, string> = {}): { o
 
 // ------------------------------------------------------------------ the mapping
 
-test('a vault maps to entities, commitments, status events and days, through its own map', () => {
+test('a vault maps to entities, commitments, status events and days, through its own map', async () => {
   const v = scratch();
   try {
-    const planned = planImport(v.root);
-    assert.ok(planned.ok);
-    const { batch, rows, skipped, vault } = planned.plan;
+    const planned = await planImport(v.root);
+    assert.ok(planned.ok, planned.ok ? '' : planned.reason);
+    const { batch, skipped, vault } = planned.plan;
     assert.equal(vault, 'scratch');
 
     assert.deepEqual(
@@ -153,7 +177,6 @@ test('a vault maps to entities, commitments, status events and days, through its
       about: ['vault:scratch:ship'],
       payload: { vault: 'scratch', id: 'ship', axis: 'status', status: 'active', path: 'notes/ship.md' },
     });
-    assert.deepEqual(rows.map((r) => r.key), status.map((e) => e.key), 'every status event is recorded once sent');
 
     const days = batch.events.filter((e) => e.kind === 'vault/day');
     assert.deepEqual(days, [
@@ -201,23 +224,48 @@ test('a vault maps to entities, commitments, status events and days, through its
   }
 });
 
-test('what was sent before decides the status events: nothing unchanged, @n for a repeat, none for a value gone', () => {
+test('the kernel’s status events decide the next: nothing unchanged, @n for a repeat, none for a value gone', () => {
   const v = scratch();
   try {
     const cfg = settingsFor(v.root).kernel;
     const notes = importNotes(v.root);
-    const sent = new Map([
-      // active → done → active again: the third change is a repeat.
-      ['ship', { keys: ['vault:scratch:ship:active', 'vault:scratch:ship:done'], status: 'done', at: '2026-10-16T00:00:00.000Z' }],
-      // unchanged since the last import.
-      ['shipped', { keys: ['vault:scratch:shipped:done'], status: 'done', at: '2026-10-15T10:00:00.000Z' }],
-      // was active; the thought has no status now.
-      ['thought', { keys: ['vault:scratch:thought:active'], status: 'active', at: '2026-10-15T09:00:00.000Z' }],
-    ]);
-    const { batch, rows } = importBatch('scratch', cfg, notes, sent);
+    const event = (key: string, at: string, status: string | null) => {
+      const alias = key.slice(0, key.lastIndexOf(':'));
+      const id = alias.slice(alias.lastIndexOf(':') + 1);
+      return { key, kind: 'vault/status', at, about: [alias], payload: { vault: 'scratch', id, axis: 'status', status, path: `notes/${id}.md` } };
+    };
+    // What the kernel answers: ids, not keys, and newest first.
+    const answer = parseAnswer(
+      statusAnswer([
+        // active → done → active again → done again: the third change is a repeat, and so is the fourth.
+        event('vault:scratch:ship:active', '2026-10-15T08:00:00.000Z', 'active'),
+        event('vault:scratch:ship:done', '2026-10-15T09:00:00.000Z', 'done'),
+        event('vault:scratch:ship:active@2', '2026-10-15T10:00:00.000Z', 'active'),
+        event('vault:scratch:ship:done@3', '2026-10-16T00:00:00.000Z', 'done'),
+        // unchanged since the last import.
+        event('vault:scratch:shipped:done', '2026-10-15T10:00:00.000Z', 'done'),
+        // was active; the thought has no status now.
+        event('vault:scratch:thought:active', '2026-10-15T09:00:00.000Z', 'active'),
+        // another vault's note, whose alias only starts like this vault's.
+        event('vault:scratchpad:x:active', '2026-10-15T09:00:00.000Z', 'active'),
+      ]),
+    );
+    const sent = statusesOf('scratch', answer);
+    assert.deepEqual(
+      sent.get('ship'),
+      {
+        keys: ['vault:scratch:ship:active', 'vault:scratch:ship:done', 'vault:scratch:ship:active@2', 'vault:scratch:ship:done@3'],
+        status: 'done',
+        at: '2026-10-16T00:00:00.000Z',
+      },
+      'each key recovered from the id the kernel derived from it, oldest first',
+    );
+    assert.deepEqual([...sent.keys()], ['ship', 'shipped', 'thought']);
+
+    const { batch } = importBatch('scratch', cfg, notes, sent);
     const status = Object.fromEntries(batch.events.filter((e) => e.kind === 'vault/status').map((e) => [e.payload.id, e]));
 
-    assert.equal(status.ship!.key, 'vault:scratch:ship:active@2');
+    assert.equal(status.ship!.key, 'vault:scratch:ship:active@4');
     assert.equal(status.ship!.at, '2026-10-16T00:00:00.001Z', 'after the change before it, though the file is older');
     assert.equal(status.ship!.payload.previous, 'done');
     assert.equal(status.shipped, undefined, 'an unchanged status is no event');
@@ -226,9 +274,12 @@ test('what was sent before decides the status events: nothing unchanged, @n for 
 
     const by = Object.fromEntries(batch.commitments.map((c) => [c.key, c]));
     assert.deepEqual(by['vault:scratch:shipped']!.evidence, ['vault:scratch:shipped:done'], 'an unchanged note cites its last event');
-    assert.deepEqual(by['vault:scratch:ship']!.evidence, ['vault:scratch:ship:active@2']);
+    assert.deepEqual(by['vault:scratch:ship']!.evidence, ['vault:scratch:ship:active@4']);
     assert.equal(by['vault:scratch:thought']!.state, 'none', 'a value gone is no commitment, which drops an open intent');
-    assert.deepEqual(rows.map((r) => r.note).sort(), ['paused', 'ship', 'someday', 'thought']);
+
+    // An event keyed some other way is counted, and read as the import would key it.
+    const odd = statusesOf('scratch', [{ note: 'vault:scratch:ship', event: 'not-an-id', at: '2026-10-15T08:00:00Z', payload: { status: 'active' } }]);
+    assert.deepEqual(odd.get('ship')!.keys, ['vault:scratch:ship:active']);
   } finally {
     v.cleanup();
   }
@@ -259,19 +310,19 @@ test('the kernel block’s commitments and days: read from the file, naming no v
   }
 });
 
-test('an import is refused when the vault asked for nothing, and a day without a date is skipped', () => {
+test('an import is refused when the vault asked for nothing, and a day without a date is skipped', async () => {
   const off = scratch('kernel:\n  enabled: false\n');
   const nothing = scratch('kernel:\n  enabled: true\n  bin: kernel\n');
   const days = scratch('kernel:\n  enabled: true\n  bin: kernel\n  vault: scratch\n  days: daily\n');
   try {
-    const a = planImport(off.root);
+    const a = await planImport(off.root);
     assert.ok(!a.ok && /enabled: true/.test(a.reason));
-    const b = planImport(nothing.root);
+    const b = await planImport(nothing.root);
     assert.ok(!b.ok && /nothing to import/.test(b.reason));
 
     writeFileSync(place(days.root, 'daily/notes-on-days.md'), note('notes-on-days', 'About days', ''), 'utf8');
-    const c = planImport(days.root);
-    assert.ok(c.ok);
+    const c = await planImport(days.root);
+    assert.ok(c.ok, 'days only: no status to ask the kernel about, so `bin: kernel` is never run');
     assert.deepEqual(c.plan.batch.commitments, [], 'days only: no commitments without an axis');
     assert.deepEqual(c.plan.batch.events.map((e) => e.key), ['vault:scratch:day:2026-10-14', 'vault:scratch:day:2026-10-15']);
     assert.deepEqual(c.plan.skipped, [{ id: 'notes-on-days', why: 'in daily/ with no date in its name' }]);
@@ -282,14 +333,17 @@ test('an import is refused when the vault asked for nothing, and a day without a
 
 // ------------------------------------------------------------------ the command
 
-test('pj kernel import sends one batch as the owner, records it, and sends no change twice', () => {
+const STATUS_QUERY = 'query --saved projector/vault-status-events --in alias=vault:scratch: --limit 10000 --json';
+
+test('pj kernel import asks the kernel what it holds, sends one batch as the owner, and sends no change twice', () => {
   const v = scratch();
   try {
+    const kdb = join(v.root, 'kdb');
     const dry = pj(v.root, ['kernel', 'import', '--dry-run', '--json'], v.env);
     assert.equal(dry.code, 0, dry.err);
     const printed = JSON.parse(dry.out) as ImportBatch;
     assert.equal(printed.commitments.length, 4);
-    assert.deepEqual(v.calls(), [], 'a dry run asks the kernel nothing');
+    assert.deepEqual(v.calls(), [`${kdb}|${STATUS_QUERY}`], 'a dry run asks the kernel what it holds, and sends nothing');
 
     const human = pj(v.root, ['kernel', 'import', '--dry-run'], v.env);
     assert.match(human.out, /would send vault:scratch — 4 commitment\(s\) \(1 open, 1 met, 2 none\), 4 status change\(s\), 2 day\(s\), 6 entities/);
@@ -298,13 +352,14 @@ test('pj kernel import sends one batch as the owner, records it, and sends no ch
     assert.equal(sent.code, 0, sent.err);
     assert.match(sent.out, /^sent vault:scratch — 4 commitment/);
     assert.match(sent.out, /kernel: source system:projector · entities-new 0/);
-    assert.deepEqual(v.calls(), [`${join(v.root, 'kdb')}|ingest --source system:projector --owner --json`]);
+    assert.deepEqual(v.calls().slice(-2), [`${kdb}|${STATUS_QUERY}`, `${kdb}|ingest --source system:projector --owner --json`]);
     const [first] = v.batches();
     assert.deepEqual(first, printed, 'the batch sent is the batch the dry run printed');
+    assert.equal(existsSync(paths(v.root).intakeDb), false, 'nothing of what was sent is kept here: the kernel is the record');
 
-    // The record now holds what was sent: a second import reports the same
+    // The kernel now holds what it took: a second import reports the same
     // commitments, and no status event again.
-    closeIntakeDb(v.root);
+    v.holds();
     const again = pj(v.root, ['kernel', 'import'], v.env);
     assert.equal(again.code, 0, again.err);
     const second = v.batches()[1]!;
@@ -318,25 +373,47 @@ test('pj kernel import sends one batch as the owner, records it, and sends no ch
     const third = v.batches()[2]!;
     assert.deepEqual(third.events.filter((e) => e.kind === 'vault/status').map((e) => e.key), ['vault:scratch:ship:done']);
     assert.equal(third.commitments.find((c) => c.key === 'vault:scratch:ship')!.state, 'met');
-    closeIntakeDb(v.root);
-    assert.deepEqual(statusesSent(v.root, 'scratch').get('ship')!.keys, ['vault:scratch:ship:active', 'vault:scratch:ship:done']);
+
+    // And back to a status it held before: the kernel's record makes it @2.
+    v.holds();
+    writeFileSync(place(v.root, 'ship.md'), note('ship', 'Ship the widget', 'status: [active]'), 'utf8');
+    pj(v.root, ['kernel', 'import'], v.env);
+    const fourth = v.batches()[3]!;
+    const back = fourth.events.filter((e) => e.kind === 'vault/status');
+    assert.deepEqual(back.map((e) => e.key), ['vault:scratch:ship:active@2']);
+    assert.equal(back[0]!.payload.previous, 'done');
+    assert.deepEqual(fourth.commitments.find((c) => c.key === 'vault:scratch:ship')!.evidence, ['vault:scratch:ship:active@2']);
   } finally {
     v.cleanup();
   }
 });
 
-test('a kernel that refuses the batch is a clear message, a non-zero exit, and nothing recorded', () => {
+test('a kernel that refuses the batch, or the query, is a clear message, a non-zero exit, and nothing kept', () => {
   const v = scratch();
   try {
     const r = pj(v.root, ['kernel', 'import'], { ...v.env, FAKE_KERNEL_FAIL: '1' });
     assert.equal(r.code, 1);
-    assert.match(r.err, /pj kernel import: kernel ingest exited 2: error: store is locked/);
-    assert.equal(statusesSent(v.root, 'scratch').size, 0, 'a refused batch is sent whole next time');
+    assert.match(r.err, /pj kernel import: kernel query projector\/vault-status-events exited 2: error: store is locked/);
+    assert.deepEqual(v.batches(), [], 'a kernel that cannot say what it holds is sent nothing');
 
+    // The query answers and the batch is refused: the kernel took nothing, so it holds nothing, and the next import sends it whole.
+    const fails = join(v.root, 'fails-on-ingest');
+    writeFileSync(fails, `#!/bin/sh\n[ "$1" = ingest ] && { echo "error: batch refused {}" >&2; exit 1; }\nexec ${FAKE} "$@"\n`, 'utf8');
+    chmodSync(fails, 0o755);
+    writeFileSync(settingsPath(v.root), CONFIG(fails), 'utf8');
+    const refused = pj(v.root, ['kernel', 'import'], v.env);
+    assert.equal(refused.code, 1);
+    assert.match(refused.err, /pj kernel import: kernel ingest exited 1: error: batch refused/);
+    writeFileSync(settingsPath(v.root), CONFIG(), 'utf8');
     const later = pj(v.root, ['kernel', 'import'], v.env);
     assert.equal(later.code, 0, later.err);
-    closeIntakeDb(v.root);
-    assert.equal(statusesSent(v.root, 'scratch').size, 4, 'and once it is taken, recorded');
+    assert.equal(v.batches()[0]!.events.filter((e) => e.kind === 'vault/status').length, 4, 'sent whole');
+
+    // A kernel that has not registered projector's queries says so, with what to run.
+    const unregistered = pj(v.root, ['kernel', 'import'], { ...v.env, FAKE_KERNEL_QUERY_FAIL: 'vault-status-events' });
+    assert.equal(unregistered.code, 1);
+    assert.match(unregistered.err, /no saved query projector\/vault-status-events: .* — run `pj kernel register`/);
+    assert.equal(v.batches().length, 1);
 
     const nobin = scratch(CONFIG(join(tmpdir(), 'no-such-kernel', 'bin', 'kernel')));
     try {
@@ -347,6 +424,28 @@ test('a kernel that refuses the batch is a clear message, a non-zero exit, and n
       nobin.cleanup();
     }
     assert.equal(pj(v.root, ['kernel', 'import', 'extra'], v.env).code, 1);
+  } finally {
+    v.cleanup();
+  }
+});
+
+test('an intake.db that still has the old kernel_status table opens, keeps the rest, and loses only that table', () => {
+  const v = scratch();
+  try {
+    const file = paths(v.root).intakeDb;
+    mkdirSync(dirname(file), { recursive: true });
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE seen (key TEXT PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
+      INSERT INTO seen VALUES ('jira:K-1', 'Done', '2026-10-15T10:00:00Z');
+      CREATE TABLE kernel_status (vault TEXT NOT NULL, note TEXT NOT NULL, seq INTEGER NOT NULL, status TEXT, key TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (vault, note, seq));
+      INSERT INTO kernel_status VALUES ('scratch', 'ship', 0, 'active', 'vault:scratch:ship:active', '2026-10-15T10:00:00Z');`);
+    old.close();
+
+    const db = openIntakeDb(v.root);
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name);
+    assert.ok(!tables.includes('kernel_status'));
+    assert.ok(tables.includes('watermark'));
+    assert.deepEqual({ ...(db.prepare('SELECT state FROM seen WHERE key = ?').get('jira:K-1') as object) }, { state: 'Done' });
   } finally {
     v.cleanup();
   }
@@ -373,7 +472,7 @@ test('pj kernel register hands the kernel this checkout’s manifest', async () 
   }
 });
 
-test('the manifest declares what projector writes, and every batch it sends fits it', () => {
+test('the manifest declares what projector writes and reads, and every batch it sends fits it', async () => {
   const m = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   assert.equal(m.system, 'projector');
   assert.deepEqual(m.writes, { events: ['vault/', 'intake/', 'plan/', 'review/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
@@ -417,6 +516,23 @@ test('the manifest declares what projector writes, and every batch it sends fits
   assert.deepEqual(m.develop, { repo: '..', 'default-branch': 'main', branch: 'kernel/<attempt>', test: 'bun test', typecheck: 'bun run typecheck', guide: 'CLAUDE.md' });
   assert.ok(existsSync(join(dir, m.develop.repo, m.develop.guide)));
   for (const skill of m.skills) assert.ok(existsSync(join(dir, skill, 'SKILL.md')), skill);
+  // What projector reads of the kernel: its saved queries, each an EDN file whose :in names exactly its inputs.
+  assert.deepEqual(
+    m.queries.map((q: { name: string; query: string; inputs: { name: string; type: string }[] }) => [q.name, q.query, q.inputs.map((i) => `${i.name}:${i.type}`)]),
+    [
+      ['vault-intents', 'queries/vault-intents.edn', ['prefix:string']],
+      ['vault-status-events', 'queries/vault-status-events.edn', ['alias:string']],
+      ['intake-proposals', 'queries/intake-proposals.edn', []],
+    ],
+  );
+  for (const q of m.queries as { name: string; query: string; inputs: { name: string }[]; description: string }[]) {
+    const text = readFileSync(join(dir, q.query), 'utf8');
+    const ins = /:in ([^\n]*)/.exec(text)?.[1]?.match(/\?[a-z][a-z0-9-]*/g) ?? [];
+    assert.deepEqual(ins, q.inputs.map((i) => `?${i.name}`), q.name);
+    assert.ok(q.description, q.name);
+    assert.ok(existsSync(join(appRoot, 'test', 'kernel-queries', `${q.name}.json`)), `test/fake-kernel answers ${q.name}`);
+  }
+  assert.match(readFileSync(join(dir, 'queries/vault-status-events.edn'), 'utf8'), /\(alias \?s "system:projector"\)/, 'this system’s events only');
   for (const r of ['pj CLI', 'skill pj-about', 'skill pj-work']) assert.ok(m.reach.includes(r), r);
   // What a session capturing for the owner runs: pj add for work, the note's file for a note about it.
   assert.deepEqual(m.accepts.map((x: { what: string }) => x.what.split(':')[0]), ['A task or a project', 'A note about work already in the vault']);
@@ -425,7 +541,7 @@ test('the manifest declares what projector writes, and every batch it sends fits
 
   const v = scratch();
   try {
-    const planned = planImport(v.root);
+    const planned = await planImport(v.root);
     assert.ok(planned.ok);
     const intake = kernelBatch(
       'scratch',

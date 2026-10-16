@@ -1,0 +1,14 @@
+{
+ "columns": ["intent", "alias", "status", "statement", "horizon", "verdict", "by", "at", "note", "evidence", "proposer"],
+ "rows": [
+  ["aaaaaaaa-0000-4000-8000-000000000001", "vault:fake:alpha", "open", "Ship alpha", "2026-10-20T12:00:00Z", "met", "agent:claude", "2026-10-15T09:00:00Z", "the PR merged", "ee000000-0000-4000-8000-000000000001", ""],
+  ["aaaaaaaa-0000-4000-8000-000000000009", "vault:fake:alpha", "superseded", "Ship alpha, first try", "", "", "", "", "", "", ""],
+  ["bbbbbbbb-0000-4000-8000-000000000002", "vault:fake:beta", "open", "Write beta", "", "", "", "", "", "", ""],
+  ["cccccccc-0000-4000-8000-000000000003", "vault:fake:gamma", "met", "Finish gamma", "", "met", "owner", "2026-10-14T18:00:00Z", "", "", ""],
+  ["dddddddd-0000-4000-8000-000000000004", "vault:fake:delta", "proposed", "Look at delta", "", "", "", "", "", "", "agent:projector-intake"],
+  ["eeeeeeee-0000-4000-8000-000000000005", "vault:fake:epsilon", "open", "Epsilon, judged by its owner", "", "partial", "owner", "2026-10-13T10:00:00Z", "not yet", "", ""],
+  ["ffffffff-0000-4000-8000-000000000006", "vault:other:zeta", "open", "Another vault's note", "", "", "", "", "", "", ""]
+ ],
+ "count": 7,
+ "query": "projector/vault-intents"
+}

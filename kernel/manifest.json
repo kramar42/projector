@@ -69,5 +69,37 @@
     "test": "bun test",
     "typecheck": "bun run typecheck",
     "guide": "CLAUDE.md"
-  }
+  },
+  "queries": [
+    {
+      "name": "vault-intents",
+      "description": "Every intent, whatever its status, about this vault's notes: status, statement, horizon, the latest verdict and who gave it, and who proposed it when not the owner. One row per intent, note alias and piece of evidence the latest verdict cites; projector's board reads its kernel axis through it.",
+      "query": "queries/vault-intents.edn",
+      "inputs": [
+        {
+          "name": "prefix",
+          "type": "string",
+          "description": "the vault's alias prefix, vault:<vault>:"
+        }
+      ]
+    },
+    {
+      "name": "vault-status-events",
+      "description": "The vault/status events projector's import sent about a note, newest first, with the payload it sent; given an alias prefix, every note's, each row naming its note. The import reads them back to key the next change, so the kernel is the only record of what was sent.",
+      "query": "queries/vault-status-events.edn",
+      "inputs": [
+        {
+          "name": "alias",
+          "type": "string",
+          "description": "a note's alias, vault:<vault>:<id>, or a vault's prefix, vault:<vault>:"
+        }
+      ]
+    },
+    {
+      "name": "intake-proposals",
+      "description": "The intents projector's intake proposed that the owner has not answered yet: still proposed, with when and what each is about.",
+      "query": "queries/intake-proposals.edn",
+      "inputs": []
+    }
+  ]
 }

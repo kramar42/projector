@@ -4,7 +4,8 @@ import type { Note } from '../schema/types.ts';
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
 import { patchNote } from '../server/mutate.ts';
-import { forgetKernel, kernelEnv, kernelIndex, said, type KernelIndex } from './read.ts';
+import { forgetKernel, kernelIndex, type KernelIndex } from './read.ts';
+import { kernelEnv, said } from './query.ts';
 import { shortId, type KernelNote } from './state.ts';
 
 /**

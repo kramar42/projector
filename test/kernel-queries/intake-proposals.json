@@ -1,0 +1,8 @@
+{
+ "columns": ["intent", "statement", "at", "about"],
+ "rows": [
+  ["dddddddd-0000-4000-8000-000000000004", "Look at delta", "2026-10-12T08:00:00Z", "vault:fake:delta"]
+ ],
+ "count": 1,
+ "query": "projector/intake-proposals"
+}

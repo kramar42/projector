@@ -1,0 +1,21 @@
+;; The intents projector's intake proposed that the owner has not answered yet: still proposed,
+;; opened by an observation of system:projector that cites an intake/ event (an inbox card's
+;; candidate; the loops the registration proposes cite none). When it was proposed, and each entity
+;; it is about by alias, or "" when it names none; one row per intent and alias.
+[:find ?intent ?statement ?at ?about
+ :where
+ (proposed-intent ?intent)
+ [?intent :intent/origin ?o]
+ [?o :observation/observer ?s]
+ (alias ?s "system:projector")
+ [?o :observation/evidence ?ev]
+ [?ev :event/kind ?kind]
+ [(str ?kind) ?k]
+ [(clojure.string/starts-with? ?k ":intake/")]
+ [?intent :intent/statement ?statement]
+ [?o :observation/at ?at]
+ (or-join [?intent ?about]
+   (and [?intent :intent/about ?e]
+        [?e :entity/aliases ?about])
+   (and (not [?intent :intent/about _])
+        [(ground "") ?about]))]

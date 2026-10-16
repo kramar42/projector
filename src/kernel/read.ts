@@ -1,11 +1,13 @@
 import { basename } from 'node:path';
 import { settingsFor, type Settings } from '../settings.ts';
-import { spawnRunner, vaultName, type Runner } from '../intake/kernel.ts';
+import { vaultName, type Runner } from '../intake/kernel.ts';
 import { warn } from '../server/log.ts';
-import { notesOf, parseIntents, type KernelIntent, type KernelNote } from './state.ts';
+import { ask, QUERIES } from './query.ts';
+import { intentsOf, notesOf, type KernelIntent, type KernelNote } from './state.ts';
 
 /**
- * The kernel read: `<kernel.bin> intents --json --about vault:<vault>:`, once
+ * The kernel read: projector's saved query, `<kernel.bin> query --saved
+ * projector/vault-intents --in prefix=vault:<vault>: --json` (`query.ts`), once
  * per index rebuild and at most once per `KERNEL_TTL_MS` after that.
  *
  * **Why it is cached at all.** The board asks for the `kernel` axis on every
@@ -22,8 +24,9 @@ import { notesOf, parseIntents, type KernelIntent, type KernelNote } from './sta
  * the vault.
  *
  * **A kernel that is absent costs nothing but its axis.** Every way of failing —
- * no `kernel.bin`, a binary that is not there, one that exits non-zero or prints
- * something other than an array — is an empty answer with a `reason`, warned
+ * no `kernel.bin`, a binary that is not there, one that exits non-zero, refuses
+ * the query (one that has not registered projector's queries yet) or prints
+ * something other than an answer — is an empty answer with a `reason`, warned
  * once per vault until it recovers. Off unless the vault's `kernel:` block says
  * `enabled: true`, exactly as the sink is.
  */
@@ -32,6 +35,13 @@ export const KERNEL_TTL_MS = 30_000;
 
 /** A read is on the request path; a kernel that takes longer than this is treated as absent. */
 const READ_TIMEOUT_S = 10;
+
+/**
+ * Rows the read lets the kernel return: one per intent, alias and piece of the
+ * latest verdict's evidence. The kernel refuses more than it is allowed rather
+ * than cutting them, which is a reason here, never a partial board.
+ */
+const READ_LIMIT = 10_000;
 
 export interface KernelIndex {
   /** The vault's `kernel:` block is on. When it is not, nothing was asked. */
@@ -47,38 +57,19 @@ export interface KernelIndex {
 
 export type IntentsRead = { ok: true; intents: KernelIntent[] } | { ok: false; reason: string };
 
-/** The kernel's environment: this process's, with `KERNEL_DB` from `kernel.db` when the file sets it. */
-export const kernelEnv = (cfg: Settings['kernel']): Record<string, string | undefined> => ({
-  ...process.env,
-  ...(cfg.db ? { KERNEL_DB: cfg.db } : {}),
-});
-
-/** The last line a failed kernel command said, for a reason a person can act on. */
-export function said(code: number | null, stdout: string, stderr: string): string {
-  const line = (stderr || stdout).trim().split('\n').pop() ?? '';
-  return `exited ${code ?? 'on a signal'}${line ? `: ${line.slice(0, 300)}` : ''}`;
-}
-
 /** One read of every intent about this vault's notes. Never throws. */
 export async function readIntents(
   cfg: Settings['kernel'],
   vault: string,
-  run: Runner = spawnRunner,
+  run?: Runner,
 ): Promise<IntentsRead> {
-  if (!cfg.bin) return { ok: false, reason: 'kernel.bin is not set' };
-  try {
-    const { code, stdout, stderr } = await run(
-      cfg.bin,
-      ['intents', '--json', '--about', `vault:${vault}:`],
-      '',
-      kernelEnv(cfg),
-      Math.min(cfg.timeoutSeconds, READ_TIMEOUT_S) * 1000,
-    );
-    if (code !== 0) return { ok: false, reason: `kernel intents ${said(code, stdout, stderr)}` };
-    return { ok: true, intents: parseIntents(stdout.trim() || '[]') };
-  } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
-  }
+  const r = await ask(cfg, QUERIES.vaultIntents, { prefix: `vault:${vault}:` }, {
+    run,
+    timeoutMs: READ_TIMEOUT_S * 1000,
+    limit: READ_LIMIT,
+  });
+  if (!r.ok) return r;
+  return { ok: true, intents: intentsOf(r.rows) };
 }
 
 interface Entry {

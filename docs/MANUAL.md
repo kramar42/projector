@@ -1352,6 +1352,21 @@ Your kernel is the ledger of what you meant to do and what became of it; the vau
 is written down. With a `kernel:` block turned on, each reads the other where the two meet — a note
 with an intent about it — and neither stores the other's answer.
 
+**Projector reads the kernel only through its own saved queries.** `kernel/manifest.json` names them,
+each an EDN file in `kernel/queries/`, so the kernel checks them against its query allow-list when
+projector registers, and `orient` lists them under `system:projector`:
+
+| query | input | what projector reads with it |
+|---|---|---|
+| `projector/vault-intents` | `prefix=vault:<vault>:` | every intent about this vault's notes: status, statement, horizon, the latest verdict and who gave it, who proposed it — the `kernel` axis, the panel's row and `pj kernel status` |
+| `projector/vault-status-events` | `alias=vault:<vault>:` (or one note's alias) | the `vault/status` events projector has sent, so `pj kernel import` knows what changed since |
+| `projector/intake-proposals` | — | the intents intake proposed that you have not answered yet |
+
+You can run any of them yourself: `bin/kernel query --saved projector/vault-intents --in
+prefix=vault:work: --json`. Nothing the kernel answers is kept in the vault or in `.projector/`: the axis
+lives in memory for half a minute, and the import asks again each time. A kernel that has not
+registered projector's queries refuses them, and the line it leaves says to run `pj kernel register`.
+
 **What the board sees.** Every intent in the kernel about a note of this vault
 (`vault:<vault>:<note id>`, the alias the intake sink gives notes) puts one value on that note's
 **`kernel`** axis:
@@ -1468,15 +1483,18 @@ kernel:
 
 The kernel turns each change of state into your observation — a new `open` opens an intent, `met`
 closes it, `none` drops an open one — and the same state again into nothing, so running the import
-twice writes nothing twice. Nothing in the vault is written; `.projector/intake.db` remembers which
-status events were sent, which is how a return to an earlier status gets its `@<n>`. `--dry-run`
-prints the batch instead of sending it, `--json` prints it (or, sent, the kernel's answer with it) as
-JSON. A kernel that refuses the batch is one line and a non-zero exit, and the next import sends it
-whole.
+twice writes nothing twice. Nothing in the vault is written, and nothing is remembered here: before it
+plans, the import asks the kernel which status events it already holds
+(`projector/vault-status-events`), which is how an unchanged status sends nothing and a return to an
+earlier status gets its `@<n>`. The kernel is the only record of what was sent. `--dry-run` asks the
+same and prints the batch instead of sending it, `--json` prints it (or, sent, the kernel's answer with
+it) as JSON. A kernel that refuses the batch, or cannot answer the query, is one line and a non-zero
+exit, the kernel takes nothing, and the next import sends it whole.
 
 **Projector is a registered kernel system.** `kernel/manifest.json` in this checkout tells the kernel
 what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities, proposals and
-your commitments, no judgments — and brings two specs, `kernel/specs/`: `note-conventions`, the
+your commitments, no judgments — names the saved queries it reads with (above), and brings specs,
+`kernel/specs/`, among them `note-conventions`, the
 convention for writing a note, and `work-a-note`, a capability whose procedure is the `pj-work` skill
 (an attempt of it, started by hand and never by the kernel's tick, carries the skill whole in its brief
 and is judged by the note's `Done when` line, by you). Its `develop` block tells the kernel's `develop`
@@ -1484,7 +1502,8 @@ spec how projector's own code is changed: from `main` on a `kernel/<attempt>` br
 `bun run typecheck` green, the repo's `CLAUDE.md` read first. The kernel
 checks every batch projector sends against it and refuses one that strays. `pj kernel register` hands
 it over (`<bin> register <checkout>/kernel/manifest.json`); run it once, and again after the manifest
-changes — the same manifest twice records nothing.
+or a query file changes — the kernel runs the version last registered, and the same manifest twice
+records nothing.
 
 **From a shell**, the same reader and writer, so a session can drive it without the UI:
 

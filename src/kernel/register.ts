@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { appRoot } from '../config.ts';
 import { spawnRunner, type Runner } from '../intake/kernel.ts';
 import type { Settings } from '../settings.ts';
-import { kernelEnv, said } from './read.ts';
+import { kernelEnv, said } from './query.ts';
 
 /**
  * `pj kernel register`: `<kernel.bin> register <repo>/kernel/manifest.json`.

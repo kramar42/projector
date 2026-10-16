@@ -13,7 +13,8 @@ import { parseSpec } from '../src/view/spec.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import { logTo } from '../src/server/log.ts';
 import { forgetKernel, kernelIndex } from '../src/kernel/read.ts';
-import { axisValues, isOwner, KERNEL_VALUES, notesOf, parseIntents } from '../src/kernel/state.ts';
+import { axisValues, intentsOf, isOwner, KERNEL_VALUES, notesOf } from '../src/kernel/state.ts';
+import { parseAnswer } from '../src/kernel/query.ts';
 import { decide, snapshot, valueFor, verdictFor, writeThrough } from '../src/kernel/write.ts';
 import type { Runner } from '../src/intake/kernel.ts';
 import { place } from './fixture.ts';
@@ -22,10 +23,11 @@ import { place } from './fixture.ts';
  * Projector over the kernel: the reader, the `kernel` axis it feeds, the owner's
  * answers to a drafted verdict, the status write-through, and `pj kernel`.
  *
- * The kernel is played by `test/fake-kernel`, a shell script that prints a fixed
- * array of intents and records every call — so what is pinned here is exactly
- * the interface: which arguments projector passes, with which `KERNEL_DB`, and
- * what it makes of the answer. Nothing here starts the real kernel.
+ * The kernel is played by `test/fake-kernel`, a shell script that answers
+ * projector's saved query `vault-intents` from `test/kernel-queries/` and
+ * records every call — so what is pinned here is exactly the interface: which
+ * query projector asks, with which inputs and `KERNEL_DB`, and what it makes of
+ * the answer. Nothing here starts the real kernel.
  */
 
 const FAKE = fileURLToPath(new URL('./fake-kernel', import.meta.url));
@@ -73,12 +75,30 @@ function vault(kernel = `kernel:\n  enabled: true\n  bin: ${FAKE}\n  db: ./kdb\n
   };
 }
 
-const fixed = () => execFileSync(FAKE, ['intents', '--json'], { encoding: 'utf8', env: { ...process.env, FAKE_KERNEL_LOG: '' } });
+const fixed = () =>
+  execFileSync(FAKE, ['query', '--saved', 'projector/vault-intents', '--json'], { encoding: 'utf8', env: { ...process.env, FAKE_KERNEL_LOG: '' } });
+
+/** The fixed answer's rows, by column. */
+const fixedRows = () => parseAnswer(fixed());
+
+const COLUMNS = ['intent', 'alias', 'status', 'statement', 'horizon', 'verdict', 'by', 'at', 'note', 'evidence', 'proposer'];
+
+/** An answer to `vault-intents`, as the kernel prints it, from rows by column. */
+const answer = (rows: Record<string, unknown>[]) =>
+  JSON.stringify({ columns: COLUMNS, rows: rows.map((r) => COLUMNS.map((c) => r[c] ?? '')), count: rows.length });
+
+/** A directory the fake kernel answers `vault-intents` from instead of its fixture. */
+function holding(root: string, rows: Record<string, unknown>[]): string {
+  const dir = join(root, 'kernel-answers');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'vault-intents.json'), answer(rows), 'utf8');
+  return dir;
+}
 
 // ------------------------------------------------------------------ the answer, as data
 
 test('each note gets the intent that speaks for it, and the value it draws', () => {
-  const notes = notesOf('fake', parseIntents(fixed()));
+  const notes = notesOf('fake', intentsOf(fixedRows()));
   assert.deepEqual([...notes.keys()].sort(), ['alpha', 'beta', 'delta', 'epsilon', 'gamma'], 'another vault’s note is not ours');
 
   const alpha = notes.get('alpha')!;
@@ -97,19 +117,39 @@ test('each note gets the intent that speaks for it, and the value it draws', () 
   assert.ok(isOwner('kernel:owner') && isOwner('owner') && !isOwner('agent:claude') && !isOwner(null));
 });
 
-test('the answer is read leniently, row by row, and refused whole only when it is not an array', () => {
-  const rows = parseIntents(
-    JSON.stringify([
-      { id: 'x1', status: ':open', statement: 's', about: ['vault:v:x'], latest: { verdict: ':met', by: 'agent:a' } },
-      { status: 'open' },
-      { id: 'x2', status: 'imagined' },
-      'not an intent',
-    ]),
+test('the answer is folded into one intent each, read leniently, and refused whole only when it is not an answer', () => {
+  const intents = intentsOf(fixedRows());
+  const alpha = intents.find((i) => i.id === ALPHA)!;
+  assert.deepEqual(alpha, {
+    id: ALPHA,
+    status: 'open',
+    statement: 'Ship alpha',
+    horizon: '2026-10-20',
+    about: ['vault:fake:alpha'],
+    latest: { verdict: 'met', by: 'agent:claude', at: '2026-10-15T09:00:00Z', note: 'the PR merged', evidence: 1 },
+    proposedBy: null,
+  });
+  assert.equal(intents.find((i) => i.id === BETA)!.latest, null, '"" for no verdict is none');
+  assert.equal(intents.find((i) => i.id === DELTA)!.proposedBy, 'agent:projector-intake');
+
+  const rows = intentsOf(
+    parseAnswer(
+      answer([
+        { intent: 'x1', alias: 'vault:v:x', status: ':open', statement: 's', verdict: ':met', by: 'agent:a', evidence: 'e1' },
+        { intent: 'x1', alias: 'vault:v:y', status: ':open', statement: 's', verdict: ':met', by: 'agent:a', evidence: 'e2' },
+        { intent: 'x1', alias: 'vault:v:x', status: ':open', statement: 's', verdict: ':met', by: 'agent:a', evidence: 'e2' },
+        { status: 'open' },
+        { intent: 'x2', status: 'imagined' },
+      ]),
+    ),
   );
   assert.equal(rows.length, 1, 'rows the reader cannot use are skipped, not fatal');
   assert.equal(rows[0]!.status, 'open', 'a keyword’s colon is dropped');
+  assert.deepEqual(rows[0]!.about, ['vault:v:x', 'vault:v:y'], 'one row per alias, one intent');
   assert.equal(rows[0]!.latest!.verdict, 'met');
-  assert.throws(() => parseIntents('{"intents": []}'), /array/);
+  assert.equal(rows[0]!.latest!.evidence, 2, 'one row per piece of evidence, counted once each');
+  assert.throws(() => parseAnswer('[]'), /columns, rows/);
+  assert.throws(() => parseAnswer('{"intents": []}'), /columns, rows/);
 });
 
 // ------------------------------------------------------------------ the reader
@@ -124,7 +164,7 @@ test('the reader asks once per index and TTL, with KERNEL_DB, and shares a read 
     assert.equal(a.reason, null);
     assert.equal(a.vault, 'fake');
     assert.equal(a.notes.get('alpha')!.value, 'proposed-verdict');
-    assert.deepEqual(v.calls(), [`${join(v.root, 'kdb')}|intents --json --about vault:fake:`]);
+    assert.deepEqual(v.calls(), [`${join(v.root, 'kdb')}|query --saved projector/vault-intents --in prefix=vault:fake: --limit 10000 --json`]);
 
     await kernelIndex(v.root, 'g1', { now });
     assert.equal(v.calls().length, 1, 'same index, inside the TTL: no second process');
@@ -156,7 +196,7 @@ test('a kernel that is absent is an empty answer and one warning, and a vault wi
 
     process.env.FAKE_KERNEL_FAIL = '1';
     const refused = await kernelIndex(missing.root, 'g4', { run: (async () => ({ code: 2, stdout: '', stderr: 'boot\nerror: store is locked {}\n' })) as Runner });
-    assert.equal(refused.reason, 'kernel intents exited 2: error: store is locked {}');
+    assert.equal(refused.reason, 'kernel query projector/vault-intents exited 2: error: store is locked {}');
 
     const none = await kernelIndex(off.root, 'g1');
     assert.equal(none.enabled, false);
@@ -166,6 +206,29 @@ test('a kernel that is absent is an empty answer and one warning, and a vault wi
     logTo(null);
     missing.cleanup();
     off.cleanup();
+  }
+});
+
+test('a kernel that refuses the query is an empty answer that says to register, and the next read recovers', async () => {
+  const lines: string[] = [];
+  logTo((l) => lines.push(l));
+  const v = vault();
+  try {
+    process.env.FAKE_KERNEL_QUERY_FAIL = 'vault-intents';
+    const refused = await kernelIndex(v.root, 'g1');
+    assert.equal(refused.enabled, true);
+    assert.equal(refused.notes.size, 0, 'no stored answer stands in for the kernel’s');
+    assert.match(refused.reason!, /^kernel query projector\/vault-intents exited 1: error: no saved query projector\/vault-intents: .* — run `pj kernel register`$/);
+    assert.equal(lines.filter((l) => l.includes('[WARN]') && l.includes('register')).length, 1);
+
+    delete process.env.FAKE_KERNEL_QUERY_FAIL;
+    const back = await kernelIndex(v.root, 'g2');
+    assert.equal(back.reason, null);
+    assert.equal(back.notes.get('alpha')!.value, 'proposed-verdict');
+  } finally {
+    delete process.env.FAKE_KERNEL_QUERY_FAIL;
+    logTo(null);
+    v.cleanup();
   }
 });
 
@@ -425,23 +488,21 @@ test('partial keeps the intent open and leaves the file untouched', async () => 
   }
 });
 
-/** The fixed answer with some intents closed while their files still read open. */
+/** The fixed answer with some intents closed while their files still read open, as a directory the fake kernel answers from. */
 function closedWhileOpen(root: string): string {
-  const intents = JSON.parse(fixed()) as { id: string; status: string; about: string[] }[];
+  const gone = new Set(fixedRows().filter((r) => ['vault:fake:beta', 'vault:fake:epsilon'].includes(r.alias as string)).map((r) => r.intent));
   const extra = [
-    { id: 'bbbbbbbb-0000-4000-8000-000000000002', status: 'met', statement: 'Write beta', about: ['vault:fake:beta'], latest: { verdict: 'met', by: 'kernel:owner' } },
-    { id: '11111111-0000-4000-8000-000000000007', status: 'dropped', statement: 'Plain', about: ['vault:fake:plain'], latest: { verdict: 'dropped', by: 'kernel:owner' } },
-    { id: '22222222-0000-4000-8000-000000000008', status: 'missed', statement: 'Epsilon', about: ['vault:fake:epsilon'], latest: { verdict: 'missed', by: 'kernel:owner' } },
+    { intent: 'bbbbbbbb-0000-4000-8000-000000000002', alias: 'vault:fake:beta', status: 'met', statement: 'Write beta', verdict: 'met', by: 'owner' },
+    { intent: '11111111-0000-4000-8000-000000000007', alias: 'vault:fake:plain', status: 'dropped', statement: 'Plain', verdict: 'dropped', by: 'owner' },
+    { intent: '22222222-0000-4000-8000-000000000008', alias: 'vault:fake:epsilon', status: 'missed', statement: 'Epsilon', verdict: 'missed', by: 'owner' },
   ];
-  const file = join(root, 'intents.json');
-  writeFileSync(file, JSON.stringify([...intents.filter((i) => !['beta', 'epsilon'].some((n) => i.about.includes(`vault:fake:${n}`))), ...extra]), 'utf8');
-  return file;
+  return holding(root, [...fixedRows().filter((r) => !gone.has(r.intent)), ...extra]);
 }
 
 test('pj kernel status lists what disagrees, and pj kernel sync writes the files without observing', () => {
   const v = vault(`kernel:\n  enabled: true\n  bin: ${FAKE}\n  vault: fake\n${VERDICTS}  onVerdict:\n    status: { dropped: cancelled }\n`);
   try {
-    const env = { FAKE_KERNEL_INTENTS: closedWhileOpen(v.root) };
+    const env = { FAKE_KERNEL_QUERIES: closedWhileOpen(v.root) };
     const listed = pj(v.root, ['kernel', 'status'], env);
     assert.equal(listed.code, 0, listed.err);
     assert.match(listed.out, /3 file\(s\) disagree with the kernel:/);
@@ -475,7 +536,7 @@ test('pj kernel status lists what disagrees, and pj kernel sync writes the files
 test('a vault without kernel.verdicts never touches a file', () => {
   const v = vault(`kernel:\n  enabled: true\n  bin: ${FAKE}\n  db: ./kdb\n  vault: fake\n`);
   try {
-    const env = { FAKE_KERNEL_INTENTS: closedWhileOpen(v.root) };
+    const env = { FAKE_KERNEL_QUERIES: closedWhileOpen(v.root) };
     const ids = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'plain'];
     const before = ids.map((id) => bytes(v.root, id));
 
