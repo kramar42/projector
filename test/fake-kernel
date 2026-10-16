@@ -9,7 +9,7 @@
 # with no fixture, or the one FAKE_KERNEL_QUERY_FAIL names, is refused the way a
 # kernel that never registered it refuses it. Every call is appended to
 # FAKE_KERNEL_LOG as `KERNEL_DB|arg arg …`, so a test can read back exactly what
-# projector asked and wrote. `observe` prints the line the real CLI prints.
+# projector asked and wrote. `judge` prints the line the real CLI prints.
 # `ingest` appends the batch it was given on stdin, one line per batch, to
 # FAKE_KERNEL_BATCHES and answers with a JSON object as the real one does;
 # `register` says what it registered; `attempt start <spec> … --json` answers a
@@ -47,8 +47,8 @@ case "$1" in
     fi
     cat "$fixture"
     ;;
-  observe)
-    echo "observation 12345678 intent $(printf '%s' "$2" | cut -c1-8) -> $3"
+  judge)
+    echo "judgment 12345678 intent $(printf '%s' "$2" | cut -c1-8) -> $3"
     ;;
   ingest)
     batch=$(cat)

@@ -260,8 +260,8 @@ export const COMPUTED: Record<string, Computed> = {
   },
   /**
    * What the owner's kernel says became of the intent about this note — `open`,
-   * `proposed-verdict` (open, and somebody other than the owner drafted a
-   * verdict), `met`, `missed` or `dropped`.
+   * `draft` (open, and somebody other than the owner drafted a verdict),
+   * `met`, `missed` or `dropped`.
    *
    * Computed over something no facet can describe either: a store outside the
    * vault. The caller reads it (`kernel/read.ts`) and hands it in, because this

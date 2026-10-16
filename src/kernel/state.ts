@@ -18,12 +18,12 @@ export const KERNEL_AXIS = 'kernel';
 /**
  * The values the axis takes, in the order a board draws them.
  *
- * `proposed-verdict` is the one value no kernel status spells: the intent is
- * still open, and its latest verdict — `met`, `missed` or `dropped` — came from
- * somebody other than the owner. That is a draft waiting for you, which is the
+ * `draft` is the one value no kernel status spells: the intent is still open,
+ * and its latest verdict — `met`, `missed` or `dropped` — came from somebody
+ * other than the owner. That is a draft waiting for you, which is the
  * column a board grouped by this axis exists to show.
  */
-export const KERNEL_VALUES = ['open', 'proposed-verdict', 'met', 'missed', 'dropped'] as const;
+export const KERNEL_VALUES = ['open', 'draft', 'met', 'missed', 'dropped'] as const;
 export type KernelValue = (typeof KERNEL_VALUES)[number];
 
 /** An intent's status, as the kernel's `vault-intents` query reports it. */
@@ -43,7 +43,7 @@ export function isOwner(by: string | null | undefined): boolean {
   return who === OWNER_ALIAS || who === OWNER_ALIAS.slice(OWNER_ALIAS.indexOf(':') + 1);
 }
 
-export interface Observation {
+export interface Judgment {
   verdict: string;
   by: string | null;
   at: string | null;
@@ -57,7 +57,7 @@ export interface KernelIntent {
   statement: string;
   horizon: string | null;
   about: string[];
-  latest: Observation | null;
+  latest: Judgment | null;
   proposedBy: string | null;
 }
 
@@ -68,9 +68,9 @@ export interface KernelNote {
   status: IntentStatus;
   statement: string;
   horizon: string | null;
-  latest: Observation | null;
+  latest: Judgment | null;
   /** The latest verdict is a draft: open, and given by someone other than the owner. */
-  proposed: boolean;
+  draft: boolean;
   /** The `kernel` axis value, or null for a status the axis does not draw. */
   value: KernelValue | null;
   /** Other intents about the same note, by id — superseded ones, usually. */
@@ -79,7 +79,7 @@ export interface KernelNote {
 
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
-function observation(v: unknown): Observation | null {
+function judgment(v: unknown): Judgment | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   const verdict = text(o.verdict);
@@ -124,7 +124,7 @@ export function intentsOf(rows: Record<string, unknown>[]): KernelIntent[] {
     if (!id || !status || !STATUSES.includes(status)) continue;
     let had = by.get(id);
     if (!had) {
-      const latest = observation({ verdict: r.verdict, by: r.by, at: r.at, note: r.note });
+      const latest = judgment({ verdict: r.verdict, by: r.by, at: r.at, note: r.note });
       had = {
         intent: {
           id,
@@ -153,10 +153,10 @@ export function intentsOf(rows: Record<string, unknown>[]): KernelIntent[] {
 }
 
 /** What a verdict's standing is read from. */
-type Standing = { status: IntentStatus; latest: Observation | null };
+type Standing = { status: IntentStatus; latest: Judgment | null };
 
 /** An open intent whose latest verdict is somebody else's `met`, `missed` or `dropped`. */
-export function hasProposedVerdict(i: Standing): boolean {
+export function hasDraft(i: Standing): boolean {
   return i.status === 'open' && !!i.latest && DRAFTABLE.includes(i.latest.verdict) && !isOwner(i.latest.by);
 }
 
@@ -169,7 +169,7 @@ export function hasProposedVerdict(i: Standing): boolean {
  * the intent that now speaks for the note.
  */
 export function kernelValue(i: Standing): KernelValue | null {
-  if (i.status === 'open') return hasProposedVerdict(i) ? 'proposed-verdict' : 'open';
+  if (i.status === 'open') return hasDraft(i) ? 'draft' : 'open';
   if (i.status === 'met' || i.status === 'missed' || i.status === 'dropped') return i.status;
   return null;
 }
@@ -216,7 +216,7 @@ export function notesOf(vault: string, intents: KernelIntent[]): Map<string, Ker
       statement: i.statement,
       horizon: i.horizon,
       latest: i.latest,
-      proposed: hasProposedVerdict(i),
+      draft: hasDraft(i),
       value: kernelValue(i),
       others: list.slice(1).map((o) => o.id),
     });

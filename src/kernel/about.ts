@@ -13,10 +13,10 @@ import { renderContext, type NoteContext } from '../agent/context.ts';
  * Starting work on a note is the kernel's act now: `bin/kernel worktree
  * <intent>` starts an attempt for the note's open intent, lays out one git
  * worktree per repository and writes the brief the session reads. The kernel
- * names no app, so it asks the system whose `writes.entities` prefix covers the
- * intent's subject — `vault:` is projector's — through the manifest's `context`
- * command: `pj context --alias vault:<vault>:<id> --json-kernel`, which prints
- * this, one JSON object.
+ * names no app, so it asks the system whose `writes.entities` prefix covers
+ * what the intent is about — `vault:` is projector's — through the manifest's
+ * `context` command: `pj context --alias vault:<vault>:<id> --json-kernel`,
+ * which prints this, one JSON object.
  *
  * - `text` is the note's context as `pj context` renders it — project chain,
  *   inherited `AGENTS.md` instructions, relations, links, body — after a short
@@ -32,7 +32,7 @@ import { renderContext, type NoteContext } from '../agent/context.ts';
  * note with no repos answers with none, and the kernel refuses with its own
  * words, naming projector as the system that named none.
  */
-export interface SubjectContext {
+export interface AboutContext {
   text: string;
   repos: { path: string; base?: string }[];
   branch: string;
@@ -75,7 +75,7 @@ export function vaultForAlias(name: string): FoundVault {
 }
 
 /** The context the kernel embeds, for a note already assembled. Throws on a branch template it cannot apply. */
-export function subjectContext(ctx: NoteContext, where: { root: string; vault: string }): SubjectContext {
+export function aboutContext(ctx: NoteContext, where: { root: string; vault: string }): AboutContext {
   const jiraKeys = ctx.links.filter((l) => l.kind === 'jira').map((l) => l.ref);
   const branch = branchFor(ctx.id, { template: ctx.project?.branch, jiraKeys });
   return {

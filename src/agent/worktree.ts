@@ -4,7 +4,7 @@
  * Laying out the worktrees is the kernel's now: `bin/kernel worktree <intent>`
  * starts an attempt for the note's open intent and makes one git worktree per
  * repository, on the branch projector names when the kernel asks about the note
- * (`kernel/subject.ts`). This is that name, and intake's reading of a legacy
+ * (`kernel/about.ts`). This is that name, and intake's reading of a legacy
  * `<project>-wt-<branch>` workspace (`intake/match.ts`) uses the same rule, so
  * the two cannot disagree about which note a branch is.
  */

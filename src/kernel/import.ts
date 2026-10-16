@@ -34,9 +34,9 @@ import { ask, eventId, QUERIES, type Row } from './query.ts';
  *   events back through the saved query `projector/vault-status-events`, so the
  *   kernel is the only record of them (C11) and nothing here keeps a copy;
  * - a commitment per note carrying a value on the axis, keyed by its alias, with
- *   the state the vault's map gives that value, citing the note's latest status
- *   event. The kernel turns a change of state into the owner's observation and
- *   the same state again into nothing (`docs/registration.md` in the kernel);
+ *   the status the vault's map gives that value, citing the note's latest status
+ *   event. The kernel turns a change of status into the owner's judgment and
+ *   the same status again into nothing (`docs/registration.md` in the kernel);
  * - a `vault/day` event per note in the `kernel.days` folder, keyed
  *   `vault:<vault>:day:<date>`, at that date, its text as the payload. A day is
  *   never a commitment.
@@ -48,7 +48,7 @@ import { ask, eventId, QUERIES, type Row } from './query.ts';
  * give the same batch byte for byte.
  */
 
-export type CommitmentState = 'open' | 'met' | 'missed' | 'dropped' | 'none';
+export type CommitmentStatus = 'open' | 'met' | 'missed' | 'dropped' | 'none';
 
 export interface Commitment {
   key: string;
@@ -56,7 +56,7 @@ export interface Commitment {
   criterion: string;
   horizon?: string;
   about: string[];
-  state: CommitmentState;
+  status: CommitmentStatus;
   evidence: string[];
 }
 
@@ -94,7 +94,7 @@ export interface Planned {
 const DATE = /\d{4}-\d{2}-\d{2}/;
 
 /** What one note's values on the commitments axis say, through the vault's own map. */
-export function commitmentState(cfg: Settings['kernel'], facets: Record<string, string[]>): CommitmentState {
+export function commitmentStatus(cfg: Settings['kernel'], facets: Record<string, string[]>): CommitmentStatus {
   const c = cfg.commitments;
   if (!c) return 'none';
   const values = facets[c.axis] ?? [];
@@ -201,7 +201,7 @@ export function importBatch(
       criterion: criterionOf(cfg, note.body),
       ...(horizon ? { horizon } : {}),
       about: [alias],
-      state: commitmentState(cfg, note.facets),
+      status: commitmentStatus(cfg, note.facets),
       evidence: evidence ? [evidence] : [],
     });
   }
@@ -327,8 +327,8 @@ export async function runImport(root: string, opts: { dryRun?: boolean; run?: Ru
 
 /** One line for what a batch holds. */
 export function planLine(p: Planned): string {
-  const by = (s: CommitmentState) => p.batch.commitments.filter((c) => c.state === s).length;
-  const states = (['open', 'met', 'missed', 'dropped', 'none'] as const)
+  const by = (s: CommitmentStatus) => p.batch.commitments.filter((c) => c.status === s).length;
+  const statuses = (['open', 'met', 'missed', 'dropped', 'none'] as const)
     .map((s) => [s, by(s)] as const)
     .filter(([, n]) => n)
     .map(([s, n]) => `${n} ${s}`)
@@ -336,7 +336,7 @@ export function planLine(p: Planned): string {
   const status = p.batch.events.filter((e) => e.kind === 'vault/status').length;
   const days = p.batch.events.filter((e) => e.kind === 'vault/day').length;
   return (
-    `vault:${p.vault} — ${p.batch.commitments.length} commitment(s)${states ? ` (${states})` : ''}, ` +
+    `vault:${p.vault} — ${p.batch.commitments.length} commitment(s)${statuses ? ` (${statuses})` : ''}, ` +
     `${status} status change(s), ${days} day(s), ${p.batch.entities.length} entit${p.batch.entities.length === 1 ? 'y' : 'ies'}`
   );
 }

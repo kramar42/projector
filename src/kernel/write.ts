@@ -9,9 +9,9 @@ import { kernelEnv, said } from './query.ts';
 import { shortId, type KernelNote } from './state.ts';
 
 /**
- * The kernel write: `<kernel.bin> observe <intent> <verdict> [--note text]`.
+ * The kernel write: `<kernel.bin> judge <intent> <verdict> [--note text]`.
  *
- * **Always as the owner.** The kernel's CLI observes as its owner unless told
+ * **Always as the owner.** The kernel's CLI judges as its owner unless told
  * otherwise, and nothing here tells it otherwise: every write on this page is
  * something the owner did in the owner's own UI or shell — accepting a draft,
  * overruling it, setting a status. No agent reaches it, and the intake sink,
@@ -23,28 +23,28 @@ import { shortId, type KernelNote } from './state.ts';
  * holds waits on it.
  */
 
-export type ObserveVerdict = 'met' | 'missed' | 'dropped' | 'partial';
+export type JudgeVerdict = 'met' | 'missed' | 'dropped' | 'partial';
 
-export type Observed = { ok: true; said: string } | { ok: false; reason: string };
+export type Judged = { ok: true; said: string } | { ok: false; reason: string };
 
-/** One observation, as the owner. Never throws. */
-export async function observe(
+/** One judgment, as the owner. Never throws. */
+export async function judge(
   cfg: Settings['kernel'],
   intent: string,
-  verdict: ObserveVerdict,
+  verdict: JudgeVerdict,
   note: string | null,
   run: Runner = spawnRunner,
-): Promise<Observed> {
+): Promise<Judged> {
   if (!cfg.bin) return { ok: false, reason: 'kernel.bin is not set' };
   try {
     const { code, stdout, stderr } = await run(
       cfg.bin,
-      ['observe', intent, verdict, ...(note ? ['--note', note] : [])],
+      ['judge', intent, verdict, ...(note ? ['--note', note] : [])],
       '',
       kernelEnv(cfg),
       cfg.timeoutSeconds * 1000,
     );
-    if (code !== 0) return { ok: false, reason: `kernel observe ${said(code, stdout, stderr)}` };
+    if (code !== 0) return { ok: false, reason: `kernel judge ${said(code, stdout, stderr)}` };
     return { ok: true, said: stdout.trim().split('\n').pop() ?? '' };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
@@ -64,7 +64,7 @@ export type Decided =
       ok: true;
       note: string;
       intent: string;
-      verdict: ObserveVerdict;
+      verdict: JudgeVerdict;
       said: string;
       kernel: KernelNote | null;
       /** What became of the note's file: null for `partial`, which closes nothing and so writes nothing. */
@@ -81,7 +81,7 @@ export type Decided =
  * `kernel.verdicts` read backwards (`fileVerdict`) — so the status chip and the
  * `kernel` axis say the same thing. The kernel goes first: a refusal there
  * writes nothing anywhere, and a file that cannot be written after an accepted
- * observation is a reason in `file`, not a failed answer.
+ * judgment is a reason in `file`, not a failed answer.
  *
  * Refused, not attempted, when there is nothing to answer: the vault has no
  * kernel, the note has no intent, or the intent is no longer open — the kernel
@@ -110,22 +110,22 @@ export async function decide(
   // agent finishing work writes, or the `missed`/`dropped` it drafted instead,
   // because writing `met` over a draft of `missed` would invert it. With no
   // draft, accept is the owner saying `met` outright.
-  const verdict: ObserveVerdict =
-    decision === 'accept' ? (k.proposed && k.latest ? (k.latest.verdict as ObserveVerdict) : 'met') : (opts.verdict ?? 'missed');
-  const draft = k.proposed && k.latest ? `${k.latest.by ?? 'someone'}'s ${k.latest.verdict}` : null;
+  const verdict: JudgeVerdict =
+    decision === 'accept' ? (k.draft && k.latest ? (k.latest.verdict as JudgeVerdict) : 'met') : (opts.verdict ?? 'missed');
+  const draft = k.draft && k.latest ? `${k.latest.by ?? 'someone'}'s ${k.latest.verdict}` : null;
   const note =
     opts.note ??
     (decision === 'accept'
       ? draft ? `accepted ${draft} in projector` : 'met, said in projector'
       : draft ? `overruled ${draft} in projector` : `${verdict}, said in projector`);
 
-  const res = await observe(cfg, k.intent, verdict, note, run);
+  const res = await judge(cfg, k.intent, verdict, note, run);
   forgetKernel(root);
   if (!res.ok) return { ok: false, note: id, reason: res.reason };
   // Straight to the validated note write, beneath the status write-through
   // that wraps it in `PATCH /api/note/:id` and `pj set`: this value *is* the
   // kernel's answer, so it must not travel back to the kernel as a second
-  // observation. (Were it to, the intent is closed by now and `writeThrough`
+  // judgment. (Were it to, the intent is closed by now and `writeThrough`
   // skips a closed intent — but the guard is not having the path at all.)
   const file = verdict === 'partial' ? null : fileVerdict(root, id, verdict);
   const after = await kernelIndex(root, 'owner-answer', { fresh: true, run });
@@ -307,7 +307,7 @@ export interface Through {
  * Which verdict a change says, if any.
  *
  * Only a value that *arrived*: an axis whose values did not change says nothing,
- * so re-saving a note in `done` does not observe `met` again, and moving from one
+ * so re-saving a note in `done` does not judge `met` again, and moving from one
  * value to another that maps to the same verdict says nothing new either. A value
  * the map does not name writes nothing — `active` is not a verdict. The first
  * mapped axis in the map's order wins, so two mapped axes cannot both speak.
@@ -371,7 +371,7 @@ export async function writeThrough(
       out.push({ id, through, outcome: 'skipped', reason: `intent ${shortId(k.intent)} is ${k.status}` });
       continue;
     }
-    const res = await observe(cfg, k.intent, through.verdict, `${through.axis} set to ${through.value} in projector`, run);
+    const res = await judge(cfg, k.intent, through.verdict, `${through.axis} set to ${through.value} in projector`, run);
     out.push(
       res.ok
         ? { id, through, outcome: 'written', intent: k.intent, said: res.said }

@@ -126,7 +126,7 @@ export interface Settings {
    *
    * `verdicts` is the other direction: which values of which axis, set by the
    * owner, also tell the kernel what became of a note's intent — `met`,
-   * `missed` or `dropped` through `<bin> observe`. A vault's vocabulary is its
+   * `missed` or `dropped` through `<bin> judge`. A vault's vocabulary is its
    * own (C4), so nothing here knows which axis is the lifecycle or which of its
    * values means finished; absent, a status change writes nothing to the kernel.
    *
@@ -494,7 +494,7 @@ enrich: ${enrich ? 'true' : 'false'}
 #   db: ~/.kernel/db           # passed as KERNEL_DB; default: the kernel's own
 #   vault: work                # the name in vault:<vault>:<note id>; default: the registered name
 #   # When you set one of these values, the note's kernel intent is told too,
-#   # through \`<bin> observe\`. Other values write nothing to the kernel.
+#   # through \`<bin> judge\`. Other values write nothing to the kernel.
 #   verdicts:
 #     status: { done: met, archived: dropped, cancelled: dropped }
 #   # Accepting or overruling a verdict writes it back into the note: the first

@@ -23,7 +23,7 @@ import type { KernelNote } from '../types.ts';
  */
 const READS: Record<string, string> = {
   open: 'open',
-  'proposed-verdict': 'open, with a drafted verdict',
+  draft: 'open, with a drafted verdict',
   met: 'met',
   missed: 'missed',
   dropped: 'dropped',
@@ -53,7 +53,7 @@ export function KernelLine({ id, kernel }: { id: string; kernel: KernelNote | nu
   };
 
   const l = line.latest;
-  const drafted = line.proposed && l;
+  const drafted = line.draft && l;
   return (
     <section className="panel-section" data-navlist="kernel" data-nav-flow="row">
       <h3>Kernel</h3>

@@ -24,7 +24,7 @@ import type { Note } from '../schema/types.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
-import { parseNoteAlias, subjectContext, vaultForAlias } from '../kernel/subject.ts';
+import { parseNoteAlias, aboutContext, vaultForAlias } from '../kernel/about.ts';
 import { vaultName } from '../intake/kernel.ts';
 import {
   candidateCount,
@@ -329,7 +329,7 @@ every intent about a note of this vault, with the \`kernel\` axis value it
 gives the note and its latest verdict, then every note whose file still reads
 open where the kernel has closed it. \`accept\` tells the kernel the note's
 intent is met (or what the draft said); \`overrule\` says missed, dropped, or
-\`--verdict partial\` to keep it open. Both run \`<bin> observe\` as the owner,
+\`--verdict partial\` to keep it open. Both run \`<bin> judge\` as the owner,
 then write the value \`kernel.verdicts\` maps that verdict to into the note.
 \`sync\` writes those values into the files \`status\` lists as disagreeing.
 
@@ -909,7 +909,7 @@ async function cmdKernel(argv: string[]): Promise<void> {
           // The note's own line when this intent is the one that speaks for it;
           // an intent it outranked is shown by its status.
           const value = line?.intent === i.id ? (line.value ?? `(${i.status})`) : `(${i.status})`;
-          return { note, value, intent: i, proposed: line?.intent === i.id && line.proposed };
+          return { note, value, intent: i, draft: line?.intent === i.id && line.draft };
         }),
     );
     const kcfg = settingsFor(root).kernel;
@@ -939,7 +939,7 @@ async function cmdKernel(argv: string[]): Promise<void> {
       const latest = l ? `${l.verdict} by ${l.by ?? '?'}${l.at ? ` ${l.at.slice(0, 10)}` : ''}` : '—';
       console.log(`${pad(r.note, 30)} ${pad(r.value, 17)} ${shortId(r.intent.id)}  ${pad(latest, 34)} ${r.intent.statement}`);
     }
-    const drafts = rows.filter((r) => r.proposed).length;
+    const drafts = rows.filter((r) => r.draft).length;
     if (drafts) console.log(`\n${drafts} drafted verdict(s) wait for you: \`pj kernel accept <id>\` or \`pj kernel overrule <id>\``);
     // Only where the vault named its lifecycle: without \`kernel.verdicts\` there is no axis to disagree on.
     if (Object.keys(kcfg.verdicts).length) {
@@ -995,7 +995,7 @@ async function cmdKernel(argv: string[]): Promise<void> {
     }
     console.log(`${dryRun ? 'would send' : 'sent'} ${planLine(plan)}`);
     if (dryRun) {
-      for (const c of plan.batch.commitments) console.log(`  ${pad(c.state, 8)} ${pad(c.key, 40)} ${c.statement}`);
+      for (const c of plan.batch.commitments) console.log(`  ${pad(c.status, 8)} ${pad(c.key, 40)} ${c.statement}`);
       for (const e of plan.batch.events) console.log(`  ${pad(e.kind, 12)} ${e.key}`);
     }
     for (const s of plan.skipped) console.log(`  skipped ${s.id}: ${s.why}`);
@@ -1290,7 +1290,7 @@ if (asking) {
       );
       if (flags.has('json') && flags.has('json-kernel')) fail('pj context: --json or --json-kernel, not both');
       // `--alias` is the kernel's spelling of a note: the vault comes out of it,
-      // by the name the vault goes by in the kernel (`kernel/subject.ts`).
+      // by the name the vault goes by in the kernel (`kernel/about.ts`).
       const alias = flags.get('alias')?.[0];
       let here = root;
       let id = rest[0] ?? '';
@@ -1309,7 +1309,7 @@ if (asking) {
       const ctx = flags.has('fresh') ? await freshNoteContext(id, here) : noteContext(id, here);
       if (!ctx) fail(`no note with id "${id}"${alias !== undefined ? ` in ${here}` : ''}`);
       if (flags.has('json-kernel')) {
-        console.log(JSON.stringify(subjectContext(ctx, { root: here, vault: vaultName(here) })));
+        console.log(JSON.stringify(aboutContext(ctx, { root: here, vault: vaultName(here) })));
       } else console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
       break;
     }

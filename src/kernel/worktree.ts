@@ -16,7 +16,7 @@ import { notesOf, shortId } from './state.ts';
  * that record each commit in the attempt, and writes `BRIEF.md`. The repos, the
  * branch and what the work is about come back to projector as a question about
  * the note — the manifest's `context` command, `pj context --alias …
- * --json-kernel` (`subject.ts`) — so nothing here decides them.
+ * --json-kernel` (`about.ts`) — so nothing here decides them.
  *
  * What is projector's: finding the note's intent, through the same saved query
  * the board's `kernel` axis reads (`read.ts`); asking the kernel; and recording

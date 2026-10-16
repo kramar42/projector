@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { branchFor } from '../src/agent/worktree.ts';
 import { workspacePath } from '../src/agent/workspaceName.ts';
 import { noteContext } from '../src/agent/context.ts';
-import { parseNoteAlias, subjectContext } from '../src/kernel/subject.ts';
+import { parseNoteAlias, aboutContext } from '../src/kernel/about.ts';
 import { KernelFailed, NoNote, NotWorkable, startWork } from '../src/kernel/worktree.ts';
 import type { Runner } from '../src/intake/kernel.ts';
 import { sessionsUnder } from '../src/sources/claude.ts';
@@ -105,7 +105,7 @@ test('what projector tells the kernel about a note: its context, its repos, its 
   const root = workVault();
   try {
     const ctx = noteContext('ship-it', root)!;
-    const said = subjectContext(ctx, { root, vault: 'fake' });
+    const said = aboutContext(ctx, { root, vault: 'fake' });
     assert.equal(said.title, 'Ship it');
     // The project's template, applied to the note — the branch `pj work` used.
     assert.equal(said.branch, 'plat/ship-it');

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { appRoot, paths } from '../src/config.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { closeIntakeDb, openIntakeDb } from '../src/intake/db.ts';
-import { commitmentState, importBatch, importNotes, planImport, statusesOf, type ImportBatch } from '../src/kernel/import.ts';
+import { commitmentStatus, importBatch, importNotes, planImport, statusesOf, type ImportBatch } from '../src/kernel/import.ts';
 import { eventId, parseAnswer } from '../src/kernel/query.ts';
 import { MANIFEST, register } from '../src/kernel/register.ts';
 import { kernelBatch } from '../src/intake/kernel.ts';
@@ -18,7 +18,7 @@ import { place } from './fixture.ts';
 /**
  * `pj kernel import` and `pj kernel register`: projector as a registered kernel
  * system that owns its adapter. Pinned here: the batch a vault maps to — which
- * notes are commitments and in which state, the status events and their keys,
+ * notes are commitments and with which status, the status events and their keys,
  * the days — through the vault's own configuration and nothing the code knows
  * about any facet value (C4); the status events read back from the kernel
  * through `projector/vault-status-events`, which make a repeated status `@n`
@@ -139,7 +139,7 @@ test('a vault maps to entities, commitments, status events and days, through its
     assert.equal(vault, 'scratch');
 
     assert.deepEqual(
-      batch.commitments.map((c) => [c.key, c.state]),
+      batch.commitments.map((c) => [c.key, c.status]),
       [
         ['vault:scratch:paused', 'none'],
         ['vault:scratch:ship', 'open'],
@@ -155,7 +155,7 @@ test('a vault maps to entities, commitments, status events and days, through its
       criterion: 'Done when the widget is live.',
       horizon: '2026-10-19',
       about: ['vault:scratch:ship'],
-      state: 'open',
+      status: 'open',
       evidence: ['vault:scratch:ship:active'],
     });
     assert.equal(
@@ -275,7 +275,7 @@ test('the kernel’s status events decide the next: nothing unchanged, @n for a 
     const by = Object.fromEntries(batch.commitments.map((c) => [c.key, c]));
     assert.deepEqual(by['vault:scratch:shipped']!.evidence, ['vault:scratch:shipped:done'], 'an unchanged note cites its last event');
     assert.deepEqual(by['vault:scratch:ship']!.evidence, ['vault:scratch:ship:active@4']);
-    assert.equal(by['vault:scratch:thought']!.state, 'none', 'a value gone is no commitment, which drops an open intent');
+    assert.equal(by['vault:scratch:thought']!.status, 'none', 'a value gone is no commitment, which drops an open intent');
 
     // An event keyed some other way is counted, and read as the import would key it.
     const odd = statusesOf('scratch', [{ note: 'vault:scratch:ship', event: 'not-an-id', at: '2026-10-15T08:00:00Z', payload: { status: 'active' } }]);
@@ -298,12 +298,12 @@ test('the kernel block’s commitments and days: read from the file, naming no v
     assert.equal(settingsFor(bare.root).kernel.days, 'journal', 'a folder, however it is written');
 
     const cfg = { ...k, verdicts: { stage: { shipped: 'met' as const, binned: 'dropped' as const } }, commitments: { axis: 'stage', open: ['doing', 'shipped'], horizon: null } };
-    assert.equal(commitmentState(cfg, { stage: ['doing'] }), 'open');
-    assert.equal(commitmentState(cfg, { stage: ['shipped'] }), 'met', 'a verdict outranks open');
-    assert.equal(commitmentState(cfg, { stage: ['binned'] }), 'dropped');
-    assert.equal(commitmentState(cfg, { stage: ['idea'] }), 'none', 'every other value is no commitment');
-    assert.equal(commitmentState(cfg, { status: ['active'] }), 'none', 'another axis says nothing');
-    assert.equal(commitmentState({ ...cfg, commitments: null }, { stage: ['doing'] }), 'none');
+    assert.equal(commitmentStatus(cfg, { stage: ['doing'] }), 'open');
+    assert.equal(commitmentStatus(cfg, { stage: ['shipped'] }), 'met', 'a verdict outranks open');
+    assert.equal(commitmentStatus(cfg, { stage: ['binned'] }), 'dropped');
+    assert.equal(commitmentStatus(cfg, { stage: ['idea'] }), 'none', 'every other value is no commitment');
+    assert.equal(commitmentStatus(cfg, { status: ['active'] }), 'none', 'another axis says nothing');
+    assert.equal(commitmentStatus({ ...cfg, commitments: null }, { stage: ['doing'] }), 'none');
   } finally {
     v.cleanup();
     bare.cleanup();
@@ -372,7 +372,7 @@ test('pj kernel import asks the kernel what it holds, sends one batch as the own
     pj(v.root, ['kernel', 'import'], v.env);
     const third = v.batches()[2]!;
     assert.deepEqual(third.events.filter((e) => e.kind === 'vault/status').map((e) => e.key), ['vault:scratch:ship:done']);
-    assert.equal(third.commitments.find((c) => c.key === 'vault:scratch:ship')!.state, 'met');
+    assert.equal(third.commitments.find((c) => c.key === 'vault:scratch:ship')!.status, 'met');
 
     // And back to a status it held before: the kernel's record makes it @2.
     v.holds();

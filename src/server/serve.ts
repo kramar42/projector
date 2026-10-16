@@ -465,8 +465,8 @@ app.get('/api/note/:id', async (c) => {
 });
 
 /**
- * The owner's answer to a note's kernel line: `accept` observes `met` (or what
- * the draft said); `overrule` observes `missed` or `dropped`, or `partial` to
+ * The owner's answer to a note's kernel line: `accept` judges `met` (or what
+ * the draft said); `overrule` judges `missed` or `dropped`, or `partial` to
  * keep the intent open. Runs the kernel's CLI as the owner, since this is the
  * owner's UI — `decide`, the same call `pj kernel` makes. A verdict that closes
  * the intent is then written into the note as the value `kernel.verdicts` maps

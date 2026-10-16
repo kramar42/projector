@@ -104,13 +104,13 @@ test('each note gets the intent that speaks for it, and the value it draws', () 
   const alpha = notes.get('alpha')!;
   assert.equal(alpha.intent, ALPHA, 'the open intent outranks the superseded one');
   assert.deepEqual(alpha.others, ['aaaaaaaa-0000-4000-8000-000000000009']);
-  assert.equal(alpha.proposed, true, 'open, and the latest verdict is an agent’s: a draft');
-  assert.equal(alpha.value, 'proposed-verdict');
+  assert.equal(alpha.draft, true, 'open, and the latest verdict is an agent’s: a draft');
+  assert.equal(alpha.value, 'draft');
   assert.deepEqual(alpha.latest && { verdict: alpha.latest.verdict, by: alpha.latest.by }, { verdict: 'met', by: 'agent:claude' });
 
   assert.equal(notes.get('beta')!.value, 'open', 'open with no verdict');
   assert.equal(notes.get('gamma')!.value, 'met');
-  assert.equal(notes.get('gamma')!.proposed, false, 'the owner’s own verdict is not a draft');
+  assert.equal(notes.get('gamma')!.draft, false, 'the owner’s own verdict is not a draft');
   assert.equal(notes.get('epsilon')!.value, 'open', 'the owner said partial: open, and nothing waits on them');
   assert.equal(notes.get('delta')!.value, null, 'a proposed intent is a draft commitment, which the inbox already shows');
 
@@ -163,7 +163,7 @@ test('the reader asks once per index and TTL, with KERNEL_DB, and shares a read 
     assert.equal(a, b, 'two callers, one read');
     assert.equal(a.reason, null);
     assert.equal(a.vault, 'fake');
-    assert.equal(a.notes.get('alpha')!.value, 'proposed-verdict');
+    assert.equal(a.notes.get('alpha')!.value, 'draft');
     assert.deepEqual(v.calls(), [`${join(v.root, 'kdb')}|query --saved projector/vault-intents --in prefix=vault:fake: --limit 10000 --json`]);
 
     await kernelIndex(v.root, 'g1', { now });
@@ -224,7 +224,7 @@ test('a kernel that refuses the query is an empty answer that says to register, 
     delete process.env.FAKE_KERNEL_QUERY_FAIL;
     const back = await kernelIndex(v.root, 'g2');
     assert.equal(back.reason, null);
-    assert.equal(back.notes.get('alpha')!.value, 'proposed-verdict');
+    assert.equal(back.notes.get('alpha')!.value, 'draft');
   } finally {
     delete process.env.FAKE_KERNEL_QUERY_FAIL;
     logTo(null);
@@ -243,9 +243,9 @@ test('the kernel axis filters, groups and shows like any axis, and is never stor
     const { db, notes } = reindex(v.root);
     const deps = { facets: loadFacets(paths(v.root).facets), db, notes, views: [], today: '2026-10-16', kernel };
 
-    const drafts = queryPayload(deps, parseSpec({ 'f.kernel': 'proposed-verdict' }));
+    const drafts = queryPayload(deps, parseSpec({ 'f.kernel': 'draft' }));
     assert.deepEqual(drafts.ids, ['alpha']);
-    assert.deepEqual(drafts.notes.alpha!.computed.kernel, ['proposed-verdict'], 'a card can show it');
+    assert.deepEqual(drafts.notes.alpha!.computed.kernel, ['draft'], 'a card can show it');
 
     const board = queryPayload(deps, parseSpec({ group: 'kernel' }));
     assert.deepEqual(board.groupOrder.primary, [...KERNEL_VALUES, '(none)'], 'every value a column, in order, then the notes with no intent');
@@ -277,21 +277,21 @@ test('accept writes the draft’s verdict as the owner; overrule writes missed o
     assert.equal(accepted.ok, true);
     const db = join(v.root, 'kdb');
     assert.ok(
-      v.calls().includes(`${db}|observe ${ALPHA} met --note accepted agent:claude's met in projector`),
-      `observe as the owner — no --by, no other identity: ${v.calls().join('\n')}`,
+      v.calls().includes(`${db}|judge ${ALPHA} met --note accepted agent:claude's met in projector`),
+      `judge as the owner — no --by, no other identity: ${v.calls().join('\n')}`,
     );
 
     await decide(v.root, 'alpha', 'overrule');
-    assert.ok(v.calls().some((c) => c.startsWith(`${db}|observe ${ALPHA} missed`)));
+    assert.ok(v.calls().some((c) => c.startsWith(`${db}|judge ${ALPHA} missed`)));
     await decide(v.root, 'beta', 'overrule', { verdict: 'partial', note: 'half done' });
-    assert.ok(v.calls().includes(`${db}|observe ${BETA} partial --note half done`), 'partial keeps it open');
+    assert.ok(v.calls().includes(`${db}|judge ${BETA} partial --note half done`), 'partial keeps it open');
 
     const closed = await decide(v.root, 'gamma', 'accept');
     assert.equal(closed.ok, false);
     assert.match((closed as { reason: string }).reason, /is met, not open/);
     const none = await decide(v.root, 'plain', 'accept');
     assert.match((none as { reason: string }).reason, /has no intent/);
-    assert.equal(v.calls().filter((c) => c.includes('observe')).length, 3, 'a refusal never reached the kernel');
+    assert.equal(v.calls().filter((c) => c.includes('|judge ')).length, 3, 'a refusal never reached the kernel');
   } finally {
     v.cleanup();
   }
@@ -335,10 +335,10 @@ test('setting a status tells the kernel after the vault, skipping what is not op
     assert.equal(by.gamma!.outcome, 'skipped', 'a met intent is not reopened from a status');
     assert.equal(by.plain, undefined, 'a note with no intent is not a result');
     assert.equal(by.beta, undefined, 'planning is not a verdict');
-    const observed = v.calls().filter((c) => c.includes('observe'));
-    assert.deepEqual(observed, [
-      `${join(v.root, 'kdb')}|observe ${ALPHA} met --note status set to done in projector`,
-      `${join(v.root, 'kdb')}|observe ${DELTA} dropped --note status set to cancelled in projector`,
+    const judged = v.calls().filter((c) => c.includes('|judge '));
+    assert.deepEqual(judged, [
+      `${join(v.root, 'kdb')}|judge ${ALPHA} met --note status set to done in projector`,
+      `${join(v.root, 'kdb')}|judge ${DELTA} dropped --note status set to cancelled in projector`,
     ]);
 
     process.env.FAKE_KERNEL_FAIL = '1';
@@ -370,21 +370,21 @@ test('pj kernel status, accept and overrule drive the same reader and writer', (
   try {
     const status = pj(v.root, ['kernel', 'status']);
     assert.equal(status.code, 0, status.err);
-    assert.match(status.out, /alpha\s+proposed-verdict\s+aaaaaaaa\s+met by agent:claude 2026-10-15\s+Ship alpha/);
+    assert.match(status.out, /alpha\s+draft\s+aaaaaaaa\s+met by agent:claude 2026-10-15\s+Ship alpha/);
     assert.match(status.out, /alpha\s+\(superseded\)/, 'an outranked intent is listed by its status');
     assert.match(status.out, /delta\s+\(proposed\)/);
     assert.doesNotMatch(status.out, /zeta/, 'another vault’s intents are not this vault’s');
     assert.match(status.out, /1 drafted verdict\(s\) wait for you/);
     const json = JSON.parse(pj(v.root, ['kernel', 'status', '--json']).out);
-    assert.equal(json.notes.alpha.value, 'proposed-verdict');
+    assert.equal(json.notes.alpha.value, 'draft');
 
     const accept = pj(v.root, ['kernel', 'accept', 'alpha']);
     assert.equal(accept.code, 0, accept.err);
     assert.match(accept.out, /alpha: met on intent aaaaaaaa/);
     const overrule = pj(v.root, ['kernel', 'overrule', 'beta', '--verdict', 'partial']);
     assert.equal(overrule.code, 0, overrule.err);
-    assert.ok(v.calls().some((c) => c.includes(`observe ${ALPHA} met`)));
-    assert.ok(v.calls().some((c) => c.includes(`observe ${BETA} partial`)));
+    assert.ok(v.calls().some((c) => c.includes(`judge ${ALPHA} met`)));
+    assert.ok(v.calls().some((c) => c.includes(`judge ${BETA} partial`)));
 
     assert.equal(pj(v.root, ['kernel', 'overrule', 'beta', '--verdict', 'met']).code, 1, 'overrule is missed or partial');
     assert.match(pj(v.root, ['kernel', 'accept', 'gamma']).err, /not open/);
@@ -392,7 +392,7 @@ test('pj kernel status, accept and overrule drive the same reader and writer', (
     assert.equal(pj(v.root, ['kernel', 'frobnicate']).code, 1);
 
     // The axis reaches `pj ls` — the payload the app receives.
-    const ls = JSON.parse(pj(v.root, ['ls', '--filter', 'kernel=proposed-verdict', '--json']).out);
+    const ls = JSON.parse(pj(v.root, ['ls', '--filter', 'kernel=draft', '--json']).out);
     assert.deepEqual(ls.ids, ['alpha']);
   } finally {
     v.cleanup();
@@ -406,11 +406,11 @@ test('pj set writes the note first and tells the kernel second; a refusing kerne
     assert.equal(set.code, 0, set.err);
     assert.match(set.out, /beta: status=done/);
     assert.match(set.out, /kernel: beta: status=done → kernel met on bbbbbbbb/);
-    assert.ok(v.calls().includes(`${join(v.root, 'kdb')}|observe ${BETA} met --note status set to done in projector`));
+    assert.ok(v.calls().includes(`${join(v.root, 'kdb')}|judge ${BETA} met --note status set to done in projector`));
 
     const quiet = pj(v.root, ['set', 'epsilon', '--facet', 'status=planning']);
     assert.equal(quiet.code, 0);
-    assert.equal(v.calls().filter((c) => c.includes('observe')).length, 1, 'planning is not a verdict');
+    assert.equal(v.calls().filter((c) => c.includes('|judge ')).length, 1, 'planning is not a verdict');
 
     const refused = pj(v.root, ['set', 'alpha', '--facet', 'status=on-hold'], { FAKE_KERNEL_FAIL: '1' });
     assert.equal(refused.code, 0, 'the kernel is additional, never blocking');
@@ -425,7 +425,7 @@ test('pj set writes the note first and tells the kernel second; a refusing kerne
 
 const status = (root: string, id: string) => readAll(paths(root).notes).notes.get(id)!.facets.status;
 const bytes = (root: string, id: string) => readFileSync(place(root, `${id}.md`), 'utf8');
-const observes = (v: { calls: () => string[] }) => v.calls().filter((c) => c.includes('|observe '));
+const judges = (v: { calls: () => string[] }) => v.calls().filter((c) => c.includes('|judge '));
 
 test('the map read backwards: the first value for a verdict, or the one onVerdict chooses', () => {
   const v = vault(
@@ -445,7 +445,7 @@ test('the map read backwards: the first value for a verdict, or the one onVerdic
   }
 });
 
-test('accept writes the mapped value into the file, and the kernel is observed exactly once', () => {
+test('accept writes the mapped value into the file, and the kernel is told exactly once', () => {
   const v = vault();
   try {
     const accept = pj(v.root, ['kernel', 'accept', 'alpha']);
@@ -453,7 +453,7 @@ test('accept writes the mapped value into the file, and the kernel is observed e
     assert.match(accept.out, /alpha: met on intent aaaaaaaa/);
     assert.match(accept.out, /alpha: status active → done in the file \(kernel met\)/);
     assert.deepEqual(status(v.root, 'alpha'), ['done'], 'the status chip now agrees with the kernel');
-    assert.deepEqual(observes(v), [`${join(v.root, 'kdb')}|observe ${ALPHA} met --note accepted agent:claude's met in projector`]);
+    assert.deepEqual(judges(v), [`${join(v.root, 'kdb')}|judge ${ALPHA} met --note accepted agent:claude's met in projector`]);
 
     // An overrule that closes the intent writes too; one nothing maps to says so and writes nothing.
     const dropped = pj(v.root, ['kernel', 'overrule', 'beta', '--verdict', 'dropped']);
@@ -464,7 +464,7 @@ test('accept writes the mapped value into the file, and the kernel is observed e
     assert.equal(missed.code, 0, missed.err);
     assert.match(missed.out, /^epsilon: the file is unchanged — no status value maps to missed in kernel\.verdicts$/m);
     assert.equal(bytes(v.root, 'epsilon'), before);
-    assert.equal(observes(v).length, 3, 'one observation per answer, none from the file writes');
+    assert.equal(judges(v).length, 3, 'one judgment per answer, none from the file writes');
   } finally {
     v.cleanup();
   }
@@ -482,7 +482,7 @@ test('partial keeps the intent open and leaves the file untouched', async () => 
     assert.doesNotMatch(cli.out, /file/, 'partial says nothing about the file, because it writes nothing');
     assert.equal(bytes(v.root, 'alpha'), before);
     assert.deepEqual(status(v.root, 'beta'), ['active']);
-    assert.equal(observes(v).length, 2);
+    assert.equal(judges(v).length, 2);
   } finally {
     v.cleanup();
   }
@@ -499,7 +499,7 @@ function closedWhileOpen(root: string): string {
   return holding(root, [...fixedRows().filter((r) => !gone.has(r.intent)), ...extra]);
 }
 
-test('pj kernel status lists what disagrees, and pj kernel sync writes the files without observing', () => {
+test('pj kernel status lists what disagrees, and pj kernel sync writes the files without judging', () => {
   const v = vault(`kernel:\n  enabled: true\n  bin: ${FAKE}\n  vault: fake\n${VERDICTS}  onVerdict:\n    status: { dropped: cancelled }\n`);
   try {
     const env = { FAKE_KERNEL_QUERIES: closedWhileOpen(v.root) };
@@ -523,7 +523,7 @@ test('pj kernel status lists what disagrees, and pj kernel sync writes the files
     assert.deepEqual(status(v.root, 'beta'), ['done']);
     assert.deepEqual(status(v.root, 'plain'), ['cancelled']);
     assert.equal(bytes(v.root, 'epsilon'), epsilon);
-    assert.deepEqual(observes(v), [], 'sync reads the kernel; it never observes');
+    assert.deepEqual(judges(v), [], 'sync reads the kernel; it never judges');
 
     const after = pj(v.root, ['kernel', 'status'], env);
     assert.match(after.out, /1 file\(s\) disagree/, 'only the one nothing maps to is left');
@@ -543,7 +543,7 @@ test('a vault without kernel.verdicts never touches a file', () => {
     const accept = pj(v.root, ['kernel', 'accept', 'alpha']);
     assert.equal(accept.code, 0, accept.err);
     assert.match(accept.out, /^alpha: the file is unchanged — kernel\.verdicts is not set$/m);
-    assert.equal(observes(v).length, 1, 'the kernel is still told');
+    assert.equal(judges(v).length, 1, 'the kernel is still told');
 
     const status = pj(v.root, ['kernel', 'status'], env);
     assert.doesNotMatch(status.out, /disagree/, 'no lifecycle named, nothing to disagree on');
@@ -579,7 +579,7 @@ async function server(root: string): Promise<{ url: string; stop: () => void }> 
   return { url, stop: () => child.kill() };
 }
 
-test('the panel’s route does what the CLI does: one observation, then the mapped value in the file', async () => {
+test('the panel’s route does what the CLI does: one judgment, then the mapped value in the file', async () => {
   const v = vault();
   const s = await server(v.root);
   try {
@@ -606,9 +606,9 @@ test('the panel’s route does what the CLI does: one observation, then the mapp
 
     // The write-through runs after a response, so give it the moment it would take.
     await new Promise((r) => setTimeout(r, 300));
-    assert.deepEqual(observes(v), [
-      `${join(v.root, 'kdb')}|observe ${ALPHA} met --note accepted agent:claude's met in projector`,
-      `${join(v.root, 'kdb')}|observe ${BETA} partial --note partial, said in projector`,
+    assert.deepEqual(judges(v), [
+      `${join(v.root, 'kdb')}|judge ${ALPHA} met --note accepted agent:claude's met in projector`,
+      `${join(v.root, 'kdb')}|judge ${BETA} partial --note partial, said in projector`,
     ]);
   } finally {
     s.stop();
