@@ -62,6 +62,8 @@ import { execFileSync } from 'node:child_process';
 import { parseDay } from '../did/day.ts';
 import { did, renderDid } from '../did/run.ts';
 import { kernelIndex } from '../kernel/read.ts';
+import { planLine, runImport } from '../kernel/import.ts';
+import { MANIFEST, register } from '../kernel/register.ts';
 import { axisValues, shortId } from '../kernel/state.ts';
 import {
   decide,
@@ -266,7 +268,7 @@ Intake
   intake declined    inspect declined candidates
 
 Kernel
-  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict; sync files to it
+  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict; sync files to it; import the vault; register
 
 Vault and maintenance
   setup              inspect or initialise vault integration
@@ -317,6 +319,8 @@ Apply the same scripted edit to one or more notes.`,
        pj kernel accept <note id> [--note text]
        pj kernel overrule <note id> [--verdict missed|dropped|partial] [--note text]
        pj kernel sync
+       pj kernel import [--dry-run] [--json]
+       pj kernel register
 
 The owner's kernel, read through the vault's \`kernel:\` block. \`status\` lists
 every intent about a note of this vault, with the \`kernel\` axis value it
@@ -325,7 +329,14 @@ open where the kernel has closed it. \`accept\` tells the kernel the note's
 intent is met (or what the draft said); \`overrule\` says missed, dropped, or
 \`--verdict partial\` to keep it open. Both run \`<bin> observe\` as the owner,
 then write the value \`kernel.verdicts\` maps that verdict to into the note.
-\`sync\` writes those values into the files \`status\` lists as disagreeing.`,
+\`sync\` writes those values into the files \`status\` lists as disagreeing.
+
+\`import\` sends the vault to the kernel as one batch, as the owner: every note
+on the \`kernel.commitments\` axis as a commitment — open, met, missed,
+dropped, or none — a \`vault/status\` event per status change since the last
+import, and every note in the \`kernel.days\` folder as a \`vault/day\` event.
+\`--dry-run\` prints the batch instead of sending it. \`register\` hands the
+kernel projector's manifest, \`kernel/manifest.json\`.`,
   mv: `Usage: pj mv <id> <new-id>
 
 Rename a note and repoint references and saved views.`,
@@ -974,6 +985,42 @@ async function cmdKernel(argv: string[]): Promise<void> {
     if (res.file && res.verdict !== 'partial') {
       (res.file.outcome === 'failed' ? console.error : console.log)(filedLine(id, res.verdict, res.file));
     }
+    return;
+  }
+
+  if (sub === 'import') {
+    const { flags, rest } = argFlags(more, ['dry-run', 'json'], ['dry-run', 'json']);
+    if (rest.length) fail('pj kernel import takes no arguments');
+    const dryRun = flags.has('dry-run');
+    const res = await runImport(root, { dryRun });
+    if (!res.ok) fail(`pj kernel import: ${res.reason}`);
+    const { plan, answer } = res;
+    if (flags.has('json')) {
+      console.log(JSON.stringify(dryRun ? plan.batch : { vault: plan.vault, kernel: answer, batch: plan.batch }, null, 2));
+      return;
+    }
+    console.log(`${dryRun ? 'would send' : 'sent'} ${planLine(plan)}`);
+    if (dryRun) {
+      for (const c of plan.batch.commitments) console.log(`  ${pad(c.state, 8)} ${pad(c.key, 40)} ${c.statement}`);
+      for (const e of plan.batch.events) console.log(`  ${pad(e.kind, 12)} ${e.key}`);
+    }
+    for (const s of plan.skipped) console.log(`  skipped ${s.id}: ${s.why}`);
+    if (answer) {
+      const said = Object.entries(answer)
+        .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
+        .map(([k, v]) => `${k} ${v}`)
+        .join(' · ');
+      console.log(`kernel: ${said || JSON.stringify(answer)}`);
+    }
+    return;
+  }
+
+  if (sub === 'register') {
+    const { rest } = argFlags(more, []);
+    if (rest.length) fail('pj kernel register takes no arguments');
+    const res = await register(settingsFor(root).kernel);
+    if (!res.ok) fail(`pj kernel register: ${res.reason}`);
+    console.log(res.said || `registered ${MANIFEST}`);
     return;
   }
 

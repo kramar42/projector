@@ -151,6 +151,16 @@ export interface Settings {
    * `onVerdict` (`{ <axis>: { <verdict>: <value> } }`) chooses when several do
    * — `{ status: { dropped: cancelled } }` — and names only values `verdicts`
    * already maps to that verdict, so the two can never disagree.
+   *
+   * `commitments` and `days` are what `pj kernel import` reports (`kernel/import.ts`).
+   * `commitments` names the axis whose values say whether a note is one of the
+   * owner's commitments: a value in `open` is an open one, a value
+   * `verdicts[axis]` maps is `met`, `missed` or `dropped`, and every other value
+   * — or none — is no commitment at all. `horizon` names a date axis for the
+   * intent's horizon. `days` is a folder, relative to the vault, whose notes are
+   * the owner's days: `vault/day` events, never commitments. Both absent, the
+   * import has nothing to send. As with `verdicts`, the code knows no value of
+   * any axis (C4); the vault says them all.
    */
   kernel: {
     enabled: boolean;
@@ -160,6 +170,8 @@ export interface Settings {
     timeoutSeconds: number;
     verdicts: Record<string, Record<string, StatusVerdict>>;
     onVerdict: Record<string, Partial<Record<StatusVerdict, string>>>;
+    commitments: { axis: string; open: string[]; horizon: string | null } | null;
+    days: string | null;
   };
 }
 
@@ -201,6 +213,8 @@ interface Raw {
     timeout?: unknown;
     verdicts?: unknown;
     onVerdict?: unknown;
+    commitments?: { axis?: unknown; open?: unknown; horizon?: unknown };
+    days?: unknown;
   };
   mcp?: {
     slack?: unknown;
@@ -384,6 +398,16 @@ export function settingsFor(root: string): Settings {
       timeoutSeconds: Math.max(5, Number(raw.kernel?.timeout ?? 60) || 60),
       verdicts: verdictMap(raw.kernel?.verdicts),
       onVerdict: onVerdictMap(raw.kernel?.onVerdict, verdictMap(raw.kernel?.verdicts)),
+      commitments: (() => {
+        // Without an axis there is no question to ask of a note, so the block
+        // is absent rather than half-read.
+        const c = raw.kernel?.commitments;
+        const axis = c && typeof c === 'object' ? str(c.axis) : null;
+        if (!c || !axis) return null;
+        return { axis, open: list(c.open) ?? [], horizon: str(c.horizon) };
+      })(),
+      // Vault-relative, as a folder: `./daily/` and `daily` are the same place.
+      days: str(raw.kernel?.days)?.replace(/^(\.\/)+/, '').replace(/\/+$/, '') || null,
     },
   };
 
@@ -535,11 +559,19 @@ enrich: ${enrich ? 'true' : 'false'}
 #   # When you set one of these values, the note's kernel intent is told too,
 #   # through \`<bin> observe\`. Other values write nothing to the kernel.
 #   verdicts:
-#     status: { done: met, on-hold: dropped, cancelled: dropped }
+#     status: { done: met, archived: dropped, cancelled: dropped }
 #   # Accepting or overruling a verdict writes it back into the note: the first
 #   # value that maps to it, or the one named here when several do.
 #   onVerdict:
 #     status: { dropped: cancelled }
+#   # \`pj kernel import\`: which notes are your commitments. A value in open is
+#   # an open one, a value verdicts maps is met, missed or dropped, and any
+#   # other value (planning, on-hold) is no commitment at all.
+#   commitments:
+#     axis: status
+#     open: [active]
+#     horizon: due             # a date axis, for the intent's horizon
+#   days: daily                # a folder whose notes are your days: vault/day events
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so
 # it stays an environment variable: PROJECTOR_CLAUDE_HOME, PROJECTOR_CLAUDE_DESKTOP.

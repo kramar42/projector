@@ -191,6 +191,10 @@ export const claudeChannel: Channel = {
           branch: sum.branch,
           text: sum.opening,
         }),
+        // The session's last activity is the state it was seen in, so the kernel
+        // sink records a later sighting of the same session as an event of its own
+        // (`eventKey`). Nothing in this channel reads it back from `seen`.
+        state: { key: fingerprint, value: sum.lastAt ?? t.modifiedAt },
       });
     }
 

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
 import { closeIntakeDb, watermarkFor } from '../src/intake/db.ts';
 import { CHANNELS } from '../src/intake/run.ts';
-import { kernelBatch, sendToKernel, vaultName, type Examined, type KernelBatch, type Runner } from '../src/intake/kernel.ts';
+import { eventKey, kernelBatch, sendToKernel, vaultName, type Examined, type KernelBatch, type Runner } from '../src/intake/kernel.ts';
 import { channelLine, pollOnce, stopPolling } from '../src/server/poll.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import type { Ask } from '../src/intake/classify.ts';
@@ -115,6 +115,23 @@ test('every examined candidate is an event; only a card is a proposal', () => {
   assert.deepEqual(b.links, []);
 });
 
+test('a candidate carrying its source’s state is keyed by it, so a later sighting is an event of its own', () => {
+  const seen = (value: string, fingerprint = 'jira:K-1'): Examined => ({
+    candidate: cand(fingerprint, 'K-1', { channel: 'jira', state: { key: 'jira:K-1', value } }),
+    verdict: { fingerprint, decision: 'keep', reason: 'r', title: 'Answer K-1' },
+    decision: 'keep',
+    reason: 'r',
+  });
+  const first = kernelBatch('demo', 'jira', [seen('To Do · Bob')], notes);
+  const later = kernelBatch('demo', 'jira', [seen('In Progress · Bob')], notes);
+  assert.equal(first.events[0]!.key, 'jira:K-1@To Do · Bob');
+  assert.equal(later.events[0]!.key, 'jira:K-1@In Progress · Bob', 'the same issue, moved: a second event');
+  assert.deepEqual(first.proposals[0]!.evidence, ['jira:K-1@To Do · Bob'], 'the proposal cites the event by its key');
+  assert.equal(eventKey({ fingerprint: 'claude:s1', state: { key: 'claude:s1', value: '2026-10-15T09:00:00Z' } }), 'claude:s1@2026-10-15T09:00:00Z');
+  assert.equal(eventKey({ fingerprint: 'jira:K-1@To Do · Bob', state: { key: 'jira:K-1', value: 'To Do · Bob' } }), 'jira:K-1@To Do · Bob', 'not twice');
+  assert.equal(eventKey({ fingerprint: 'git:r@abc' }), 'git:r@abc', 'no state, the fingerprint alone');
+});
+
 test('a candidate with no date is an event the kernel dates itself', () => {
   const b = kernelBatch('demo', 'jira', [{ candidate: cand('jira:K-1', 'K-1', { when: undefined }), decision: 'drop', reason: 'no' }], notes);
   assert.equal('at' in b.events[0]!, false);
@@ -144,7 +161,7 @@ test('the kernel is off unless the file turns it on', () => {
   const on = vault('kernel:\n  enabled: true\n  bin: ~/k/bin/kernel\n  db: scratch/db\n  timeout: 1\n');
   const bare = vault('kernel:\n  enabled: true\n  bin: kernel\n');
   try {
-    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60, verdicts: {}, onVerdict: {} });
+    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60, verdicts: {}, onVerdict: {}, commitments: null, days: null });
     const k = settingsFor(on).kernel;
     assert.equal(k.enabled, true);
     assert.match(k.bin!, /\/k\/bin\/kernel$/);
@@ -160,18 +177,28 @@ test('the kernel is off unless the file turns it on', () => {
 // ------------------------------------------------------------------ sending
 
 const batch: KernelBatch = { entities: [], events: [], links: [], proposals: [] };
-const cfg = { enabled: true, bin: '/k/bin/kernel', db: '/scratch/db', vault: null, timeoutSeconds: 5, verdicts: {}, onVerdict: {} };
+const cfg = {
+  enabled: true,
+  bin: '/k/bin/kernel',
+  db: '/scratch/db',
+  vault: null,
+  timeoutSeconds: 5,
+  verdicts: {},
+  onVerdict: {},
+  commitments: null,
+  days: null,
+};
 
 test('a batch goes to `<bin> ingest` on stdin, with KERNEL_DB', async () => {
   let seen: { bin: string; args: string[]; input: string; db?: string } | null = null;
   const run: Runner = async (bin, args, input, env) => {
     seen = { bin, args, input, db: env.KERNEL_DB };
-    return { code: 0, stdout: '{"events-new":3,"proposals-new":1,"source":"agent:projector-intake"}\n', stderr: '' };
+    return { code: 0, stdout: '{"events-new":3,"proposals-new":1,"source":"system:projector"}\n', stderr: '' };
   };
   assert.deepEqual(await sendToKernel(cfg, batch, run), { ok: true, events: 3, proposals: 1 });
   assert.deepEqual(seen, {
     bin: '/k/bin/kernel',
-    args: ['ingest', '--source', 'agent:projector-intake', '--json'],
+    args: ['ingest', '--source', 'system:projector', '--json'],
     input: JSON.stringify(batch),
     db: '/scratch/db',
   });

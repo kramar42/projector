@@ -1067,7 +1067,8 @@ new boundary is a file rather than a line in a terminal you have already closed.
 
 **A tick can also tell your kernel.** With a `kernel:` block, every candidate a tick judged — kept,
 extended, linked or declined — is also sent to the kernel as one `intake/<channel>` event keyed by its
-fingerprint, about the notes it matched (as `vault:<vault>:<note id>`), and every card as a *proposed*
+fingerprint — and by the state its source was in, for a Jira issue or a Claude session, so seeing one
+again after it moved is a second event — about the notes it matched (as `vault:<vault>:<note id>`), and every card as a *proposed*
 intent citing that event, which `bin/kernel today` lists under awaiting until you confirm or drop it
 there. The card in `inbox/` is still what the board shows for a candidate; what the kernel says of
 notes you have is [the other direction](#projector-over-the-kernel). Sending
@@ -1077,7 +1078,7 @@ written and the cursor moves regardless.
 ```yaml
 kernel:
   enabled: true                            # off unless written true
-  bin: ~/Code/projects/kernel/bin/kernel   # run as `<bin> ingest --source agent:projector-intake`
+  bin: ~/Code/projects/kernel/bin/kernel   # run as `<bin> ingest --source system:projector`
   db: ~/.kernel/db                         # passed as KERNEL_DB; omit for the kernel's own default
   vault: work                              # optional: the name in the aliases; default the registered name
 ```
@@ -1401,7 +1402,7 @@ kernel:
   enabled: true
   bin: ~/Code/projects/kernel/bin/kernel
   verdicts:
-    status: { done: met, on-hold: dropped, cancelled: dropped }
+    status: { done: met, archived: dropped, cancelled: dropped }
 ```
 
 When you then set one of those values — a chip in the panel, a drag across a status column, the bulk
@@ -1423,9 +1424,9 @@ several values map to one verdict, `onVerdict:` says which to write:
 ```yaml
 kernel:
   verdicts:
-    status: { done: met, on-hold: dropped, cancelled: dropped }
+    status: { done: met, archived: dropped, cancelled: dropped }
   onVerdict:
-    status: { dropped: cancelled }   # without it, dropped writes on-hold, the first
+    status: { dropped: cancelled }   # without it, dropped writes archived, the first
 ```
 
 It is the same validated write a status chip makes, and it does not tell the kernel a second time.
@@ -1437,6 +1438,49 @@ file holds no mapped value, and `pj kernel sync` writes the mapped values into t
 per note. A file that already holds a mapped value, even a different one, is your word and is left
 alone. Neither runs on its own; you ask.
 
+**Your commitments come from the vault: `pj kernel import`.** Which of your notes are promises is the
+vault's to say, so the `kernel:` block names it — the axis, the values that are open, and, through the
+`verdicts:` map above, the values that are met, missed or dropped. Every other value is *no commitment*:
+a note in planning is not a promise yet, and one on hold is not a broken one. A folder of day notes is
+named the same way:
+
+```yaml
+kernel:
+  enabled: true
+  bin: ~/Code/projects/kernel/bin/kernel
+  verdicts:
+    status: { done: met, archived: dropped, cancelled: dropped }
+  commitments:
+    axis: status
+    open: [active]
+    horizon: due          # optional: a date axis, the intent's horizon
+  days: daily             # optional: a folder whose notes are your days
+```
+
+`pj kernel import` reads the vault the way the board does and sends the kernel one batch, as you:
+
+| | becomes, in the kernel |
+|---|---|
+| a note with a value on the axis | the entity `vault:<vault>:<note id>`, and a commitment keyed by it: `open` for a value in `open`, `met`/`missed`/`dropped` for a value `verdicts` maps, `none` for any other. Its statement is the title; its criterion the body's `Done when …` line, else the axis reaching a `met` value |
+| a status change since the last import | one `vault/status` event, keyed `vault:<vault>:<note id>:<status>` — `none` when the value went away, `@<n>` on a status the note held before |
+| a note in the `days` folder | one `vault/day` event, keyed `vault:<vault>:day:<date>`, at that date, its text as the payload — never a commitment. The date is the one in the file's name |
+| an inbox card, or a note with no value on the axis | nothing — the intake sink already sends cards as proposals |
+
+The kernel turns each change of state into your observation — a new `open` opens an intent, `met`
+closes it, `none` drops an open one — and the same state again into nothing, so running the import
+twice writes nothing twice. Nothing in the vault is written; `.projector/intake.db` remembers which
+status events were sent, which is how a return to an earlier status gets its `@<n>`. `--dry-run`
+prints the batch instead of sending it, `--json` prints it (or, sent, the kernel's answer with it) as
+JSON. A kernel that refuses the batch is one line and a non-zero exit, and the next import sends it
+whole.
+
+**Projector is a registered kernel system.** `kernel/manifest.json` in this checkout tells the kernel
+what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities, proposals and
+your commitments, no judgments — and brings the `note-conventions` spec, `kernel/specs/`. The kernel
+checks every batch projector sends against it and refuses one that strays. `pj kernel register` hands
+it over (`<bin> register <checkout>/kernel/manifest.json`); run it once, and again after the manifest
+changes — the same manifest twice records nothing.
+
 **From a shell**, the same reader and writer, so a session can drive it without the UI:
 
 ```
@@ -1444,6 +1488,8 @@ pj kernel status [--json]                                          every intent 
 pj kernel accept <note id> [--note text]                           the draft's verdict, or met
 pj kernel overrule <note id> [--verdict missed|dropped|partial]    missed by default; partial keeps it open
 pj kernel sync                                                     write the kernel's verdict into the files that disagree
+pj kernel import [--dry-run] [--json]                              send the vault's commitments, status changes and days
+pj kernel register                                                 register projector's manifest with the kernel
 ```
 
 ---
@@ -1616,7 +1662,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check [--json]` | under *Validity*, every note file and every saved view against the same vocabulary; then under *Rules*, every saved view declaring `expect: empty`, with the notes breaking it. Exits non-zero on a validity error or a broken rule — warnings alone pass |
-| `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel sync` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner · write the kernel's verdicts into files that disagree. See [Projector over the kernel](#projector-over-the-kernel) |
+| `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel sync` · `pj kernel import [--dry-run] [--json]` · `pj kernel register` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner · write the kernel's verdicts into files that disagree · send the vault's commitments and days · register projector with the kernel. See [Projector over the kernel](#projector-over-the-kernel) |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
 **Flags use their full long spelling.** `pj ls --json`, `pj ls --group status` and

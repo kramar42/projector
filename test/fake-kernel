@@ -1,11 +1,14 @@
 #!/bin/sh
-# A stand-in for the owner's kernel CLI, for test/intents.test.ts.
+# A stand-in for the owner's kernel CLI, for test/intents.test.ts and test/import.test.ts.
 #
 # `intents --json --about <prefix>` prints a fixed JSON array — the file named by
 # FAKE_KERNEL_INTENTS when it is set, the array below otherwise — and every call
 # is appended to FAKE_KERNEL_LOG as `KERNEL_DB|arg arg …`, so a test can read
 # back exactly what projector asked and wrote. `observe` prints the line the real
-# CLI prints. FAKE_KERNEL_FAIL makes every call refuse, the way a locked store does.
+# CLI prints. `ingest` appends the batch it was given on stdin, one line per
+# batch, to FAKE_KERNEL_BATCHES and answers with a JSON object as the real one
+# does; `register` says what it registered. FAKE_KERNEL_FAIL makes every call
+# refuse, the way a locked store does.
 [ -n "$FAKE_KERNEL_LOG" ] && printf '%s|%s\n' "$KERNEL_DB" "$*" >> "$FAKE_KERNEL_LOG"
 if [ -n "$FAKE_KERNEL_FAIL" ]; then
   echo "error: store is locked {}" >&2
@@ -41,6 +44,14 @@ JSON
     ;;
   observe)
     echo "observation 12345678 intent $(printf '%s' "$2" | cut -c1-8) -> $3"
+    ;;
+  ingest)
+    batch=$(cat)
+    [ -n "$FAKE_KERNEL_BATCHES" ] && printf '%s\n' "$batch" >> "$FAKE_KERNEL_BATCHES"
+    echo "{\"source\": \"$3\", \"entities-new\": 0, \"events-new\": 0, \"proposals-new\": 0}"
+    ;;
+  register)
+    echo "registered system:projector from $2"
     ;;
   *)
     echo "unknown command $1"

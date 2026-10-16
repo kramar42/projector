@@ -135,6 +135,30 @@ CREATE TABLE IF NOT EXISTS seen (
   state  TEXT NOT NULL,
   at     TEXT NOT NULL
 );
+
+-- What \`pj kernel import\` has told the kernel each note's status was, in order.
+--
+-- The kernel keys a status change \`vault:<vault>:<id>:<status>\`, and a status
+-- the note held before carries \`@<n>\`, the count of changes before it — so
+-- active, done, active again is three events, not two. Telling a repeat from
+-- the same status seen twice needs the sequence, and the kernel's interface
+-- gives no way to read its events back; this is the sender's own record of
+-- what it sent, the role \`seen\` plays for a channel. Written only after the
+-- kernel took the batch. Same lifecycle, same argument: lose it and the next
+-- import sends each note's current status under its first key, which a store
+-- that already holds it ignores; only a later return to an earlier status goes
+-- unrecorded as an event, and the commitment it reports still moves the intent.
+CREATE TABLE IF NOT EXISTS kernel_status (
+  vault  TEXT NOT NULL,
+  note   TEXT NOT NULL,
+  seq    INTEGER NOT NULL,
+  -- NULL when the note stopped carrying a value on the axis.
+  status TEXT,
+  key    TEXT NOT NULL,
+  -- The event's time, ISO: the next one for this note is always later.
+  at     TEXT NOT NULL,
+  PRIMARY KEY (vault, note, seq)
+);
 `;
 
 /**
@@ -772,4 +796,45 @@ export function markSeen(dataRoot: string, key: string, state: string): void {
        ON CONFLICT(key) DO UPDATE SET state = excluded.state, at = excluded.at`,
     )
     .run(key, state, new Date().toISOString());
+}
+
+// ---------------------------------------------------------------- kernel_status
+
+/** What the import last told the kernel of one note: every key sent, oldest first, and the latest status and time. */
+export interface StatusSent {
+  keys: string[];
+  status: string | null;
+  at: string;
+}
+
+/** Every note's record under one vault name. */
+export function statusesSent(dataRoot: string, vault: string): Map<string, StatusSent> {
+  const rows = openIntakeDb(dataRoot)
+    .prepare('SELECT note, status, key, at FROM kernel_status WHERE vault = ? ORDER BY note, seq')
+    .all(vault) as unknown as { note: string; status: string | null; key: string; at: string }[];
+  const out = new Map<string, StatusSent>();
+  for (const r of rows) {
+    const had = out.get(r.note);
+    if (had) {
+      had.keys.push(r.key);
+      had.status = r.status;
+      had.at = r.at;
+    } else out.set(r.note, { keys: [r.key], status: r.status, at: r.at });
+  }
+  return out;
+}
+
+/** Append the status events a batch the kernel took carried. */
+export function recordStatusesSent(
+  dataRoot: string,
+  vault: string,
+  rows: { note: string; status: string | null; key: string; at: string }[],
+): void {
+  const conn = openIntakeDb(dataRoot);
+  const next = conn.prepare('SELECT COALESCE(MAX(seq), -1) + 1 AS n FROM kernel_status WHERE vault = ? AND note = ?');
+  const put = conn.prepare('INSERT INTO kernel_status (vault, note, seq, status, key, at) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const r of rows) {
+    const { n } = next.get(vault, r.note) as { n: number };
+    put.run(vault, r.note, n, r.status, r.key, r.at);
+  }
 }

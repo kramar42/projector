@@ -17,10 +17,17 @@ import type { Note } from '../schema/types.ts';
  * its terms projector's intake *gathers*, so it is a source: it writes events
  * about what it saw and **proposes** intents, and never opens one. Every
  * candidate a tick judged becomes one `intake/<channel>` event keyed by its
- * fingerprint; a candidate kept as a card (`keep` or `extend`) also becomes one
- * proposal citing that event, which the kernel files as a proposed intent by
- * `agent:projector-intake`, waiting for the owner's `opened` or `dropped`.
- * Declines, links and unanswered candidates are events only.
+ * fingerprint — and by the source's state when the candidate carries one, so a
+ * Jira issue or a Claude session seen again after it moved is a second event
+ * rather than the first one again; a candidate kept as a card (`keep` or
+ * `extend`) also becomes one proposal citing that event, which the kernel files
+ * as a proposed intent by `system:projector`, waiting for the owner's `opened`
+ * or `dropped`. Declines, links and unanswered candidates are events only.
+ *
+ * **As the registered system.** The batch goes in as `system:projector`, the
+ * system `kernel/manifest.json` registers, so the kernel checks every item
+ * against what the manifest says projector writes — `intake/` events, `vault:`
+ * entities, proposals — and refuses the batch whole when one falls outside.
  *
  * Both halves are idempotent in the kernel — an event by its key, a proposal by
  * its statement and evidence — so a candidate examined twice, or a batch sent
@@ -79,7 +86,22 @@ export interface Examined {
 /** The alias a vault note goes by in the kernel. Stable for as long as the note id and the vault's name are. */
 export const noteAlias = (vault: string, id: string): string => `vault:${vault}:${id}`;
 
-export const KERNEL_SOURCE = 'agent:projector-intake';
+/** The system `kernel/manifest.json` registers, and the source of every batch projector sends. */
+export const KERNEL_SOURCE = 'system:projector';
+
+/**
+ * The key a candidate's event goes by: its fingerprint, and the state the
+ * source was in when the candidate carries one. A fingerprint names the thing
+ * — `jira:KEY`, `claude:<session>` — and the kernel writes an event once per
+ * key, so without the state the second sighting of a moved issue would be the
+ * first event again and never recorded. A fingerprint that already ends in the
+ * state (a Jira update with no timestamp) is not given it twice.
+ */
+export function eventKey(c: Pick<Candidate, 'fingerprint' | 'state'>): string {
+  const value = c.state?.value;
+  if (!value || c.fingerprint.endsWith(`@${value}`)) return c.fingerprint;
+  return `${c.fingerprint}@${value}`;
+}
 
 /**
  * The vault's name in kernel aliases: `kernel.vault` when the file sets one,
@@ -127,8 +149,9 @@ export function kernelBatch(
     const titles = new Map((ev.matches ?? []).map((m) => [m.id, m.title]));
     const about = [...new Set(ids)].filter((id) => notes.has(id)).map((id) => entity(id, titles.get(id)));
 
+    const key = eventKey(c);
     events.push({
-      key: c.fingerprint,
+      key,
       kind: `intake/${channel}`,
       ...(c.when ? { at: c.when } : {}),
       about,
@@ -151,7 +174,7 @@ export function kernelBatch(
       proposals.push({
         statement: v.title ?? c.title,
         about: v.target && notes.has(v.target) ? [entity(v.target)] : [],
-        evidence: [c.fingerprint],
+        evidence: [key],
       });
     }
   }
@@ -195,22 +218,28 @@ export const spawnRunner: Runner = (bin, args, input, env, timeoutMs) =>
     child.stdin.end(input);
   });
 
+/** What `<bin> ingest --json` answered, as its own keys, or why there is no answer. */
+export type Ingested = { ok: true; answer: Record<string, unknown> } | { ok: false; reason: string };
+
 /**
- * Send one batch: `<bin> ingest --source agent:projector-intake --json`, the
- * batch on stdin, `KERNEL_DB` from `kernel.db` when the file sets it. Never
- * throws: every way of failing is a `reason`.
+ * Send one batch: `<bin> ingest --source system:projector [--owner] --json`,
+ * the batch on stdin, `KERNEL_DB` from `kernel.db` when the file sets it.
+ * `owner` is for the owner's own reports — the import's commitments — and
+ * never for the intake sink, whose proposals are an agent's. Never throws:
+ * every way of failing is a `reason`.
  */
-export async function sendToKernel(
+export async function ingest(
   cfg: Settings['kernel'],
-  batch: KernelBatch,
+  batch: object,
+  opts: { owner?: boolean } = {},
   run: Runner = spawnRunner,
-): Promise<Sent> {
+): Promise<Ingested> {
   if (!cfg.bin) return { ok: false, reason: 'kernel.bin is not set' };
   const env = { ...process.env, ...(cfg.db ? { KERNEL_DB: cfg.db } : {}) };
   try {
     const { code, stdout, stderr } = await run(
       cfg.bin,
-      ['ingest', '--source', KERNEL_SOURCE, '--json'],
+      ['ingest', '--source', KERNEL_SOURCE, ...(opts.owner ? ['--owner'] : []), '--json'],
       JSON.stringify(batch),
       env,
       cfg.timeoutSeconds * 1000,
@@ -219,11 +248,23 @@ export async function sendToKernel(
       const said = (stderr || stdout).trim().split('\n').pop() ?? '';
       return { ok: false, reason: `kernel ingest exited ${code ?? 'on a signal'}${said ? `: ${said.slice(0, 300)}` : ''}` };
     }
-    const r = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as Record<string, unknown>;
-    return { ok: true, events: Number(r['events-new'] ?? 0), proposals: Number(r['proposals-new'] ?? 0) };
+    const r = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as unknown;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: 'kernel ingest answered something other than a JSON object' };
+    return { ok: true, answer: r as Record<string, unknown> };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** The intake sink's send: one tick's batch, as the system and never as the owner. */
+export async function sendToKernel(
+  cfg: Settings['kernel'],
+  batch: KernelBatch,
+  run: Runner = spawnRunner,
+): Promise<Sent> {
+  const r = await ingest(cfg, batch, {}, run);
+  if (!r.ok) return r;
+  return { ok: true, events: Number(r.answer['events-new'] ?? 0), proposals: Number(r.answer['proposals-new'] ?? 0) };
 }
 
 /**
