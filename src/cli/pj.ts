@@ -271,8 +271,9 @@ List notes through the same query compiler and payload builder as the app.
 Your own traces on one local day: vault notes created, closed or moved,
 commits in the work repos, the Claude sessions you worked in there, and the
 Jira changes, comments and worklogs you authored. Facts only, nothing summarised and nothing written —
-the pj-did skill turns them into a list of tasks. \`did.roots\` in the vault's
-config says which directories count as work.`,
+the source-level report; the day recap as tasks is the kernel's
+\`bin/kernel did\`. \`did.roots\` in the vault's config says which
+directories count as work.`,
   log: `Usage: pj log [--since "1 week ago"]
 
 Read status transitions, deadlines, and creations from this vault's git history.`,

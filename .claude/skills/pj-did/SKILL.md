@@ -1,119 +1,28 @@
 ---
 name: pj-did
-description: Summarise what the user actually did on one day, as a categorised list of tasks, from their own traces in the vault, git, Claude sessions, Jira and Slack. Use when asked what they did today, yesterday or on a date, for a daily recap or standup notes, or for "what did I get done". Not for what is left to do; that is the actionable view.
+description: Retired; redirects to the kernel's day recap. Use when asked what the user did today, yesterday or on a date, for a daily recap or standup notes, or for "what did I get done" — the recap is now `bin/kernel did [today|yesterday|YYYY-MM-DD]` in the owner's kernel, and this skill says how to run it. `pj did` remains as the source-level report. Not for what is left to do; that is the actionable view, or `bin/kernel today`.
 ---
 
-# What I did
+# What I did: retired to the kernel
 
-Turn one day's traces into a short, categorised list of **tasks done**, each one backed by the traces
-that prove it. You summarise and group. You do not investigate, and you add nothing the traces don't
-show.
+The day recap is the kernel's: `bin/kernel did [today|yesterday|YYYY-MM-DD] [--json]` reads the
+day's events in the owner's kernel, mechanically and with no model, and prints one task per entity
+the events are about (a repo, a note, a task) or else per kind. Each task carries its title in the
+events' own words, an outcome (`done` when an intent about it was met that day or a did task was
+marked done, `handled` when it was only messages or sessions with no artifact, `progressed`
+otherwise) and its refs (event ids, a sha, a Jira key, links). A Gaps line names the sources that
+wrote nothing that day. Answer from that output; do not regroup it or add tasks it does not show.
 
-## 1. Gather
+`pj did` the command still exists: it is the source-level report of one day's vault notes, commits,
+Claude sessions and Jira changes, gathered straight from those sources and never judged. Use it when
+the question is about a source the kernel does not receive yet, and say which.
 
-The day is `today` unless the user named one: `yesterday` or `YYYY-MM-DD`.
+Neither writes a `daily/` note. Planning and closing the day are retired too; `pj-day` says where
+they went (the `kernel-tick` skill, `bin/kernel today`, `bin/kernel week` for the week reset).
 
-```bash
-pj did <day> --json
-```
+## Running the kernel from a projector workspace
 
-Run it the way this workspace runs `pj` (its `AGENTS.md` gives the command and the `--vault`). The
-report holds the vault, git, claude and jira sources. Each **activity** has a `ref` to cite and, where
-one matched mechanically, the vault `notes` it belongs to. If a source says `fetched: false`, report
-its `reason` under **Gaps** and carry on without it.
-
-**Slack** is the one source the script can't reach. Fetch it yourself with the read-only Slack
-search, `from:me on:<YYYY-MM-DD>`, sorted by timestamp, paging until there are no more results.
-Leave out the user's self-DM, which is a scratchpad and not work. If Slack isn't connected, put that
-under **Gaps**.
-
-This step is done when every source has either returned results or appears under Gaps.
-
-## 2. Merge into tasks
-
-A **task** is one piece of work, however many sources recorded it. A branch's commits, the session
-that wrote them, the Jira ticket that moved and the Slack "deployed to eu-test" can all be one task.
-Merge by mechanical evidence first: the same vault note in `notes`, the same Jira key, a session's
-`wrote:` files inside the commit's repo, or the same branch. Merge by topic only when the words
-plainly name the same thing.
-
-Record exactly one **outcome** per task, read from the traces:
-
-- **done**: the traces show it finished. A note became `note-closed`, a Jira `transition` went to a
-  done-like status, the user said in Slack that it was merged, deployed or shipped, or a session's
-  last word reports it complete.
-- **progressed**: work happened but nothing shows it finished. This is the default.
-- **handled**: a question answered, a ticket reassigned, a review requested. The user did something
-  real that produced nothing to build on.
-
-Leave out traces that are not the user's work:
-
-- chit-chat, thanks and emoji-only messages
-- sessions that wrote nothing and led to nothing in another source. Keep one as *handled* when its
-  answer went to someone else (a ticket, a colleague), and drop it when the answer was only for the
-  user
-- meetings attended
-- reviewing somebody else's work
-
-This step is done when every activity and Slack message sits in exactly one task or in the
-left-out count.
-
-## 3. Categorise and answer in chat
-
-Group tasks under the **vault project** their notes point at, using the project note's title. A
-`cwd` match only says the work happened in a repo that project declares, and one repo can serve
-several projects. When the content plainly belongs elsewhere, group by content and name the override
-under Gaps. If a
-task matches no note, group it by theme: *Support*, *Infra / DevOps*, *Coordination*, or a name the
-traces make obvious. Order categories by number of tasks, most first.
-
-```markdown
-## <day> — <n> tasks
-
-### <Category>
-- **<Task, as an outcome in past tense>** · done — <one line of what changed> · [refs]
-- **<…>** · progressed — …
-
-### Gaps
-- <sources not fetched and why; anything ambiguous you left ungrouped>
-
-Left out as not work: <each trace you dropped, by its ref, with the one-word reason> — or nothing.
-```
-
-- Write each task in the user's own words where a trace has them: a commit subject, a prompt, a
-  ticket summary.
-- Put refs in the brackets: a Jira key, a short sha, `claude:<uuid8>`, a Slack permalink. Two or three
-  per task is enough.
-- Every claim needs a trace behind it. A date, a status or a "done" with no trace becomes
-  *progressed*, or goes under Gaps.
-- The left-out line names only traces you actually dropped, each by its ref: never a count or a
-  category you didn't enumerate, and never a meeting no trace shows you attended. It stays in
-  chat; a day note's `Did` holds the tasks and Gaps only.
-
-## 4. Offer to save, then stop
-
-Ask one question: **"Save this as the day's `Did`?"** Then wait. When the day is today, the summary
-is what happened *so far*: say so in the question, because the day's close rewrites it.
-
-Only if the user says yes, read the `pj-about` skill first. A day lives in one note,
-`daily/YYYY-MM-DD.md` with id `YYYY-MM-DD` (the convention in the vault's `AGENTS.md` wins if it
-names another), holding `## Plan` and `## Did`. Saving writes `Did` and nothing else of the day's:
-
-- **The day's note exists** — `pj-day` wrote its Plan. Write the summary, without its first heading,
-  under `## Did`. Leave the title, `status` and the Plan's checkboxes alone: closing the day is
-  `pj-day`'s close. If `Did` already holds text, show both versions and ask: replace or append.
-  Never overwrite it silently.
-- **No note, and the day is over** — create it, with an empty Plan:
-
-  ```bash
-  pj add "<YYYY-MM-DD Ddd> — <the day's two or three biggest outcomes>" --id <YYYY-MM-DD> \
-    --facet day=<YYYY-MM-DD> --facet private=true --facet status=done \
-    --facet source=<each source with traces> --facet project=<each project in the summary>
-  ```
-
-  then write `## Plan` (empty) and `## Did` (the summary) into the file `pj add` prints.
-- **No note, and the day is today** — create it the same way without `status`, titled
-  `<YYYY-MM-DD Ddd> — so far: <outcomes>`, so it stays off the work boards until the day closes.
-
-Either way, link the Jira keys and Claude sessions the summary cites: `pj link <YYYY-MM-DD>
-jira:<KEY> claude:<uuid> …`. A day with no traces gets no note.
+- From the kernel checkout, `~/Code/projects/kernel`: `bin/kernel did yesterday`.
+- From anywhere else, by path: `~/Code/projects/kernel/bin/kernel did`. It uses the checkout's store
+  unless `KERNEL_DB` names another; the vault's `.projector/config.yaml` `kernel:` block (`bin`, `db`)
+  says which this vault's intake sends to: `KERNEL_DB=<kernel.db> <kernel.bin> did --json`.

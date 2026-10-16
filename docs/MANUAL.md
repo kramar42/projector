@@ -1064,6 +1064,22 @@ Unlike a preview, a tick **does** move each channel's cursor — it can, because
 new boundary is a file rather than a line in a terminal you have already closed. Without a server,
 `pj intake` is that tick.
 
+**A tick can also tell your kernel.** With a `kernel:` block, every candidate a tick judged — kept,
+extended, linked or declined — is also sent to the kernel as one `intake/<channel>` event keyed by its
+fingerprint, about the notes it matched (as `vault:<vault>:<note id>`), and every card as a *proposed*
+intent citing that event, which `bin/kernel today` lists under awaiting until you confirm or drop it
+there. The card in `inbox/` is still what the board shows; the kernel does not yet feed the UI. Sending
+twice lands once, and a kernel that cannot be reached is a warning on that channel's line — the card is
+written and the cursor moves regardless.
+
+```yaml
+kernel:
+  enabled: true                            # off unless written true
+  bin: ~/Code/projects/kernel/bin/kernel   # run as `<bin> ingest --source agent:projector-intake`
+  db: ~/.kernel/db                         # passed as KERNEL_DB; omit for the kernel's own default
+  vault: work                              # optional: the name in the aliases; default the registered name
+```
+
 **`pj intake rejudge` runs the pass again over what is still in the queue.** A card is written once, on
 the way in, so cards from before you changed `.projector/classify.md` — or from an earlier version of
 the app — keep whatever they were given. This is how they catch up, and it is the only command that
@@ -1370,7 +1386,7 @@ prepares the workspace and prints the link instead of following it.
 The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
 before planning or writing code. It asks for nothing at the end: the note records the workspace at
 launch, so every session that ever runs there shows on the note without any of them registering
-itself. When the vault has a `memory/AGENTS.md` — what `/pj-day` has learned about reading your
+itself. When the vault has a `memory/AGENTS.md` — what the retired `/pj-day` learned about reading your
 sources — the briefing names it, to be read before the linked sources and left as it is.
 
 ## Skills
@@ -1382,8 +1398,8 @@ sources — the briefing names it, to be read before the linked sources and left
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
 | `/pj-work` | start work on a note |
-| `/pj-did` | what you did on a day, as categorised tasks cited to their traces — `pj did` plus your Slack messages; answers in chat and asks before saving it as the `Did` of that day's note (today's is "so far"; closing the day stays `/pj-day`'s) |
-| `/pj-day` | run the working day: open it with one to three agreed outcomes, check in during it, close it with what was done, reset the week. One day note per day — `Plan` and `Did`, nothing else; what you said, the questions still waiting and the evidence behind each plan line live in the vault's `memory/`, which is the agent's own and needs no approval (the first run seeds it). Close drafts tomorrow's `Plan`, written as tomorrow's note only on your yes; the week reset turns what held up into `memory/patterns/`, so a thing learned is not asked again. Every run gathers first, then asks only closed questions: a decision, an ownership call, sources that disagree |
+| `/pj-did` | retired: points to the kernel's day recap, `bin/kernel did [today\|yesterday\|YYYY-MM-DD]`, which groups the day's kernel events into tasks with an outcome (done, progressed, handled) and their refs, and names the sources that wrote nothing. `pj did` stays as the source-level report |
+| `/pj-day` | retired: points to the kernel, where the day is a loop — morning is the `kernel-tick` skill plus `bin/kernel today`, a check-in is `today`, the close is your verdicts (`bin/kernel observe`), and the week reset is `bin/kernel week`. Its discipline lives in the kernel's daily plan: every proposal cites evidence or says untested, and at most three closed questions a run reach you as proposed intents. Each skill says how to run the kernel from here: from its checkout, or by path with `KERNEL_DB` naming the store the vault's `kernel:` block sends to |
 
 **There is no capture skill any more.** Sweeping, judging and filing are what the poller does, on a
 timer and without being asked — see *Intake* above. What used to be a conversation you had to start is
@@ -1391,11 +1407,11 @@ now a queue you walk, and `pj intake` runs the same tick by hand when there is n
 
 **Nor a triage skill.** The `triage` view stays — the inbox is its first column, then one column per
 filing rule — but nothing is left for a skill of its own to do there. A card arrives with its facets
-proposed, and `/pj-day` judges every one in its stop: `pj accept`, `pj accept` folding an `extends`
-card into its target, or `pj decline --reason`. A note you made yourself and left half-filled breaks
-a rule, which `pj check` reports under *Rules* and the `/pj-day` week reset asks about. Both propose
-and stop: a wrong project assignment hides a note in a column nobody will look in, which is worse than
-leaving it blank.
+proposed, and you judge each one: `pj accept`, `pj accept` folding an `extends` card into its target,
+`pj merge`, or `pj decline --reason` — with a `kernel:` block each card also waits on `bin/kernel today`
+as a proposed intent. A note you made yourself and left half-filled breaks a rule, which `pj check`
+reports under *Rules*. Neither is decided for you: a wrong project assignment hides a note in a
+column nobody will look in, which is worse than leaving it blank.
 
 ---
 
@@ -1474,7 +1490,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 |---|---|
 | `pj ls [--view n] [--group f[,f]] [--filter f=v,v] [--sort k:d] [--q text] [--focus id --via v --dir out\|in\|both --depth n] [--shape s] [--show f,f] [--json]` | list notes. `--filter due=>2026-09-01` is a range on any ordered facet. `--json` is the payload the app receives |
 | `pj log [--since "1 week ago"]` | what changed, read out of git: status transitions, deadlines, creations |
-| `pj did [today\|yesterday\|YYYY-MM-DD] [--only s,s] [--json]` | your own traces on one local day — notes created, closed or moved, your commits in every work repo, and the Claude sessions you worked in (that day's prompts, the files written, the session's last word), and the Jira changes, comments and worklogs you authored — as facts for the `pj-did` skill to summarise. `did: { roots: [~/Code/work] }` in the vault config says which directories count as work; the repos project notes declare always do |
+| `pj did [today\|yesterday\|YYYY-MM-DD] [--only s,s] [--json]` | your own traces on one local day — notes created, closed or moved, your commits in every work repo, and the Claude sessions you worked in (that day's prompts, the files written, the session's last word), and the Jira changes, comments and worklogs you authored — as facts, never judged — the source-level report beside the kernel's day recap, `bin/kernel did`. `did: { roots: [~/Code/work] }` in the vault config says which directories count as work; the repos project notes declare always do |
 | `pj add <title> [--id slug] [--facet f=v] [--link ref] [--fingerprint fp] [--body text]` | create a note. `--facet` repeated for one axis holds every value named |
 | `pj set <id>… …` | scripted edits, over any number of ids: `--title`, `--facet f=v`, `--add`, `--remove`, `--set path=yaml`. `--facet` repeated for one axis replaces it with every value named |
 | `pj mv <id> <new-id>` | rename a note's stable id. Its file (or project folder), assets, every declared reference facet, and saved-view focus, filters and arrangement follow the new id; the note's title stays as it was |

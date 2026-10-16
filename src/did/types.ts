@@ -10,7 +10,8 @@
  * **Sources gather; they never judge** (C8, the same split intake keeps). Every
  * field here is a fact copied or computed from a source. Which facts amount to
  * one task, what the task was, and whether it finished belongs to whoever reads
- * the report — the `pj-did` skill, in practice — and it cites these rows.
+ * the report, and it cites these rows. The day recap as tasks is the kernel's
+ * `bin/kernel did`, over the kernel's events; this stays the source-level report.
  */
 
 /** One trace of your own work. */
