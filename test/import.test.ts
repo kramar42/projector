@@ -386,6 +386,10 @@ test('the manifest declares what projector writes, and every batch it sends fits
   }
   for (const skill of m.skills) assert.ok(existsSync(join(dir, skill, 'SKILL.md')), skill);
   for (const r of ['pj CLI', 'skill pj-about', 'skill pj-work']) assert.ok(m.reach.includes(r), r);
+  // What a session capturing for the owner runs: pj add for work, the note's file for a note about it.
+  assert.deepEqual(m.accepts.map((x: { what: string }) => x.what.split(':')[0]), ['A task or a project', 'A note about work already in the vault']);
+  assert.match(m.accepts[0].how, /^~\/\.local\/bin\/pj --vault \S+ add <title> --facet status=planning/);
+  assert.match(m.accepts[1].how, /pj --vault \S+ context <note id>/);
 
   const v = scratch();
   try {

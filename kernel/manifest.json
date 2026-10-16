@@ -26,6 +26,18 @@
       "intake/claude"
     ]
   },
+  "accepts": [
+    {
+      "what": "A task or a project: a change to make, a thing to build, fix, ship or decide",
+      "how": "~/.local/bin/pj --vault work add <title> --facet status=planning [--facet priority=<week|month|backlog|maybe>] [--facet project=<project note id>] [--body <the owner's details, and a 'Done when ...' line when they gave one>]; the values are the vault's .projector/facets.yaml",
+      "example": "pj --vault work add \"Fix the panel's missing drop button\" --facet status=planning --facet priority=week"
+    },
+    {
+      "what": "A note about work already in the vault: progress, a finding, a link for an existing task or project",
+      "how": "~/.local/bin/pj --vault work ls --q <words> finds the note and ~/.local/bin/pj --vault work context <note id> names its file; append the words as a paragraph at the end of that file (plain file writes are a vault's own write path, note-conventions C3)",
+      "example": "a paragraph appended to projects/kernel/route-capture.md: \"the route-capture spec landed; live check next\""
+    }
+  ],
   "specs": [
     "specs/note-conventions.edn"
   ],
