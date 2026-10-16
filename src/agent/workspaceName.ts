@@ -1,11 +1,15 @@
 import { join, resolve } from 'node:path';
 
 /**
- * How a workspace directory is named, and how to read one back.
+ * How a legacy workspace directory is named, and how to read one back.
  *
- * `pj work` names a workspace `<project>-wt-<branch>`, so a working directory
- * inside one says which project and which branch without reading anything —
- * which is how the intake sweep recognises a Claude session as work on a note.
+ * The retired `pj work` named a workspace `<project>-wt-<branch>`, so a working
+ * directory inside one says which project and which branch without reading
+ * anything — which is how the intake sweep recognised a Claude session as work
+ * on a note. Workspaces the kernel prepares (`bin/kernel worktree`) are named
+ * for the branch alone and never match; a session in one is attributed by the
+ * `workspace:` link the app records on the note, the stronger reason anyway
+ * (`intake/match.ts`). This half stays for the workspaces already on disk.
  *
  * Both halves are here because they were not. `worktree.ts` encoded and
  * `intake/match.ts` decoded, each holding its own copy of the character class,

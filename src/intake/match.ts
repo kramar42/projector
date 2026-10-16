@@ -53,9 +53,11 @@ function push(into: Match[], ctx: IntakeContext, id: string, why: string): void 
  * worktree's project, or a repo's.
  *
  * The strongest reason first and by a distance. A note that carries
- * `workspace:<path>` was *told* this directory is where its work goes — `pj work`
- * wrote it at launch — so a session inside it is not a guess. The two below are
- * what answer for workspaces prepared before that link existed.
+ * `workspace:<path>` was *told* this directory is where its work goes — the app
+ * writes it when it starts work through the kernel, as the retired `pj work` did
+ * — so a session inside it is not a guess. The two below are what answer for
+ * workspaces prepared before that link existed; the kernel's own workspaces are
+ * named for the branch alone and never match the `<project>-wt-` name.
  */
 export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
   if (!cwd) return [];
@@ -87,7 +89,7 @@ export function matchCwd(ctx: IntakeContext, cwd: string | undefined): Match[] {
       try {
         branch = branchFor(rec.id, { ...(template ? { template } : {}), jiraKeys });
       } catch {
-        // A template with an unknown placeholder is a refusal `pj work` makes
+        // A template with an unknown placeholder is a refusal starting work makes
         // loudly; here it is simply not a match.
         break;
       }

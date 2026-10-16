@@ -954,11 +954,14 @@ A `claude:` link takes a session transcript uuid and resolves to its opening pro
 turn count, working directory, branch, and either a `claude://` deep link into the desktop app or the
 `claude --resume` command to pick it back up.
 
-A `workspace:` link takes an absolute directory — the one `pj work` prepared — and resolves to the
+A `workspace:` link takes an absolute directory — the workspace the kernel prepared when work on the
+note started — and resolves to the
 sessions that have worked in it: what the newest one is doing, how many there have been, and the way
 back into it. It names a *place* rather than a session, which is what makes it maintenance-free:
 every session that ever runs there is found by reading the directory, live or finished, and nothing
-has to register itself. `pj work` writes one at launch and it is the only thing it writes to a note.
+has to register itself. Starting work from the app writes one, and it is the only thing that writes
+to the note. With nobody in it yet, the row offers a first session told to read the brief the
+workspace holds.
 
 A read never waits on the network: `pj context <id>` shows each link as cached, with the time it was
 fetched. `pj context <id> --fresh` re-resolves every link on that note first and waits for the
@@ -1465,11 +1468,11 @@ exit, the kernel takes nothing, and the next import sends it whole.
 what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities, proposals and
 your commitments, no judgments — names the saved queries it reads with (above), and brings specs,
 `kernel/specs/`, among them `note-conventions`, the
-convention for writing a note, and `work-a-note`, a capability whose procedure is the `pj-work` skill
-(an attempt of it, started by hand and never by the kernel's tick, carries the skill whole in its brief
-and is judged by the note's `Done when` line, by you). Its `develop` block tells the kernel's `develop`
+convention for writing a note. Its `develop` block tells the kernel's `develop`
 spec how projector's own code is changed: from `main` on a `kernel/<attempt>` branch, `bun test` and
-`bun run typecheck` green, the repo's `CLAUDE.md` read first. The kernel
+`bun run typecheck` green, the repo's `CLAUDE.md` read first. Its `context` command,
+`pj context --alias {alias} --json-kernel`, is how the kernel asks about a note when work on it
+starts (*Starting work*, below). The kernel
 checks every batch projector sends against it and refuses one that strays. `pj kernel register` hands
 it over (`<bin> register <checkout>/kernel/manifest.json`); run it once, and again after the manifest
 or a query file changes — the kernel runs the version last registered, and the same manifest twice
@@ -1502,37 +1505,39 @@ is one overwritten date and only ever says that *something* changed. The vault i
 the answer was already on disk — this reads the two versions of every changed file through the note
 parser and reports the transitions. Nothing is written, and no field was added to carry it.
 
-**Starting work** prepares a workspace: a `git worktree` per project repo on one branch, a briefing
-with the note's full context embedded, `workspace:<path>` recorded on the note, and a Claude session
-opened on it in the desktop app — the same place the `claude:` link on a note reopens a *past*
-session, so work happens in one app rather than two. One repo failing does not stop the others.
-**`PROJECTOR_WORKSPACES` is required** — worktrees are real directories on disk, so where they go is
-told, never guessed.
+**Starting work** on a note is the kernel's act: an attempt of its `worktree` spec for the note's
+**open intent**. The kernel makes a `git worktree` per repository on one branch under its workspaces
+(`~/Code/wt`), installs hooks in those worktrees that record every commit in the attempt, writes
+`BRIEF.md` — its rules, the repositories and their guides, what the note is about, the attempt's brief
+— and opens a Claude session there in the desktop app, which works it under the kernel's
+`kernel-worktree` skill. One repo failing does not stop the others.
 
-**Running it twice does not make two sessions.** The worktrees were always idempotent — an existing
-one is reused rather than refused — and now the session is too: if something is already working in
-that workspace, it is reopened instead of joined by a second window. A session started from a
-terminal is the one case with nothing to reopen, since the app has no chat to point at; that says so
-and opens nothing. `--new` asks for a second session deliberately, which is a real thing to want.
+Projector answers the kernel's question about the note: `pj context --alias vault:<vault>:<id>
+--json-kernel` prints one JSON object — `text`, the note's context as `pj context` renders it (project
+chain, inherited `AGENTS.md` instructions, relations, links, body) after a line saying where the note
+lives and naming the vault's `memory/AGENTS.md` when there is one; `repos`, the project's declared
+repositories with their bases; `branch`, the project's branch template applied to the note, a lone
+Jira key, else the id; and `title`. The alias names the vault, by the name it goes by in the kernel
+(`kernel.vault`, else its registered name), so the command needs no `--vault`.
 
-Three ways in, one act behind them:
+A note can be worked when it has an open intent: it carries an open value of the vault's
+`kernel.commitments` axis and `pj kernel import` has sent it. A note with no status, a closed or still
+proposed intent, or a vault whose `kernel:` block is off is refused with the reason, and so is a note
+whose project declares no repos — the kernel's refusal, in its words.
+
+Three ways in:
 
 | | |
 |---|---|
 | the ▶ in the panel's top-right corner | beside the trash, and confirmed like it |
 | `!` with a note under the cursor | opens the panel if it is shut, then presses the same control |
-| `pj work <id>` | prints what it prepared, then hands the link to `open`; `--new` forces a second session |
+| `bin/kernel worktree <intent>` in the kernel checkout | the same act from a shell; `pj kernel status` names the note's intent. `--dry-run` prints the plan, `--open none` the link instead of opening it |
 
-The confirm names the workspace directory, the branch and every repo *before* any of them exists,
-which is the whole of the safety on a one-keystroke launch. Backing out of it creates nothing.
-`pj work --dry-run` prints the same plan plus the entire briefing and touches nothing; `--no-open`
-prepares the workspace and prints the link instead of following it.
-
-The briefing's key step: read the note, the linked issues and every repo's docs — then **stop and ask**
-before planning or writing code. It asks for nothing at the end: the note records the workspace at
-launch, so every session that ever runs there shows on the note without any of them registering
-itself. When the vault has a `memory/AGENTS.md` — what the retired `/pj-day` learned about reading your
-sources — the briefing names it, to be read before the linked sources and left as it is.
+The panel asks the kernel twice. First `--dry-run`, which starts nothing and writes nothing, so the
+confirm can name the intent, the workspace, the branch and every repo *before* any of them exists —
+the whole of the safety on a one-keystroke launch. Backing out of it creates nothing. Then it starts
+the attempt, records `workspace:<dir>` on the note and navigates to the kernel's `claude://` link.
+`pj work` is retired: it says where it went.
 
 ## Skills
 
@@ -1542,7 +1547,7 @@ sources — the briefing names it, to be read before the linked sources and left
 |---|---|
 | `/pj-about` | the model and the `pj` surface — read by the others, and on its own for ad-hoc note work |
 | `/pj-setup` | choose this vault's channels, prove each one answers, and write `.projector/config.yaml` |
-| `/pj-work` | start work on a note |
+| `/pj-work` | retired: points to the kernel, where work on a note is an attempt for its open intent — `bin/kernel worktree <intent>`, the kernel MCP tool `worktree`, or ▶ in the app — worked under the kernel's `kernel-worktree` skill |
 | `/plan-day` | the procedure of projector's `daily-plan` spec, which the kernel's tick fires at 07:00: one proposed attempt per open intent — every open intent in the kernel, not only this vault's — a flag on the stalled ones, at most three closed questions; you read it on `bin/kernel today` |
 | `/review-week` | the procedure of projector's `weekly-review` spec, fired on Sunday at 18:00: a drafted verdict per open intent with the week's events as evidence, the specs that ran judged, next week's intents proposed; you read it on `bin/kernel week` |
 | `/pj-did` | retired: points to the kernel's day recap, `bin/kernel did [today\|yesterday\|YYYY-MM-DD]`, which groups the day's kernel events into tasks with an outcome (done, progressed, handled) and their refs, and names the sources that wrote nothing. `pj did` stays as the source-level report |
@@ -1645,10 +1650,11 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj rm <id>…` | delete, dropping every reference pointing at it. Declines nothing: a card's no is `pj decline` |
 | `pj accept <id>… [--only f,g]` | file inbox cards: one of its own moves to its place; an `extends` card folds into its target, which takes every axis the card proposes, or only those named — a many-valued axis as a union |
 | `pj decline <id\|fp>… --reason <why> [--title t]` | the no to a card: removes it and records its fingerprints, with the reason the judge learns from. A fingerprint no note holds is recorded as it is; `--title` names it in the pile |
-| `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
-| `pj context <id> [--fresh] [--json]` | everything known about a note, assembled. Links show what is cached; `--fresh` re-resolves every one first and waits for it |
+| `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside the note's workspace, since one inside is already found through `workspace:` |
+| `pj context <id> [--fresh] [--json \| --json-kernel]` | everything known about a note, assembled. Links show what is cached; `--fresh` re-resolves every one first and waits for it. `--json-kernel` is what the kernel embeds when work on the note starts: `{text, repos, branch, title}` |
+| `pj context --alias vault:<vault>:<id> …` | the same, the note named as the kernel names it, its vault inside the alias — the manifest's `context` command |
 | `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `search`, `context` (`fresh: true` is `pj context --fresh`), `log`, `did`, `vault_status` — counts, `pj check`, the rule views, the inbox's size, whether intake has a kernel to triage from and which connector gathers each channel, and every saved view — `memory`, which reads `memory/AGENTS.md`, one day of `memory/theories/` (the newest by default) and `memory/patterns/`, and writes nothing there, and `propose`, which answers a batch of changes (`add`, `set`, `link`, `accept`, `decline`) with the `pj` commands, each checked as `pj` would check it, a refused one reported by its number, and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
-| `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
+| `pj work` | retired: work on a note starts in the kernel, `bin/kernel worktree <intent>`, or ▶ in the app |
 | `pj intake [<channel>…]` | one pass by hand: read the connector events in the kernel newer than each channel's cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, and record every event it looked at in the kernel as `intake:<key>`. Fetches nothing; with the kernel block off, reads nothing and says so |
 | `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a pass would judge since each channel's cursor. Judges, files and records nothing |
 | `pj intake status [--json]` | asked of the kernel: each channel's cursor, the connector events waiting behind it and how many the next pass would judge, and the connector that gathers it |
@@ -1848,7 +1854,7 @@ clicked was on screen already, so the view stays exactly where it was and the pa
 | `g` `c` | edit the body. `⌘S` saves, `Esc` leaves it |
 | `g` `y` | edit the raw frontmatter. `⌘S` saves, `Esc` leaves it |
 | `⟨axis⟩⟨axis⟩` | one axis's own row — the axis prefix followed by anything that is not a digit |
-| `!` | **start work** on the cursor's note: worktrees, a briefing, a session in the app. Confirmed first, and the confirm names what it is about to create |
+| `!` | **start work** on the cursor's note, through the kernel: an attempt for its open intent, worktrees, `BRIEF.md`, a session in the app. Confirmed first, and the confirm names what it is about to create |
 | `+` | **judge** a candidate. One key, because the card has already decided which act it is: one carrying `extends` folds into that note — confirmed first, and the dialog names the target — and one carrying none is accepted as its own note. To keep a card that proposes a target separate, remove the `extends` reference and judge it again |
 | `⌫` | **delete**, after one confirm. With nothing selected that is the cursor's note and the confirm names it; with a selection it is the whole selection and the confirm counts it — the same rule every other write follows, so `⌫` deletes exactly what a facet key would have written to. In the queue this is *declining*: the files go and their fingerprints are recorded, so the next sweep does not propose them again. Not `dd` — `d` is an axis letter in the shipped vocabularies, where `dd` already means that axis's own row |
 

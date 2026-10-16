@@ -7,7 +7,7 @@
     "pj CLI",
     "the app at localhost:8092",
     "skill pj-about",
-    "skill pj-work",
+    "work on a note: ~/Code/projects/kernel/bin/kernel worktree <the note's open intent> (or the kernel MCP tool worktree, or ▶ on the note in the app), an attempt of the kernel's worktree spec worked under its kernel-worktree skill; the kernel asks projector about the note through context",
     "skill plan-day",
     "skill review-week"
   ],
@@ -44,7 +44,6 @@
   ],
   "specs": [
     "specs/note-conventions.edn",
-    "specs/work-a-note.edn",
     "specs/daily-plan.edn",
     "specs/weekly-review.edn",
     "specs/judge-intake.edn"
@@ -58,7 +57,6 @@
   ],
   "skills": [
     "../.claude/skills/pj-about",
-    "../.claude/skills/pj-work",
     "../.claude/skills/plan-day",
     "../.claude/skills/review-week"
   ],
@@ -69,6 +67,9 @@
     "test": "bun test",
     "typecheck": "bun run typecheck",
     "guide": "CLAUDE.md"
+  },
+  "context": {
+    "run": "~/.local/bin/pj context --alias {alias} --json-kernel"
   },
   "queries": [
     {

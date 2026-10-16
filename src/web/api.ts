@@ -192,22 +192,22 @@ export const api = {
   ),
 
   /**
-   * Start work on a note: a worktree workspace, a briefing, the `workspace:` link
-   * recording where it went, and somewhere to open.
+   * Start work on a note, through the owner's kernel: an attempt of its
+   * `worktree` spec for the note's open intent, its worktrees and `BRIEF.md`,
+   * and the `workspace:` link recording where it went.
    *
    * `stampSelfWrite` on the commit and not on the plan, which is the difference
-   * between them: the plan touches nothing, while the commit appends that link
-   * and so is a note write this tab made and must not read back as someone
-   * else's.
+   * between them: the plan is the kernel's dry run and touches nothing, while
+   * the commit appends that link and so is a note write this tab made and must
+   * not read back as someone else's.
    *
    * `commit: false` is the plan, which is what the confirm is built from: a
-   * dialog that names the directory it is about to create is worth one extra
-   * round trip against localhost. `fresh` forces a new session where the
-   * workspace already has one running.
+   * dialog that names the workspace it is about to create is worth one extra
+   * round trip.
    */
-  work: (id: string, commit: boolean, fresh = false) => (
+  work: (id: string, commit: boolean) => (
     commit && stampSelfWrite(id),
-    req<WorkResult>('POST', `/api/note/${encodeURIComponent(id)}/work`, { commit, fresh })
+    req<WorkResult>('POST', `/api/note/${encodeURIComponent(id)}/work`, { commit })
   ),
 
   bulk: (input: {

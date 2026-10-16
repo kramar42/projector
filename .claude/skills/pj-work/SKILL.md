@@ -1,86 +1,45 @@
 ---
 name: pj-work
-description: Start work on a projector note — prepare a multi-repo git worktree workspace, write a briefing from the note's full context, and open a Claude session there. Use when asked to work on / start / pick up a note, or to set up a workspace or worktree for a piece of work. Also use to hand a note to a fresh session with its context intact.
+description: Retired; redirects to the kernel. Use when asked to work on, start or pick up a projector note, to set up a workspace or worktree for one, or to hand a note to a fresh session — work on a note now starts in the owner's kernel as an attempt for the note's open intent (`bin/kernel worktree <intent>`, the kernel MCP tool `worktree`, or ▶ on the note in the app), worked under the kernel skill `kernel-worktree`. `pj work` is gone.
 ---
 
-# Work on a note
+# Work on a note: retired to the kernel
 
-Prepare a workspace and hand the note to a session that starts with everything it needs. Read the
-`pj-about` skill first.
+Starting work on a note is the kernel's act: an attempt of its `worktree` spec for the note's
+**open intent**. The kernel makes one git worktree per repository under `~/Code/wt`, installs hooks
+that record every commit in the attempt, and writes `BRIEF.md`; the session that opens there works
+it under the kernel's `kernel-worktree` skill. Projector only answers the kernel's question about the
+note — `pj context --alias vault:<vault>:<id> --json-kernel`, the manifest's `context` command: its
+context, its project's repos and the branch its project's template names.
 
-## 1. Identify the note
+## 1. Find the note and its intent
 
-If the user named one loosely, resolve it before doing anything:
+Resolve a loosely named note first (`pj search "<words>"`; `pj ls --view unblocked` for "what should
+I work on"), and confirm it when there was any ambiguity. Then `pj kernel status` lists every intent
+about the vault's notes: the note's id beside its intent's.
 
-```bash
-pj search "<what they said>"
-pj ls --view unblocked       # when they asked "what should I work on"
-```
+Stop and say so when:
 
-Confirm which note you landed on if there was any ambiguity. Never prepare a workspace for a guess.
+- **It has no intent, or no open one.** Only an open intent is worked. A note becomes one by carrying
+  an open value of the vault's `kernel.commitments` axis (`pj set <id> --facet status=active`, say),
+  sent by `pj kernel import`. A proposed intent waits for the owner to open it.
+- **Its project declares no repos.** The kernel refuses with "named none". Offer to add `repos` to the
+  project note's frontmatter (`pj context <id>` shows which project it resolves to).
+- **It is blocked.** `pj context <id>` lists unfinished blockers; ask whether to proceed.
 
-## 2. Check it can actually be worked
-
-```bash
-pj context <id>
-```
-
-Stop and say so, rather than pressing on, if:
-
-- **No project, or the project declares no repos.** There is nothing to lay out. Offer to add repos
-  to the project record's frontmatter — `pj context` shows which project it resolves to, and the
-  frontmatter tab in the app is the place to edit it.
-- **It is blocked.** `blockedBy` lists unfinished blockers. Say which, and ask whether to proceed
-  anyway or switch to a blocker.
-- **It carries no `status`.** Carrying a status is what makes a note work; without one it is a
-  thought, not a commitment. Offer to give it one first (`pj set <id> --facet status=planning`).
-
-## 3. Dry run first when anything is unusual
+## 2. Start it
 
 ```bash
-pj work <id> --dry-run
+~/Code/projects/kernel/bin/kernel worktree <intent id> --dry-run   # the plan, nothing written
+~/Code/projects/kernel/bin/kernel worktree <intent id>             # opens the desktop app on it
 ```
 
-This prints the workspace path, the branch, the repos and the whole briefing without touching the
-filesystem. Worth doing when the note has several repos, an unfamiliar branch template, or when the
-user has not used this before.
+`--open none` prints the desktop link and the terminal command instead of opening; `--open headless`
+runs `claude -p` there. Over MCP it is the kernel tool `worktree`. From the app, ▶ on the note (or
+`!`) runs the same with a confirm first, records `workspace:<dir>` on the note and opens the link.
 
-## 4. Launch
+## 3. Then
 
-```bash
-pj work <id>
-```
-
-Which does, in order: a workspace directory outside every repo; one `git worktree` per project repo
-on a single branch; `AGENT_BRIEFING.md` at the root with the note's full context embedded;
-`workspace:<path>` appended to the note; and the desktop app opened on that directory.
-
-Report the workspace path and which repos were prepared. **One repo failing does not stop the
-others** — the result says which, and the briefing tells the new session that those are out of scope.
-
-Add `--no-open` when the user wants the workspace without opening anything, and give them the command
-to run themselves.
-
-## 5. Running it again
-
-Running it twice does not make a second session. If something is already working in that workspace,
-`pj work` reopens it rather than adding another beside it — and if that session was started from a
-terminal, the app has no way to reach it, so nothing is opened and the command says so. Pass `--new`
-when a second session alongside the first is what the user actually wants, which is a real thing to
-want and never the accident.
-
-There is nothing to run afterwards to make the session show up on the note. The workspace is recorded
-at launch and every session that ever runs there is read back off the directory — live and finished
-both — so the note's `workspace:` row shows what is working, how many sessions there have been, and
-when the last one was active. The old `pj link <id> --session` step is gone from the briefing.
-
-`pj link <id> --session` still exists, for a session that is **not** in a `pj work` workspace — one
-you started by hand in a repo checkout. Inside a workspace it is redundant.
-
-## What this does not do
-
-- It does not commit, push, or open a pull request. The workspace is prepared; the work is the new
-  session's, and the branch is left for the user.
-- It does not modify the note beyond recording the workspace.
-- It does not touch the main checkouts. Every repo in the workspace is a worktree; if a change
-  belongs somewhere not laid out, stop and say so.
+The session in the workspace follows `BRIEF.md` and the `kernel-worktree` skill: read, ask before
+building, change only the worktrees, commit (the hooks record each commit in the attempt), end the
+attempt. Nothing commits, pushes or merges for the owner; the branch is theirs.

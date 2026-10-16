@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { desktopSessionFor, describeSession, sessionsUnder, type SessionState } from '../sources/claude.ts';
-import { BRIEFING_PROMPT, desktopLink } from '../agent/worktree.ts';
 import { ago } from '../sources/run.ts';
 import { unavailable, type Badge, type Fetcher, type Tone } from './types.ts';
 
@@ -46,6 +46,31 @@ function resume(uuid: string): {
       badges: [{ label: 'import', tone: 'warn' }],
     };
   return { command: `claude --resume ${uuid}` };
+}
+
+/**
+ * The brief a workspace opens with, by the file it holds.
+ *
+ * `BRIEF.md` is what `bin/kernel worktree` writes, and its prompt is the
+ * kernel's own sentence (`kernel.worktree/prompt`), so a session opened from
+ * here starts exactly as one the kernel opened. `AGENT_BRIEFING.md` is what the
+ * retired `pj work` wrote, in workspaces it prepared before the kernel took the
+ * act over. A folder with neither opens with no prompt.
+ */
+const BRIEFS: [file: string, prompt: string][] = [
+  ['BRIEF.md', 'Read BRIEF.md in this folder and follow it.'],
+  ['AGENT_BRIEFING.md', 'Read AGENT_BRIEFING.md and follow it exactly.'],
+];
+
+/**
+ * A new session in a workspace: the desktop app's `claude://code/new`, the route
+ * it exposes for a session that does not exist yet, which lands on the same
+ * surface `claude://claude.ai/epitaxy/<id>` reaches for one that does.
+ */
+export function newSessionLink(dir: string): string {
+  const prompt = BRIEFS.find(([file]) => existsSync(join(dir, file)))?.[1];
+  const params = new URLSearchParams({ folder: dir, ...(prompt ? { prompt } : {}) });
+  return `claude://code/new?${params}`;
 }
 
 /** How the four states read on a card. The state itself is decided upstream. */
@@ -100,14 +125,15 @@ export const sessionFetcher: Fetcher = {
 
 /**
  * A `workspace:` ref, resolved for display: the sessions that have worked in a
- * directory `pj work` prepared.
+ * workspace the kernel prepared for the note (or the retired `pj work` did).
  *
  * The other half of the same idea as the fetcher above, which is why it lives
  * beside it rather than in a file of its own. A `claude:` ref names one session
  * somebody chose to record; a `workspace:` ref names a *place*, and the sessions
  * fall out of it — every one that ever ran there, without any of them having had
- * to register (C8, C11). `pj work` writes one of these at launch and nothing has
- * to be written again for the note to keep up.
+ * to register (C8, C11). Starting work from the app writes one of these
+ * (`kernel/worktree.ts`) and nothing has to be written again for the note to
+ * keep up.
  *
  * The row summarises and does not enumerate. One live session is the interesting
  * case and gets the badge and the title; the rest become a count, because a note
@@ -130,8 +156,8 @@ export const workspaceFetcher: Fetcher = {
         title: 'prepared, but nothing has worked in it yet',
         badges: [{ label: '○ no sessions', tone: 'neutral' }],
         fields: [{ k: 'path', v: dir }],
-        // Nothing to reopen, so the offer is the one `pj work` would have made.
-        action: { label: 'open in Claude', href: desktopLink(dir, BRIEFING_PROMPT) },
+        // Nothing to reopen, so the offer is a first session, told to read the brief.
+        action: { label: 'open in Claude', href: newSessionLink(dir) },
       };
     }
 

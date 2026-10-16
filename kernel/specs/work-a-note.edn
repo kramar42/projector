@@ -1,8 +1,0 @@
-{:name "work-a-note"
- :purpose "Work one projector note to the state its Done when line names: a workspace prepared from the note's full context, the work done there, the result for the owner to judge."
- :executor :either
- :skill "../../.claude/skills/pj-work"
- :procedure "Follow the pj-work skill, carried in full in the brief: resolve the note, check it can be worked (a project with repos, not blocked, a status), dry-run when anything is unusual, then pj work <id> to lay out one worktree per repo on one branch with AGENT_BRIEFING.md, and work the note there. pj work commits, pushes and merges nothing: the branch is left for the owner. Emit what was prepared (workspace path, repos, branch) into the attempt and end it; the owner judges the note's Done when line."
- :criterion "the note's Done when line holds, as the owner judges"
- :trigger {:manual true}
- :budget {:minutes 180}}

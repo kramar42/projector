@@ -52,7 +52,9 @@ It is read-only and cached, but it is network traffic against work systems — a
 links gains nothing from it. `enrich: false` and every link renders as its raw ref, which is exactly
 what the app did before enrichment existed, so turning it off breaks nothing.
 
-**Where should `pj work` put worktrees?** Only ask if they want `pj work`.
+**Where do the kernel's worktrees live?** `workspaces: ~/Code/wt` (the kernel's `KERNEL_WORKSPACES`)
+lets `pj did` count the work done in them. Nothing in projector creates a worktree; work on a note
+starts in the kernel (`bin/kernel worktree <intent>`).
 
 ## 3. Write the file, then have them fill in the secrets
 

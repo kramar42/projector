@@ -270,7 +270,7 @@ function NoteCard({
    * The mark is a 15px glyph seven pixels from a title whose whole row opens the
    * rename editor, and clicking it used to write straight through. In the
    * destructive direction that write is `project: null`, which reaches
-   * `doc.delete('project')` and takes the whole block: the repos `pj work` clones,
+   * `doc.delete('project')` and takes the whole block: the repos work on its notes runs in,
    * the branch template it names them from, the jira key and every instruction
    * block, plus whatever the notes downstream were inheriting. The panel's own
    * comment already claimed weight follows blast radius; this is the control it was
@@ -465,7 +465,7 @@ function NoteCard({
                 data-act="work"
                 disabled={!!work.busy}
                 aria-label={`Start work on ${card.title}`}
-                title={`Start work on "${card.title}" — a worktree workspace and a Claude session (!)`}
+                title={`Start work on "${card.title}" — a kernel attempt in its own worktrees, and a Claude session (!)`}
                 onClick={work.start}
               />
               <IconButton

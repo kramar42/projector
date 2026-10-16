@@ -48,7 +48,11 @@ export interface Settings {
   jira: { url: string; email: string; token: string } | null;
   /** Whose commits `pj did` counts. */
   gitAuthor: string | null;
-  /** Where `pj work` puts worktrees. */
+  /**
+   * Where work's worktrees live — the kernel's workspaces (`KERNEL_WORKSPACES`,
+   * `~/Code/wt`), since `bin/kernel worktree` makes them. `pj did` counts the
+   * repos and sessions under it; nothing in projector creates a worktree.
+   */
   workspaces: string | null;
   /** A template like `cursor://file{path}` for opening a `doc:` ref. */
   docUrl: string | null;
@@ -469,7 +473,7 @@ enrich: ${enrich ? 'true' : 'false'}
 # doc:
 #   url: 'cursor://file{path}'   # how a doc: ref opens; defaults to the OS
 
-# workspaces: ~/Code/wt   # where \`pj work\` puts worktrees
+# workspaces: ~/Code/wt   # where the kernel's worktrees live; pj did counts the work under it
 #
 # The unattended classifier is local by default. Ollama must be running and the
 # model downloaded; set provider: claude to keep the older Claude CLI transport.

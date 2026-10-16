@@ -76,7 +76,7 @@ test('a desktop-app local_ id explains why it cannot resolve', async () => {
 });
 
 test('a workspace refuses a relative path and reports a directory that is gone', async () => {
-  // Absolute on purpose: the ref is written by `pj work` from a resolved path, so
+  // Absolute on purpose: the ref is written from the kernel's workspace path, so
   // a relative one is a hand-edit that would resolve against whatever the server's
   // cwd happens to be.
   const rel = await workspaceFetcher.fetch('wt/plat-wt-ship-it');
@@ -99,8 +99,24 @@ test('a prepared workspace nobody has worked in says so, and offers the way in',
     if (!isUnavailable(r)) {
       assert.match(r.title ?? '', /nothing has worked in it/);
       // Empty is not unavailable: the directory is there and starting a session
-      // in it is the offer, which is the same one `pj work` would have made.
+      // in it is the offer — with no brief in it, a session and no prompt.
       assert.match(r.action?.href ?? '', /^claude:\/\/code\/new\?/);
+      assert.equal(new URL(r.action!.href).searchParams.get('prompt'), null);
+    }
+    // A workspace the kernel prepared opens with the kernel's own sentence, and
+    // one the retired `pj work` prepared with the one it wrote.
+    for (const [file, prompt] of [
+      ['AGENT_BRIEFING.md', 'Read AGENT_BRIEFING.md and follow it exactly.'],
+      ['BRIEF.md', 'Read BRIEF.md in this folder and follow it.'],
+    ]) {
+      writeFileSync(join(dir, file!), '# brief\n', 'utf8');
+      const b = await workspaceFetcher.fetch(dir);
+      assert.ok(!isUnavailable(b));
+      if (!isUnavailable(b)) {
+        const url = new URL(b.action!.href);
+        assert.equal(url.searchParams.get('folder'), dir);
+        assert.equal(url.searchParams.get('prompt'), prompt);
+      }
     }
   } finally {
     if (before === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;

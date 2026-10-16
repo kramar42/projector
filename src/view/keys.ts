@@ -216,8 +216,9 @@ export type Command =
       region: 'links' | 'facets' | 'body' | 'frontmatter' | 'addFacet' | 'addRef';
     }
   /**
-   * Start work on the note under the cursor: a worktree workspace, a briefing,
-   * and a Claude session opened on it.
+   * Start work on the note under the cursor, through the owner's kernel: an
+   * attempt for its open intent, a worktree workspace, a brief, and a Claude
+   * session opened on it.
    *
    * The one command in the map that **acts** on something outside the vault, and
    * the only one that is not reached through a prefix. Both follow from what it
@@ -1139,7 +1140,7 @@ const SPEC: { section: string; rows: RowSpec[] }[] = [
       { keys: '⟨axis⟩⟨axis⟩', does: 'one axis’s row' },
       // The one row here that acts rather than reaching, which the wording has to
       // carry on its own: every other line in this section moves the keyboard.
-      { ids: ['work'], does: 'start work on it — worktrees, briefing, a session' },
+      { ids: ['work'], does: 'start work on it in the kernel — worktrees, a brief, a session' },
       { ids: ['judge'], does: 'judge a candidate — fold it in, or accept it as its own note' },
       { ids: ['remove'], does: 'delete — the selection if there is one, else this note. One confirm' },
     ],

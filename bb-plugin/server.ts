@@ -10,8 +10,8 @@
 //
 // The thread side needs no approval; it is bb's own state. The note side is a
 // vault write, so it happens only on an explicit act: `--record`, the panel's
-// "record on the note" box, or `bb pj work` (whose whole point is to start work
-// on that note, and which already writes `workspace:`).
+// "record on the note" box. Starting work on a note is the kernel's act
+// (`bin/kernel worktree <intent>`), so this plugin no longer has a `work` command.
 //
 // The app half (app.tsx) embeds projector's own web app through its `?embed=`
 // protocol: a Projector page in the sidebar and a note tab beside each thread.
@@ -27,9 +27,6 @@ import {
 /** Note ids are vault-relative slugs; anything else in metadata is ignored. */
 const NOTE_ID = /^[a-z0-9][a-z0-9/_.-]{0,199}$/i;
 const THREAD_ID = /^thr_[a-z0-9]+$/i;
-
-/** What `pj work` tells a fresh session to do, verbatim (src/agent/worktree.ts). */
-const BRIEFING_PROMPT = "Read AGENT_BRIEFING.md and follow it exactly.";
 
 interface Attachment {
   noteId: string;
@@ -256,7 +253,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.cli.register(
     defineCli({
       name: "pj",
-      summary: "Projector vault from bb: read notes, reference threads ↔ notes, start work on a note",
+      summary: "Projector vault from bb: read notes, reference threads ↔ notes",
       commands: {
         run: cliCommand({
           summary: "Run any pj command against the configured vault",
@@ -336,64 +333,6 @@ export default async function plugin(bb: BbPluginApi) {
             if (options.json) return { exitCode: 0, stdout: JSON.stringify(rows) };
             if (!rows.length) return { exitCode: 0, stdout: `no threads attached to ${noteId}` };
             return { exitCode: 0, stdout: rows.map((r) => `@thread:${r.id}  ${r.status}  ${r.title}`).join("\n") };
-          },
-        }),
-        work: cliCommand({
-          summary: "Prepare the note's workspace with `pj work` and start a bb thread there",
-          description:
-            "Creates worktrees and AGENT_BRIEFING.md, records `workspace:` and `bb:<thread>` on the note, " +
-            "registers the workspace as a bb project, and spawns a thread attached to the note. " +
-            "--dry-run only prints the plan.",
-          positionals: [{ name: "note", description: "Note id", required: true }],
-          options: {
-            "dry-run": { type: "boolean", description: "Print the plan and briefing; change nothing" },
-            provider: { type: "string", description: "bb provider for the thread (default: bb's default)" },
-            model: { type: "string", description: "Model for the thread" },
-          },
-          async run({ positionals, options }, ctx) {
-            const noteId = positionals.note;
-            if (options["dry-run"]) {
-              return { exitCode: 0, stdout: await pj(["work", noteId, "--dry-run"], ctx.signal) };
-            }
-            const title = await noteTitle(noteId, ctx.signal);
-            const out = await pj(["work", noteId, "--no-open"], ctx.signal);
-            const workspace = /^workspace\s+(\S.*)$/m.exec(out)?.[1]?.trim();
-            if (!workspace || !/^wrote .*AGENT_BRIEFING\.md$/m.test(out)) {
-              throw new PluginCliError(`could not read the workspace from pj work:\n${out}`, { code: "pj_output" });
-            }
-
-            // pj ran on the server machine, so that is where the workspace is.
-            const { primaryHostId: hostId } = await bb.sdk.system.config();
-            if (!hostId) throw new PluginCliError("bb reports no server machine", { code: "no_host" });
-            const projects = await bb.sdk.projects.list();
-            const existing = projects.find((p) => p.sources.some((s) => s.path === workspace));
-            const projectId =
-              existing?.id ??
-              (
-                await bb.sdk.projects.create({
-                  name: title ?? noteId,
-                  source: { type: "local_path", hostId, path: workspace },
-                })
-              ).id;
-
-            const thread = await bb.sdk.threads.spawn({
-              projectId,
-              environment: { type: "project-default" },
-              prompt: BRIEFING_PROMPT,
-              title: title ?? noteId,
-              ...(options.provider ? { providerId: options.provider } : {}),
-              ...(options.model ? { model: options.model } : {}),
-              pluginMetadata: { noteId, title },
-            });
-            await indexAdd(noteId, thread.id);
-            let recorded = `recorded bb:${thread.id} on ${noteId}`;
-            try {
-              await recordLink(noteId, thread.id, false, ctx.signal);
-            } catch (err) {
-              // The thread is running by now; failing the command would misreport it.
-              recorded = `could not record bb:${thread.id} on ${noteId}: ${err instanceof Error ? err.message : err}`;
-            }
-            return { exitCode: 0, stdout: `${out.trimEnd()}\n\nstarted @thread:${thread.id} in ${workspace}\n${recorded}` };
           },
         }),
       },

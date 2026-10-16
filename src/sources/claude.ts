@@ -548,8 +548,8 @@ export interface DirSession extends SessionStatus {
 /**
  * Every session that has ever run in a directory or below it, newest first.
  *
- * The point of this is that it needs nobody's cooperation. `pj work` records the
- * workspace on the note (`workspace:` link) and the sessions are read back from
+ * The point of this is that it needs nobody's cooperation. Starting work records
+ * the workspace on the note (`workspace:` link) and the sessions are read back from
  * here — live *and* finished, since Claude keeps a transcript per session under
  * a directory named for its cwd. Before this, a session appeared on a note only
  * if the agent working in it remembered to run `pj link --session`, which meant

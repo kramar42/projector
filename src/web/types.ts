@@ -27,6 +27,7 @@ export type { Resolved } from '../server/enrich.ts';
 import type { NoteDetailDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
 import type { KernelNote } from '../kernel/state.ts';
+import type { KernelWork } from '../kernel/worktree.ts';
 export type { KernelNote } from '../kernel/state.ts';
 import type { QueryPayload } from '../view/payload.ts';
 import type { ViewSpec as Spec } from '../view/spec.ts';
@@ -78,43 +79,12 @@ export interface NoteDetail {
 }
 
 /**
- * `POST /api/note/:id/work`, both answers.
- *
- * One type for the plan and the result because the plan *is* the result minus
- * what happened: `workspace`, `branch` and `repos` are the same three facts
- * either way, and everything optional below is what a commit adds. Two types
- * would have let a caller read `opening` off a plan that never created one.
+ * `POST /api/note/:id/work`, both answers: the kernel's worktree attempt for the
+ * note's open intent, planned (`dryRun`) or started. One type because the plan
+ * *is* the result minus what happened — `attempt`, `link` and the per-repo
+ * `ok`/`error` are what a start adds. See `kernel/worktree.ts`.
  */
-export interface WorkResult {
-  workspace: string;
-  branch: string;
-  repos: { path: string; base?: string }[];
-  /** The briefing text, on a plan only — the commit writes it to a file instead. */
-  briefing?: string;
-  /** One entry per declared repo, on a commit only. */
-  results?: { name: string; path: string; created: boolean; error: string | null }[];
-  /**
-   * Where to go, on a commit only — and whether that is a new session at all.
-   * `running` is a live session the desktop app cannot be pointed at, so it
-   * carries no link: there is nothing to open and saying so is the answer.
-   */
-  opening?:
-    | { how: 'new'; link: string }
-    | { how: 'reopen'; link: string; session: WorkSession }
-    | { how: 'running'; session: WorkSession };
-  /** Whether the note now carries `workspace:<path>`, and why not if it does not. */
-  recorded?: boolean;
-  recordError?: string | null;
-  briefingPath?: string;
-}
-
-/** A session already working in the workspace, as the panel reports it. */
-export interface WorkSession {
-  uuid: string;
-  state: 'working' | 'stalled' | 'waiting' | 'closed';
-  opening: string;
-  lastAt: string;
-}
+export type WorkResult = KernelWork;
 
 /**
  * A candidate a sweep saw and nobody filed.

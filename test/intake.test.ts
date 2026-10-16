@@ -187,15 +187,19 @@ test('a worktree path names the project and the branch it was made for', () => {
 test('a workspace recorded on a note is the strongest reason a cwd can give', () => {
   const root = vault({
     ship: `---\nid: ship\ntitle: ship\nlinks:\n  - workspace:/wt/plat-wt-tos-ship\n---\n\nb\n`,
+    tos: `---\nid: tos\ntitle: tos\nlinks:\n  - workspace:/wt/plat-tos\n---\n\nb\n`,
   });
   try {
     const ctx = context(root);
     // The session sits in a worktree *inside* the workspace, which is where
-    // `pj work` puts every repo — so containment, not equality.
+    // every repo goes — so containment, not equality.
     assert.deepEqual(matchCwd(ctx, '/wt/plat-wt-tos-ship/api'), [
       { id: 'ship', title: 'ship', why: 'workspace' },
     ]);
     assert.deepEqual(matchCwd(ctx, '/wt/plat-wt-tos-other'), []);
+    // A workspace the kernel prepared is named for its branch alone, so only the
+    // link the app recorded on the note says whose it is — and that is enough.
+    assert.deepEqual(matchCwd(ctx, '/wt/plat-tos/plat-api'), [{ id: 'tos', title: 'tos', why: 'workspace' }]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

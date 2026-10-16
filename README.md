@@ -128,7 +128,9 @@ Each one is fetched, cached and shown inline, and none of them is ever written t
 **An agent is a first-class writer.** Notes are plain files, so a Claude session creates and edits
 them directly, with no API and nothing running. Judgement is where the agent earns its place: sweeping
 the intake, filling in facets, triage. The deterministic parts stay deterministic, so enrichment is
-plain fetching and every count on screen is computed rather than guessed.
+plain fetching and every count on screen is computed rather than guessed. Starting work on a note
+(▶) hands it to the owner's kernel, which lays out a git worktree per repository and briefs the
+session there with everything projector knows about the note.
 
 **The vocabulary is extensible.** Facets are declared per vault, so every vault tracks exactly what
 its domain needs. Link kinds and their enrichments, intake sources, and new shapes such as a calendar

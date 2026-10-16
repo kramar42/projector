@@ -37,8 +37,8 @@ Success, in the user's own terms, all at once:
 - **nothing falls through** — every commitment from Slack, Jira, git and Claude sessions ends on a note;
 - **"what's next" is one query**, answered fast enough not to think about;
 - **no hand-kept TODO.md survives** beside it — capture and triage are cheap enough that the habit dies;
-- **an agent starts unbriefed** — a note carries enough context that `pj work` plus a Claude session is
-  productive with nothing explained;
+- **an agent starts unbriefed** — a note carries enough context that the kernel's worktree attempt
+  for it plus a Claude session is productive with nothing explained;
 - **actual TODOs and conceptual mind-maps live in one place.**
 
 ## Positioning
@@ -77,8 +77,9 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   judged worth a card into `inbox/`, which is not your notes, and records the judgment in the kernel;
   nothing leaves `inbox/` until you accept or decline the card; `pj intake --dry-run` previews and
   writes nothing.
-- **`pj work`** prepares a multi-repo git worktree workspace, a briefing with the note's full context,
-  and a terminal running a Claude session in it.
+- **Starting work** on a note (▶ in the app) asks the owner's kernel for an attempt of its `worktree`
+  spec: a multi-repo git worktree workspace, a brief carrying the note's full context — which projector
+  supplies through `pj context --json-kernel` — and a Claude session opened in it.
 - **Configuration is the vault's.** `.projector/config.yaml` says which channels this vault triages,
   whether links are enriched, and holds the credentials both need — gitignored, because a vault is
   often a repository. The matching `PROJECTOR_*` variables still override it for one run. `pj setup`

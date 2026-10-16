@@ -244,15 +244,22 @@ things.
   to the judge with no earlier lines. Reading the conversation's earlier events back from the kernel is
   one more query per conversation; worth it the first time an answered ask is offered again.
 
-- **`pj work` does not resume a *finished* session in the workspace.** It reopens a live one and
-  starts a new one otherwise, and a closed transcript in that directory stays history rather than
-  becoming the thing the command lands you in. The reasoning is that "continue where I left off" and
-  "start the next piece of work" are different intentions that produce the same keystroke, and
-  guessing between them silently is what the reconnect was added to stop doing. Both are visible
-  either way — the note's `workspace:` row lists every session the directory has held, live and
-  closed, and each carries its own way back in. What changes the answer is wanting the *keystroke* to
-  resume: then it needs to ask rather than pick, and a `confirm()` is already the wrong shape for that
-  (see the native-dialog entry above).
+- **▶ on a note that is already being worked starts a second attempt.** Starting work moved to the
+  kernel (`bin/kernel worktree`), which starts an attempt every time it is asked; the workspace is
+  named for the branch, so a second ▶ reuses the same worktrees and opens another session beside the
+  first. `pj work` used to reopen a live session instead (`openingFor`), or say one was running from a
+  terminal and open nothing. That went with it, deliberately: an attempt is the kernel's unit of work
+  and whether a second one is a mistake is the kernel's question. Until it answers it, the note's
+  `workspace:` row is where a running session shows — reopen it from there rather than pressing ▶.
+  What would change this: the kernel refusing, or offering to resume, a second running attempt of
+  `worktree` for one intent.
+- **Intake no longer reads a kernel workspace's name.** The retired `pj work` named a workspace
+  `<project>-wt-<branch>`, and intake read a session's project and branch back off that name
+  (`workspaceName.ts`). The kernel names its workspaces for the branch alone, so only the
+  `workspace:` link the app records on the note attributes a session in one — which is the stronger
+  reason anyway. A workspace started from the kernel's own CLI, not from the app, has no such link;
+  the kernel records its session in the attempt (its SessionStart hook), so the evidence is there,
+  just not on the note. Reading the kernel's `attempt/started` workspace back would close the gap.
 
 ## Decided against
 

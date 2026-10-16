@@ -44,7 +44,7 @@ evidence the kernel holds, or says it does not.
    planned.
 3. For each open intent, `emit` one `plan/proposal` into the attempt, `about` the intent, payload
    `{"intent": "<id>", "spec": "<spec name or none>", "note": "<why today>", "evidence": ["<event id>", ...]}`.
-   `spec` is a spec name from `orient` (`develop`, `work-a-note`, ...) or the literal `none`; the
+   `spec` is a spec name from `orient` (`develop`, `worktree`, ...) or the literal `none`; the
    reasoning goes in `note`. At most one attempt per intent, and the whole list short enough to
    finish today.
 4. `attempts` with `all: true`. An intent no attempt started in the 7 days before this attempt

@@ -55,7 +55,8 @@ a frontmatter; it is dropped on the next write.
 investigate this vault, `memory/theories/YYYY-MM-DD.md` its working state for one day, and
 `memory/patterns/` what has held up across days. That skill writes it with plain file tools and needs
 no one's yes; `pj` has no command for it, and the MCP `memory` tool reads it. Any other session reads
-it and leaves it as it is — `pj work`'s briefing names `memory/AGENTS.md` when there is one.
+it and leaves it as it is — what projector tells the kernel about a note when work starts on it names
+`memory/AGENTS.md` when there is one.
 
 **A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
@@ -162,7 +163,7 @@ pj accept <id>... [--only f,g]      # files an inbox card; an extends card folds
 pj decline <id|fingerprint>... --reason <why>   # the no to a card: removes it, records why
 pj link <id> <ref> [...] [--remove]   # --remove takes the same refs off
 pj link <id> --session       # link the live Claude session working in this directory.
-                             # Only for a session outside a pj work workspace: inside one,
+                             # Only for a session outside the note's workspace: inside one,
                              # the note's workspace: link already finds it.
 pj check                     # validity, then the vault's rules; run this after a batch of edits
 pj setup                     # which channels and fetchers this vault can reach, and what is missing
@@ -346,9 +347,10 @@ A `local_…` id comes from the desktop app's store, is not on disk, and will no
 
 A `bb:` link names a thread in the bb app by its `thr_…` id. It is a reference, not a sync: the note
 says which threads worked on it, and the thread's status is read from bb when the link is shown.
-`bb pj attach <id> --record` and `bb pj work <id>` write it.
+`bb pj attach <id> --record` writes it.
 
-A `workspace:` link is written by `pj work` and names the directory it prepared. Do not write one by
+A `workspace:` link is written when the app starts work on the note through the kernel, and names
+the workspace `bin/kernel worktree` prepared. Do not write one by
 hand: every session that has ever run there is read back off the directory, so the link is how a note
 shows its sessions — one you invented points at nothing.
 

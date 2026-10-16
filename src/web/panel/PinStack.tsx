@@ -480,7 +480,7 @@ function PinPage({
                   data-act="work"
                   disabled={!!work.busy}
                   aria-label={`Start work on ${title}`}
-                  title={`Start work on "${title}" — a worktree workspace and a Claude session (!)`}
+                  title={`Start work on "${title}" — a kernel attempt in its own worktrees, and a Claude session (!)`}
                   onClick={work.start}
                 />
                 <IconButton

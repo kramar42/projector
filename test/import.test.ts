@@ -493,7 +493,7 @@ test('the manifest declares what projector writes and reads, and every batch it 
   assert.deepEqual(m.writes, { events: ['vault/', 'intake/', 'plan/', 'review/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
   assert.deepEqual(m.sync, [{ name: 'vault', run: 'pj kernel import', when: 'after edits, or hourly' }]);
   const dir = join(appRoot, 'kernel');
-  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/work-a-note.edn', 'specs/daily-plan.edn', 'specs/weekly-review.edn', 'specs/judge-intake.edn']);
+  assert.deepEqual(m.specs, ['specs/note-conventions.edn', 'specs/daily-plan.edn', 'specs/weekly-review.edn', 'specs/judge-intake.edn']);
   const scheduled: Record<string, RegExp> = {
     'specs/daily-plan.edn': /:trigger \{:daily "07:00"\}/,
     'specs/weekly-review.edn': /:trigger \{:weekly :sunday :at "18:00"\}/,
@@ -519,14 +519,11 @@ test('the manifest declares what projector writes and reads, and every batch it 
   assert.match(judgeIntake, /:executor :agent/);
   assert.match(judgeIntake, /:budget \{:minutes \d+\}/);
   assert.match(judgeIntake, /classify\.ts/);
-  // work-a-note is a capability: its procedure is the pj-work skill, read whole into the brief.
-  const work = readFileSync(join(dir, 'specs/work-a-note.edn'), 'utf8');
-  const skill = work.match(/:skill "([^"]+)"/)?.[1];
-  assert.ok(skill && existsSync(join(dir, 'specs', skill, 'SKILL.md')), 'work-a-note names the pj-work skill');
-  assert.equal(basename(skill), 'pj-work');
-  assert.match(work, /:executor :either/);
-  assert.match(work, /:criterion "the note's Done when line holds, as the owner judges"/);
-  assert.match(work, /:budget \{:minutes 180\}/);
+  // Work on a note is the kernel's worktree spec, not one of projector's: projector answers the kernel's
+  // question about the note through its context command, the vault resolved from the alias.
+  assert.equal(existsSync(join(dir, 'specs/work-a-note.edn')), false, 'work-a-note is retired to the kernel');
+  assert.deepEqual(m.context, { run: '~/.local/bin/pj context --alias {alias} --json-kernel' });
+  assert.ok(!m.skills.includes('../.claude/skills/pj-work'), 'pj-work is a redirect, not a procedure');
   // How the develop spec changes projector's own code.
   assert.deepEqual(m.develop, { repo: '..', 'default-branch': 'main', branch: 'kernel/<attempt>', test: 'bun test', typecheck: 'bun run typecheck', guide: 'CLAUDE.md' });
   assert.ok(existsSync(join(dir, m.develop.repo, m.develop.guide)));
@@ -551,7 +548,9 @@ test('the manifest declares what projector writes and reads, and every batch it 
     assert.ok(existsSync(join(appRoot, 'test', 'kernel-queries', `${q.name}.json`)), `test/fake-kernel answers ${q.name}`);
   }
   assert.match(readFileSync(join(dir, 'queries/vault-status-events.edn'), 'utf8'), /\(alias \?s "system:projector"\)/, 'this system’s events only');
-  for (const r of ['pj CLI', 'skill pj-about', 'skill pj-work']) assert.ok(m.reach.includes(r), r);
+  for (const r of ['pj CLI', 'skill pj-about']) assert.ok(m.reach.includes(r), r);
+  assert.ok(!m.reach.includes('skill pj-work'));
+  assert.ok(m.reach.some((r: string) => /bin\/kernel worktree <the note's open intent>/.test(r)), 'reach says where work on a note starts');
   // What a session capturing for the owner runs: pj add for work, the note's file for a note about it.
   assert.deepEqual(m.accepts.map((x: { what: string }) => x.what.split(':')[0]), ['A task or a project', 'A note about work already in the vault']);
   assert.match(m.accepts[0].how, /^~\/\.local\/bin\/pj --vault \S+ add <title> --facet status=planning/);

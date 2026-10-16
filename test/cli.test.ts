@@ -166,7 +166,7 @@ test('every command refuses a flag it does not know', () => {
     const commands = [
       ['ls'], ['log'], ['add', 'x'], ['link', 'alpha', 'jira:A-1'], ['check'], ['reindex'],
       ['search', 'x'], ['vaults'], ['intake'], ['context', 'alpha'],
-      ['set', 'alpha'], ['rm', 'alpha'], ['work', 'alpha'], ['did'], ['mcp'],
+      ['set', 'alpha'], ['rm', 'alpha'], ['did'], ['mcp'],
       ['accept', 'alpha'], ['decline', 'alpha', '--reason', 'x'],
     ];
     for (const cmd of commands) {
@@ -719,6 +719,71 @@ test('context --fresh re-resolves the note\'s links before printing them', () =>
     const ghost = run(['--vault', v.root, 'context', 'ghost', '--fresh']);
     assert.equal(ghost.code, 1);
     assert.match(ghost.out, /no note with id "ghost"/);
+  } finally {
+    v.cleanup();
+  }
+});
+
+/**
+ * The kernel's question about a note: the manifest's `context` command, run from
+ * a shell that names no vault. The alias names it — by the name the vault goes by
+ * in the kernel, `kernel.vault` before the registered name — so a second vault in
+ * the registry, which would make a bare `pj context` ambiguous, changes nothing.
+ */
+test('context --alias --json-kernel answers the kernel about a note in the vault the alias names', () => {
+  const v = vault();
+  const two = mkdtempSync(join(tmpdir(), 'pj-cli-two-'));
+  try {
+    mkdirSync(paths(two).config, { recursive: true });
+    writeFileSync(settingsPath(two), 'kernel:\n  vault: other\n', 'utf8');
+    writeFileSync(place(two, 'zeta.md'), '---\nid: zeta\ntitle: Zeta\n---\nlast\n', 'utf8');
+    writeFileSync(
+      v.registry,
+      JSON.stringify({ vaults: [{ path: v.root, name: 'scratch', addedAt: 1 }, { path: two, name: 'two', addedAt: 2 }] }),
+      'utf8',
+    );
+    const env = { PROJECTOR_VAULTS: v.registry };
+
+    const r = run(['context', '--alias', 'vault:scratch:alpha', '--json-kernel'], env);
+    assert.equal(r.code, 0, r.out);
+    const said = JSON.parse(r.out);
+    assert.deepEqual(Object.keys(said).sort(), ['branch', 'repos', 'text', 'title']);
+    assert.equal(said.title, 'Alpha');
+    assert.equal(said.branch, 'alpha', 'no project template and no Jira key: the id');
+    assert.deepEqual(said.repos, [], 'no project, so no repos — the kernel refuses in its own words');
+    assert.match(said.text, /^Projector note `alpha` in the vault `scratch`/);
+    assert.match(said.text, /# Alpha/);
+
+    // `kernel.vault` is the name the aliases carry, whatever the registry calls it.
+    assert.equal(JSON.parse(run(['context', '--alias', 'vault:other:zeta', '--json-kernel'], env).out).title, 'Zeta');
+    // Without --json-kernel the alias reads like an id does.
+    assert.match(run(['context', '--alias', 'vault:scratch:beta'], env).out, /^# Beta/);
+
+    const refusals: [string[], RegExp][] = [
+      [['context', '--alias', 'vault:nowhere:alpha', '--json-kernel'], /no registered vault goes by "nowhere"/],
+      [['context', '--alias', 'vault:scratch:ghost', '--json-kernel'], /no note with id "ghost"/],
+      [['context', '--alias', 'repo:projector', '--json-kernel'], /not a note's alias/],
+      [['--vault', v.root, 'context', '--alias', 'vault:scratch:alpha'], /--alias names its own vault/],
+      [['context', '--alias', 'vault:scratch:alpha', '--json', '--json-kernel'], /--json or --json-kernel/],
+    ];
+    for (const [args, said] of refusals) {
+      const bad = run(args, env);
+      assert.equal(bad.code, 1, args.join(' '));
+      assert.match(bad.out, said);
+    }
+  } finally {
+    rmSync(two, { recursive: true, force: true });
+    v.cleanup();
+  }
+});
+
+test('pj work is retired to the kernel, and says where it went', () => {
+  const v = vault();
+  try {
+    const r = run(['--vault', v.root, 'work', 'alpha']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /pj work is retired/);
+    assert.match(r.out, /bin\/kernel worktree <intent id>/);
   } finally {
     v.cleanup();
   }

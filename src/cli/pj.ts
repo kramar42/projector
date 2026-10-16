@@ -24,6 +24,8 @@ import type { Note } from '../schema/types.ts';
 import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
+import { parseNoteAlias, subjectContext, vaultForAlias } from '../kernel/subject.ts';
+import { vaultName } from '../intake/kernel.ts';
 import {
   candidateCount,
   channelNames,
@@ -37,10 +39,7 @@ import {
 import { channelLine, pollOnce, tickLine } from '../server/poll.ts';
 import { rejudge } from '../intake/rejudge.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
-import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
-import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
-import { ago } from '../sources/run.ts';
 import {
   acceptCards,
   createNote,
@@ -51,7 +50,6 @@ import {
   patchFields,
   renameNote,
 } from '../server/mutate.ts';
-import { execFileSync } from 'node:child_process';
 import { parseDay } from '../did/day.ts';
 import { did, renderDid } from '../did/run.ts';
 import { kernelIndex } from '../kernel/read.ts';
@@ -213,6 +211,13 @@ function vaultOrExit(): string {
  */
 const NO_VAULT_NEEDED = new Set(['vaults', '']);
 /**
+ * `pj context --alias vault:<vault>:<id>` names its vault inside the alias. It is
+ * how the kernel asks about a note (the manifest's `context` command), from a
+ * shell that names no vault, so resolving one up front would refuse it whenever
+ * more than one is registered.
+ */
+const ALIASED = rawCmd === 'context' && rawArgv.includes('--alias');
+/**
  * Help resolves a vault but never dies for want of one.
  *
  * `--help` was missing from the set above, so it resolved *and exited 1* — and
@@ -228,7 +233,7 @@ const root = asking
   ? soft && 'root' in soft
     ? soft.root
     : ''
-  : NO_VAULT_NEEDED.has(rawCmd ?? '')
+  : NO_VAULT_NEEDED.has(rawCmd ?? '') || ALIASED
     ? ''
     : vaultOrExit();
 const p = paths(root || '/nonexistent');
@@ -251,7 +256,6 @@ Work with notes
   context            everything known about one note; --fresh re-asks its links
   add, set, link     create or change notes
   mv, merge, rm      rename, combine, or remove notes
-  work               prepare a worktree workspace and briefing
   mcp                serve the vault read-only to MCP clients, over stdio
 
 Intake
@@ -299,11 +303,16 @@ Create one note.`,
                     [--session [id]] [--cwd dir]
 
 Add or remove links. \`--session\` names a live Claude session.`,
-  context: `Usage: pj context <id> [--fresh] [--json]
+  context: `Usage: pj context <id> [--fresh] [--json | --json-kernel]
+       pj context --alias vault:<vault>:<id> [--fresh] [--json | --json-kernel]
 
 Print everything projector knows about one note. Its links show what is
 cached; \`--fresh\` re-resolves every one first — Jira, GitHub, docs,
-sessions — and waits for the answers, so each is as of now.`,
+sessions — and waits for the answers, so each is as of now.
+
+\`--alias\` names the note as the kernel does, its vault inside the alias.
+\`--json-kernel\` prints what the kernel embeds when \`bin/kernel worktree\`
+starts work on the note: one JSON object, {text, repos, branch, title}.`,
   set: `Usage: pj set <id>... [--title t] [--facet f=v] [--add f=v]
                  [--remove f=v] [--set path=yaml ...]
 
@@ -352,9 +361,6 @@ Say no to inbox cards, or to candidates that never became cards. A card is
 removed; every fingerprint is recorded with your reason, so no sweep offers it
 again and the judge learns from it. \`--title\` names a bare fingerprint in the
 pile. \`pj intake declined\` reads the pile, \`pj intake restore\` takes one back.`,
-  work: `Usage: pj work <id> [--dry-run] [--no-open] [--new]
-
-Prepare the worktree workspace and briefing for a note.`,
   mcp: `Usage: pj --vault <name|path> mcp
 
 Serve the vault to an MCP client — Claude Desktop, claude.ai, any other — over
@@ -1277,17 +1283,34 @@ if (asking) {
     }
 
     case 'context': {
-      const { flags, rest } = argFlags(argv, ['fresh', 'json'], ['fresh', 'json']);
+      const { flags, rest } = argFlags(
+        argv,
+        ['fresh', 'json', 'json-kernel', 'alias'],
+        ['fresh', 'json', 'json-kernel'],
+      );
+      if (flags.has('json') && flags.has('json-kernel')) fail('pj context: --json or --json-kernel, not both');
+      // `--alias` is the kernel's spelling of a note: the vault comes out of it,
+      // by the name the vault goes by in the kernel (`kernel/subject.ts`).
+      const alias = flags.get('alias')?.[0];
+      let here = root;
+      let id = rest[0] ?? '';
+      if (alias !== undefined) {
+        if (vaultGiven) fail('pj context: --alias names its own vault; drop --vault');
+        if (rest.length) fail('pj context: a note id or --alias, not both');
+        const parsed = parseNoteAlias(alias);
+        if (!parsed) fail(`pj context: "${alias}" is not a note's alias, vault:<vault>:<note id>`);
+        const found = vaultForAlias(parsed.vault);
+        if (!found.ok) fail(`pj context: ${found.reason}`);
+        here = found.root;
+        id = parsed.id;
+      }
       // `--fresh` is what `pj enrich --force` was: the note's links
       // re-resolved and awaited, so what prints is what landed.
-      const ctx = flags.has('fresh')
-        ? await freshNoteContext(rest[0] ?? '', root)
-        : noteContext(rest[0] ?? '', root);
-      if (!ctx) {
-        console.error(`no note with id "${rest[0] ?? ''}"`);
-        process.exit(1);
-      }
-      console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
+      const ctx = flags.has('fresh') ? await freshNoteContext(id, here) : noteContext(id, here);
+      if (!ctx) fail(`no note with id "${id}"${alias !== undefined ? ` in ${here}` : ''}`);
+      if (flags.has('json-kernel')) {
+        console.log(JSON.stringify(subjectContext(ctx, { root: here, vault: vaultName(here) })));
+      } else console.log(flags.has('json') ? JSON.stringify(ctx, null, 2) : renderContext(ctx));
       break;
     }
 
@@ -1452,103 +1475,16 @@ if (asking) {
       break;
     }
 
-    case 'work': {
-      const { flags, rest } = argFlags(
-        argv,
-        ['dry-run', 'no-open', 'new'],
-        ['dry-run', 'no-open', 'new'],
+    case 'work':
+      // Retired, and said so rather than answered by the root help: starting work
+      // on a note is the kernel's act now, an attempt of its `worktree` spec, and
+      // projector only answers the kernel's question about the note
+      // (`pj context --alias … --json-kernel`).
+      fail(
+        'pj work is retired: work on a note starts in the kernel, as an attempt for its open intent.\n' +
+          '  ~/Code/projects/kernel/bin/kernel worktree <intent id>   (pj kernel status names the note\'s intent)\n' +
+          'or ▶ on the note in the app, which runs the same.',
       );
-      const id = rest[0];
-      const ctx = id ? noteContext(id, root) : null;
-      if (!ctx) {
-        console.error('pj work <id> [--dry-run] [--no-open] [--new]');
-        process.exit(1);
-      }
-      /**
-       * Deciding and doing are both `agent/work.ts` now, because the app reaches
-       * the same act through `POST /api/note/:id/work` and the two must not be
-       * able to disagree about which branch, which directory or which link. What
-       * is left here is printing.
-       */
-      let plan;
-      try {
-        plan = planWork(ctx, root);
-      } catch (err) {
-        if (!(err instanceof NotWorkable)) throw err;
-        console.error(err.message);
-        process.exit(1);
-      }
-
-      console.log(`workspace  ${plan.workspace}`);
-      console.log(`branch     ${plan.branch}`);
-      for (const r of plan.repos) console.log(`repo       ${r.path}${r.base ? ` @ ${r.base}` : ''}`);
-
-      if (flags.has('dry-run')) {
-        console.log('\n--- AGENT_BRIEFING.md (dry run) ---\n');
-        console.log(plannedBriefing(ctx, plan));
-        break;
-      }
-
-      let started;
-      try {
-        started = startWork(ctx, plan, root, { fresh: flags.has('new') });
-      } catch (err) {
-        if (!(err instanceof NotWorkable)) throw err;
-        console.error(`\n${err.message}`);
-        process.exit(1);
-      }
-      for (const r of started.results) {
-        console.log(`  ${r.error ? '✗' : r.created ? '+' : '='} ${pad(r.name, 26)} ${r.error ?? r.path}`);
-      }
-      console.log(`\nwrote ${started.briefingPath}`);
-      // Worth a line either way. Silence about the recorded workspace would make
-      // the one thing this writes into the vault the one thing it does not say.
-      if (started.recordError) console.error(`could not record it on ${ctx.id}: ${started.recordError}`);
-      else console.log(started.recorded ? `recorded on ${ctx.id}` : `already recorded on ${ctx.id}`);
-
-      const { opening } = started;
-      if (opening.how !== 'new') {
-        const s = opening.session;
-        console.log(`\n${s.state} here: session ${s.uuid.slice(0, 8)}, last active ${ago(s.lastAt)}`);
-        if (s.opening) console.log(`  ${s.opening}`);
-      }
-      /**
-       * A live session the desktop app cannot be pointed at — started from a
-       * terminal — is the one case with nothing to open. Saying so and stopping
-       * is the point: opening a second session beside it is exactly the silent
-       * duplication this is here to prevent, and `--new` is how you ask for it.
-       */
-      if (opening.how === 'running') {
-        console.log(`\nalready running here, and not the app's to reopen.\nStart another alongside it with --new.`);
-        break;
-      }
-
-      if (flags.has('no-open')) {
-        console.log(`not opening the app (--no-open)\n  ${opening.link}`);
-        break;
-      }
-      /**
-       * The desktop app, not a terminal.
-       *
-       * A note already opens its past sessions in the app — `enrich/claudeSession.ts`
-       * mints a `claude://` link for every one it can — so the session that is
-       * about to exist opens the same way, rather than in a second place with its
-       * own idea of what a session is. `open` hands the URL to whatever registered
-       * the scheme; the fallback below is the CLI, for a machine with no app.
-       */
-      try {
-        execFileSync('open', [opening.link], { stdio: ['ignore', 'ignore', 'pipe'] });
-        console.log(opening.how === 'reopen' ? 'reopened it in Claude' : 'opened the workspace in Claude');
-      } catch (err) {
-        console.error(`could not open the app: ${(err as Error).message}`);
-        console.log(
-          opening.how === 'reopen'
-            ? `run it yourself:\n  claude --resume ${opening.session.uuid}`
-            : `run it yourself:\n  cd ${shellQuote(started.workspace)} && claude ${shellQuote(BRIEFING_PROMPT)}`,
-        );
-      }
-      break;
-    }
 
     case 'mcp': {
       argFlags(argv, []);

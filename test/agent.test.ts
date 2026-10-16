@@ -2,21 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { history } from '../src/agent/history.ts';
 import { execFileSync } from 'node:child_process';
-import {
-  addWorktree,
-  BRIEFING_PROMPT,
-  branchFor,
-  desktopLink,
-  worktreeBase,
-  shellQuote,
-  workspacePath,
-} from '../src/agent/worktree.ts';
-import { buildBriefing } from '../src/agent/briefing.ts';
-import { NotWorkable, openingFor, plannedBriefing, planWork, startWork } from '../src/agent/work.ts';
+import { branchFor } from '../src/agent/worktree.ts';
+import { workspacePath } from '../src/agent/workspaceName.ts';
+import { noteContext } from '../src/agent/context.ts';
+import { parseNoteAlias, subjectContext } from '../src/kernel/subject.ts';
+import { KernelFailed, NoNote, NotWorkable, startWork } from '../src/kernel/worktree.ts';
+import type { Runner } from '../src/intake/kernel.ts';
 import { sessionsUnder } from '../src/sources/claude.ts';
 import { readAll } from '../src/index/indexer.ts';
-import type { NoteContext } from '../src/agent/context.ts';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join as pathJoin, } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
@@ -25,7 +19,8 @@ import { place } from './fixture.ts';
 
 
 /**
- * What an agent is handed: a note context, a briefing, a workspace, and git history.
+ * What an agent is handed: a note context, what projector tells the kernel about
+ * a note when work starts, the workspace a note records, and git history.
  *
  * Split out of a 1,306-line `model.test.ts` that had become the catch-all: anything
  * not obviously about the query compiler, a view spec or intake landed there, and
@@ -48,248 +43,251 @@ test('every spelling of the id placeholder substitutes, and a typo is refused', 
   assert.equal(branchFor('fix-kpow', { template: 'plat/{note}' }), 'plat/fix-kpow');
   assert.equal(branchFor('fix-kpow', { template: '{id}-wip' }), 'fix-kpow-wip');
   // An unknown placeholder would name a literal `{...}` branch shared by every
-  // note in the project — the second `pj work` would collide with the first.
+  // note in the project — the second note's work would collide with the first.
   assert.throws(() => branchFor('fix-kpow', { template: 'plat/{ntoe}' }), /\{ntoe\}/);
 });
 
-test('a branch with slashes still makes a legal directory name', () => {
+test('a legacy workspace name still makes a legal directory name from a branch with slashes', () => {
   assert.equal(
     workspacePath('/wt', 'keycloak', 'kc/fix-kpow'),
     '/wt/keycloak-wt-kc-fix-kpow',
   );
 });
 
-/**
- * The desktop link, which is what replaced two layers of shell-and-AppleScript
- * quoting. The tests that used to live here proved a path with a quote in it
- * survived both layers; a URL has one encoding, so what is worth proving now is
- * that the app is handed the route it actually implements.
- */
-test('the desktop link names the app route, the workspace and the prompt', () => {
-  const url = new URL(desktopLink('/wt/keycloak-wt-kc-fix', BRIEFING_PROMPT));
-  // `claude://code/new` is the app's own route for a session that does not exist
-  // yet. `claude://resume` mints a chat from a transcript and is a different act;
-  // `enrich/claudeSession.ts` owns that one.
-  assert.equal(url.protocol, 'claude:');
-  assert.equal(url.host, 'code');
-  assert.equal(url.pathname, '/new');
-  assert.equal(url.searchParams.get('folder'), '/wt/keycloak-wt-kc-fix');
-  assert.equal(url.searchParams.get('prompt'), BRIEFING_PROMPT);
-});
-
-test('the prompt names the file the briefing is written to', () => {
-  // The two halves of one contract: `startWork` writes `AGENT_BRIEFING.md`, and
-  // this sentence is the only thing that tells the new session to read it.
-  assert.match(BRIEFING_PROMPT, /AGENT_BRIEFING\.md/);
-});
-
-test('a path a shell would mangle survives the link intact', () => {
-  // One encoding layer instead of two. A quote, a space and an ampersand are the
-  // three that ended the old AppleScript literal or split the old shell command.
-  const path = `/wt/don't & "quote" me`;
-  const url = new URL(desktopLink(path, BRIEFING_PROMPT));
-  assert.equal(url.searchParams.get('folder'), path);
-  // Percent-encoded on the wire, so nothing in it can be read as syntax.
-  assert.ok(!desktopLink(path, BRIEFING_PROMPT).includes('"'));
-});
-
-test('shellQuote still covers the one place a shell command is printed', () => {
-  // `pj work` prints `cd <ws> && claude <prompt>` when `open` fails, which is the
-  // only shell string left in the launch path.
-  assert.equal(shellQuote("/tmp/don't"), `'/tmp/don'\\''t'`);
-});
-
-test('base branch falls back from declared to origin/HEAD to HEAD', () => {
-  const git = (out: Record<string, string>) => (args: string[]) => {
-    const key = args.join(' ');
-    const hit = Object.entries(out).find(([k]) => key.includes(k));
-    return hit ? { ok: true, out: hit[1], err: '' } : { ok: false, out: '', err: 'no' };
-  };
-  assert.equal(worktreeBase({ path: '/r', base: 'dev' }, git({})), 'dev');
-  assert.equal(worktreeBase({ path: '/r' }, git({ 'refs/remotes/origin/HEAD': 'origin/main\n' })), 'origin/main');
-  assert.equal(worktreeBase({ path: '/r' }, git({ 'rev-parse --abbrev-ref': 'trunk\n' })), 'trunk');
-});
-
-test('a missing repo is reported per repo, never thrown', () => {
-  const res = addWorktree({ path: '/definitely/not/here' }, '/wt', 'b', () => ({ ok: true, out: '', err: '' }));
-  assert.equal(res.created, false);
-  assert.match(res.error ?? '', /repo not found/);
-  assert.equal(res.name, 'here');
-});
-
-test('worktree prune runs even when the folder already exists', () => {
-  // Without the unconditional prune, reopening a hand-deleted workspace fails
-  // with "missing but already registered worktree".
-  const calls: string[] = [];
-  const git = (args: string[]) => {
-    calls.push(args.join(' '));
-    return { ok: true, out: '', err: '' };
-  };
-  // The repo has to exist or addWorktree bails before pruning; the target must
-  // not, or it takes the already-prepared path instead. A fresh temp dir is both.
-  const repo = mkdtempSync(pathJoin(tmpdir(), 'projector-worktree-'));
-  addWorktree({ path: repo }, repo, 'b', git); // <repo>/<basename repo> won't exist
-  rmSync(repo, { recursive: true, force: true });
-  assert.ok(calls.some((c) => c === 'worktree prune'), calls.join(' | '));
-});
-
-test('the briefing names failed repos as out of scope and stops before building', () => {
-  const ctx = {
-    id: 'c1', title: 'T', isProject: false, file: 'notes/c1.md',
-    facets: {}, body: '', project: null, blockedBy: [],
-    refs: {}, inbound: {}, links: [], siblings: [],
-  };
-  const out = buildBriefing({
-    ctx, workspace: '/wt/x', branch: 'b',
-    repos: [
-      { name: 'ok', path: '/wt/x/ok', created: true, error: null },
-      { name: 'bad', path: '/wt/x/bad', created: false, error: 'boom' },
-    ],
-  });
-  assert.match(out, /`ok\/`/);
-  assert.match(out, /out of scope[\s\S]*bad.*boom/);
-  assert.match(out, /STOP/);
-  assert.match(out, /deliberately left out/);
-  // The briefing no longer asks the session to register itself. `pj work` records
-  // the workspace on the note and the sessions are read back off that, so a step
-  // the agent could forget is a step that must not be here.
-  assert.ok(!out.includes('--session'), out);
-});
-
-
-// ---------------------------------------------------------------- starting work
+// ------------------------------------------------- starting work, through the kernel
 //
-// `planWork` is the half both `pj work` and `POST /api/note/:id/work` reach, so
-// what is worth holding is that it decides and touches nothing, and that both of
-// its refusals are refusals rather than crashes.
+// The act is the kernel's (`bin/kernel worktree`); projector answers its question
+// about the note and asks it to start. Every kernel here is a `Runner` the test
+// wrote: nothing reaches the owner's kernel.
 
-/** A context with just enough on it for the work path. */
-const workCtx = (project: NoteContext['project']): NoteContext => ({
-  id: 'ship-it', title: 'Ship it', isProject: false, file: 'notes/ship-it.md',
-  facets: {}, body: '', project, blockedBy: [],
-  refs: {}, inbound: {}, links: [], siblings: [],
-});
+const INTENT = 'aaaaaaaa-0000-4000-8000-000000000001';
 
-/** A resolved project, with the two derived fields a briefing reads. */
-const project = (o: { repos: string[]; branch?: string }): NoteContext['project'] => ({
-  key: 'plat',
-  repos: o.repos.map((path) => ({ path })),
-  ...(o.branch ? { branch: o.branch } : {}),
-  instructions: [],
-  chain: ['plat'],
-});
+const ON = 'kernel:\n  enabled: true\n  bin: /fake/kernel\n  db: ./kdb\n  vault: fake\n  commitments: { axis: status, open: [active] }\n';
 
-/** A vault whose only interesting property is where it says worktrees go. */
-function vaultSaying(workspaces: string | null): string {
-  const root = mkdtempSync(pathJoin(tmpdir(), 'projector-work-'));
+/**
+ * A vault with one project declaring a repo, a branch template and instructions,
+ * and `ship-it`, an active note in it. `memory/AGENTS.md` too, so the preface
+ * names it.
+ */
+function workVault(kernel: string | null = ON): string {
+  const root = mkdtempSync(pathJoin(tmpdir(), 'pj-work-'));
   mkdirSync(paths(root).config, { recursive: true });
-  writeFileSync(paths(root).facets, '{}\n', 'utf8');
-  if (workspaces) writeFileSync(settingsPath(root), `workspaces: ${workspaces}\n`, 'utf8');
+  writeFileSync(
+    paths(root).facets,
+    'status: { label: Status, values: [planning, active, done], open: false, single: true }\n' +
+      'project: { label: Project, type: ref, single: true }\n',
+    'utf8',
+  );
+  writeFileSync(
+    place(root, 'plat/README.md'),
+    '---\ntitle: Platform\nproject:\n  repos:\n    - path: /src/plat-api\n      base: origin/main\n    - path: ~/src/plat-web\n  branch: plat/{note}\n---\n\nThe platform.\n',
+    'utf8',
+  );
+  writeFileSync(place(root, 'plat/AGENTS.md'), 'Run the API tests before every commit.\n', 'utf8');
+  writeFileSync(
+    place(root, 'ship-it.md'),
+    '---\nid: ship-it\ntitle: Ship it\nfacets: { status: [active], project: [plat] }\n---\n\nDone when the widget ships.\n',
+    'utf8',
+  );
+  writeFileSync(place(root, 'memory/AGENTS.md'), 'How to read this vault.\n', 'utf8');
+  if (kernel) writeFileSync(settingsPath(root), kernel, 'utf8');
   return root;
 }
 
-test('with nowhere to put worktrees, work refuses instead of guessing', () => {
-  const root = vaultSaying(null);
+test('a note alias names its vault and its note', () => {
+  assert.deepEqual(parseNoteAlias('vault:work:tos'), { vault: 'work', id: 'tos' });
+  assert.deepEqual(parseNoteAlias('vault:work:plat/ship-it'), { vault: 'work', id: 'plat/ship-it' });
+  assert.equal(parseNoteAlias('repo:projector'), null);
+  assert.equal(parseNoteAlias('vault:work:'), null);
+});
+
+test('what projector tells the kernel about a note: its context, its repos, its branch', () => {
+  const root = workVault();
   try {
-    // No fallback on purpose: a guessed parent directory puts real worktrees
-    // somewhere the user did not choose and will not think to look.
-    assert.throws(
-      () => planWork(workCtx(project({ repos: ['/r'] })), root),
-      (err: unknown) => err instanceof NotWorkable && /PROJECTOR_WORKSPACES/.test((err as Error).message),
-    );
+    const ctx = noteContext('ship-it', root)!;
+    const said = subjectContext(ctx, { root, vault: 'fake' });
+    assert.equal(said.title, 'Ship it');
+    // The project's template, applied to the note — the branch `pj work` used.
+    assert.equal(said.branch, 'plat/ship-it');
+    // Absolute, a `~` expanded, the declared base carried and none invented.
+    assert.equal(said.repos[0]!.path, '/src/plat-api');
+    assert.equal(said.repos[0]!.base, 'origin/main');
+    assert.ok(said.repos[1]!.path.startsWith('/') && said.repos[1]!.path.endsWith('/src/plat-web'));
+    assert.equal('base' in said.repos[1]!, false);
+    // The rendered context, with the inherited instructions and the body in it…
+    assert.match(said.text, /# Ship it/);
+    assert.match(said.text, /Run the API tests before every commit\./);
+    assert.match(said.text, /Done when the widget ships\./);
+    // …after a preface saying where the note lives and naming the day agent's memory.
+    assert.match(said.text, /^Projector note `ship-it` in the vault `fake`/);
+    assert.ok(said.text.includes(pathJoin(root, 'memory', 'AGENTS.md')));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('a note whose project declares no repos has nothing to lay out', () => {
-  const root = vaultSaying('/wt');
-  try {
-    for (const p of [null, project({ repos: [] })]) {
-      assert.throws(
-        () => planWork(workCtx(p), root),
-        (err: unknown) => err instanceof NotWorkable && /has no repos/.test((err as Error).message),
-      );
+/** A kernel that answers the intents query with `rows` and `worktree` with `worktree`, recording each call. */
+function fakeKernel(
+  rows: unknown[][],
+  worktree: (args: string[]) => { code: number | null; stdout: string; stderr: string },
+): { run: Runner; calls: { args: string[]; env: Record<string, string | undefined> }[] } {
+  const calls: { args: string[]; env: Record<string, string | undefined> }[] = [];
+  const run: Runner = async (_bin, args, _input, env) => {
+    calls.push({ args, env });
+    if (args[0] === 'query') {
+      return {
+        code: 0,
+        stdout: JSON.stringify({
+          columns: ['intent', 'alias', 'status', 'statement', 'horizon', 'verdict', 'by', 'at', 'note', 'evidence', 'proposer'],
+          rows,
+        }),
+        stderr: '',
+      };
     }
+    return worktree(args);
+  };
+  return { run, calls };
+}
+
+const row = (status: string, id = INTENT, alias = 'vault:fake:ship-it') => [id, alias, status, 'Ship it', '', '', '', '', '', '', ''];
+
+/** What `bin/kernel worktree --json` prints, planned or started. */
+function worktreeAnswer(dryRun: boolean): string {
+  return JSON.stringify({
+    id: 'bbbbbbbb-0000-4000-8000-000000000002',
+    short: 'bbbbbbbb',
+    spec: 'worktree',
+    intent: INTENT,
+    dir: '/wt/plat-ship-it',
+    branch: 'plat/ship-it',
+    repos: [
+      { name: 'plat-api', path: '/src/plat-api', worktree: '/wt/plat-ship-it/plat-api', base: 'origin/main', guide: '/src/plat-api/CLAUDE.md', ...(dryRun ? {} : { ok: true, 'base-sha': 'abc' }) },
+      { name: 'plat-web', path: '/src/plat-web', worktree: '/wt/plat-ship-it/plat-web', base: 'HEAD', ...(dryRun ? {} : { error: 'git worktree add: locked' }) },
+    ],
+    context: { alias: 'vault:fake:ship-it', system: 'system:projector', text: '…' },
+    problems: [],
+    ...(dryRun
+      ? { 'dry-run': true }
+      : {
+          attempt: 'bbbbbbbb-0000-4000-8000-000000000002',
+          'brief-file': '/wt/plat-ship-it/BRIEF.md',
+          opened: { open: 'none', link: 'claude://code/new?folder=%2Fwt%2Fplat-ship-it&prompt=Read', command: "cd '/wt/plat-ship-it' && claude 'Read'" },
+        }),
+  });
+}
+
+const linksOf = (root: string) => readAll(paths(root).notes).notes.get('ship-it')!.links.map((l) => l.raw);
+
+test('the plan is the kernel’s dry run for the note’s open intent, and writes nothing', async () => {
+  const root = workVault();
+  try {
+    const k = fakeKernel([row('open')], () => ({ code: 0, stdout: worktreeAnswer(true), stderr: '' }));
+    const plan = await startWork(root, 'ship-it', { commit: false, run: k.run });
+    const call = k.calls.find((c) => c.args[0] === 'worktree')!;
+    assert.deepEqual(call.args, ['worktree', INTENT, '--open', 'none', '--json', '--dry-run']);
+    assert.equal(call.env.KERNEL_DB, pathJoin(root, 'kdb'));
+    // The intent was read through projector's saved query, for this vault's prefix.
+    assert.deepEqual(k.calls[0]!.args.slice(0, 3), ['query', '--saved', 'projector/vault-intents']);
+    assert.ok(k.calls[0]!.args.includes('prefix=vault:fake:'));
+
+    assert.equal(plan.dryRun, true);
+    assert.equal(plan.intent, INTENT);
+    assert.equal(plan.dir, '/wt/plat-ship-it');
+    assert.equal(plan.branch, 'plat/ship-it');
+    assert.deepEqual(plan.repos.map((r) => [r.name, r.worktree, r.base]), [
+      ['plat-api', '/wt/plat-ship-it/plat-api', 'origin/main'],
+      ['plat-web', '/wt/plat-ship-it/plat-web', 'HEAD'],
+    ]);
+    assert.deepEqual(plan.context, { alias: 'vault:fake:ship-it', system: 'system:projector' });
+    assert.equal(plan.attempt, null);
+    assert.equal(plan.link, null);
+    assert.deepEqual(linksOf(root), [], 'a plan records nothing on the note');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('the plan names the workspace and the branch, and creates neither', () => {
-  const root = vaultSaying('/wt');
+test('starting work starts the attempt, hands back its link, and records the workspace once', async () => {
+  const root = workVault();
   try {
-    const ctx = workCtx(project({ repos: ['/repos/api'], branch: 'kc/{note}' }));
-    const plan = planWork(ctx, root);
-    assert.equal(plan.branch, 'kc/ship-it');
-    assert.equal(plan.workspace, '/wt/plat-wt-kc-ship-it');
-    // Nothing on disk: this is what the panel's confirm is built from, and it
-    // runs before the user has agreed to anything.
-    assert.equal(existsSync(plan.workspace), false);
+    const k = fakeKernel([row('open')], () => ({ code: 0, stdout: 'a launcher line\n' + worktreeAnswer(false), stderr: '' }));
+    const done = await startWork(root, 'ship-it', { commit: true, run: k.run });
+    assert.deepEqual(k.calls.find((c) => c.args[0] === 'worktree')!.args, ['worktree', INTENT, '--open', 'none', '--json']);
+    assert.equal(done.dryRun, false);
+    assert.equal(done.attempt, 'bbbbbbbb-0000-4000-8000-000000000002');
+    assert.match(done.link ?? '', /^claude:\/\/code\/new\?folder=/);
+    // One repo the kernel could not make is reported, not fatal.
+    assert.equal(done.repos[0]!.ok, true);
+    assert.equal(done.repos[1]!.error, 'git worktree add: locked');
+    assert.equal(done.recorded, true);
+    assert.equal(done.recordError, null);
+    assert.deepEqual(linksOf(root), ['workspace:/wt/plat-ship-it']);
+
+    // The same workspace again is the same ref: nothing appended, `updated` untouched.
+    const before = readFileSync(place(root, 'ship-it.md'), 'utf8');
+    const again = await startWork(root, 'ship-it', { commit: true, run: k.run });
+    assert.equal(again.recorded, false);
+    assert.equal(readFileSync(place(root, 'ship-it.md'), 'utf8'), before);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('the dry-run briefing shows worktree paths, not the source checkouts', () => {
-  const root = vaultSaying('/wt');
+test('a note without an open intent is refused before the kernel is asked to start anything', async () => {
+  const root = workVault();
+  const never = () => {
+    throw new Error('worktree must not be called');
+  };
   try {
-    const ctx = workCtx(project({ repos: ['/repos/api'] }));
-    const out = plannedBriefing(ctx, planWork(ctx, root));
-    // The *workspace list* is the part that must show worktrees. The checkout is
-    // the one path the briefing tells the session never to touch, so naming it
-    // there made the dry run contradict its own text — while the project-config
-    // echo further down is meant to show the declared repo, and still does.
-    const listed = out.slice(out.indexOf('## Repositories'), out.indexOf('These are git worktrees'));
-    assert.match(listed, /`api\/` → \/wt\/plat-wt-ship-it\/api/);
-    assert.ok(!listed.includes('/repos/api'), listed);
-    assert.match(out, /repo: `\/repos\/api`/);
+    const none = fakeKernel([row('open', INTENT, 'vault:fake:another')], never);
+    await assert.rejects(startWork(root, 'ship-it', { commit: false, run: none.run }), (e: Error) =>
+      e instanceof NotWorkable && /give the note a status first \(status: active\)/.test(e.message) && /pj kernel import/.test(e.message));
+
+    const met = fakeKernel([row('met')], never);
+    await assert.rejects(startWork(root, 'ship-it', { commit: false, run: met.run }), (e: Error) =>
+      e instanceof NotWorkable && /aaaaaaaa is met: only an open intent is worked/.test(e.message));
+
+    const proposed = fakeKernel([row('proposed')], never);
+    await assert.rejects(startWork(root, 'ship-it', { commit: false, run: proposed.run }), (e: Error) =>
+      e instanceof NotWorkable && /still a proposal/.test(e.message));
+
+    const unread = fakeKernel([], never);
+    const broken: Runner = async () => ({ code: 1, stdout: '', stderr: 'error: store locked' });
+    await assert.rejects(startWork(root, 'ship-it', { commit: false, run: broken }), KernelFailed);
+    await assert.rejects(startWork(root, 'nope', { commit: false, run: unread.run }), NoNote);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('the briefing points the session at the vault’s memory/AGENTS.md only when there is one', () => {
-  const root = vaultSaying('/wt');
-  try {
-    const ctx = workCtx(project({ repos: ['/repos/api'] }));
-    const file = pathJoin(paths(root).memory, 'AGENTS.md');
-    // A vault the day agent has never run in has no memory/, and a briefing that
-    // named the file anyway would send the session to read nothing.
-    assert.equal(planWork(ctx, root).memory, null);
-    assert.ok(!plannedBriefing(ctx, planWork(ctx, root)).includes('memory/AGENTS.md'));
-    mkdirSync(paths(root).memory, { recursive: true });
-    assert.equal(planWork(ctx, root).memory, null, 'an empty memory/ has nothing to read');
-
-    writeFileSync(file, '# How I work\n', 'utf8');
-    const plan = planWork(ctx, root);
-    assert.equal(plan.memory, file);
-    // Absolute, because the workspace is outside the vault.
-    const out = plannedBriefing(ctx, plan);
-    assert.ok(out.includes(`\`${file}\``), out);
-    // Read before the note's sources, which is what it says how to read.
-    assert.ok(out.indexOf(file) < out.indexOf('# Ship it'), out);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+test('a vault whose kernel block is off cannot start work, and says why', async () => {
+  for (const kernel of [null, 'kernel:\n  enabled: false\n  bin: /fake/kernel\n']) {
+    const root = workVault(kernel);
+    try {
+      const k = fakeKernel([row('open')], () => ({ code: 0, stdout: worktreeAnswer(true), stderr: '' }));
+      await assert.rejects(startWork(root, 'ship-it', { commit: false, run: k.run }), (e: Error) =>
+        e instanceof NotWorkable && /kernel block is off/.test(e.message));
+      assert.equal(k.calls.length, 0, 'nothing is asked of a kernel the vault did not turn on');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 
-test('every repo failing is a refusal, so no briefing is written and nothing opens', () => {
-  const root = vaultSaying('/wt');
-  const parent = mkdtempSync(pathJoin(tmpdir(), 'projector-wt-'));
+test('the kernel’s refusal comes back in its own words, and nothing is recorded', async () => {
+  const root = workVault();
   try {
-    const ctx = workCtx(project({ repos: ['/definitely/not/here'] }));
-    const plan = { ...planWork(ctx, root), workspace: pathJoin(parent, 'plat-wt-x') };
-    assert.throws(
-      () => startWork(ctx, plan, root),
-      (err: unknown) => err instanceof NotWorkable && /no worktree could be created/.test((err as Error).message),
-    );
-    // One repo failing does not stop the others; all of them failing leaves
-    // nothing to work in, so the briefing is the thing that must not exist.
-    assert.equal(existsSync(pathJoin(plan.workspace, 'AGENT_BRIEFING.md')), false);
+    const k = fakeKernel([row('open')], () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'error: no worktree: no repositories: give --repo <path>; system:projector named none for vault:fake:ship-it {:worktree :refused}\n',
+    }));
+    await assert.rejects(startWork(root, 'ship-it', { commit: true, run: k.run }), (e: Error) =>
+      e instanceof NotWorkable &&
+      e.message === 'kernel worktree: no worktree: no repositories: give --repo <path>; system:projector named none for vault:fake:ship-it');
+    assert.deepEqual(linksOf(root), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
-    rmSync(parent, { recursive: true, force: true });
   }
 });
 
@@ -299,8 +297,8 @@ test('every repo failing is a refusal, so no briefing is written and nothing ope
 // The mechanism that replaced `pj link --session` in the briefing. A session used
 // to reach a note only by registering itself at the end of its work, so a note
 // showed nothing while the work was happening and nothing at all if the agent
-// never got that far. `pj work` records the workspace instead, once, and every
-// session that ever runs there is read back off the directory (C8, C11).
+// never got that far. Starting work records the workspace instead, once, and
+// every session that ever runs there is read back off the directory (C8, C11).
 
 /** A `~/.claude` with the sessions and transcripts a test wants in it. */
 function claudeHomeWith(
@@ -337,8 +335,7 @@ function withClaudeHome<T>(home: string, fn: () => T): T {
   const before = process.env.PROJECTOR_CLAUDE_HOME;
   const desktop = process.env.PROJECTOR_CLAUDE_DESKTOP;
   process.env.PROJECTOR_CLAUDE_HOME = home;
-  // No desktop store, so nothing has a chat: `openingFor` lands on `running`
-  // unless a test says otherwise, which is the interesting half anyway.
+  // No desktop store, so nothing has a chat.
   process.env.PROJECTOR_CLAUDE_DESKTOP = pathJoin(home, 'no-desktop');
   try {
     return fn();
@@ -382,77 +379,6 @@ test('a slug collision is settled by the cwd the transcript recorded', () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
-
-test('a workspace with a live session is reopened, not doubled — unless asked', () => {
-  const home = claudeHomeWith([{ uuid: 'cccccccc-0000-4000-8000-000000000001', cwd: '/wt/plat-wt-ship-it' }]);
-  try {
-    withClaudeHome(home, () => {
-      // Live, but no desktop chat to point at: nothing is opened, and saying so
-      // is the answer. Opening a second session beside it is the bug.
-      const busy = openingFor('/wt/plat-wt-ship-it');
-      assert.equal(busy.how, 'running');
-      assert.ok(!('link' in busy));
-
-      // `--new` is how you ask for the second one.
-      assert.equal(openingFor('/wt/plat-wt-ship-it', true).how, 'new');
-      // A workspace nobody is in starts one, which is what it always did.
-      assert.equal(openingFor('/wt/plat-wt-nobody').how, 'new');
-    });
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test('a finished session in the workspace is history, not something to reopen', () => {
-  const home = claudeHomeWith([
-    { uuid: 'dddddddd-0000-4000-8000-000000000001', cwd: '/wt/plat-wt-ship-it', alive: false },
-  ]);
-  try {
-    withClaudeHome(home, () => {
-      // It still shows on the note — `sessionsUnder` returns it — but `pj work`
-      // starts a new one rather than resuming work somebody finished.
-      assert.equal(sessionsUnder('/wt/plat-wt-ship-it').length, 1);
-      assert.equal(openingFor('/wt/plat-wt-ship-it').how, 'new');
-    });
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test('starting work records the workspace on the note, once', () => {
-  const parent = mkdtempSync(pathJoin(tmpdir(), 'projector-wt-'));
-  const repo = mkdtempSync(pathJoin(tmpdir(), 'projector-repo-'));
-  const home = claudeHomeWith([]);
-  const root = vaultSaying(parent);
-  const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
-  try {
-    git('init', '-b', 'main');
-    git('config', 'user.email', 'a@b.c');
-    git('config', 'user.name', 'A');
-    writeFileSync(pathJoin(repo, 'f.txt'), 'x\n', 'utf8');
-    git('add', '.');
-    git('commit', '-m', 'first');
-
-    writeFileSync(place(root, 'ship-it.md'), '---\ntitle: Ship it\n---\n\nbody\n', 'utf8');
-    const ctx = workCtx(project({ repos: [repo] }));
-    const plan = planWork(ctx, root);
-
-    const first = withClaudeHome(home, () => startWork(ctx, plan, root));
-    assert.equal(first.recorded, true);
-    assert.equal(first.recordError, null);
-    const links = () => readAll(paths(root).notes).notes.get('ship-it')!.links.map((l) => l.raw);
-    assert.deepEqual(links(), [`workspace:${plan.workspace}`]);
-
-    // Reopening is the same act, so it must not append a second copy — nor bump
-    // `updated` on a note nothing changed about.
-    const again = withClaudeHome(home, () => startWork(ctx, plan, root));
-    assert.equal(again.recorded, false);
-    assert.deepEqual(links(), [`workspace:${plan.workspace}`]);
-  } finally {
-    for (const d of [parent, repo, home, root]) rmSync(d, { recursive: true, force: true });
-  }
-});
-
 
 
 // ---------------------------------------------------------------- history

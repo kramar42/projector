@@ -1,6 +1,6 @@
 ---
 name: projector
-description: Use the user's projector vault from a bb thread — their notes, projects, priorities and own thinking about work. Use when a question touches what they are working on, what is actionable, a note or project, or when the thread is attached to a note; also to attach a thread to a note or start work on a note in a fresh thread.
+description: Use the user's projector vault from a bb thread — their notes, projects, priorities and own thinking about work. Use when a question touches what they are working on, what is actionable, a note or project, or when the thread is attached to a note; also to attach a thread to a note.
 ---
 
 # Projector from bb
@@ -27,11 +27,8 @@ thread with a `bb:thr_…` link that projector resolves by asking bb.
   vault write, so only when the user asked for it.
 - `bb pj detach [--record]` — undo that (`--record` also removes the note's link).
 - `bb pj threads <note-id>` — the bb threads attached to a note.
-- `bb pj work <note-id>` — runs `pj work` (worktrees + AGENT_BRIEFING.md + `workspace:` link on the
-  note), registers the workspace as a bb project, starts an attached thread there and records
-  `bb:<thread>` on the note. It creates
-  worktrees and writes the vault: run it only when the user asked to start work on that note.
-  `--dry-run` shows the plan and changes nothing.
+- Starting work on a note is not this plugin's: it is the owner's kernel, `bin/kernel worktree
+  <intent>` for the note's open intent (projector's `pj-work` skill says how to find it).
 
 ## Rules
 

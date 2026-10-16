@@ -147,7 +147,7 @@ export async function probe(root: string): Promise<Report> {
       ? { status: 'ready' as Status, detail: s.workspaces }
       : {
           status: 'unconfigured' as Status,
-          detail: '`pj work` has nowhere to put worktrees',
+          detail: '`pj did` does not count the work in the kernel’s worktrees',
           fix: `put \`workspaces: ~/Code/wt\` in ${CONFIG_FILE}`,
         }),
   });

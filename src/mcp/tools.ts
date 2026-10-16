@@ -21,7 +21,6 @@ import { renderListing, resolveListing, type Overrides } from '../view/listing.t
 import { specToParams } from '../view/spec.ts';
 import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
-import { shellQuote } from '../agent/worktree.ts';
 import { parseDay } from '../did/day.ts';
 import { DID_SOURCES, did, renderDid } from '../did/run.ts';
 import { CHANNELS } from '../intake/connectors.ts';
@@ -391,6 +390,9 @@ const proposeInput = z.object({
 });
 
 type Proposal = z.infer<typeof proposalInput>;
+
+/** Single-quote for the shell, the POSIX way. */
+const shellQuote = (text: string) => `'${text.replace(/'/g, `'\\''`)}'`;
 
 /** Quote only what a shell would split or expand, so the common case reads plainly. */
 const arg = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : shellQuote(s));
