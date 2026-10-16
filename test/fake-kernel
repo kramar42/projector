@@ -32,6 +32,19 @@ case "$1" in
       echo "error: no saved query $ref: orient lists them under schema.queries as <system>/<name> {}" >&2
       exit 1
     fi
+    if [ "$name" = "intake-newest" ] && [ -n "$FAKE_KERNEL_BATCHES" ] && [ ! -f "$FAKE_KERNEL_QUERIES/intake-newest.json" ]; then
+      # A batch is one JSON line, and an event's key, kind and at come in that
+      # order: the newest at of each intake/ kind, as the kernel's (max ?at).
+      rows=""
+      if [ -f "$FAKE_KERNEL_BATCHES" ]; then
+        rows=$(grep -o '"kind":"intake/[a-z]*","at":"[^"]*"' "$FAKE_KERNEL_BATCHES" |
+          sed 's/"kind":"\(intake\/[a-z]*\)","at":"\([^"]*\)"/\1 \2/' |
+          sort -k1,1 -k2,2r |
+          awk '!seen[$1]++ { printf "%s[\":%s\", \"%s\"]", (n++ ? ", " : ""), $1, $2 }')
+      fi
+      echo "{\"columns\": [\"kind\", \"(max ?at)\"], \"rows\": [$rows], \"query\": \"$ref\"}"
+      exit 0
+    fi
     cat "$fixture"
     ;;
   observe)

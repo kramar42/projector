@@ -4,58 +4,47 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { DatabaseSync } from 'node:sqlite';
 import { reindex } from '../src/index/indexer.ts';
-import { closeIntakeDb, commitWatermark, openIntakeDb, recordPending, rescues, resetWatermark, suppress, suppressedFingerprints, suppressions, unsuppress, watermarkFor, watermarks } from '../src/intake/db.ts';
+import { closeIntakeDb, openIntakeDb, rescues, suppress, suppressedFingerprints, suppressions, unsuppress } from '../src/intake/db.ts';
 import { evidenceFor, ftsOverlapQuery, matchBranch, matchCwd, repoIndex } from '../src/intake/match.ts';
 import { fromWorkspacePath, workspacePath } from '../src/agent/workspaceName.ts';
-import { CHANNELS, advance, candidateCount, channelNames, renderSweep, renderStatus, statusOf, sweep } from '../src/intake/run.ts';
+import { CHANNELS, channelNames, mapEvents, pending, placeOf, readVault, renderPreview, startOf } from '../src/intake/run.ts';
 import { materialise, SOURCE_EXCERPT } from '../src/intake/materialise.ts';
 import { rejudge } from '../src/intake/rejudge.ts';
-import { candidateFor, linkFor } from '../src/intake/mcp.ts';
 import {
   conversationsFrom,
-  costFromEnvelope,
-  heardUpTo,
   knownFor,
-  parseGmailRelay,
-  parseSlackRelay,
-  relayInstructions,
-  renderCost,
-  scrubSecrets,
-  searchToolIn,
-  sinceHeard,
-  slackBoundary,
+  linkFor,
   slackPermalinkParts,
   trackedBy,
-  transcribedAll,
   transcript as exchangeOf,
   withPermalinks,
-} from '../src/intake/relay.ts';
-import { markSeen, seenState } from '../src/intake/db.ts';
-import { claudeChannel, placeOf } from '../src/intake/claude.ts';
-import { jiraChannel } from '../src/intake/jira.ts';
-import { gogSearchArgs, parseGogSearch } from '../src/intake/gmail.ts';
+  type Message,
+} from '../src/intake/conversation.ts';
+import { costFromEnvelope, renderCost } from '../src/intake/cost.ts';
+import { eventId } from '../src/kernel/query.ts';
 import { parseLink } from '../src/schema/links.ts';
 import { deleteNote, discard } from '../src/server/mutate.ts';
-import { channelLine, firstTickIn, lastTick, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
+import { channelLine, isBehind, pollAtStartup, pollOnce, startPolling, stopPolling, withinHours } from '../src/server/poll.ts';
 import { logTo } from '../src/server/log.ts';
 import { classify, ollamaAsk, type Ask, type Verdict } from '../src/intake/classify.ts';
 import { settingsFor, settingsPath } from '../src/settings.ts';
-import { touchedButIdle } from '../src/intake/claude.ts';
 import { listTranscripts, pickSession, describeTranscript, type LiveSession } from '../src/sources/claude.ts';
 import { jqlDate } from '../src/sources/jira.ts';
 import { lastTurn, sessionState, type Turn } from '../src/sources/claude.ts';
-import type { Candidate, Channel, ChannelReport, IntakeContext } from '../src/intake/types.ts';
+import type { ConnectorEvent } from '../src/intake/connectors.ts';
+import type { Candidate, IntakeContext } from '../src/intake/types.ts';
 import { paths } from '../src/config.ts';
 import { BUILTIN_FACETS, loadFacets } from '../src/schema/facets.ts';
-import { place } from './fixture.ts';
+import { againstFake, asConnectorEvent, connectorAnswer as connectorAnswerOf, FAKE_KERNEL, place, type FixtureEvent } from './fixture.ts';
 
 /**
- * Intake is the one part of projector holding state that is not derived from the
- * note files, so most of what is worth testing here is the discipline around
- * that: the cursor may not skip anything, and it may not be the thing
- * correctness depends on.
+ * Intake triages what the kernel's connectors gathered. What is worth testing
+ * here is everything between the connector event and the card: what is decided
+ * mechanically and what is left to the judge, the evidence beside it, the
+ * judgment's contract, the write, and the declines that make it converge. The
+ * kernel's half — the cursor read back, the attempt recorded — is
+ * `kernel.test.ts`.
  */
 
 function vault(cards: Record<string, string>): string {
@@ -71,153 +60,54 @@ function vault(cards: Record<string, string>): string {
 }
 
 function context(root: string, over: Partial<IntakeContext> = {}): IntakeContext {
-  const { db, notes } = reindex(root);
-  const fingerprints = new Map<string, string[]>();
-  const links = new Map<string, string[]>();
-  for (const rec of notes.values()) {
-    if (rec.source_fingerprint) fingerprints.set(rec.source_fingerprint, [rec.id]);
-    for (const l of rec.links) links.set(l.raw, [...(links.get(l.raw) ?? []), rec.id]);
-  }
-  return {
-    root,
-    db,
-    notes,
-    fingerprints,
-    links,
-    suppressed: new Set<string>(),
-    since: new Date(0),
-    cursor: null,
-    limit: 25,
-    ...over,
-  };
+  return { ...readVault(root), ...over };
 }
+
+/** A connector event as the kernel holds it, its id derived from its key. */
+const ev = (key: string, kind: string, at: string, about: string[], payload: Record<string, unknown>): ConnectorEvent =>
+  asConnectorEvent({ key, kind, at, about, payload });
+
+/** A vault with the kernel block on, pointed at `test/fake-kernel`. */
+const kernelOn = (extra = '') => `kernel:\n  enabled: true\n  bin: ${FAKE_KERNEL}\n${extra}`;
+
+/** A fixture event an hour old, inside every channel's window. */
+const recent = (minutes = 60) => new Date(Date.now() - minutes * 60_000).toISOString();
+const gitEvent = (repo: string, sha: string, subject: string, branch = 'feature/x', at = recent()): FixtureEvent => ({
+  key: `git:${repo}:${sha}`,
+  kind: 'git/commit',
+  at,
+  about: [`repo:${repo}`],
+  payload: { sha, subject, files: [], insertions: 1, deletions: 0, branch },
+});
 
 const card = (id: string, extra = '') => `---\nid: ${id}\ntitle: ${id}\n${extra}---\n\nbody\n`;
 
 // ------------------------------------------------------------------ watermarks
 
-test('a channel with no watermark reports none rather than inventing one', () => {
-  const root = vault({ a: card('a') });
-  try {
-    assert.equal(watermarkFor(root, 'claude'), null);
-    assert.deepEqual(watermarks(root), []);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a commit with no cursor leaves the old one where it was', () => {
-  const root = vault({ a: card('a') });
-  try {
-    commitWatermark(root, 'slack', '1755700000.1');
-    // A run that fetched nothing has no new boundary to note. Overwriting with
-    // null would reopen the whole window on the next sweep.
-    commitWatermark(root, 'slack', null, { seen: 4 });
-    const w = watermarkFor(root, 'slack');
-    assert.equal(w?.cursor, '1755700000.1');
-    assert.equal(w?.seen, 4);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a cursor is opaque: a Slack ts survives the round trip unparsed', () => {
-  const root = vault({ a: card('a') });
-  try {
-    commitWatermark(root, 'slack', '1755700000.123456');
-    assert.equal(watermarkFor(root, 'slack')?.cursor, '1755700000.123456');
-    commitWatermark(root, 'gmail', '2026-08-01T00:00:00.000Z');
-    assert.equal(watermarkFor(root, 'gmail')?.cursor, '2026-08-01T00:00:00.000Z');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('resetting a cursor falls back to the default window, not to the beginning of time', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    commitWatermark(root, 'claude', new Date().toISOString());
-    assert.equal(resetWatermark(root, 'claude'), 1);
-    assert.equal(watermarkFor(root, 'claude'), null);
-    // The fallback is a window, so losing the file is a wider sweep and never a
-    // sweep of everything that has ever happened.
-    const s = await sweep(root, { only: ['claude'], limit: 1 });
-    assert.equal(s.reports[0]?.cursor, null);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 // ------------------------------------------------------------------ the sweep
 
-test('a sweep writes no notes and moves no cursor', async () => {
+test('an unknown channel is named rather than silently read away', async () => {
   const root = vault({ a: card('a') });
+  writeFileSync(settingsPath(root), kernelOn(), 'utf8');
   try {
-    const before = reindex(root).notes.size;
-    await sweep(root, { only: ['claude', 'git'], limit: 3 });
-    assert.equal(reindex(root).notes.size, before);
-
-    // Proposing is not resolving. A sweep now *notes* where it would go, so the
-    // rows exist — but every cursor is still unset, and only `pj intake advance`
-    // promotes a proposal. Asserting the table is empty would be asserting the
-    // storage rather than the invariant.
-    const after = watermarks(root);
-    assert.deepEqual(after.map((w) => w.channel).sort(), ['claude', 'git']);
-    for (const w of after) {
-      assert.equal(w.cursor, null, `${w.channel}: a sweep must not move the cursor`);
-      assert.ok(w.pending, `${w.channel}: a sweep notes what it would advance to`);
-    }
+    const p = await pending(root, { only: ['sms'] });
+    assert.deepEqual(p.unknown, ['sms']);
+    assert.ok(p.ok && p.reports.length === 0);
+    assert.match(renderPreview(p), /unknown channel/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('a truncated run holds its cursor, so nothing behind it is skipped', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    // The claude channel reads the real ~/.claude, which on any developer
-    // machine has more than one transcript; a limit of one truncates it.
-    const s = await sweep(root, { only: ['claude'], limit: 1, since: new Date(0) });
-    const r = s.reports[0]!;
-    if (r.truncated) assert.equal(r.nextCursor, null, 'a truncated report must not advance the cursor');
-    else assert.ok(r.nextCursor === null || typeof r.nextCursor === 'string');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a channel with no tools named is not fetched, and still reports its cursor', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    commitWatermark(root, 'slack', '1755700000.1');
-    const s = await sweep(root, { only: ['slack', 'gmail'] });
-    const slack = s.reports.find((r) => r.channel === 'slack')!;
-    // The default, and the safe one: Slack and Gmail are the shared channels C2
-    // names, so a vault that has not named the tools gets no agent at all.
-    assert.equal(slack.fetched, false);
-    assert.equal(slack.cursor, '1755700000.1');
-    assert.match(slack.reason ?? '', /mcp\.slack/);
-    // Not fetching is not an error, and it never advances anything.
-    assert.equal(slack.nextCursor, null);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('an unknown channel is named rather than silently swept away', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    const s = await sweep(root, { only: ['sms'] });
-    assert.deepEqual(s.unknown, ['sms']);
-    assert.equal(s.reports.length, 0);
-    assert.match(renderSweep(s), /unknown channel/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('every channel in the registry is named in channelNames', () => {
+test('every channel in the registry is named in channelNames, with the connector that gathers it', () => {
   assert.deepEqual(channelNames(), ['claude', 'git', 'jira', 'slack', 'gmail']);
+  assert.deepEqual(CHANNELS.map((c) => [c.name, c.connector, c.kinds]), [
+    ['claude', 'claude-code', ['claude/session']],
+    ['git', 'git', ['git/commit']],
+    ['jira', 'jira', ['jira/issue', 'jira/transition']],
+    ['slack', 'slack', ['slack/message']],
+    ['gmail', 'gmail', ['gmail/message']],
+  ]);
 });
 
 // ------------------------------------------------------------------- dedup
@@ -230,9 +120,9 @@ test('a fingerprint already on a note is what makes a re-sweep converge', () => 
     const ctx = context(root);
     const ev = evidenceFor(ctx, { fingerprint: 'claude:abc-123' });
     assert.deepEqual(ev.capturedAs, ['known']);
-    // And the same holds with no watermark at all, which is the property that
-    // makes losing .intake.db safe rather than merely inconvenient.
-    assert.deepEqual(context(root, { cursor: null }).fingerprints.get('claude:abc-123'), ['known']);
+    // And it holds with nothing of intake's own on disk, which is the property
+    // that makes losing .intake.db safe rather than merely inconvenient.
+    assert.deepEqual(context(root).fingerprints.get('claude:abc-123'), ['known']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -362,19 +252,6 @@ test('a branch named after a note matches it, at any path segment', () => {
 
 // ------------------------------------------------------- mtime is not activity
 
-test('a transcript whose file was touched but had no activity is not new work', () => {
-  const since = new Date('2026-08-14T00:00:00Z');
-  // Found by mtime, rejected by the transcript: something rewrote a batch of
-  // month-old transcripts in three seconds, and 13 of 30 candidates in the
-  // first real sweep were finished sessions resurfacing.
-  assert.equal(touchedButIdle('2026-08-04T13:50:00Z', since), true);
-  assert.equal(touchedButIdle('2026-08-19T10:32:00Z', since), false);
-  // No timestamp in the file at all: mtime is the only evidence there is, so it
-  // stands rather than being second-guessed.
-  assert.equal(touchedButIdle(undefined, since), false);
-  assert.equal(touchedButIdle('not a date', since), false);
-});
-
 // ------------------------------------------------------------------ FTS safety
 
 test('an opening prompt full of FTS operators produces a query, not a syntax error', () => {
@@ -402,18 +279,6 @@ test('a JQL date is local, because Jira reads it in the account timezone', () =>
 });
 
 // ------------------------------------------------------------------ rendering
-
-test('a sweep says out loud that it captured nothing', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    const s = await sweep(root, { only: ['slack'] });
-    const out = renderSweep(s);
-    assert.match(out, /nothing is filed and no cursor has moved/);
-    assert.equal(candidateCount(s), 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 /**
  * A session's state is read from the tail of its transcript, because the thing
@@ -487,151 +352,7 @@ test('a process without a turn to work on is waiting, and none at all is closed'
   assert.equal(state(true, { waitingOn: 'model', at: stale }), 'stalled');
 });
 
-/**
- * `pj intake status --json` used to be accepted and ignored, so the sweep's caller read
- * the cursor it fetches Slack and Gmail from out of a padded table. The renderer
- * reads this now, which is what keeps the two from disagreeing.
- */
-test('every channel reports a status, and the text is rendered from it', () => {
-  const root = vault({});
-  try {
-    const rows = statusOf(root);
-    assert.deepEqual(
-      rows.map((r) => r.channel).sort(),
-      channelNames().slice().sort(),
-      'a channel missing from status is a channel whose cursor cannot be read',
-    );
-    for (const r of rows) {
-      assert.equal(r.cursor, null, 'a fresh vault has committed no cursor');
-      assert.equal(r.ranAt, null);
-      assert.ok(r.defaultDays > 0, 'a channel with no cursor falls back to a window');
-    }
-
-    commitWatermark(root, 'git', 'abc123', { seen: 4, captured: 1 });
-    const after = statusOf(root).find((r) => r.channel === 'git')!;
-    assert.equal(after.cursor, 'abc123');
-    assert.equal(after.seen, 4);
-    assert.equal(after.captured, 1);
-    assert.ok(after.ranAt, 'a committed channel notes when it ran');
-
-    // The table is a view of the same rows, not a second query.
-    const text = renderStatus(root);
-    for (const r of statusOf(root)) assert.match(text, new RegExp(r.channel));
-    assert.match(text, /abc123/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-/**
- * A preview is not a run.
- *
- * `pj intake --dry-run` records where it would move each cursor, so `advance` can
- * promote it — but on a channel with no row yet that record used to be inserted
- * with `ran_at` stamped now. `pj intake status` then read "last run: just now" for
- * a channel nothing had fetched for, and `lastTick` — what the server's first tick
- * and pj-day's freshness rule both read — called a vault fresh that had never
- * ticked.
- */
-test('recording a preview leaves a channel never run, and no tick on the vault', () => {
-  const root = vault({});
-  try {
-    recordPending(root, 'git', '2026-10-01T00:00:00.000Z', 2);
-    assert.equal(statusOf(root).find((s) => s.channel === 'git')!.ranAt, null, 'a preview is not a run');
-    assert.match(renderStatus(root), /^git\s.*\snever\s/m);
-    assert.equal(lastTick(root), null, 'and the vault has still never ticked');
-    assert.equal(watermarkFor(root, 'git')!.pending?.cursor, '2026-10-01T00:00:00.000Z', 'but the proposal is kept');
-
-    advance(root, { channel: 'git' });
-    assert.ok(statusOf(root).find((s) => s.channel === 'git')!.ranAt, 'promoting it is the run');
-    assert.ok(lastTick(root));
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-/**
- * The sweep notes where it would go; `advance` promotes it.
- *
- * Resolving a sweep used to mean copying an opaque cursor — a Slack `ts`, a Gmail
- * date — out of one process and typing it into the next, once per channel, with
- * the counts retyped alongside. Both were `pj`'s own numbers. `captured` is the
- * exception, because capture happens between the two calls.
- */
-test('a recorded sweep is promoted once, and only once', () => {
-  const root = vault({});
-  try {
-    recordPending(root, 'slack', '1787229273.986369', 7);
-    recordPending(root, 'git', null, 3);
-
-    // Recorded is not advanced: nothing reads a pending value until it is promoted.
-    const before = watermarkFor(root, 'slack')!;
-    assert.equal(before.cursor, null, 'recording a proposal must not move the cursor');
-    assert.equal(before.pending?.cursor, '1787229273.986369');
-    assert.equal(before.pending?.seen, 7);
-
-    const first = advance(root, { captured: 2 });
-    assert.deepEqual(first.moved.map((m) => m.channel).sort(), ['git', 'slack']);
-    assert.deepEqual(first.withoutPending.sort(), ['claude', 'gmail', 'jira']);
-
-    const slack = watermarkFor(root, 'slack')!;
-    assert.equal(slack.cursor, '1787229273.986369', 'the proposed cursor is now the cursor');
-    assert.equal(slack.seen, 7, 'seen comes from the sweep, not from the caller');
-    assert.equal(slack.captured, 2, 'captured is the one number the caller supplies');
-    assert.equal(slack.pending, undefined, 'a promoted proposal is spent');
-
-    // A null proposal means hold: a truncated run has items behind its cursor.
-    assert.equal(watermarkFor(root, 'git')!.cursor, null);
-
-    // Promoting twice must not re-commit a cursor that has already moved.
-    const second = advance(root);
-    assert.deepEqual(second.moved, []);
-    assert.equal(watermarkFor(root, 'slack')!.captured, 2, 'the spent proposal left the counts alone');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 /** A store written before the pending columns existed gains them, keeping its cursors. */
-test('the watermark store migrates in place rather than being replaced', () => {
-  const root = vault({});
-  try {
-    commitWatermark(root, 'jira', '2026-08-18T13:32:49.967+0000', { seen: 1 });
-    const file = paths(root).intakeDb;
-    const raw = new DatabaseSync(file);
-    const before = raw
-      .prepare('SELECT channel, cursor, ran_at, seen, captured FROM watermark')
-      .all() as { channel: string; cursor: string; ran_at: string; seen: number; captured: number }[];
-    // The old shape is written out, not derived by dropping the pending columns.
-    // `DROP COLUMN` rewrites the stored schema text, and before SQLite 3.53 the
-    // `--` comment above the last column swallowed the closing paren — so that
-    // spelling passed on Node's SQLite and failed on Bun's. This one also states
-    // the pre-migration schema instead of approximating it.
-    raw.exec('DROP TABLE watermark');
-    raw.exec(`CREATE TABLE watermark (
-      channel   TEXT PRIMARY KEY,
-      cursor    TEXT,
-      ran_at    TEXT NOT NULL,
-      seen      INTEGER NOT NULL DEFAULT 0,
-      captured  INTEGER NOT NULL DEFAULT 0
-    )`);
-    const ins = raw.prepare(
-      'INSERT INTO watermark (channel, cursor, ran_at, seen, captured) VALUES (?, ?, ?, ?, ?)',
-    );
-    for (const r of before) ins.run(r.channel, r.cursor, r.ran_at, r.seen, r.captured);
-    raw.close();
-    closeIntakeDb(root);
-
-    // Reopening runs the migration; the cursor that was already there survives it.
-    assert.equal(watermarkFor(root, 'jira')!.cursor, '2026-08-18T13:32:49.967+0000');
-    recordPending(root, 'jira', 'newer', 4);
-    assert.equal(watermarkFor(root, 'jira')!.pending?.cursor, 'newer');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 /**
  * The seam that was worked around instead of taken.
  *
@@ -777,51 +498,6 @@ test('the asking process excludes itself', () => {
  * the table safe to rely on and safe to lose.
  */
 
-test('a declined candidate survives the cursor moving past it', () => {
-  const root = vault({ a: card('a') });
-  try {
-    suppress(root, { fingerprint: 'git:abc', reason: 'my own commit', channel: 'git' });
-    commitWatermark(root, 'git', '2026-01-01T00:00:00.000Z');
-
-    // The cursor has moved past it and the note was never written, and the
-    // rejection is still readable — which is the whole point.
-    const rows = suppressions(root).rows;
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.fingerprint, 'git:abc');
-    assert.equal(rows[0]!.reason, 'my own commit');
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a suppressed candidate is declined by the sweep, not silently dropped', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    const first = await sweep(root, { only: ['claude', 'git'], limit: 3 });
-    const seen = first.reports.flatMap((r) => r.candidates);
-    // The fixture vault may legitimately produce nothing to propose; the
-    // invariant only has teeth when there is a candidate to suppress.
-    if (!seen.length) return;
-
-    const victim = seen[0]!;
-    suppress(root, { fingerprint: victim.fingerprint, reason: 'noise', channel: victim.channel });
-
-    const second = await sweep(root, { only: ['claude', 'git'], limit: 3 });
-    const proposed = second.reports.flatMap((r) => r.candidates.map((c) => c.fingerprint));
-    assert.ok(!proposed.includes(victim.fingerprint), 'a suppressed candidate is not re-proposed');
-
-    // It moves to `skipped` rather than vanishing: a run that quietly dropped
-    // what it fetched would read as a quiet channel, and that reading must not
-    // be available.
-    const declined = second.reports.flatMap((r) => r.skipped.map((s) => s.fingerprint));
-    assert.ok(declined.includes(victim.fingerprint), 'and it is named as declined');
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('suppressing again replaces the reason rather than failing', () => {
   const root = vault({ a: card('a') });
   try {
@@ -899,30 +575,6 @@ test('the intake axis is built in, so a vault cannot strand the sweep', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-/**
- * Polling: the same sweep with nobody standing there to answer it.
- *
- * The difference is not the fetching, which is identical — it is that a
- * materialising run writes each candidate down, and therefore earns the right to
- * move a cursor that a proposing run does not have.
- */
-
-/**
- * A classifier that keeps everything, for the tests that are about something else.
- *
- * The real one shells out to a model, which a test must never do — so every
- * `pollOnce` here passes a transport, and the ones asserting judgement pass one
- * that judges.
- */
-const keepAll: Ask = async (_system, user) =>
-  JSON.stringify(
-    (JSON.parse(user) as { fp: string }[]).map((c) => ({
-      fp: c.fp,
-      decision: 'keep',
-      reason: 'kept',
-    })),
-  );
 
 /**
  * Candidates paired with a bare "keep" verdict — for the materialise tests, whose
@@ -1057,11 +709,13 @@ test('a suppressed candidate never reaches materialisation', async () => {
   }
 });
 
-test('polling is off unless the vault asks for it', () => {
+test('polling is off unless the vault asks for it, and has a kernel to read', () => {
   const root = vault({ a: card('a') });
   try {
     assert.equal(startPolling(root), false, 'a vault with no config is not polled');
     writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: 120\n', 'utf8');
+    assert.equal(startPolling(root), false, 'nor is one whose kernel block is off: a pass would have nothing to read');
+    writeFileSync(settingsPath(root), `poll:\n  enabled: true\n  every: 120\nkernel:\n  enabled: true\n  bin: ${join(tmpdir(), 'no-such-kernel')}\n`, 'utf8');
     assert.equal(startPolling(root), true);
     assert.equal(startPolling(root), true, 'and starting twice does not double the rate');
   } finally {
@@ -1071,84 +725,28 @@ test('polling is off unless the vault asks for it', () => {
   }
 });
 
-test('the first tick waits out whatever is left of the interval since the last one', () => {
-  const now = Date.parse('2026-10-14T12:00:00.000Z');
-  assert.equal(firstTickIn(null, 900, now), 0, 'a vault never swept is due now');
-  assert.equal(firstTickIn('2026-10-14T11:00:00.000Z', 900, now), 0, 'an hour ago is overdue');
-  assert.equal(firstTickIn('2026-10-14T11:55:00.000Z', 900, now), 10 * 60_000, 'five minutes ago leaves ten');
-  assert.equal(firstTickIn('2026-10-14T13:00:00.000Z', 900, now), 900_000, 'a clock that ran ahead waits one interval, no more');
-  assert.equal(firstTickIn('not a date', 900, now), 0, 'an unreadable stamp is no evidence of a recent tick');
-
-  // The newest channel is the one that counts: a channel that has been
-  // unreachable for a week does not make a tick that ran a minute ago stale.
-  const root = vault({ a: card('a') });
-  try {
-    assert.equal(lastTick(root), null);
-    commitWatermark(root, 'git', 'abc');
-    commitWatermark(root, 'jira', '2026-10-01T00:00:00.000Z');
-    openIntakeDb(root).prepare(`UPDATE watermark SET ran_at = ? WHERE channel = 'jira'`).run('2026-10-07T00:00:00.000Z');
-    assert.equal(lastTick(root), watermarkFor(root, 'git')!.ranAt);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a restart does not repeat a tick the interval has not come round for', async () => {
-  // `bun --watch` restarts the server on every save. A tick on every start would
-  // be a full sweep — minutes and real money — per save.
-  const root = vault({ a: card('a') });
-  let collected = 0;
-  const fake: Channel = {
-    name: 'fakeR',
-    defaultDays: 1,
-    collect: (ctx) => {
-      collected++;
-      return { channel: 'fakeR', cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [] };
-    },
-  };
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeR]\nclassify:\n  enabled: false\n', 'utf8');
-  try {
-    commitWatermark(root, 'fakeR', 'x');
-    assert.equal(startPolling(root), true, 'the loop is running');
-    await new Promise((r) => setTimeout(r, 50));
-    assert.equal(collected, 0, 'but the tick that just ran is not run again');
-    stopPolling(root);
-
-    // Stale, it ticks straight away, as it always has.
-    openIntakeDb(root).prepare(`UPDATE watermark SET ran_at = ?`).run('2026-01-01T00:00:00.000Z');
-    assert.equal(startPolling(root), true);
-    await new Promise((r) => setTimeout(r, 50));
-    assert.equal(collected, 1, 'a stale vault is swept on start');
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('the server starts every vault that asked to be polled, and says so for each', () => {
   const on = vault({ a: card('a') });
   const off = vault({ a: card('a') });
-  writeFileSync(settingsPath(on), 'poll:\n  enabled: true\n  every: 120\n  hours: [8, 20]\nchannels: [git]\n', 'utf8');
-  commitWatermark(on, 'git', 'abc');
+  const bare = vault({ a: card('a') });
+  writeFileSync(settingsPath(on), `poll:\n  enabled: true\n  every: 120\n  hours: [8, 20]\nchannels: [git]\nkernel:\n  enabled: true\n  bin: ${join(tmpdir(), 'no-such-kernel')}\n`, 'utf8');
+  writeFileSync(settingsPath(bare), 'poll:\n  enabled: true\n', 'utf8');
   const lines: string[] = [];
   logTo((l) => lines.push(l));
   try {
-    pollAtStartup([on, off]);
+    pollAtStartup([on, off, bare]);
     const said = (root: string) => lines.filter((l) => l.includes(` ${basename(root)} `));
     assert.equal(said(on).length, 1, 'one line for the polled vault');
-    assert.match(said(on)[0]!, /polling every 120s, 8–20 local time — next tick in 2m \(last ran just now\)/);
+    assert.match(said(on)[0]!, /polling every 120s, 8–20 local time — triaging what the kernel’s connectors gathered; next tick now/);
     assert.equal(said(off).length, 1, 'and one for the vault that did not ask');
     assert.match(said(off)[0]!, /not polling — poll\.enabled is off/);
+    assert.match(said(bare)[0]!, /not polling — the kernel block is off, so there is nothing to triage/);
     assert.equal(startPolling(on), true, 'the loop it started is the one a request finds');
     assert.equal(startPolling(off), false);
   } finally {
     logTo(null);
     stopPolling(on);
-    for (const root of [on, off]) {
+    for (const root of [on, off, bare]) {
       closeIntakeDb(root);
       rmSync(root, { recursive: true, force: true });
     }
@@ -1169,122 +767,6 @@ test('a poll interval is floored, so a typo cannot spin', () => {
     writeFileSync(settingsPath(root), 'poll:\n  enabled: true\n  every: soon\n', 'utf8');
     assert.equal(settingsFor(root).poll.everySeconds, 900);
   } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a channel that throws is that channel’s news, not the sweep’s', async () => {
-  const root = vault({ a: card('a') });
-  const boom: Channel = {
-    name: 'boom',
-    defaultDays: 1,
-    collect() {
-      throw new Error('credential expired');
-    },
-  };
-  CHANNELS.push(boom);
-  try {
-    const { reports } = await sweep(root, { only: ['boom', 'git'] });
-    const failed = reports.find((r) => r.channel === 'boom');
-    assert.ok(failed, 'the failing channel still reports');
-    assert.equal(failed!.fetched, false);
-    assert.match(failed!.reason ?? '', /credential expired/);
-    assert.equal(failed!.nextCursor, null, 'and it holds its cursor, having examined nothing');
-
-    // The point: the other channel still ran. Before this, one bad credential
-    // meant no git candidates either.
-    assert.ok(reports.some((r) => r.channel === 'git'), 'the healthy channel still ran');
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(boom), 1);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('an unreachable channel is reported and its cursor is not advanced', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    // Slack and Gmail have no credential here by design, so they are the honest
-    // fixture for "could not fetch".
-    const res = await pollOnce(root, keepAll);
-    const names = res.unreachable.map((u) => u.channel);
-    assert.ok(names.includes('slack') && names.includes('gmail'), 'both are named, with reasons');
-    for (const u of res.unreachable) assert.ok(u.reason, `${u.channel} says why`);
-    assert.ok(!res.advanced.includes('slack'), 'and nothing it did not fetch is advanced');
-  } finally {
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a materialising run advances the cursor, because nothing is left unrecorded', async () => {
-  const root = vault({ a: card('a') });
-  const fake: Channel = {
-    name: 'fake',
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: 'fake',
-      cursor: ctx.cursor,
-      nextCursor: '2026-02-02T00:00:00.000Z',
-      fetched: true,
-      candidates: [candidate('fake:1', 'Something that happened', { channel: 'fake' })],
-      skipped: [],
-    }),
-  };
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
-  try {
-    // A sweep run by a person proposes and holds — it wrote nothing down, so
-    // passing the boundary would step over candidates that exist only on screen.
-    await sweep(root, { only: ['fake'] });
-    assert.equal(watermarkFor(root, 'fake')?.cursor, null, 'proposing does not advance');
-
-    // A poll writes each candidate into the vault, so every item behind the new
-    // boundary is a file. That is what earns the advance.
-    const res = await pollOnce(root, keepAll);
-    assert.equal(res.created.length, 1);
-    assert.ok(res.advanced.includes('fake'));
-    assert.equal(watermarkFor(root, 'fake')?.cursor, '2026-02-02T00:00:00.000Z');
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('captured is attributed per channel, not totalled across the tick', async () => {
-  const root = vault({ a: card('a') });
-  const report = (name: string, candidates: Candidate[]) => (ctx: IntakeContext) => ({
-    channel: name,
-    cursor: ctx.cursor,
-    nextCursor: '2026-04-04T00:00:00.000Z',
-    fetched: true,
-    candidates,
-    skipped: [],
-  });
-  const busy: Channel = {
-    name: 'busy',
-    defaultDays: 1,
-    collect: report('busy', [candidate('busy:1', 'Something that happened', { channel: 'busy' })]),
-  };
-  const quiet: Channel = { name: 'quiet', defaultDays: 1, collect: report('quiet', []) };
-  CHANNELS.push(busy, quiet);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [busy, quiet]\n', 'utf8');
-  try {
-    const res = await pollOnce(root, keepAll);
-    assert.equal(res.created.length, 1);
-    // The stat feeds `pj intake status`, per channel. A channel that wrote
-    // nothing must not inherit the tick's total, or every quiet channel reads
-    // as busy as the busiest one.
-    assert.equal(watermarkFor(root, 'busy')?.captured, 1);
-    assert.equal(watermarkFor(root, 'quiet')?.captured, 0);
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(busy), 1);
-    CHANNELS.splice(CHANNELS.indexOf(quiet), 1);
-    stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }
@@ -1395,73 +877,6 @@ test('the local classifier uses Ollama without exposing tools', async () => {
   }
 });
 
-test('a held tick writes nothing and moves no cursor', async () => {
-  const root = vault({ a: card('a') });
-  const fake: Channel = {
-    name: 'fake',
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: 'fake',
-      cursor: ctx.cursor,
-      nextCursor: '2026-03-03T00:00:00.000Z',
-      fetched: true,
-      candidates: [candidate('fake:1', 'Something', { channel: 'fake' })],
-      skipped: [],
-    }),
-  };
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
-  try {
-    const res = await pollOnce(root, async () => null);
-    assert.ok(res.held, 'the tick says it held');
-    assert.deepEqual(res.created, [], 'and wrote nothing');
-    assert.equal(watermarkFor(root, 'fake')?.cursor, null, 'and moved no cursor');
-
-    // The point of holding: the next tick sees exactly what this one saw.
-    const retry = await pollOnce(root, keepAll);
-    assert.equal(retry.created.length, 1);
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('turning the classifier off writes everything down, explicitly', async () => {
-  const root = vault({ a: card('a') });
-  const fake: Channel = {
-    name: 'fake',
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: 'fake',
-      cursor: ctx.cursor,
-      nextCursor: '2026-03-03T00:00:00.000Z',
-      fetched: true,
-      candidates: [candidate('fake:1', 'Something', { channel: 'fake' })],
-      skipped: [],
-    }),
-  };
-  CHANNELS.push(fake);
-  // `classify: {enabled: false}` is the way to ask for the firehose on purpose.
-  // Never reached by omission — a missing classifier holds instead.
-  writeFileSync(
-    settingsPath(root),
-    'poll:\n  enabled: true\nchannels: [fake]\nclassify:\n  enabled: false\n',
-    'utf8',
-  );
-  try {
-    const res = await pollOnce(root, async () => null);
-    assert.ok(!res.held, 'no judgement was wanted, so nothing could hold it');
-    assert.equal(res.created.length, 1);
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('a vault may override the judgement without editing the app', () => {
   const root = vault({ a: card('a') });
   try {
@@ -1480,7 +895,7 @@ test('a vault may override the judgement without editing the app', () => {
   }
 });
 
-test('both prompts that reach a model carry the secrets rule', async () => {
+test('the prompt that reaches a model carries the secrets rule', async () => {
   const root = vault({ a: card('a') });
   try {
     // The pipeline writes notes from swept text with nobody watching, and a
@@ -1494,16 +909,10 @@ test('both prompts that reach a model carry the secrets rule', async () => {
     };
     await classify(root, [candidate('git:1', 'a')], spy);
     assert.match(seen, /value was withheld/, 'the classifier is told to withhold a secret’s value');
-    // The fetching agent is a relay now and copies verbatim on purpose, so the
-    // rule moved from its prompt into code: known shapes are redacted before any
-    // text leaves the parser. The maxim from NEXT.md — never ask a model to
-    // honour a rule code can apply.
-    const scrubbed = scrubSecrets(
-      'token ghp_abcdefghijklmnopqrstuvwxyz0123456789 and AKIAIOSFODNN7EXAMPLE and xoxb-1234567890-abcdefghij, commit 3f2a9c1d',
-    );
-    assert.doesNotMatch(scrubbed, /ghp_|AKIA|xoxb-/, 'the values are gone');
-    assert.match(scrubbed, /\[redacted github token\].*\[redacted aws key id\].*\[redacted slack token\]/, 'and say what they were');
-    assert.match(scrubbed, /3f2a9c1d/, 'a commit hash is not a secret');
+    // The copying half of the rule is the connectors' now: they redact known
+    // credential shapes in code before anything reaches the kernel
+    // (`kernel/connectors/connector.bb`, `scrub`), so the judge only ever reads
+    // what is left.
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -1533,79 +942,6 @@ test('a fetched message links its permalink, never its fingerprint', () => {
   assert.deepEqual(linkFor('gmail', thread), [thread]);
   assert.equal(parseLink(linkFor('gmail', thread)[0]!).kind, 'url');
   assert.deepEqual(linkFor('gmail', '18f2c0a1b2c3d4e5'), []);
-});
-
-test('the relay is told exactly what to call, to copy verbatim, and never to write', () => {
-  // Pinned as wording for the same reason the secrets rule was: the read-only
-  // line and the verbatim rule are the whole safety story of an agent in the
-  // fetch path, and a later edit must not drop either silently.
-  const since = new Date('2026-08-29T01:11:25+02:00');
-  const slack = relayInstructions('slack', { since, pages: 5, searchTool: 'mcp__x__slack_search_public_and_private' });
-  assert.match(slack, /READ ONLY/);
-  assert.match(slack, /Do not filter, summarise, judge/, 'a relay, not a summariser');
-  assert.match(slack, /mcp__x__slack_search_public_and_private/, 'the tool the vault named, by its exact id');
-  assert.match(slack, /"to:me"/);
-  assert.match(slack, /"from:me"/, 'both directions, so whose move it is can be computed');
-  assert.match(slack, new RegExp(`after "${Math.floor(since.getTime() / 1000)}"`), 'the cursor as an epoch the tool understands');
-  assert.match(slack, /up to 5 pages/);
-  assert.match(slack, /"permalink"/, 'a link a person can open');
-  assert.match(slack, /"ts"/, 'and the id a fingerprint is made of, as two fields');
-
-  // Gmail's `after:` is a day in the account's own timezone, so the relay is
-  // given the UTC day before the cursor and the parser applies the cursor
-  // exactly. A day of overlap costs a few known threads; a day of gap costs mail.
-  const gmail = relayInstructions('gmail', { since: new Date('2026-08-29T12:00:00Z'), pages: 3, searchTool: 'mcp__x__search_threads' });
-  assert.match(gmail, /in:inbox after:2026\/08\/28/);
-  assert.match(gmail, /in:sent after:2026\/08\/28/);
-  assert.match(gmail, /"labels"/, 'SENT is how the owner’s own mail is told apart');
-
-  // The relay needs one tool per source, found in the allowlist by suffix; a
-  // list without it is a configuration error the channel reports, not a guess.
-  assert.equal(searchToolIn('slack', ['mcp__x__slack_read_channel', 'mcp__x__slack_search_public_and_private']), 'mcp__x__slack_search_public_and_private');
-  assert.equal(searchToolIn('gmail', ['mcp__x__get_thread']), null);
-});
-
-test('the Gmail CLI boundary is read-only and its JSON becomes factual candidates', () => {
-  const root = vault({ a: card('a') });
-  try {
-    const args = gogSearchArgs(
-      context(root, { since: new Date('2026-08-30T00:00:00.000Z') }),
-      'me@example.com',
-    );
-    assert.ok(args.includes('--readonly'));
-    assert.ok(args.includes('--gmail-no-send'));
-    assert.ok(args.includes('--no-input'));
-    assert.deepEqual(args.slice(-4), ['gmail', 'search', 'in:inbox after:1788048000', '--all']);
-    assert.ok(!args.some((arg) => /send|modify|delete/.test(arg) && arg !== '--gmail-no-send'));
-
-    assert.deepEqual(
-      parseGogSearch(
-        JSON.stringify({
-          threads: [
-            {
-              id: 'abc123',
-              subject: 'Can you review this?',
-              from: 'Ada <ada@example.com>',
-              date: '2026-08-30T10:00:00Z',
-              snippet: 'The change is ready.',
-            },
-          ],
-        }),
-      ),
-      [
-        {
-          id: 'abc123',
-          title: 'Can you review this?',
-          detail: 'Ada <ada@example.com> — The change is ready.',
-          when: '2026-08-30T10:00:00.000Z',
-        },
-      ],
-    );
-    assert.equal(parseGogSearch('not json'), null);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
 });
 
 test('deleting a card on the board is a decline, so the sweep stops offering it', () => {
@@ -1862,49 +1198,42 @@ test('a rescue is kept after the decline it corrects is gone', () => {
   }
 });
 
-test('un-declining walks the cursor back, or it is offered again nowhere', () => {
+/**
+ * Taking a decline back has to bring the item within reach, or the pile's one
+ * repair is a no-op. The connector event was judged, so it sits behind the
+ * channel's cursor; the decline carried its kernel id, the rescue carries it on,
+ * and the next pass reads it back (`projector/connector-event`) and offers it
+ * to the judge once more — once, whatever the judge says.
+ */
+test('taking a decline back offers its connector event to the judge again, once', async () => {
   const root = vault({ a: card('a') });
+  writeFileSync(settingsPath(root), kernelOn(), 'utf8');
+  const commit = gitEvent('r', 'd1', 'Rotate the signing key', 'main');
+  const asked: string[][] = [];
+  const judgeWith = (decision: string): Ask => async (_s, user) => {
+    const fps = (JSON.parse(user) as { fp: string }[]).map((c) => c.fp);
+    asked.push(fps);
+    return JSON.stringify(fps.map((fp) => ({ fp, decision, reason: decision === 'drop' ? 'routine' : 'a key to rotate', title: 'Rotate the signing key' })));
+  };
   try {
-    commitWatermark(root, 'git', '2026-08-01T00:00:00Z');
-    suppress(root, { fingerprint: 'git:abc', reason: 'routine', channel: 'git' });
+    await againstFake(
+      async () => {
+        writeFileSync(join(process.env.FAKE_KERNEL_QUERIES!, 'connector-event.json'), JSON.stringify(connectorAnswerOf([commit])), 'utf8');
+        await pollOnce(root, judgeWith('drop'));
+        const row = openIntakeDb(root).prepare('SELECT event FROM suppressed WHERE fingerprint = ?').get('git:r@d1') as { event: string };
+        assert.equal(row.event, eventId(commit.key), 'the model’s decline carries the connector event it was of');
 
-    const back = unsuppress(root, 'git:abc');
-    assert.equal(back?.rewound, 'git');
+        assert.deepEqual(unsuppress(root, 'git:r@d1'), { fingerprint: 'git:r@d1', event: eventId(commit.key) });
+        const back = await pollOnce(root, judgeWith('area'));
+        assert.deepEqual(asked.at(-1), ['git:r@d1'], 'offered again, though the cursor has passed it');
+        assert.equal(back.created.length, 1, 'and kept this time');
 
-    // The row going is only half of it. Every channel fetches forward of its
-    // watermark, so an item behind the cursor is un-hidden and still out of
-    // reach — and a repair that repairs nothing is worse than no repair, because
-    // it reads as one.
-    assert.equal(watermarkFor(root, 'git'), null, "the channel falls back to its default window");
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('the channel to reach back into is read off the fingerprint when the row lacks one', () => {
-  const root = vault({ a: card('a') });
-  try {
-    commitWatermark(root, 'jira', '2026-08-01T00:00:00Z');
-    // What the delete cascade writes: it knows the fingerprint the note answered
-    // for and has no channel to hand.
-    suppress(root, { fingerprint: 'jira:ABC-1', reason: 'declined from the queue' });
-
-    assert.equal(unsuppress(root, 'jira:ABC-1')?.rewound, 'jira');
-    assert.equal(watermarkFor(root, 'jira'), null);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a fingerprint naming no channel is still un-declined, and rewinds nothing', () => {
-  const root = vault({ a: card('a') });
-  try {
-    suppress(root, { fingerprint: 'no-colon-here', reason: 'hand-written' });
-    const back = unsuppress(root, 'no-colon-here');
-    assert.equal(back?.rewound, null);
-    assert.equal(suppressedFingerprints(root).size, 0, 'the decline is lifted either way');
+        await pollOnce(root, judgeWith('area'));
+        assert.equal(asked.length, 2, 'and offered once: the next pass asks nothing');
+      },
+      {},
+      [commit],
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2024,24 +1353,6 @@ test('a candidate that was not written cannot interrupt anyone', async () => {
     // Being interrupted about something that turned out to already exist is the
     // fastest way to have notifications turned off.
     assert.equal(materialise(root, 'git', kept).notify.length, 0);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('an MCP channel with no tools named calls no agent at all', async () => {
-  const root = vault({ a: card('a') });
-  try {
-    // The C2 guard, stated as a test: Slack and Gmail are the shared channels the
-    // principle names, so the default has to be that no agent is launched into
-    // them — not that one is launched with tools we hope are read-only.
-    writeFileSync(settingsPath(root), 'channels: [slack]\n', 'utf8');
-    const { reports } = await sweep(root, { only: ['slack'] });
-    const slack = reports[0]!;
-    assert.equal(slack.fetched, false);
-    assert.equal(slack.nextCursor, null);
-    assert.match(slack.reason ?? '', /mcp\.slack/);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2261,89 +1572,114 @@ test('a rejudge that keeps the body does not grow it a line at a time', async ()
 });
 
 
-// ------------------------------------------------------------------- the relay
+// ------------------------------------------------------------ conversations
 
 /**
- * The relay: an agent copies tool results into one shape, and everything that is
- * decided about them — conversations, whose move it is, whether the vault tracks
- * them — is computed here. These are the tests of the computing half, on records
- * shaped the way the relay is told to shape them.
+ * The connectors write one event per message; a pass groups them into the
+ * conversations they belong to, marks the owner's own lines, and finds the open
+ * note that tracks each. These are the tests of that computing half, on events
+ * shaped the way the slack and gmail connectors write them.
  */
 
 const P = (channel: string, ts: string) => `https://acme.slack.com/archives/${channel}/p${ts.replace('.', '')}`;
-const slackRecord = (
-  channel: string,
-  ts: string,
-  user: string,
-  text: string,
-  mine = false,
-  over: Record<string, unknown> = {},
-) => ({
-  channel_id: channel,
-  channel: `DM with ${user === 'me' ? 'Someone' : user}`,
-  ts,
-  thread_ts: null,
-  user_id: mine ? 'U0ME' : `U0${user.toUpperCase()}`,
-  user: mine ? 'Me' : user,
-  mine,
-  text,
-  permalink: P(channel, ts),
-  ...over,
-});
-
-test('the relay’s Slack records become conversations that say whose move it is', () => {
-  const env = JSON.stringify({
-    messages: [
-      // An ask nobody answered.
-      slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'do you have time this week to check the submissions?'),
-      // An ask, answered eleven minutes later — the case a summariser could not see.
-      slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'can you help me pull the AWS contract?'),
-      slackRecord('D0BBBBBBB', '1788340789.000001', 'me', 'never seen one, finance maybe?', true),
-      // Only the owner spoke: nothing to react to.
-      slackRecord('D0CCCCCCC', '1788340000.000001', 'me', 'sent you the link', true),
-      // A record the relay got wrong, and one in a thread.
-      slackRecord('not-a-channel', '1788340000.000002', 'x', 'garbage'),
-      slackRecord('C0DDDDDDD', '1788350000.000002', 'Gerard', 'metadata on each definition?', false, { thread_ts: '1788349000.000001' }),
-    ],
-    more: false,
+const slackTsToIso = (ts: string) => new Date(Number(ts) * 1000).toISOString();
+const slackEvent = (channel: string, ts: string, author: string, text: string, over: Record<string, unknown> = {}): ConnectorEvent =>
+  ev(`slack:${channel}/${ts}`, 'slack/message', slackTsToIso(ts), [`slack:channel:${channel}`, ...(author === 'kernel:owner' ? ['kernel:owner'] : [])], {
+    channel,
+    channel_name: author === 'kernel:owner' ? 'Someone' : author,
+    ts,
+    author,
+    text,
+    to_owner: author !== 'kernel:owner',
+    mentions_owner: false,
+    permalink: P(channel, ts),
+    ...over,
   });
-  const parsed = parseSlackRelay(env)!;
-  assert.equal(parsed.dropped, 1, 'a bad record is counted, not smuggled through');
-  assert.equal(parsed.more, false);
+const gmailEvent = (thread: string, message: string, at: string, from: string, snippet: string, subject = 'Weekly report'): ConnectorEvent =>
+  ev(`gmail:${thread}@${message}`, 'gmail/message', at, [`gmail:thread:${thread}`, ...(from === 'kernel:owner' ? ['kernel:owner'] : [])], {
+    thread,
+    subject,
+    from,
+    snippet,
+    labels: from === 'kernel:owner' ? ['SENT'] : ['INBOX'],
+    url: `https://mail.google.com/mail/u/0/#all/${thread}`,
+    message,
+  });
 
-  const convs = conversationsFrom('slack', parsed.messages, '2026-08-29T00:00:00Z');
-  const byKey = new Map(convs.map((c) => [c.key, c]));
-  assert.deepEqual([...byKey.keys()].sort(), ['C0DDDDDDD/1788349000.000001', 'D0AAAAAAA', 'D0BBBBBBB', 'D0CCCCCCC']);
-
-  const marthe = byKey.get('D0AAAAAAA')!;
-  assert.equal(marthe.ball, 'mine', 'she spoke last, so it is with the owner');
-  assert.equal(marthe.asks.length, 1);
-
-  const vivek = byKey.get('D0BBBBBBB')!;
-  assert.equal(vivek.ball, 'theirs', 'the owner answered');
-  assert.equal(vivek.asks.length, 1, 'but the ask is still an ask — the classifier reads the exchange and decides');
-  assert.match(exchangeOf(vivek), /Vivek: can you help.*\n.*you: never seen one/s, 'the exchange, oldest first, the owner marked');
-
-  assert.equal(byKey.get('D0CCCCCCC')!.asks.length, 0, 'only the owner’s own words: nothing to react to');
-  assert.equal(byKey.get('C0DDDDDDD/1788349000.000001')!.thread, '1788349000.000001', 'a thread is its own conversation');
-
-  assert.deepEqual(slackPermalinkParts(P('D0AAAAAAA', '1788344704.998749')), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
+test('Slack messages become conversations that say whose move it is', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const { candidates, skipped } = mapEvents('slack', context(root), [
+      // An ask nobody answered.
+      slackEvent('D0AAAAAAA', '1788344704.998749', 'Marthe', 'do you have time this week to check the submissions?'),
+      // An ask, answered eleven minutes later — the case a summariser could not see.
+      slackEvent('D0BBBBBBB', '1788340111.790849', 'Vivek', 'can you help me pull the AWS contract?'),
+      slackEvent('D0BBBBBBB', '1788340789.000001', 'kernel:owner', 'never seen one, finance maybe?'),
+      // Only the owner spoke: nothing to react to.
+      slackEvent('D0CCCCCCC', '1788340000.000001', 'kernel:owner', 'sent you the link'),
+      // A reply in a thread is its own conversation.
+      slackEvent('C0DDDDDDD', '1788350000.000002', 'Gerard', 'metadata on each definition?', { thread: '1788349000.000001', channel_name: 'data' }),
+    ]);
+    const byFp = new Map(candidates.map((c) => [c.fingerprint, c]));
+    assert.deepEqual([...byFp.keys()].sort(), [
+      'slack:C0DDDDDDD/1788350000.000002',
+      'slack:D0AAAAAAA/1788344704.998749',
+      'slack:D0BBBBBBB/1788340111.790849',
+    ]);
+    const field = (fp: string, k: string) => byFp.get(fp)!.fields!.find((f) => f.k === k)?.v ?? '';
+    assert.match(field('slack:D0AAAAAAA/1788344704.998749', 'ball'), /it is with you/, 'she spoke last');
+    assert.match(field('slack:D0BBBBBBB/1788340111.790849', 'ball'), /you had the last word/, 'the owner answered');
+    assert.match(
+      field('slack:D0BBBBBBB/1788340111.790849', 'conversation'),
+      /Vivek: can you help.*\n.*you: never seen one/s,
+      'the exchange, oldest first, the owner marked — the classifier reads it and decides',
+    );
+    assert.deepEqual(
+      skipped.map((s) => s.why),
+      ['your own message', 'your own message'],
+      'the owner’s own words are not news to them; they are skipped, and recorded',
+    );
+    const marthe = byFp.get('slack:D0AAAAAAA/1788344704.998749')!;
+    assert.deepEqual(marthe.links, [`slack:${P('D0AAAAAAA', '1788344704.998749')}`], 'the permalink, never the fingerprint');
+    assert.equal(marthe.event?.key, 'slack:D0AAAAAAA/1788344704.998749', 'the connector event it is');
+    assert.deepEqual(slackPermalinkParts(P('D0AAAAAAA', '1788344704.998749')), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-test('a Slack message the relay copied no permalink for still links back, on the workspace the vault already uses', () => {
-  const bare = (channel: string, ts: string, over: Record<string, unknown> = {}) =>
-    slackRecord(channel, ts, 'Ruud', 'how much time can you spend on TOS?', false, { permalink: null, ...over });
-  const parsed = parseSlackRelay(
-    JSON.stringify({
-      messages: [bare('D0AAAAAAA', '1788344704.998749'), bare('C0DDDDDDD', '1788350000.000002', { thread_ts: '1788349000.000001' })],
-      more: false,
-    }),
-  )!;
-  assert.equal(parsed.messages[0]!.url, undefined, 'the relay gave none');
+test('several asks in one conversation are one candidate, the rest folded into it', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const { candidates, skipped } = mapEvents('slack', context(root), [
+      slackEvent('D0AAAAAAA', '1788344704.000001', 'Marthe', 'are you there?'),
+      slackEvent('D0AAAAAAA', '1788344705.000001', 'Marthe', 'can you check the submissions?'),
+    ]);
+    assert.deepEqual(candidates.map((c) => c.fingerprint), ['slack:D0AAAAAAA/1788344704.000001'], 'a discovery is keyed by its first ask');
+    assert.deepEqual(skipped.map((s) => s.why), ['folded into slack:D0AAAAAAA/1788344704.000001']);
+    assert.match(candidates[0]!.detail ?? '', /2 new message\(s\)/);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
-  // Off a permalink this run's relay did copy…
-  const copied = parseSlackRelay(JSON.stringify({ messages: [slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'x')], more: false }))!;
-  const fromRun = withPermalinks([...parsed.messages, ...copied.messages], []);
+test('a Slack message the connector copied no permalink for still links back, on the workspace the vault already uses', () => {
+  const msg = (channel: string, ts: string, over: Partial<Message> = {}): Message => ({
+    event: 'e',
+    channel,
+    channelName: 'Ruud',
+    id: ts,
+    at: slackTsToIso(ts),
+    from: 'Ruud',
+    mine: false,
+    text: 'how much time can you spend on TOS?',
+    ...over,
+  });
+  const bare = [msg('D0AAAAAAA', '1788344704.998749'), msg('C0DDDDDDD', '1788350000.000002', { thread: '1788349000.000001' })];
+  // Off a permalink this pass has…
+  const fromRun = withPermalinks([...bare, msg('D0BBBBBBB', '1788340111.790849', { url: P('D0BBBBBBB', '1788340111.790849') })], []);
   assert.equal(fromRun[0]!.url, P('D0AAAAAAA', '1788344704.998749'));
   assert.equal(
     fromRun[1]!.url,
@@ -2351,9 +1687,9 @@ test('a Slack message the relay copied no permalink for still links back, on the
     'a reply opens in its thread, as Slack writes the link',
   );
   // …or off one a note already carries.
-  const fromVault = withPermalinks(parsed.messages, [`slack:${P('D0ZZZZZZZ', '1788000000.000001')}`]);
+  const fromVault = withPermalinks(bare, [`slack:${P('D0ZZZZZZZ', '1788000000.000001')}`]);
   assert.deepEqual(slackPermalinkParts(fromVault[0]!.url!), { channel: 'D0AAAAAAA', ts: '1788344704.998749' });
-  assert.deepEqual(withPermalinks(parsed.messages, []), parsed.messages, 'with no host anywhere, nothing is invented');
+  assert.deepEqual(withPermalinks(bare, []), bare, 'with no host anywhere, nothing is invented');
 });
 
 test('a conversation on an open note is an update; on a closed one, or none, it is not', () => {
@@ -2364,43 +1700,30 @@ test('a conversation on an open note is an update; on a closed one, or none, it 
   });
   writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
   try {
-    const ctx = context(root, { cursor: '2026-08-29T00:00:00Z' });
-    const parsed = parseSlackRelay(
-      JSON.stringify({
-        messages: [
-          slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any news?'),
-          slackRecord('D0BBBBBBB', '1788340111.790849', 'Vivek', 'one more thing'),
-          slackRecord('C0DDDDDDD', '1788350000.000002', 'Gerard', 'and the sequence?', false, { thread_ts: '1788349000.000001' }),
-          slackRecord('D0EEEEEEE', '1788350000.000003', 'Oliver', 'got an issue with the thing'),
-        ],
-        more: false,
-      }),
-    )!;
-    const known = knownFor('slack', ctx);
-    const convs = new Map(conversationsFrom('slack', parsed.messages, ctx.cursor).map((c) => [c.key, c]));
+    const { candidates } = mapEvents('slack', context(root), [
+      slackEvent('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any news?'),
+      slackEvent('D0AAAAAAA', '1788344705.000001', 'Marthe', 'and the deadline?'),
+      slackEvent('D0BBBBBBB', '1788340111.790849', 'Vivek', 'one more thing'),
+      slackEvent('C0DDDDDDD', '1788350000.000002', 'Gerard', 'and the sequence?', { thread: '1788349000.000001' }),
+      slackEvent('D0EEEEEEE', '1788350000.000003', 'Oliver', 'got an issue with the thing'),
+    ]);
+    const of = (channel: string) => candidates.find((c) => c.fingerprint.startsWith(`slack:${channel}/`))!;
 
     // Same DM as a message an open note links: tracked, by container.
-    const marthe = convs.get('D0AAAAAAA')!;
-    assert.deepEqual(trackedBy(marthe, known), ['open']);
-    const update = candidateFor('slack', ctx, marthe, ['open'])!;
-    assert.equal(update.fingerprint, 'slack:D0AAAAAAA/1788344704.998749', 'keyed by the newest ask, so each exchange is its own offer');
+    const update = of('D0AAAAAAA');
+    assert.equal(update.fingerprint, 'slack:D0AAAAAAA/1788344705.000001', 'keyed by the newest ask, so each exchange is its own offer');
     assert.deepEqual(update.evidence?.linkedTo, ['open'], 'and it says which note it is news about');
     assert.equal(update.evidence?.matches?.[0]?.why, 'tracked', 'first among its matches, so extend may name it');
     assert.match(update.detail ?? '', /already on open/);
 
     // Same DM as a message a *closed* note links: not tracked — finished work
     // does not hear about later chatter.
-    assert.deepEqual(trackedBy(convs.get('D0BBBBBBB')!, known), []);
-
+    assert.equal(of('D0BBBBBBB').evidence?.linkedTo, undefined);
     // A thread whose root a swept note answers for, by fingerprint.
-    assert.deepEqual(trackedBy(convs.get('C0DDDDDDD/1788349000.000001')!, known), ['swept']);
-
+    assert.deepEqual(of('C0DDDDDDD').evidence?.linkedTo, ['swept']);
     // Nothing tracks Oliver: a discovery, fingerprinted by its first ask.
-    const oliver = convs.get('D0EEEEEEE')!;
-    assert.deepEqual(trackedBy(oliver, known), []);
-    const fresh = candidateFor('slack', ctx, oliver, [])!;
+    const fresh = of('D0EEEEEEE');
     assert.equal(fresh.fingerprint, 'slack:D0EEEEEEE/1788350000.000003');
-    assert.deepEqual(fresh.links, [`slack:${P('D0EEEEEEE', '1788350000.000003')}`], 'the permalink, never the fingerprint');
     assert.equal(fresh.evidence?.linkedTo, undefined);
     assert.ok(fresh.fields?.some((f) => f.k === 'conversation'), 'the classifier is handed the exchange');
   } finally {
@@ -2409,44 +1732,26 @@ test('a conversation on an open note is an update; on a closed one, or none, it 
   }
 });
 
-test('the relay’s Gmail threads become conversations, and SENT marks the owner’s mail', () => {
-  const env = JSON.stringify({
-    threads: [
-      {
-        id: '1a05c9cf17367981',
-        subject: 'Weekly report',
-        messages: [
-          { id: '1a05c9cf17367981', date: '2026-09-01T10:56:12Z', from: 't@example.com', to: ['me@example.com'], labels: ['INBOX', 'UNREAD'], snippet: 'could you help with the weekly report' },
-        ],
-      },
-      {
-        id: '1a060d74b08da162',
-        subject: 'Product version',
-        messages: [
-          { id: '1a060d74b08da162', date: '2026-09-02T06:38:36Z', from: 's@example.com', to: ['me@example.com'], labels: ['INBOX'], snippet: 'please create the product version' },
-          { id: '1a060d74b08da163', date: '2026-09-02T07:00:00Z', from: 'me@example.com', to: ['s@example.com'], labels: ['SENT'], snippet: 'done, see the release page' },
-          // The same message again, from the in:sent search: one message, not two.
-          { id: '1a060d74b08da163', date: '2026-09-02T07:00:00Z', from: 'me@example.com', to: ['s@example.com'], labels: ['SENT'], snippet: 'done, see the release page', mine: true },
-        ],
-      },
-      { id: 'bad id', subject: 'x', messages: [] },
-    ],
-    more: true,
-  });
-  const parsed = parseGmailRelay(env)!;
-  assert.equal(parsed.dropped, 1);
-  assert.equal(parsed.more, true, 'pages were left: Gmail pages newest-first, so the run is truncated and the cursor holds');
-  const convs = new Map(conversationsFrom('gmail', parsed.messages, null).map((c) => [c.key, c]));
-
-  const report = convs.get('1a05c9cf17367981')!;
-  assert.equal(report.ball, 'mine');
-  assert.equal(report.name, 'Weekly report');
-  assert.equal(report.last.url, 'https://mail.google.com/mail/u/0/#all/1a05c9cf17367981', 'the thread URL Gmail opens, from the id the API gave');
-
-  const version = convs.get('1a060d74b08da162')!;
-  assert.equal(version.messages.length, 2, 'the overlap of the two searches is one message');
-  assert.equal(version.ball, 'theirs', 'the owner answered — SENT says so');
-  assert.equal(version.asks.length, 1);
+test('Gmail messages become threads, and the owner’s own mail is marked', () => {
+  const root = vault({ a: card('a') });
+  try {
+    const { candidates, skipped } = mapEvents('gmail', context(root), [
+      gmailEvent('1a05c9cf17367981', '1a05c9cf17367981', '2026-09-01T10:56:12.000Z', 't@example.com', 'could you help with the weekly report'),
+      gmailEvent('1a060d74b08da162', '1a060d74b08da162', '2026-09-02T06:38:36.000Z', 's@example.com', 'please create the product version', 'Product version'),
+      gmailEvent('1a060d74b08da162', '1a060d74b08da163', '2026-09-02T07:00:00.000Z', 'kernel:owner', 'done, see the release page', 'Product version'),
+    ]);
+    const report = candidates.find((c) => c.fingerprint === 'gmail:1a05c9cf17367981')!;
+    assert.ok(report, 'a discovery is the thread');
+    assert.deepEqual(report.links, ['https://mail.google.com/mail/u/0/#all/1a05c9cf17367981'], 'the thread URL, as a plain url');
+    assert.equal(parseLink(report.links[0]!).kind, 'url');
+    assert.match(report.fields!.find((f) => f.k === 'ball')!.v, /with you/);
+    const version = candidates.find((c) => c.fingerprint === 'gmail:1a060d74b08da162')!;
+    assert.match(version.fields!.find((f) => f.k === 'ball')!.v, /you had the last word/, 'SENT says the owner answered');
+    assert.deepEqual(skipped.map((s) => s.why), ['your own message']);
+  } finally {
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a Gmail thread an open note links is an update keyed by the new message', () => {
@@ -2454,228 +1759,11 @@ test('a Gmail thread an open note links is an update keyed by the new message', 
     a: `---\nid: a\ntitle: Weekly report\nfacets: { status: [active] }\nlinks: ['https://mail.google.com/mail/u/0/#inbox/1a05c9cf17367981']\n---\n\nb\n`,
   });
   try {
-    const ctx = context(root);
-    const parsed = parseGmailRelay(
-      JSON.stringify({
-        threads: [
-          {
-            id: '1a05c9cf17367981',
-            subject: 'Weekly report',
-            messages: [{ id: '1a05c9cf17367999', date: '2026-09-03T10:00:00Z', from: 't@example.com', labels: ['INBOX'], snippet: 'any update?' }],
-          },
-        ],
-        more: false,
-      }),
-    )!;
-    const [conv] = conversationsFrom('gmail', parsed.messages, null);
-    const tracked = trackedBy(conv!, knownFor('gmail', ctx));
-    assert.deepEqual(tracked, ['a'], 'either URL shape a note carries names the thread');
-    const c = candidateFor('gmail', ctx, conv!, tracked)!;
-    assert.equal(c.fingerprint, 'gmail:1a05c9cf17367981@1a05c9cf17367999');
-    assert.deepEqual(c.evidence?.linkedTo, ['a']);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-/** A stand-in relay that answers each run with the next of `ticks`, as `claude -p` would. */
-function scriptedRelay(root: string, ticks: unknown[]): void {
-  const script = join(root, 'ticks.json');
-  const counter = join(root, 'tick');
-  writeFileSync(script, JSON.stringify(ticks), 'utf8');
-  writeFileSync(counter, '0', 'utf8');
-  const agent = join(root, 'fake-agent.mjs');
-  writeFileSync(
-    agent,
-    `#!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'node:fs';
-const n = Number(readFileSync(${JSON.stringify(counter)}, 'utf8'));
-writeFileSync(${JSON.stringify(counter)}, String(n + 1));
-const answer = JSON.stringify(JSON.parse(readFileSync(${JSON.stringify(script)}, 'utf8'))[n]);
-process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: answer }));
-`,
-    { encoding: 'utf8', mode: 0o755 },
-  );
-  writeFileSync(
-    settingsPath(root),
-    `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`,
-    'utf8',
-  );
-}
-
-/**
- * The duplicate cards of 2026-09-28 – 10-02: one DM, four unjudged cards with the
- * same title, `-2`, `-3`, `-4`. The Slack cursor was held for two weeks because
- * the relay never transcribed every result it was shown, so every tick re-read
- * the same window — and transcribed a *different subset* of it each time. An
- * update is keyed by the newest ask in what came back, so each subset was a new
- * fingerprint for news the vault had already been handed.
- *
- * Ticks run through the real poller, with a fake relay that answers from a
- * script and a judge that extends whatever is tracked, as the live one did.
- */
-test('a re-read of a held window does not mint a second card for a conversation already captured', async () => {
-  const D = 'D0SSSSSSS';
-  const root = vault({
-    coverage: `---\nid: coverage\ntitle: Admin coverage\nfacets: { status: [active] }\nlinks: ['slack:${P(D, '1789383348.868479')}']\nsource_fingerprint: slack:${D}/1789383348.868479\n---\n\nb\n`,
-  });
-  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
-  const ask = slackRecord(D, '1789457024.117719', 'Sam', 'I reviewed most of the tech challenge, want your opinion');
-  const thanks = slackRecord(D, '1789472529.463059', 'Sam', 'very cool, okay good to know');
-  const later = slackRecord(D, '1789725073.431009', 'Sam', 'done!');
-  const mine = slackRecord(D, '1789461290.990299', 'me', 'yes, will check today', true);
-  // Each tick reports more results than it transcribes — the held cursor of the
-  // live runs — and the subset differs from tick to tick.
-  const ticks = [
-    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine, thanks, later], more: false },
-    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine], more: false },
-    { pages: [{ query: 'to:me', results: 40 }], messages: [ask, mine, thanks], more: false },
-  ];
-  scriptedRelay(root, ticks);
-  const extendTracked: Ask = async (_system, user) =>
-    JSON.stringify(
-      (JSON.parse(user) as { fp: string }[]).map((c) => ({
-        fp: c.fp,
-        decision: 'extend',
-        target: 'coverage',
-        reason: 'ask: review requested',
-        title: 'Review the tech challenge',
-      })),
-    );
-  try {
-    const first = await pollOnce(root, extendTracked);
-    assert.equal(first.created.length, 1, 'the first tick files the conversation once');
-    assert.equal(first.updates, 1);
-    assert.equal(watermarkFor(root, 'slack')?.cursor ?? null, null, 'and the cursor holds: fewer transcribed than reported');
-
-    const second = await pollOnce(root, extendTracked);
-    assert.deepEqual(second.created, [], 'an older subset of the same conversation is not news');
-    const third = await pollOnce(root, extendTracked);
-    assert.deepEqual(third.created, [], 'nor is any other subset at or before what was captured');
-
-    const cards = [...reindex(root).notes.values()].filter((n) => n.facets.intake?.length);
-    assert.deepEqual(cards.map((n) => n.source_fingerprint), [`slack:${D}/1789725073.431009`]);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a discovery re-read without its first ask is not a second discovery', async () => {
-  const D = 'D0TTTTTTT';
-  const root = vault({ a: card('a') });
-  const first = slackRecord(D, '1789551120.700799', 'Tam', 'any update on the first response?');
-  const second = slackRecord(D, '1789632572.912729', 'Tam', 'can you check the script pulling the priorities?');
-  const third = slackRecord(D, '1789646332.052109', 'Tam', 'yeah just the severity matters');
-  // The first ask is the discovery's fingerprint; a re-read that misses it would
-  // fingerprint the second ask instead, which no note carries.
-  scriptedRelay(root, [
-    { pages: [{ query: 'to:me', results: 40 }], messages: [first, second, third], more: false },
-    { pages: [{ query: 'to:me', results: 40 }], messages: [second], more: false },
-  ]);
-  try {
-    const one = await pollOnce(root, keepAll);
-    assert.equal(one.created.length, 1);
-    assert.equal(seenState(root, `slack:${D}`), '2026-09-17T11:58:52.052Z', 'the newest ask the judgement covered');
-    const two = await pollOnce(root, keepAll);
-    assert.deepEqual(two.created, [], 'the store remembers the rest of the exchange the fingerprint does not name');
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a newer ask in a captured conversation is still its own update, and the skip says why for older ones', () => {
-  const D = 'D0SSSSSSS';
-  const root = vault({
-    coverage: `---\nid: coverage\ntitle: Admin coverage\nfacets: { status: [active] }\nlinks: ['slack:${P(D, '1789383348.868479')}']\n---\n\nb\n`,
-    card: `---\nid: card\ntitle: Review the tech challenge\nfacets: { intake: [unjudged], extends: [coverage] }\nsource_fingerprint: slack:${D}/1789725073.431009\n---\n\nb\n`,
-  });
-  writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
-  try {
-    const ctx = context(root, { cursor: '2026-09-15T06:09:11.000Z' });
-    const heard = heardUpTo('slack', ctx);
-    const convOf = (...recs: ReturnType<typeof slackRecord>[]) =>
-      conversationsFrom('slack', parseSlackRelay(JSON.stringify({ messages: recs, more: false }))!.messages, ctx.cursor)[0]!;
-
-    const old = convOf(slackRecord(D, '1789457024.117719', 'Sam', 'please review the tech challenge'));
-    const replayed = sinceHeard(old, heard);
-    assert.equal(replayed.asks.length, 0, 'an ask at or before what the vault holds is not an ask any more');
-    assert.equal(replayed.heard?.at, '2026-09-18T09:51:13.431Z');
-    assert.deepEqual(replayed.heard?.by, ['card']);
-
-    const fresh = convOf(
-      slackRecord(D, '1789457024.117719', 'Sam', 'please review the tech challenge'),
-      slackRecord(D, '1789900000.000001', 'Sam', 'any news on the review?'),
-    );
-    const moved = sinceHeard(fresh, heard);
-    assert.deepEqual(moved.asks.map((m) => m.id), ['1789900000.000001'], 'only what came after is news');
-    const c = candidateFor('slack', ctx, moved, trackedBy(moved, knownFor('slack', ctx)))!;
-    assert.equal(c.fingerprint, `slack:${D}/1789900000.000001`, 'and it is its own offer, as before');
-
-    // A suppressed decline counts as heard too: the model already said no to that exchange.
-    const declined = heardUpTo('slack', { ...ctx, suppressed: new Set([`slack:${D}/1789950000.000001`]) });
-    assert.equal(sinceHeard(fresh, declined).asks.length, 0);
-
-    // Un-declining walks the cursor back to bring an item within reach; the marks
-    // must not be what hides it again. Once a note carries it, it is heard again.
-    const rescued = heardUpTo('slack', ctx, [`slack:${D}/1789457024.117719`]);
-    assert.equal(sinceHeard(old, rescued).asks.length, 1, 'a rescued ask comes back');
-    const filed = heardUpTo('slack', ctx, [`slack:${D}/1789725073.431009`]);
-    assert.equal(filed.wanted.size, 0, 'a rescue a note already answers for wants nothing');
-
-    // A public channel is not one conversation: a fingerprint elsewhere in it hears nothing here.
-    const pub = convOf(slackRecord('C0PPPPPPP', '1789457024.117719', 'Sam', 'question about the tech challenge'));
-    const pubHeard = heardUpTo('slack', { ...ctx, fingerprints: new Map([['slack:C0PPPPPPP/1789999999.000001', ['x']]]) });
-    assert.equal(sinceHeard(pub, pubHeard).asks.length, 1);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a relay channel end to end: a fake agent’s envelope becomes candidates, with what it cost', async () => {
-  const root = vault({ a: card('a') });
-  // A stand-in for `claude -p`: prints the JSON envelope the CLI prints, with the
-  // relay's answer in `result`. Executable, because `run` execs it directly.
-  const agent = join(root, 'fake-agent.mjs');
-  writeFileSync(
-    agent,
-    `#!/usr/bin/env node
-const answer = ${JSON.stringify(JSON.stringify({ messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any time this week?')], more: false }))};
-process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: answer, duration_ms: 43210, num_turns: 4, total_cost_usd: 0.0412, usage: { input_tokens: 120, cache_creation_input_tokens: 20000, cache_read_input_tokens: 3000, output_tokens: 900 } }));
-`,
-    { encoding: 'utf8', mode: 0o755 },
-  );
-  writeFileSync(
-    settingsPath(root),
-    `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`,
-    'utf8',
-  );
-  try {
-    const { reports } = await sweep(root, { only: ['slack'] });
-    const r = reports[0]!;
-    assert.equal(r.fetched, true);
-    assert.equal(r.candidates.length, 1);
-    assert.equal(r.candidates[0]!.fingerprint, 'slack:D0AAAAAAA/1788344704.998749');
-    assert.equal(r.nextCursor, '2026-09-02T10:25:04.998Z', 'the newest thing seen, as an ISO the next `after` is computed from');
-    // Every field the envelope offers, so the log can say what a tick spent.
-    assert.deepEqual(r.cost, { ms: 43210, inputTokens: 23120, outputTokens: 900, costUsd: 0.0412, turns: 4 });
-    assert.match(renderSweep({ reports, unknown: [] }), /fetch 43\.2s · 23k in \/ 900 out tok · 4 turns · \$0\.041/);
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a vault naming a tool list without the search tool is told so, not guessed for', async () => {
-  const root = vault({ a: card('a') });
-  writeFileSync(settingsPath(root), 'channels: [slack]\nmcp:\n  slack: [mcp__x__slack_read_channel]\n', 'utf8');
-  try {
-    const { reports } = await sweep(root, { only: ['slack'] });
-    assert.equal(reports[0]!.fetched, false);
-    assert.match(reports[0]!.reason ?? '', /names no search tool/);
+    const { candidates } = mapEvents('gmail', context(root), [
+      gmailEvent('1a05c9cf17367981', '1a05c9cf17367999', '2026-09-03T10:00:00.000Z', 't@example.com', 'any update?'),
+    ]);
+    assert.deepEqual(candidates.map((c) => c.fingerprint), ['gmail:1a05c9cf17367981@1a05c9cf17367999'], 'either URL shape a note carries names the thread');
+    assert.deepEqual(candidates[0]!.evidence?.linkedTo, ['a']);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2749,147 +1837,35 @@ test('an update lands as an extension of the note that tracks it, never beside i
   }
 });
 
-test('a tracked Jira issue is offered when it moved and skipped when it did not', async () => {
+test('a tracked Jira issue that moved is an update; a closed note hears nothing; a queued card has it already', () => {
   const root = vault({
     a: `---\nid: a\ntitle: Fix the thing\nfacets: { status: [active] }\nlinks: ['jira:PROJ-1']\n---\n\nb\n`,
     z: `---\nid: z\ntitle: Old thing\nfacets: { status: [done] }\nlinks: ['jira:PROJ-2']\n---\n\nb\n`,
+    q: `---\nid: q\ntitle: A queued card\nintake: [unjudged]\nsource_fingerprint: jira:PROJ-4\nlinks: ['jira:PROJ-4']\n---\n\nb\n`,
   });
   writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
-  const env = { ...process.env };
-  process.env.PROJECTOR_JIRA_URL = 'https://acme.atlassian.net';
-  process.env.PROJECTOR_JIRA_EMAIL = 'me@acme.test';
-  process.env.PROJECTOR_JIRA_TOKEN = 'not-a-real-token';
-  const original = globalThis.fetch;
-  let status = 'In Progress';
-  globalThis.fetch = (async () =>
-    new Response(
-      JSON.stringify({
-        issues: [
-          { key: 'PROJ-1', fields: { summary: 'Fix the thing', status: { name: status }, issuetype: { name: 'Bug' }, updated: '2026-09-01T10:00:00.000+0000' } },
-          { key: 'PROJ-2', fields: { summary: 'Old thing', status: { name: 'Done' }, updated: '2026-09-01T11:00:00.000+0000' } },
-          { key: 'PROJ-3', fields: { summary: 'Brand new', status: { name: 'Open' }, updated: '2026-09-01T12:00:00.000+0000' } },
-        ],
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    )) as typeof fetch;
+  const issue = (key: string, summary: string, status: string, at: string) =>
+    ev(`jira:${key}@${status} · unassigned`, 'jira/issue', at, [`jira:${key}`], { key, summary, status, assignee: 'unassigned', updated: at, type: 'Bug' });
   try {
-    const first = await jiraChannel.collect(context(root));
-    const fps = first.candidates.map((c) => c.fingerprint);
-    // First look at a tracked issue: nothing to compare against, so it is offered
-    // as an update — the classifier drops it if nothing meaningful moved.
-    assert.ok(fps.includes('jira:PROJ-1@2026-09-01T10:00:00.000+0000'), `per update, not per issue: ${fps}`);
-    const update = first.candidates.find((c) => c.fingerprint.startsWith('jira:PROJ-1@'))!;
+    const { candidates, skipped } = mapEvents('jira', context(root), [
+      issue('PROJ-1', 'Fix the thing', 'Done', '2026-09-01T10:00:00.000Z'),
+      ev('jira:PROJ-1/changelog/1', 'jira/transition', '2026-09-01T10:00:00.000Z', ['jira:PROJ-1'], { key: 'PROJ-1', from: 'In Progress', to: 'Done', by: 'Olena' }),
+      issue('PROJ-2', 'Old thing', 'Done', '2026-09-01T11:00:00.000Z'),
+      issue('PROJ-3', 'Brand new', 'Open', '2026-09-01T12:00:00.000Z'),
+      issue('PROJ-4', 'Already queued', 'Open', '2026-09-01T13:00:00.000Z'),
+    ]);
+    // The connector writes an issue event only when its status or assignee is
+    // new, so every one is a move: an update is keyed per move, a discovery by the issue.
+    assert.deepEqual(candidates.map((c) => c.fingerprint), ['jira:PROJ-1@2026-09-01T10:00:00.000Z', 'jira:PROJ-3']);
+    const update = candidates[0]!;
     assert.deepEqual(update.evidence?.linkedTo, ['a']);
-    assert.deepEqual(update.state, { key: 'jira:PROJ-1', value: 'In Progress · unassigned' });
-    assert.ok(fps.includes('jira:PROJ-3'), 'a discovery keeps its plain fingerprint');
-    assert.ok(
-      first.skipped.some((s) => s.fingerprint === 'jira:PROJ-2' && /closed/.test(s.why)),
-      'an issue only a finished note tracks is skipped, and says why',
-    );
-
-    // Judged: the tick records the state. The same state next time is not news.
-    markSeen(root, 'jira:PROJ-1', 'In Progress · unassigned');
-    const second = await jiraChannel.collect(context(root));
-    assert.ok(!second.candidates.some((c) => c.fingerprint.startsWith('jira:PROJ-1')));
-    assert.ok(second.skipped.some((s) => s.fingerprint === 'jira:PROJ-1' && /unchanged/.test(s.why)));
-
-    // It moved: offered again, saying what it was.
-    status = 'Done';
-    const third = await jiraChannel.collect(context(root));
-    const moved = third.candidates.find((c) => c.fingerprint.startsWith('jira:PROJ-1@'))!;
-    assert.ok(moved, 'a status change is news');
-    assert.match(moved.detail ?? '', /was In Progress/);
-    assert.equal(seenState(root, 'jira:PROJ-1'), 'In Progress · unassigned', 'collecting never marks anything seen');
+    assert.match(update.fields!.find((f) => f.k === 'moves')!.v, /In Progress → Done by Olena/, 'its transition folds into it');
+    assert.ok(skipped.some((s) => /folded into PROJ-1/.test(s.why)));
+    assert.ok(skipped.some((s) => s.fingerprint === 'jira:PROJ-2' && /closed/.test(s.why)), 'an issue only a finished note tracks is skipped, and says why');
+    assert.ok(skipped.some((s) => s.fingerprint === 'jira:PROJ-4' && /still in the queue/.test(s.why)), 'a card is a proposal, and does not collect another');
   } finally {
-    globalThis.fetch = original;
-    for (const k of ['PROJECTOR_JIRA_URL', 'PROJECTOR_JIRA_EMAIL', 'PROJECTOR_JIRA_TOKEN']) {
-      if (env[k] === undefined) delete process.env[k];
-      else process.env[k] = env[k];
-    }
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a tick records the state it judged in, a held tick does not, and both say what they cost', async () => {
-  const root = vault({ a: card('a') });
-  const fake: Channel = {
-    name: 'fake',
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: 'fake',
-      cursor: ctx.cursor,
-      nextCursor: '2026-04-04T00:00:00.000Z',
-      fetched: true,
-      candidates: [candidate('fake:1', 'Something', { channel: 'fake', state: { key: 'fake:thing', value: 'v1' } })],
-      skipped: [],
-      cost: { ms: 1000, inputTokens: 10, outputTokens: 2 },
-    }),
-  };
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fake]\n', 'utf8');
-  try {
-    const held = await pollOnce(root, async () => null);
-    assert.ok(held.held);
-    assert.equal(seenState(root, 'fake:thing'), null, 'a held tick must see the same change again');
-
-    const judged = await pollOnce(root, async () => ({
-      text: '[{"fp":"fake:1","decision":"keep","reason":"wanted","title":"A thing"}]',
-      cost: { ms: 500, inputTokens: 300, outputTokens: 20 },
-    }));
-    assert.equal(judged.created.length, 1);
-    assert.equal(seenState(root, 'fake:thing'), 'v1', 'judged, so the state is a fact now');
-    assert.deepEqual(judged.cost, { ms: 1500, inputTokens: 310, outputTokens: 22 }, 'fetching plus judging');
-    const line = judged.channels[0]!;
-    assert.deepEqual(line.fetch, { ms: 1000, inputTokens: 10, outputTokens: 2 });
-    assert.deepEqual(line.judge, { ms: 500, inputTokens: 300, outputTokens: 20 });
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('declined sessions do not count against the claude channel’s limit', () => {
-  const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
-  const prev = process.env.PROJECTOR_CLAUDE_HOME;
-  process.env.PROJECTOR_CLAUDE_HOME = home;
-  // The sessions run in `/Users/x/repo`; a project has to declare it or they are
-  // not this vault's work at all.
-  const root = vault({ a: card('a'), proj: `---\nid: proj\ntitle: P\nproject:\n  repos:\n    - path: /Users/x/repo\n---\n\nb\n` });
-  try {
-    const dir = join(home, 'projects', '-Users-x-repo');
-    mkdirSync(dir, { recursive: true });
-    const uuids = ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000003'];
-    uuids.forEach((uuid, i) => {
-      const lines: string[] = [];
-      for (let t = 0; t < 4; t++) {
-        lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: `turn ${t} of session ${i}` }, cwd: '/Users/x/repo', timestamp: `2026-08-2${i}T10:0${t}:00Z` }));
-        lines.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ok' }, timestamp: `2026-08-2${i}T10:0${t}:30Z` }));
-      }
-      writeFileSync(join(dir, `${uuid}.jsonl`), lines.join('\n') + '\n', 'utf8');
-    });
-    // Two of three declined, and a limit of two. Before the fix the declined pair
-    // filled the limit, the run was truncated, the third was never offered and
-    // the cursor never moved.
-    const ctx = context(root, {
-      since: new Date('2026-01-01'),
-      limit: 2,
-      suppressed: new Set([`claude:${uuids[0]}`, `claude:${uuids[1]}`]),
-    });
-    const r = claudeChannel.collect(ctx) as ReturnType<typeof claudeChannel.collect> & { candidates: Candidate[] };
-    const report = r as Awaited<typeof r>;
-    assert.deepEqual(report.candidates.map((c) => c.fingerprint), [`claude:${uuids[2]}`]);
-    assert.equal(report.truncated, false, 'not truncated: the declined ones were not counted');
-    assert.equal(report.skipped.filter((s) => s.why === 'suppressed earlier').length, 2);
-    assert.ok(report.nextCursor, 'so the cursor can move');
-  } finally {
-    if (prev === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
-    else process.env.PROJECTOR_CLAUDE_HOME = prev;
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -2926,38 +1902,29 @@ test('a channel’s candidates are judged in batches, and the verdicts and cost 
   }
 });
 
-test('a channel judged before a hold keeps its notes and its cursor', async () => {
+test('a channel judged before a hold keeps its cards and its record', async () => {
   const root = vault({ a: card('a') });
-  const mk = (name: string): Channel => ({
-    name,
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: name,
-      cursor: ctx.cursor,
-      nextCursor: `2026-05-05T00:00:00.000Z`,
-      fetched: true,
-      candidates: [candidate(`${name}:1`, `From ${name}`, { channel: name })],
-      skipped: [],
-    }),
-  });
-  const first = mk('fakeA');
-  const second = mk('fakeB');
-  CHANNELS.push(first, second);
-  writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeA, fakeB]\n', 'utf8');
+  writeFileSync(settingsPath(root), kernelOn(), 'utf8');
+  const events: FixtureEvent[] = [
+    gitEvent('other', 'c1', 'Teach the widget to count'),
+    { key: 'jira:PROJ-9@Open · Olena', kind: 'jira/issue', at: recent(30), about: ['jira:PROJ-9'], payload: { key: 'PROJ-9', summary: 'Review the API', status: 'Open', assignee: 'Olena' } },
+  ];
   try {
-    // The classifier answers for A and dies on B — a relay fetch that cost two
-    // minutes must not be paid again next tick because the *other* channel held.
-    const judge: Ask = async (_s, user) =>
-      user.includes('fakeB:1') ? null : '[{"fp":"fakeA:1","decision":"keep","reason":"wanted","title":"A thing"}]';
-    const res = await pollOnce(root, judge);
-    assert.match(res.held ?? '', /fakeB/, 'the hold names the channel');
-    assert.equal(res.created.length, 1, 'A was written');
-    assert.deepEqual(res.advanced, ['fakeA'], 'and advanced');
-    assert.equal(watermarkFor(root, 'fakeA')?.cursor, '2026-05-05T00:00:00.000Z');
-    assert.equal(watermarkFor(root, 'fakeB')?.cursor ?? null, null, 'B holds where it was');
+    await againstFake(
+      async (read) => {
+        // The judge answers for git and dies on jira: what git earned stands.
+        const judge: Ask = async (_s, user) =>
+          user.includes('jira:PROJ-9') ? null : '[{"fp":"git:other@feature/x","decision":"area","reason":"new work","title":"Counting"}]';
+        const res = await pollOnce(root, judge);
+        assert.match(res.held ?? '', /jira/, 'the hold names the channel');
+        assert.equal(res.created.length, 1, 'git’s card was written');
+        const keys = read().batches.flatMap((b) => b.events.map((e) => e.key));
+        assert.deepEqual(keys, ['intake:git:other:c1'], 'and recorded; jira was not, so the next pass reads it again');
+      },
+      {},
+      events,
+    );
   } finally {
-    CHANNELS.splice(CHANNELS.indexOf(first), 1);
-    CHANNELS.splice(CHANNELS.indexOf(second), 1);
     stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -2965,108 +1932,27 @@ test('a channel judged before a hold keeps its notes and its cursor', async () =
 });
 
 
-test('a Slack run that ran out of pages moves the cursor to where both searches reached', () => {
-  const at = (ts: string) => new Date(Number(ts) * 1000).toISOString();
-  const msg = (ts: string, mine: boolean) => parseSlackRelay(JSON.stringify({ messages: [slackRecord('D0AAAAAAA', ts, mine ? 'me' : 'X', 't', mine)], more: true }))!.messages[0]!;
-  // `to:me` reached further than `from:me`: the safe boundary is the earlier one,
-  // because the pages of each search are contiguous from the cursor and the one
-  // cut short is the one that decides.
-  assert.equal(
-    slackBoundary([msg('1788340000.000001', false), msg('1788350000.000001', false), msg('1788345000.000001', true)]),
-    at('1788345000.000001'),
-  );
-  // One direction empty: the other's newest is the boundary.
-  assert.equal(slackBoundary([msg('1788340000.000001', false)]), at('1788340000.000001'));
-  assert.equal(slackBoundary([]), null);
-
-  // Told to paginate to the end, and told why.
-  const text = relayInstructions('slack', { since: new Date('2026-08-29T00:00:00Z'), pages: 5, searchTool: 't' });
-  assert.match(text, /Do not stop early/);
-});
-
-
-test('a relay that transcribed fewer records than it read holds the cursor', async () => {
-  // The page headers say how many results came back; the records are what the
-  // model wrote down. A model can leave one out without failing any validation,
-  // and a cursor moved past it loses it for good.
-  const short = parseSlackRelay(
-    JSON.stringify({
-      pages: [{ query: 'to:me', results: 3 }, { query: 'from:me', results: 1 }],
-      messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a'), slackRecord('D0AAAAAAA', '1788344800.000001', 'me', 'b', true)],
-      more: false,
-    }),
-  )!;
-  assert.equal(short.reported, 4);
-  assert.equal(short.transcribed, 2);
-  assert.equal(transcribedAll(short), false);
-  const full = parseSlackRelay(JSON.stringify({ pages: [{ query: 'to:me', results: 1 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a')], more: false }))!;
-  assert.equal(transcribedAll(full), true);
-  // More records than pages reported loses nothing: the relay listed fewer pages
-  // than it read, not fewer records. One direction only.
-  const under = parseSlackRelay(JSON.stringify({ pages: [{ query: 'to:me', results: 1 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'a'), slackRecord('D0AAAAAAA', '1788344800.000001', 'me', 'b', true)], more: false }))!;
-  assert.equal(transcribedAll(under), true);
-  // Gmail counts threads, and a thread both searches listed is two records.
-  const gm = parseGmailRelay(JSON.stringify({
-    pages: [{ query: 'in:inbox', results: 1 }, { query: 'in:sent', results: 1 }],
-    threads: [
-      { id: '1a05c9cf17367981', subject: 's', messages: [{ id: '1a05c9cf17367981', date: '2026-09-01T10:00:00Z', from: 'x', labels: ['INBOX'], snippet: 'q' }] },
-      { id: '1a05c9cf17367981', subject: 's', messages: [{ id: '1a05c9cf17367982', date: '2026-09-01T11:00:00Z', from: 'me', labels: ['SENT'], snippet: 'a' }] },
-    ],
-    more: false,
-  }))!;
-  assert.equal(gm.transcribed, 2);
-  assert.equal(transcribedAll(gm), true);
-  assert.equal(transcribedAll(parseSlackRelay(JSON.stringify({ messages: [], more: false }))!), null, 'no pages reported: nothing to check against');
-
-  // Through the channel: the candidates are still offered, the cursor is not moved.
-  const root = vault({ a: card('a') });
-  const agent = join(root, 'short-agent.mjs');
-  writeFileSync(
-    agent,
-    `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: ${JSON.stringify(JSON.stringify({ pages: [{ query: 'to:me', results: 2 }], messages: [slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'any time?')], more: false }))}, duration_ms: 10, num_turns: 2 }));
-`,
-    { encoding: 'utf8', mode: 0o755 },
-  );
-  writeFileSync(settingsPath(root), `channels: [slack]\nmcp:\n  command: ${agent}\n  slack: [mcp__x__slack_search_public_and_private]\n`, 'utf8');
-  try {
-    const { reports } = await sweep(root, { only: ['slack'] });
-    const r = reports[0]!;
-    assert.equal(r.fetched, true);
-    assert.equal(r.candidates.length, 1, 'what was transcribed is still offered');
-    assert.equal(r.nextCursor, null, 'but the cursor does not move past what was not');
-    assert.equal(r.truncated, true);
-    assert.match(r.reason ?? '', /reported 2 result\(s\) and transcribed 1 — cursor held/);
-    assert.match(relayInstructions('slack', { since: new Date(), pages: 1, searchTool: 't' }), /"pages"/, 'the relay is asked for the counts');
-  } finally {
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 
 test('an unjudged card tracks nothing itself; one that extends a note stands in for it', () => {
   const root = vault({
     real: `---\nid: real\ntitle: The real note\nfacets: { status: [active] }\n---\n\nb\n`,
-    // Last tick's card: a proposal pointing at the note, still in the queue.
+    // Last pass's card: a proposal pointing at the note, still in the queue.
     card: `---\nid: card\ntitle: A delta card\nfacets: { status: [active], intake: [unjudged], extends: [real] }\nlinks: ['slack:${P('D0AAAAAAA', '1788000000.000001')}']\nsource_fingerprint: slack:D0AAAAAAA/1788000000.000001\n---\n\nb\n`,
     // A proposal extending nothing, in another DM.
     loose: `---\nid: loose\ntitle: A loose card\nfacets: { status: [active], intake: [unjudged] }\nlinks: ['slack:${P('D0BBBBBBB', '1788000000.000002')}']\n---\n\nb\n`,
   });
   writeFileSync(paths(root).facets, 'status:\n  values: [active, done]\n  closed: [done]\n  single: true\n', 'utf8');
   try {
-    const ctx = context(root, { cursor: '2026-08-29T00:00:00Z' });
-    const known = knownFor('slack', ctx);
-    const parsed = parseSlackRelay(JSON.stringify({ messages: [
-      slackRecord('D0AAAAAAA', '1788344704.998749', 'Marthe', 'and now?'),
-      slackRecord('D0BBBBBBB', '1788344704.998750', 'Vivek', 'one more'),
-    ], more: false }))!;
-    const convs = new Map(conversationsFrom('slack', parsed.messages, ctx.cursor).map((c) => [c.key, c]));
+    const known = knownFor('slack', context(root));
+    const m = (channel: string, ts: string, from: string): Message => ({ event: ts, channel, channelName: from, id: ts, at: slackTsToIso(ts), from, mine: false, text: 'and now?' });
+    const convs = new Map(conversationsFrom('slack', [m('D0AAAAAAA', '1788344704.998749', 'Marthe'), m('D0BBBBBBB', '1788344704.998750', 'Vivek')]).map((c) => [c.key, c]));
     // The conversation the card came from is news about the *note*, not about
     // the card: an update onto a proposal would chain proposals.
     assert.deepEqual(trackedBy(convs.get('D0AAAAAAA')!, known), ['real']);
     // A proposal that extends nothing tracks nothing until somebody accepts it.
     assert.deepEqual(trackedBy(convs.get('D0BBBBBBB')!, known), []);
+    assert.match(exchangeOf(convs.get('D0AAAAAAA')!), /Marthe: and now\?/);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -3085,34 +1971,18 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
   assert.equal(withinHours(3, null), true, 'no window means always');
 
   // A vault whose window excludes this very hour: the loop starts, the first
-  // tick is skipped, and nothing is fetched or advanced.
+  // tick is skipped, and the kernel is not even asked.
   const root = vault({ a: card('a') });
-  const fake: Channel = {
-    name: 'fakeH',
-    defaultDays: 1,
-    collect: (ctx) => ({
-      channel: 'fakeH',
-      cursor: ctx.cursor,
-      nextCursor: '2026-06-06T00:00:00.000Z',
-      fetched: true,
-      candidates: [candidate('fakeH:1', 'Something', { channel: 'fakeH' })],
-      skipped: [],
-    }),
-  };
-  CHANNELS.push(fake);
   const h = new Date().getHours();
-  writeFileSync(
-    settingsPath(root),
-    `poll:\n  enabled: true\n  hours: [${(h + 1) % 24}, ${(h + 2) % 24}]\nchannels: [fakeH]\n`,
-    'utf8',
-  );
+  writeFileSync(settingsPath(root), `poll:\n  enabled: true\n  hours: [${(h + 1) % 24}, ${(h + 2) % 24}]\n${kernelOn()}`, 'utf8');
   try {
-    assert.equal(startPolling(root), true, 'the loop is running');
-    await new Promise((r) => setTimeout(r, 50));
-    assert.equal(watermarkFor(root, 'fakeH'), null, 'but the tick did not run');
-    assert.deepEqual([...reindex(root).notes.keys()].filter((id) => id !== 'a'), [], 'and wrote nothing');
+    await againstFake(async (read) => {
+      assert.equal(startPolling(root), true, 'the loop is running');
+      await new Promise((r) => setTimeout(r, 100));
+      assert.deepEqual(read().calls, [], 'but the tick did not run');
+      assert.deepEqual([...reindex(root).notes.keys()].filter((id) => id !== 'a'), [], 'and wrote nothing');
+    });
   } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
     stopPolling(root);
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -3123,201 +1993,53 @@ test('a tick outside the polling hours stays home, and the timer keeps its caden
 // ------------------------------------------------------------------ the window
 
 /**
- * A cursor is not followed back past its channel's window.
- *
- * The Slack cursor of 2026-09-23: a completeness hold stalled it for three weeks,
- * and a relay moving twenty messages a tick would have spent weeks more reading
- * asks that were settled, or asked again since, before reaching today's. Intake
- * is for current asks, so a cursor older than the window reads from the window's
- * start — and the span it stepped over is recorded, so the gap is a fact somebody
- * can read rather than an absence.
+ * Where a channel reads from: its cursor — the newest connector event it judged
+ * — bounded by its window. Intake is for current asks, so a cursor weeks old is
+ * not followed back through asks settled since; the read starts at the window
+ * and says what it stepped over.
  */
-const DAY_MS = 86_400_000;
-const OLD = '2026-01-01T00:00:00.000Z';
+test('a channel reads from its cursor, or its window when it has none or the cursor is older', () => {
+  const now = Date.parse('2026-10-16T12:00:00.000Z');
+  const week = { defaultDays: 7 };
+  assert.deepEqual(startOf(week, null, undefined, now), { since: '2026-10-09T12:00:00.000Z' }, 'never judged: the window');
+  assert.deepEqual(startOf(week, '2026-10-15T08:00:00.000Z', undefined, now), { since: '2026-10-15T08:00:00.000Z' }, 'the cursor');
+  const old = startOf(week, '2026-09-23T08:00:00.000Z', undefined, now);
+  assert.equal(old.since, '2026-10-09T12:00:00.000Z', 'a cursor older than the window reads from the window');
+  assert.match(old.note!, /cursor 2026-09-23 is older than the 7-day window: read from 2026-10-09/);
+  assert.deepEqual(startOf(week, '2026-10-15T08:00:00.000Z', new Date('2026-01-01T00:00:00.000Z'), now), { since: '2026-01-01T00:00:00.000Z' }, '--since wins');
+});
 
-function windowed(
-  name: string,
-  answer: (ctx: IntakeContext) => Partial<ChannelReport>,
-  calls: IntakeContext[],
-): Channel {
-  return {
-    name,
-    defaultDays: 7,
-    collect: (ctx) => {
-      calls.push(ctx);
-      return { channel: name, cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [], ...answer(ctx) };
-    },
-  };
-}
-
-const statusFor = (root: string, channel: string) => statusOf(root).find((s) => s.channel === channel)!;
-
-test('a cursor older than its window reads from the window’s start, and records the span it skipped', async () => {
+test('a backlog is judged a slice of candidates at a time, never cut between two events of one instant', async () => {
   const root = vault({ a: card('a') });
-  const calls: IntakeContext[] = [];
-  const fake = windowed('fakeW', () => ({}), calls);
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'channels: [fakeW]\nclassify:\n  enabled: false\n', 'utf8');
+  writeFileSync(settingsPath(root), kernelOn(), 'utf8');
+  const at = recent(30);
+  const events = [
+    gitEvent('r', 's1', 'one', 'b1', recent(40)),
+    gitEvent('r', 's2', 'two', 'b2', at),
+    gitEvent('r', 's3', 'three', 'b3', at),
+    gitEvent('r', 's4', 'four', 'b4', recent(20)),
+  ];
   try {
-    commitWatermark(root, 'fakeW', OLD);
-    assert.equal(statusFor(root, 'fakeW').stale, true, 'status says the next tick will not follow the cursor back');
-    assert.equal(statusFor(root, 'fakeW').skipped, null, 'and nothing has been skipped yet');
-    assert.match(renderStatus(root), /fakeW .*older than the 7-day window — the next tick reads from \d{4}-\d\d-\d\d/);
-
-    const before = Date.now();
-    const res = await pollOnce(root);
-    const ctx = calls[0]!;
-    assert.ok(Math.abs(ctx.since.getTime() - (before - 7 * DAY_MS)) < 5_000, 'it read from now − 7 days');
-    const start = ctx.since.toISOString();
-    assert.equal(ctx.cursor, start, 'and handed the channel that start as its cursor, so nothing older counts as new');
-
-    const line = res.channels[0]!;
-    assert.deepEqual(line.skippedSpan, { from: OLD, to: start, days: 7 });
-    assert.match(
-      channelLine(line),
-      new RegExp(`skipped 2026-01-01 → ${start.slice(0, 10)}: older than the 7-day window`),
+    await againstFake(
+      async () => {
+        // Four branches, four candidates; two share an instant.
+        const three = await pending(root, { only: ['git'], limit: 3 });
+        assert.ok(three.ok);
+        assert.equal(three.reports[0]!.read, 3, 'three candidates fit');
+        assert.equal(three.reports[0]!.truncated, true, 'and it says more waits');
+        assert.match(renderPreview(three), /more behind this slice/);
+        const two = await pending(root, { only: ['git'], limit: 2 });
+        assert.ok(two.ok);
+        assert.equal(two.reports[0]!.read, 1, 'an instant is not split to fill a slice');
+        // Skips cost the judge nothing, so they never fill one.
+        writeFileSync(join(root, 'notes', 'r.md'), '---\nid: r\ntitle: r\nsource_fingerprint: git:r@b1\n---\n\nb\n', 'utf8');
+        const skipping = await pending(root, { only: ['git'], limit: 3 });
+        assert.ok(skipping.ok);
+        assert.equal(skipping.reports[0]!.read, 4, 'a captured branch is a skip, and the slice takes all four');
+      },
+      {},
+      events,
     );
-    assert.equal(watermarkFor(root, 'fakeW')?.cursor, start, 'nothing new: the cursor moves to where it read from');
-
-    const st = statusFor(root, 'fakeW');
-    assert.equal(st.stale, false);
-    assert.equal(st.skipped?.from, OLD);
-    assert.equal(st.skipped?.to, start);
-    assert.ok(Number.isFinite(Date.parse(st.skipped?.at ?? '')), 'with when it was recorded');
-    assert.match(renderStatus(root), new RegExp(`fakeW .*skipped 2026-01-01 → ${start.slice(0, 10)}: older than the 7-day window`));
-
-    // The next tick finds the cursor a few milliseconds older than the moved
-    // window: the same span, grown, not a second one — and not news again.
-    await new Promise((r) => setTimeout(r, 5));
-    const again = await pollOnce(root);
-    assert.equal(again.channels[0]!.skippedSpan, undefined, 'a span already reported is not announced twice');
-    assert.doesNotMatch(channelLine(again.channels[0]!), /skipped/);
-    assert.equal(statusFor(root, 'fakeW').skipped?.from, OLD, 'the record keeps where the gap began');
-    assert.ok(statusFor(root, 'fakeW').skipped!.to >= start);
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('an explicit --since still wins over the window, and a preview’s skip is promoted with its cursor', async () => {
-  const root = vault({ a: card('a') });
-  const calls: IntakeContext[] = [];
-  const fake = windowed('fakeV', () => ({}), calls);
-  CHANNELS.push(fake);
-  try {
-    commitWatermark(root, 'fakeV', OLD);
-    const since = new Date('2025-12-01T00:00:00.000Z');
-    const asked = await sweep(root, { only: ['fakeV'], since });
-    assert.equal(calls[0]!.since.getTime(), since.getTime(), '--since is read as given');
-    assert.equal(calls[0]!.cursor, OLD);
-    assert.equal(asked.reports[0]!.skippedSpan, undefined, 'and nothing is skipped');
-
-    const preview = await sweep(root, { only: ['fakeV'] });
-    assert.match(renderSweep(preview), /skipped 2026-01-01 → \d{4}-\d\d-\d\d: older than the 7-day window/);
-    assert.equal(statusFor(root, 'fakeV').skipped, null, 'a preview records no skip');
-    assert.equal(watermarkFor(root, 'fakeV')?.cursor, OLD, 'nor moves the cursor');
-
-    advance(root, { channel: 'fakeV' });
-    assert.equal(statusFor(root, 'fakeV').skipped?.from, OLD, 'promoting the preview promotes its skip');
-    assert.equal(watermarkFor(root, 'fakeV')?.cursor, calls[1]!.since.toISOString());
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a held tick behind the window loses neither the cursor nor the span it would skip', async () => {
-  const root = vault({ a: card('a') });
-  const calls: IntakeContext[] = [];
-  const recent = new Date(Date.now() - DAY_MS).toISOString();
-  const fake = windowed(
-    'fakeH2',
-    () => ({ nextCursor: recent, candidates: [candidate('fakeH2:1', 'Something recent', { channel: 'fakeH2' })] }),
-    calls,
-  );
-  CHANNELS.push(fake);
-  writeFileSync(settingsPath(root), 'channels: [fakeH2]\n', 'utf8');
-  try {
-    commitWatermark(root, 'fakeH2', OLD);
-    const held = await pollOnce(root, async () => null);
-    assert.ok(held.held, 'the judge was down');
-    assert.equal(watermarkFor(root, 'fakeH2')?.cursor, OLD, 'the cursor holds where it was');
-    assert.equal(statusFor(root, 'fakeH2').skipped, null, 'nothing was skipped by a tick that did nothing');
-    assert.equal(statusFor(root, 'fakeH2').stale, true, 'and the next tick still knows to');
-
-    const judged = await pollOnce(root, keepAll);
-    assert.equal(judged.created.length, 1);
-    assert.equal(watermarkFor(root, 'fakeH2')?.cursor, recent);
-    assert.equal(statusFor(root, 'fakeH2').skipped?.from, OLD, 'the span still starts at the cursor the hold kept');
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a truncated run behind the window holds at the window’s start, not at the old cursor', async () => {
-  const root = vault({ a: card('a') });
-  const calls: IntakeContext[] = [];
-  const fake = windowed('fakeT', () => ({ truncated: true }), calls);
-  const gone = windowed('fakeU', () => ({ fetched: false, reason: 'token expired' }), calls);
-  CHANNELS.push(fake, gone);
-  writeFileSync(settingsPath(root), 'channels: [fakeT, fakeU]\nclassify:\n  enabled: false\n', 'utf8');
-  try {
-    commitWatermark(root, 'fakeT', OLD);
-    commitWatermark(root, 'fakeU', OLD);
-    await pollOnce(root);
-    // Holding means "resume from where this run started", and this run started
-    // at the window: going back to the old cursor would undo the skip.
-    assert.equal(watermarkFor(root, 'fakeT')?.cursor, calls[0]!.since.toISOString());
-    assert.equal(statusFor(root, 'fakeT').skipped?.from, OLD);
-    // A channel that could not be reached read nothing, so it skipped nothing.
-    assert.equal(watermarkFor(root, 'fakeU')?.cursor, OLD);
-    assert.equal(statusFor(root, 'fakeU').skipped, null);
-  } finally {
-    CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-    CHANNELS.splice(CHANNELS.indexOf(gone), 1);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('a Slack relay behind the window: its pages boundary and its completeness hold both work from the new start', async () => {
-  const root = vault({ a: card('a') });
-  const tsAt = (ms: number) => (ms / 1000).toFixed(6);
-  const now = Date.now();
-  const D = 'D0WWWWWWW';
-  // Day-granular search can hand back a message from before the window; it is
-  // behind the start, so it is not an ask.
-  const settled = slackRecord(D, tsAt(now - 8 * DAY_MS), 'Wes', 'are we still on for the review?');
-  const ask = slackRecord(D, tsAt(now - 2 * DAY_MS), 'Wes', 'can you look at the cutover plan?');
-  const mine = slackRecord(D, tsAt(now - 3 * DAY_MS), 'me', 'on it', true);
-  scriptedRelay(root, [
-    { pages: [{ query: 'to:me', results: 2 }, { query: 'from:me', results: 1 }], messages: [settled, ask, mine], more: true },
-    { pages: [{ query: 'to:me', results: 3 }], messages: [ask], more: true },
-  ]);
-  try {
-    commitWatermark(root, 'slack', OLD);
-    const first = await pollOnce(root, keepAll);
-    const row = first.channels.find((c) => c.channel === 'slack')!;
-    assert.equal(row.seen, 1, 'only the ask inside the window is offered');
-    assert.equal(row.behind, true, 'the relay left pages behind its boundary');
-    assert.equal(row.skippedSpan?.from, OLD);
-    // The boundary is where both searches reached: `from:me` stopped at `mine`.
-    assert.equal(watermarkFor(root, 'slack')?.cursor, new Date(Number(mine.ts) * 1000).toISOString());
-
-    // The completeness hold, from a stale cursor: held at the window's start.
-    commitWatermark(root, 'slack', OLD);
-    const before = Date.now();
-    const second = await pollOnce(root, keepAll);
-    const held = second.channels.find((c) => c.channel === 'slack')!;
-    assert.match(held.note ?? '', /cursor held/);
-    assert.notEqual(held.behind, true, 'a held cursor is not behind: a faster tick would read the same pages again');
-    const cursor = Date.parse(watermarkFor(root, 'slack')!.cursor!);
-    assert.ok(Math.abs(cursor - (before - 7 * DAY_MS)) < 5_000, 'held at the window’s start');
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -3343,34 +2065,41 @@ test('a catch-up interval defaults to ten minutes, is floored, and never exceeds
 });
 
 test('a tick that leaves a channel behind brings the next one forward, and says so', async () => {
-  const roots = [vault({ a: card('a') }), vault({ a: card('a') })];
-  const [behindRoot, currentRoot] = roots as [string, string];
-  const calls: IntakeContext[] = [];
-  const lagging = windowed('fakeL', () => ({ moreBehind: true, nextCursor: new Date().toISOString() }), calls);
-  const current = windowed('fakeC', () => ({}), calls);
-  CHANNELS.push(lagging, current);
-  const config = (channel: string) =>
-    `poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: 60\nchannels: [${channel}]\nclassify:\n  enabled: false\n`;
-  writeFileSync(settingsPath(behindRoot), config('fakeL'), 'utf8');
-  writeFileSync(settingsPath(currentRoot), config('fakeC'), 'utf8');
+  const root = vault({ a: card('a') });
+  writeFileSync(settingsPath(root), `poll:\n  enabled: true\n  every: 7200\n  catchUpSeconds: 60\nclassify:\n  enabled: false\n${kernelOn()}`, 'utf8');
+  const events = Array.from({ length: 45 }, (_, i) => gitEvent('r', `sha${i}`, `commit ${i}`, `b${i}`, recent(100 - i)));
   const lines: string[] = [];
   logTo((l) => lines.push(l));
   try {
-    assert.equal(startPolling(behindRoot), true);
-    assert.equal(startPolling(currentRoot), true);
-    await new Promise((r) => setTimeout(r, 100));
-    const tickOf = (root: string) => lines.find((l) => l.includes(` ${basename(root)} tick in `));
-    assert.match(tickOf(behindRoot) ?? '', /behind — next tick in 60s/);
-    assert.doesNotMatch(tickOf(currentRoot) ?? '', /behind/, 'a vault that is current keeps its interval');
+    await againstFake(
+      async () => {
+        // The loop's first tick reads one slice of the backlog and says it is behind.
+        assert.equal(startPolling(root), true);
+        let tick: string | undefined;
+        for (let i = 0; i < 50 && !tick; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          tick = lines.find((l) => l.includes(` ${basename(root)} tick in `));
+        }
+        assert.match(tick ?? '', /behind — next tick in 60s/);
+        const line = lines.find((l) => l.includes(`${basename(root)}/git `));
+        assert.match(line ?? '', /read 25, judged 25 .*more behind this slice/);
+        stopPolling(root);
+
+        // The rest, a pass later: nothing behind it.
+        const res = await pollOnce(root);
+        const git = res.channels.find((c) => c.channel === 'git')!;
+        assert.equal(git.read, 20);
+        assert.equal(isBehind(res), false);
+        assert.doesNotMatch(channelLine(git), /more behind/);
+      },
+      {},
+      events,
+    );
   } finally {
     logTo(null);
-    for (const root of roots) stopPolling(root);
-    CHANNELS.splice(CHANNELS.indexOf(lagging), 1);
-    CHANNELS.splice(CHANNELS.indexOf(current), 1);
-    for (const root of roots) {
-      closeIntakeDb(root);
-      rmSync(root, { recursive: true, force: true });
-    }
+    stopPolling(root);
+    closeIntakeDb(root);
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -3519,7 +2248,7 @@ test('a candidate the judge leaves out is asked again, and then declined rather 
     const fps = (JSON.parse(user) as { fp: string }[]).map((c) => c.fp);
     asks.push(fps);
     // Answers for every candidate but `git:2`, every time.
-    return JSON.stringify(fps.filter((fp) => fp !== 'git:2').map((fp) => ({ fp, decision: 'drop', reason: 'noise' })));
+    return JSON.stringify(fps.filter((fp) => fp !== 'git:2' && fp !== 'git:r@2').map((fp) => ({ fp, decision: 'drop', reason: 'noise' })));
   };
   try {
     const res = await classify(root, [candidate('git:1', 'a'), candidate('git:2', 'b'), candidate('git:3', 'c')], forgetful, 8);
@@ -3527,32 +2256,27 @@ test('a candidate the judge leaves out is asked again, and then declined rather 
     assert.deepEqual(res!.unjudged.map((c) => c.fingerprint), ['git:2']);
     assert.equal(res!.keep.length, 0, 'and it is not kept by default');
 
-    // Through a tick: declined with that reason, visible in the pile, nothing written.
-    const fake: Channel = {
-      name: 'fakeU',
-      defaultDays: 1,
-      collect: (ctx) => ({ channel: 'fakeU', cursor: ctx.cursor, nextCursor: '2026-07-07T00:00:00.000Z', fetched: true, candidates: [candidate('git:2', 'b', { channel: 'fakeU' })], skipped: [] }),
-    };
-    CHANNELS.push(fake);
-    writeFileSync(settingsPath(root), 'poll:\n  enabled: true\nchannels: [fakeU]\n', 'utf8');
-    try {
-      const tick = await pollOnce(root, forgetful);
-      assert.equal(tick.created.length, 0);
-      assert.equal(tick.unanswered, 1);
-      const row = suppressions(root).rows.find((r) => r.fingerprint === 'git:2')!;
-      assert.match(row.reason, /no verdict from the judge after two asks/);
-      assert.equal(row.decidedBy, 'model');
-    } finally {
-      CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-      stopPolling(root);
-    }
+    // Through a pass: declined with that reason, visible in the pile, nothing written.
+    writeFileSync(settingsPath(root), kernelOn(), 'utf8');
+    await againstFake(
+      async () => {
+        const tick = await pollOnce(root, forgetful);
+        assert.equal(tick.created.length, 0);
+        assert.equal(tick.unanswered, 1);
+        const row = suppressions(root).rows.find((r) => r.fingerprint === 'git:r@2')!;
+        assert.match(row.reason, /no verdict from the judge after two asks/);
+        assert.equal(row.decidedBy, 'model');
+      },
+      {},
+      [gitEvent('r', '2', 'b', 'main')],
+    );
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('a link attaches the branch to the note and writes no card', () => {
+test('a link attaches the branch to the note and writes no card, and several keep every link', () => {
   const root = vault({ a: `---\nid: a\ntitle: The note\nlinks: ['jira:PROJ-1']\n---\n\nb\n` });
   try {
     const c = candidate('git:repo@feat', 'work', { channel: 'git', links: ['gh:branch:org/repo@feat'] });
@@ -3567,6 +2291,12 @@ test('a link attaches the branch to the note and writes no card', () => {
     const again = materialise(root, 'git', [{ candidate: c, verdict: { fingerprint: c.fingerprint, decision: 'link', reason: 'r', target: 'a' } }]);
     assert.equal(again.linked.length + again.skipped, 1);
     assert.deepEqual(reindex(root).notes.get('a')!.absorbed_fingerprints, ['git:repo@feat']);
+
+    // Several onto one note in one run keep every link, not only the last one's.
+    const s1 = candidate('claude:s1', 'one', { channel: 'claude', links: ['claude:s1'] });
+    const s2 = candidate('claude:s2', 'two', { channel: 'claude', links: ['claude:s2'] });
+    materialise(root, 'claude', [s1, s2].map((x) => ({ candidate: x, verdict: { fingerprint: x.fingerprint, decision: 'link' as const, reason: 'progress', target: 'a' } })));
+    assert.deepEqual(reindex(root).notes.get('a')!.links.map((l) => l.raw), ['jira:PROJ-1', 'gh:branch:org/repo@feat', 'claude:s1', 'claude:s2']);
   } finally {
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
@@ -3579,39 +2309,30 @@ test('a session counts as this vault’s work only inside a declared repo or a r
   assert.equal(placeOf('/Users/x/repo/src', repos, workspaces), 'work');
   assert.equal(placeOf('/Users/x/wt/thing/repo', repos, workspaces), 'work');
   assert.equal(placeOf('/Users/x/personal', repos, workspaces), 'outside');
-  assert.equal(placeOf('/Users/x/vault/.projector', repos, workspaces), 'app', 'the relay and the judge run here');
+  assert.equal(placeOf('/Users/x/vault/.projector', repos, workspaces), 'app', 'the judge runs here');
   assert.equal(placeOf(undefined, repos, workspaces), 'unknown');
 
-  // Through the channel: a session in a personal project is skipped with the
+  // Through the mapping: a session in a personal project is skipped with the
   // directory in the reason, and one in a declared repo is offered.
-  const home = mkdtempSync(join(tmpdir(), 'pj-claude-'));
-  const prev = process.env.PROJECTOR_CLAUDE_HOME;
-  process.env.PROJECTOR_CLAUDE_HOME = home;
   const root = vault({
     proj: `---\nid: proj\ntitle: P\nproject:\n  repos:\n    - path: /Users/x/repo\n---\n\nb\n`,
   });
+  const session = (uuid: string, project: string, turns = 4, ended = '2026-08-20T10:03:30.000Z') =>
+    ev(`claude:${uuid}@${ended}`, 'claude/session', ended, [`claude:project:${project}`], { session: uuid, turns, ended, project, title: 'turn 0' });
   try {
-    const dir = join(home, 'projects', '-Users-x');
-    mkdirSync(dir, { recursive: true });
-    const write = (uuid: string, cwd: string) => {
-      const lines: string[] = [];
-      for (let t = 0; t < 4; t++) {
-        lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: `turn ${t}` }, cwd, timestamp: `2026-08-20T10:0${t}:00Z` }));
-        lines.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ok' }, timestamp: `2026-08-20T10:0${t}:30Z` }));
-      }
-      writeFileSync(join(dir, `${uuid}.jsonl`), lines.join('\n') + '\n', 'utf8');
-    };
-    write('bbbbbbbb-0000-0000-0000-000000000001', '/Users/x/repo/src');
-    write('bbbbbbbb-0000-0000-0000-000000000002', '/Users/x/personal');
-    const report = claudeChannel.collect(context(root, { since: new Date('2026-01-01') })) as Awaited<ReturnType<typeof claudeChannel.collect>>;
-    assert.deepEqual(report.candidates.map((c) => c.fingerprint), ['claude:bbbbbbbb-0000-0000-0000-000000000001']);
-    assert.ok(report.skipped.some((s) => /\/Users\/x\/personal is outside every declared repo/.test(s.why)));
+    const { candidates, skipped } = mapEvents('claude', context(root), [
+      session('bbbbbbbb-0000-0000-0000-000000000001', '/Users/x/repo/src'),
+      session('bbbbbbbb-0000-0000-0000-000000000002', '/Users/x/personal'),
+      session('bbbbbbbb-0000-0000-0000-000000000003', '/Users/x/repo', 2),
+      session('bbbbbbbb-0000-0000-0000-000000000001', '/Users/x/repo/src', 6, '2026-08-20T11:00:00.000Z'),
+    ]);
+    assert.deepEqual(candidates.map((c) => [c.fingerprint, c.event?.payload.turns]), [['claude:bbbbbbbb-0000-0000-0000-000000000001', 6]], 'one session, at its newest move');
+    assert.ok(skipped.some((s) => /\/Users\/x\/personal is outside every declared repo/.test(s.why)));
+    assert.ok(skipped.some((s) => /2 turn\(s\) — below the threshold/.test(s.why)));
+    assert.ok(skipped.some((s) => /folded into the session’s newer move/.test(s.why)));
   } finally {
-    if (prev === undefined) delete process.env.PROJECTOR_CLAUDE_HOME;
-    else process.env.PROJECTOR_CLAUDE_HOME = prev;
     closeIntakeDb(root);
     rmSync(root, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
   }
 });
 

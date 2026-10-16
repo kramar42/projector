@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { relative, sep } from 'node:path';
-import { originSlug } from '../intake/git.ts';
+import { originSlug } from '../sources/git.ts';
 import { settingsFor } from '../settings.ts';
 import type { IntakeContext } from '../intake/types.ts';
 import { within, type Day } from './day.ts';

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
-import { closeIntakeDb, commitWatermark } from '../src/intake/db.ts';
+import { closeIntakeDb } from '../src/intake/db.ts';
 import { createHandler } from '../src/mcp/server.ts';
 import { TOOLS } from '../src/mcp/tools.ts';
 import { place } from './fixture.ts';
@@ -216,11 +216,11 @@ test('vault_status counts the index and names a broken rule', async () => {
 
 /**
  * What the `views` tool answered is part of the status now: the vault's
- * questions, rules marked. And the intake half — each channel's last tick and
- * how much waits in the inbox — is what tells a client whether the world it is
- * about to read is stale.
+ * questions, rules marked. And the intake half — whether there is a kernel to
+ * triage from, which connector gathers each channel, and how much waits in the
+ * inbox — is what tells a client where the vault's news comes from.
  */
-test('vault_status lists every saved view, each channel\'s last tick and the inbox', async () => {
+test('vault_status lists every saved view, where intake reads from, and the inbox', async () => {
   const v = vault();
   try {
     inbox(v.root);
@@ -229,15 +229,15 @@ test('vault_status lists every saved view, each channel\'s last tick and the inb
     assert.match(before, /open — Open \(board\)/);
     assert.match(before, /unprioritised — Unprioritised \(table\) \[unlisted; rule: expect empty\]/);
     assert.match(before, /^inbox: 3 card\(s\)/m);
-    assert.match(before, /^intake: never ticked/m);
-    assert.match(before, /^ {2}git +never/m);
+    assert.match(before, /^intake: the kernel block is off, so there is nothing to triage$/m);
     assert.equal(existsSync(paths(v.root).intakeDb), false, 'asking does not create intake\'s store');
 
-    commitWatermark(v.root, 'git', '2026-10-13T10:00:00.000Z');
+    writeFileSync(join(v.root, '.projector', 'config.yaml'), 'kernel:\n  enabled: true\n  bin: kernel\n', 'utf8');
     const after = (await callTool(handle, 'vault_status')).text;
-    assert.match(after, /^intake: last tick \d{4}-\d{2}-\d{2}T.* \(just now\)/m);
-    assert.match(after, /^ {2}git +ran \S+ \(just now\) +cursor 2026-10-13T10:00:00\.000Z$/m);
-    assert.match(after, /^ {2}jira +never$/m);
+    assert.match(after, /^intake: triages the kernel’s connector events — `pj intake status` asks the kernel how far it got$/m);
+    assert.match(after, /^ {2}claude +gathered by bin\/kernel sync claude-code$/m);
+    assert.match(after, /^ {2}gmail +gathered by bin\/kernel sync gmail$/m);
+    assert.equal(existsSync(paths(v.root).intakeDb), false, 'and still creates nothing');
 
     // Folded in, not aliased.
     assert.ok(!TOOLS.some((t) => t.name === 'views'));

@@ -1,11 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { paths, resolvePath } from './config.ts';
-import { readAll } from './index/indexer.ts';
-import { channelNames } from './intake/run.ts';
+import { join } from 'node:path';
+import { CHANNELS } from './intake/connectors.ts';
 import { CONFIG_FILE, settingsFor, settingsPath, settingsTemplate } from './settings.ts';
-import { gh, run } from './sources/run.ts';
+import { gh } from './sources/run.ts';
 import { jiraGet } from './sources/jira.ts';
 
 /**
@@ -28,7 +26,7 @@ export type Status =
   | 'unconfigured'
   /** Configured and refused, or configured and pointing at nothing. */
   | 'failing'
-  /** `pj` holds no credential by design: an agent fetches this one over MCP. */
+  /** `pj` holds no credential by design: something else gathers this one — the kernel's connectors. */
   | 'agent'
   /** Turned off in this vault's config. */
   | 'off';
@@ -99,78 +97,22 @@ function probeClaude(): { status: Status; detail: string; fix?: string } {
   };
 }
 
-function probeGit(root: string): { status: Status; detail: string; fix?: string } {
-  let repos: string[] = [];
-  try {
-    const { notes } = readAll(paths(root).notes);
-    const seen = new Set<string>();
-    for (const rec of notes.values()) {
-      for (const r of rec.project?.repos ?? []) {
-        const path = resolve(resolvePath(r.path, root));
-        if (!seen.has(path)) seen.add(path);
-      }
-    }
-    repos = [...seen];
-  } catch {
-    repos = [];
-  }
-  if (!repos.length) {
+/**
+ * An intake channel: what the kernel's connector for it gathers, read back. `pj`
+ * holds no credential for it and fetches nothing — the owner runs the
+ * connector — so all a probe can say is whether the vault
+ * has a kernel to read from.
+ */
+function probeChannel(root: string, c: { connector: string; gather: string }): { status: Status; detail: string; fix?: string } {
+  const k = settingsFor(root).kernel;
+  if (!k.enabled || !k.bin) {
     return {
       status: 'unconfigured',
-      detail: 'no project note declares any repos',
-      fix: 'give a project note a `project.repos` block — `pj set <id> --set "project.repos=[{path: ~/Code/thing, base: main}]"`',
+      detail: 'intake reads the kernel, and this vault has no kernel block',
+      fix: `put kernel.enabled: true and kernel.bin in ${CONFIG_FILE}`,
     };
   }
-  const missing = repos.filter((r) => !existsSync(r));
-  if (missing.length === repos.length) {
-    return {
-      status: 'failing',
-      detail: `${repos.length} declared, none present on disk`,
-      fix: `first missing: ${missing[0]}`,
-    };
-  }
-  const note = missing.length ? `, ${missing.length} missing` : '';
-  return { status: 'ready', detail: `${repos.length - missing.length} repo(s)${note}` };
-}
-
-/**
- * Slack.
- *
- * Deliberately never `ready` or `unconfigured`: `pj` has no Slack credential
- * and is not going to grow one. The agent fetches it over MCP and hands the
- * results back, so only the agent can verify the MCP server.
- */
-const AGENT_FETCHED: Record<string, string> = {
-  slack: 'fetched by the relay agent over the Slack MCP tools named in mcp.slack; pj holds no Slack credential',
-};
-
-async function probeGmail(root: string): Promise<{ status: Status; detail: string; fix?: string }> {
-  const cfg = settingsFor(root).gmail;
-  const res = await run(
-    cfg.command,
-    [
-      '--readonly',
-      '--gmail-no-send',
-      '--no-input',
-      '--json',
-      ...(cfg.account ? ['--account', cfg.account] : []),
-      'gmail',
-      'search',
-      'after:0',
-      '--max',
-      '1',
-    ],
-    { timeoutMs: 15_000 },
-  );
-  if (res.ok) return { status: 'ready', detail: `read-only through ${cfg.command}` };
-  const missing = /spawn failed|ENOENT|not found/i.test(res.stderr);
-  return {
-    status: missing ? 'unconfigured' : 'failing',
-    detail: missing ? `${cfg.command} is not installed` : `${cfg.command} could not read Gmail`,
-    fix: missing
-      ? 'install gogcli, then authorize Gmail with read-only scopes'
-      : 'run `gog auth list`, then authorize the account with read-only Gmail access',
-  };
+  return { status: 'agent', detail: `triaged from the kernel's ${c.connector} connector — gathered by ${c.gather}` };
 }
 
 export async function probe(root: string): Promise<Report> {
@@ -187,21 +129,12 @@ export async function probe(root: string): Promise<Report> {
     r: { status: Status; detail: string; fix?: string },
   ) => probes.push({ name, kind, ...(enabled ? r : { status: 'off' as Status, detail: 'off in this vault' }) });
 
-  // Channels, in the order `pj intake` sweeps them.
-  const jira = await probeJira(root);
-  const gmail = await probeGmail(root);
-  const claude = probeClaude();
-  for (const name of channelNames()) {
-    if (name === 'claude') add(name, 'channel', on(name), claude);
-    else if (name === 'git') add(name, 'channel', on(name), probeGit(root));
-    else if (name === 'jira') add(name, 'channel', on(name), jira);
-    else if (name === 'gmail' && s.gmail.transport === 'mcp') {
-      add(name, 'channel', on(name), { status: 'agent', detail: 'fetched by the relay agent over the Gmail MCP tools named in mcp.gmail' });
-    } else if (name === 'gmail') add(name, 'channel', on(name), gmail);
-    else add(name, 'channel', on(name), { status: 'agent', detail: AGENT_FETCHED[name] ?? '' });
-  }
+  // Channels, in the order `pj intake` judges them.
+  for (const c of CHANNELS) add(c.name, 'channel', on(c.name), probeChannel(root, c));
 
-  // Enrichment. Jira and Claude reuse the answers above rather than asking twice.
+  // Enrichment.
+  const jira = await probeJira(root);
+  const claude = probeClaude();
   add('jira', 'enrich', enrichOn('jira'), jira);
   add('gh', 'enrich', enrichOn('gh:pr'), await probeGh());
   add('claude', 'enrich', enrichOn('claude'), claude);

@@ -968,17 +968,27 @@ answers — the way to ask what a ticket or a PR says *now*.
 
 # Intake
 
-Enrichment's mirror image. Enrichment is handed a ref and answers *how to show it*; intake is handed a
-channel and a cursor and answers *which refs nobody has filed*. Same Jira token, same
-`~/.claude/projects`, opposite question — so the two share `src/sources/` and nothing else.
+Enrichment's mirror image. Enrichment is handed a ref and answers *how to show it*; intake is handed
+what happened elsewhere and answers *which of it nobody has filed*. **Intake gathers nothing.** The
+kernel's connectors do — Claude Code sessions, commits, Jira issues, Slack and Gmail messages, each an
+event in the owner's kernel — and **you run them**, by hand: `bin/kernel sync claude-code` (and `jira`,
+`slack`, `gmail`, or several at once); git's connector gathers through its post-commit hook, linked into
+a repo, or its export run with the repos named. Intake reads the connector events it has not judged yet
+back out of the kernel, judges them, files what deserves a card into `inbox/`, and writes what it
+decided back to the kernel. So it needs the vault's `kernel:` block on (below); with it off, intake has
+nothing to read and says so — it never falls back to fetching.
 
-| Channel | Source | Unit | Fingerprint | Link it writes |
-|---|---|---|---|---|
-| `claude` | `~/.claude/projects/**` | a transcript that moved | `claude:<uuid>` | the same |
-| `git` | the project repos, via `git log` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` | `gh:branch:<slug>@<branch>` / `gh:commit:` — none without a GitHub remote |
-| `jira` | JQL, `PROJECTOR_JIRA_*` | an issue assigned to / reported by / watched by you | `jira:KEY` | the same |
-| `slack` | a relay agent over the MCP tools named in `mcp.slack` | a **conversation** — a DM, or a thread — with new messages from someone else | `slack:<channel>/<ts>` of the first new ask; for an update to a tracked conversation, of the newest | `slack:<permalink>` of that message |
-| `gmail` | a relay agent over `mcp.gmail`, or `gog gmail search` under `gmail.transport: gog` | a thread with new messages from someone else | `gmail:<thread-id>`; for an update, `gmail:<thread-id>@<message-id>` | the thread URL, as a plain `url` |
+| Channel | Connector, `bin/kernel sync …` | Kinds it judges | Unit | Fingerprint | Link it writes |
+|---|---|---|---|---|---|
+| `claude` | `claude-code` | `claude/session` | a session that moved, inside a declared repo | `claude:<uuid>` | the same |
+| `git` | `git` — its post-commit hook, or `bb export.bb <repo>…` | `git/commit` | a **branch**, or a lone commit on the base branch | `git:<repo>@<branch>` / `@<sha>` | `gh:branch:<slug>@<branch>` / `gh:commit:` — none without a GitHub remote |
+| `jira` | `jira` | `jira/issue`, `jira/transition` | an issue that moved and concerns you | `jira:KEY`; for an update to a tracked issue, `jira:KEY@<updated>` | `jira:KEY` |
+| `slack` | `slack` | `slack/message` | a **conversation** — a DM, or a thread — with something new from someone else | `slack:<channel>/<ts>` of the first new ask; for an update to a tracked conversation, of the newest | `slack:<permalink>` of that message |
+| `gmail` | `gmail` | `gmail/message` | a thread with something new from someone else | `gmail:<thread-id>`; for an update, `gmail:<thread-id>@<message-id>` | the thread URL, as a plain `url` |
+
+The connectors' own settings — the Jira credential, the Slack and Gmail MCP tools their relays may call,
+`gog` for Gmail — are the kernel's (`kernel/connectors/<id>/README.md` in its checkout), not this
+vault's. Intake holds no credential for any channel.
 
 **A fingerprint is not a link**, and the last two columns differ for three of the five channels. A
 fingerprint is a dedup key: it never has to resolve, it is never drawn, and `<channel>/<ts>` is a
@@ -988,35 +998,48 @@ text — the row was correct, the ref was never a link. A channel with no URL to
 the `source` facet already records where the note came from.
 
 ```bash
-pj intake                    # one tick: every channel from where it last got to, filed into inbox/
-pj intake claude git         # only these two
-pj intake --dry-run --json   # what a tick would find, filed nowhere
-pj intake status
-pj intake known claude:abc-123          # which notes already carry this
+bin/kernel sync claude-code jira   # in the kernel's checkout: gather (you run this)
+pj intake                          # one pass: judge what is new, file it into inbox/, record it in the kernel
+pj intake claude git               # only these two
+pj intake --dry-run --json         # what a pass would judge, judged and filed nowhere
+pj intake status                   # how far each channel got, and what waits behind it
+pj intake known claude:abc-123     # which notes already carry this
 
 pj decline git:abc --reason "my own commit"           # a no, recorded
 pj intake declined                                    # what a judgement hid, and why
-pj intake restore git:abc                             # offer it again, cursor and all
+pj intake restore git:abc                             # take the no back
 ```
 
-**`pj intake` is one tick, by hand** — the same tick the server runs on a timer (below): fetch, judge,
-file each card worth keeping into `inbox/`, record the rest as declined, and move the cursor of every
-channel it fetched. It needs no preview first, because `inbox/` is not your notes: nothing leaves it
-until you accept or decline the card. It prints a line per channel, `new <id>` per card, and the tick's
-total, the same lines the server logs.
+**`pj intake` is one pass, by hand** — the same pass the server runs on a timer (below): read the
+connector events newer than each channel's cursor, judge them, file each card worth keeping into
+`inbox/`, record the rest as declined, and send the kernel one `intake/<channel>` event per connector
+event it looked at. It needs no preview first, because `inbox/` is not your notes: nothing leaves it
+until you accept or decline the card. It prints a line per channel — `read 12, judged 3  2 new,
+1 declined, 9 skipped` — `new <id>` per card, and the pass's total, the same lines the server logs.
 
-**`pj intake --dry-run` is the preview**, for diagnosis: it lists the candidates, files nothing and
-moves no cursor. `--since`, `--limit`, `--json` and `--verbose` shape it and are refused without it,
-because a tick from an arbitrary `--since` would move a cursor past what it never looked at. A run that
-fetched is not a run that was resolved, so what a preview writes is only where it **would** move each
-cursor, alongside how many items it examined — not a run, so `pj intake status` reads as it did.
-Resolving a preview by hand — `pj add` or `pj decline` for each thing it listed — and then
-`pj intake advance [--captured n]` promotes those cursors; that is recovery, under
-`pj help intake advanced`. A pending proposal is inert until then, and promoting it spends it, so a
-second advance re-commits nothing.
+**The cursor is the kernel's, and it is a query.** Nothing in the vault or in `.projector/` says where
+intake got to. A channel's cursor is the newest `intake/<channel>` event projector has written
+(`projector/intake-newest`), and an intake event happens at the instant of the connector event it
+judged, so the connector events newer than that (`projector/connector-events-since`) are exactly the
+ones not judged yet. A pass that judged records its events, and the next pass starts after them; a pass
+that held records nothing, and the next one reads the same events again. Per channel rather than one
+instant for all, because you sync one connector at a time: a Jira sync an hour after a Claude Code sync
+brings events older than the newest session judged. A channel that has judged nothing yet, or whose
+newest judgment is older than its window — 7 days, 14 for Gmail — reads from the window's start, and
+its line says what it stepped over: **intake is for current asks**, and an ask three weeks old has been
+answered since or asked again in a message the window still reads.
 
-**Sweeping without being asked.** A vault can have the server sweep on a timer and write what it finds
-straight into the queue, so the intake board fills on its own:
+**`pj intake --dry-run` is the preview**, for diagnosis: it lists the candidates and the skips, and
+judges, files and records nothing, so `pj intake status` reads as it did. `--since`, `--limit`,
+`--json` and `--verbose` shape it and are refused without it. `--since` reads from exactly where it is
+told, for looking further back than a window.
+
+**`pj intake status` asks the kernel**: each channel's cursor, how many connector events wait behind
+it, how many of those the next pass would send the judge, and which connector gathers it. A channel
+with nothing waiting for days is a connector nobody has synced.
+
+**Triaging without being asked.** A vault can have the server run the pass on a timer and write what
+it judges straight into the queue, so the intake board fills on its own once you sync:
 
 ```yaml
 # .projector/config.yaml
@@ -1025,63 +1048,65 @@ poll:
   every: 900        # seconds; floored at 60, and 900 is the default
   hours: [8, 20]    # local hours a tick may run in, from inclusive to until exclusive; omit for always
   catchUpSeconds: 600   # seconds to the next tick while a channel is behind; floored at 60, never above every
-channels: [git, claude, jira]
+channels: [git, claude, jira]   # which channels this vault triages; omit for all, false for none
 ```
 
-**A tick that leaves a channel behind brings the next one forward.** A Slack relay reads a few pages
-a tick (`mcp.pages`), and when it runs out it moves the cursor to where it got and says
-`more pages behind …`. At `every` that backlog drains a few hours of a busy day per tick, so the next
-tick comes `catchUpSeconds` after this one finished instead, until no channel is behind; then the
-loop goes back to `every`. The tick's log line says which: `… 3 cursors advanced  behind — next tick
-in 10m`. `hours` still governs every tick, catch-up or not. Only a channel whose cursor moved counts:
-one held where it was would read the same pages again, so ticking sooner would only cost.
+**A pass judges a slice at a time.** Each channel sends the judge at most twenty-five candidates a pass,
+the oldest first, and never cuts between two events of one instant; skips do not count, since they cost
+the judge nothing. A sync that brought a week of sessions is judged a slice per pass, the cursor moving
+to the end of each. While a channel is behind, the next tick
+comes `catchUpSeconds` after this one finished instead of at `every`, and the tick's log line says so:
+`… 40 recorded in the kernel  behind — next tick in 10m`. `hours` still governs every tick, catch-up
+or not.
 
 `hours` is a working-day window in the machine's local time. The timer keeps its cadence through the
 night and each tick outside the window logs that it skipped — a colleague's evening reply is still there
-at eight, and two relay runs at three in the morning are two relay runs nobody asked for. A window that
-wraps midnight is written `[22, 6]`.
+at eight, and a judge running at three in the morning is a judge nobody asked for. A window that wraps
+midnight is written `[22, 6]`.
 
 **It is off unless the file says so.** `poll.enabled` is `true` only when written `true` — an absent
-`poll:` block is not a default of "yes, sweep my vault on a timer", because a server that started
-writing notes because you opened it once would be a surprise. If your intake board has been empty for
-days, this is the first thing to check: `pj intake status` shows each channel's last run, and a *last
-run* hours old with no poller means every sweep you have had was one you typed.
+`poll:` block is not a default of "yes, write into my vault on a timer", because a server that started
+writing notes because you opened it once would be a surprise. Polling also needs the kernel block on:
+without a kernel there is nothing to triage, and the server says so rather than polling nothing. If your
+intake board has been empty for days, check both, and then `pj intake status`: nothing waiting means
+nothing has been synced.
 
 It starts with the server: `bun run serve` or `bun run dev` starts every registered vault that sets
-`poll.enabled`, with no board open, and logs one line per vault saying whether it is polling and when
-its next tick is. The first tick waits out whatever is left of the interval since the last one — the
-newest *last run* in `pj intake status` — so a restart, which `bun run dev` does on every save, does not
-sweep again a vault swept five minutes ago; a vault that is behind, or was never swept, ticks at once.
-Turning `poll.enabled` on later needs no restart: the next request that opens the vault starts it.
+`poll.enabled` and has a kernel, with no board open, and logs one line per vault saying whether it is
+polling. The first tick runs at once — a pass with nothing new since the last judges nothing, so a
+restart costs two kernel queries. Turning `poll.enabled` on later needs no restart: the next request
+that opens the vault starts it.
 Each candidate that survives judgement lands as an ordinary note in `inbox/` — so an open board shows
 it appear without doing anything. Being in the
 inbox is what makes it unjudged: every query sees `intake: unjudged` on it, read off the folder and
 never stored in the file. Accepting it moves the file to where a note like it lives — `notes/`, or the
 folder of its one project — and every body link to it follows.
-Running twice writes nothing twice: a fingerprint the vault already holds short-circuits. Slack and
-Gmail are skipped with a reason, having no credential here.
+Running twice writes nothing twice: a fingerprint the vault already holds short-circuits.
 
-Unlike a preview, a tick **does** move each channel's cursor — it can, because everything behind the
-new boundary is a file rather than a line in a terminal you have already closed. Without a server,
-`pj intake` is that tick.
-
-**A tick can also tell your kernel.** With a `kernel:` block, every candidate a tick judged — kept,
-extended, linked or declined — is also sent to the kernel as one `intake/<channel>` event keyed by its
-fingerprint — and by the state its source was in, for a Jira issue or a Claude session, so seeing one
-again after it moved is a second event — about the notes it matched (as `vault:<vault>:<note id>`), and every card as a *proposed*
-intent citing that event, which `bin/kernel today` lists under awaiting until you confirm or drop it
-there. The card in `inbox/` is still what the board shows for a candidate; what the kernel says of
-notes you have is [the other direction](#projector-over-the-kernel). Sending
-twice lands once, and a kernel that cannot be reached is a warning on that channel's line — the card is
-written and the cursor moves regardless.
+**What a pass records in the kernel.** Every connector event a pass looked at — kept, extended, linked,
+declined, or skipped before the judge with its reason — becomes one `intake/<channel>` event keyed
+`intake:<the connector event's key>`, never the connector's own key, which the kernel already holds for
+the connector's event. It happens at the connector event's instant, carries that event whole as its
+evidence, and names the decision, the reason and the notes it matched (as `vault:<vault>:<note id>`).
+Every card is also a *proposed* intent citing its intake event, which `bin/kernel today` lists under
+awaiting until you confirm or drop it there. A pass that judged something is one attempt of
+projector's `judge-intake` spec, so the kernel judges the judging. The card in `inbox/` is still what
+the board shows for a candidate; what the kernel says of notes you have is
+[the other direction](#projector-over-the-kernel). Sending twice lands once. A kernel that refuses the
+batch is a warning on that channel's line: the cards are written first, nothing is recorded, and the
+next pass reads the same events — finding each already a card, a link or a decline, so it writes
+nothing twice.
 
 ```yaml
 kernel:
-  enabled: true                            # off unless written true
-  bin: ~/Code/projects/kernel/bin/kernel   # run as `<bin> ingest --source system:projector`
+  enabled: true                            # off unless written true; off, intake has nothing to read
+  bin: ~/Code/projects/kernel/bin/kernel   # run as `<bin> query --saved projector/…` and `<bin> ingest --source system:projector`
   db: ~/.kernel/db                         # passed as KERNEL_DB; omit for the kernel's own default
   vault: work                              # optional: the name in the aliases; default the registered name
 ```
+
+The saved queries are projector's, registered with its manifest: after updating projector, run
+`pj kernel register` once so the kernel knows `intake-newest` and `connector-events-since`.
 
 **`pj intake rejudge` runs the pass again over what is still in the queue.** A card is written once, on
 the way in, so cards from before you changed `.projector/classify.md` — or from an earlier version of
@@ -1094,7 +1119,7 @@ surely as typing them would. It **never deletes.** A card the pass would no long
 can look; refusing it is `pj decline`, which records why. The one thing to know: a card you corrected
 but did not judge is, by its own flag, still a proposal, so a rejudge would write over your correction.
 
-**Every tick judges before it writes, and writes the card while it is there.** One pass answers both
+**Every pass judges before it writes, and writes the card while it is there.** One pass answers both
 questions: does this deserve a note, and if so what is the note. So a card arrives with a title a person
 would actually use, a body saying where the work got to, and the axes it belongs on — rather than a
 commit subject, a provenance string and nothing else.
@@ -1109,13 +1134,13 @@ everything else there, so it is yours to delete, and a `rejudge` rewrites it alo
 keeps the last three lines of the exchange the judge read, newest last, with credential shapes
 already redacted — so the queue shows the message itself and not only an account of it. A
 `rejudge` rewrites the judgement and keeps the excerpt. A Slack card also always links back to its
-message: when the relay copies no permalink, one is assembled from the channel and the ts, on the
+message: when the connector copied no permalink, one is assembled from the channel and the ts, on the
 workspace the vault's own Slack links already use.
 
 **Judging a card is one key.** `+` folds it into what it `extends`, or accepts it as its own note when
 it extends nothing — the card has already decided which, and the fold dialog names the target before
-anything moves. Declining is `⌫`, which deletes the file and records the fingerprint so the next sweep
-does not propose it again.
+anything moves. Declining is `⌫`, which deletes the file and records the fingerprint so no later pass
+proposes it again.
 
 From the shell it is one verb each. **`pj accept <id>`** files a card the way `+` does: one of its own
 moves to its place, and an `extends` card folds in — body, links and fingerprint — with the target
@@ -1126,7 +1151,7 @@ leaves the rest as the note has them. **`pj decline <id> --reason "…"`** is `�
 the reason said: the card goes, and the reason is what the judge reads back.
 
 Candidates that do not deserve a note are recorded as declined, with the reason, and never become
-files — so a sweep of your own afternoon leaves the board empty and the declined pile three lines
+files — so a pass over your own afternoon leaves the board empty and the declined pile three lines
 longer.
 
 **What earns a card.** The judge names what each candidate *is*, one of seven kinds, and the code
@@ -1151,30 +1176,27 @@ Only sessions that ran inside a repo some project declares, or a workspace some 
 this vault's work: a personal project's sessions and the app's own headless runs are skipped with the
 directory in the reason. Declaring a repo on a project is how you widen that.
 
-**Intake is a sync, not only an inbox.** A sweep used to discover and nothing else: an issue a note
-already linked was skipped, a Slack message in a thread a note already pointed at became a second
-card beside the first, and a question you had answered eleven minutes later still arrived as a card,
-because the agent saw one message at a time. Three things changed.
+**Intake is a sync, not only an inbox.** Three things make a pass more than discovery.
 
-- **The unit is the conversation.** For Slack that is a DM, a group DM or a thread; for Gmail, a
-  thread. A conversation is offered only when someone *else* said something new since the cursor,
-  and what the classifier is shown is the whole exchange, oldest first, with your own lines marked
-  `you` — so "they asked, you answered, nothing followed" is a `drop` it can actually see, and
-  "you said *will do*" is a `keep` that says what you owe. Whose move it is is computed beside it
-  (`ball`), as a fact for the model rather than a gate: the same last word from you can be an answer
-  or a promise, and only reading tells which.
+- **The unit is the conversation.** The connectors write one event per message; a pass groups the
+  messages it read into conversations — for Slack a DM, a group DM or a thread; for Gmail, a thread —
+  and offers one only when someone *else* said something new. Your own messages are skipped as news,
+  and shown to the classifier as part of the exchange, oldest first, your lines marked `you` — so
+  "they asked, you answered, nothing followed" is a `drop` it can actually see, and "you said *will
+  do*" is a `keep` that says what you owe. Whose move it is is computed beside it (`ball`), as a fact
+  for the model rather than a gate. The other new messages of the conversation fold into the one
+  candidate; so do several commits on one branch, and a Jira issue's transitions into its issue.
 - **Anything the vault already tracks arrives as an update.** A conversation sharing a DM or a thread
   with a message an *open* note links, a Gmail thread an open note links, a Jira issue an open note
   links — each comes as a candidate that can only **extend** that note or be **dropped**, never stand
   alone. The classifier is shown the note as it stands and proposes the delta: the axes that should
   change and one or two sentences on what moved. It lands as an `extends` card, and the fold dialog asks
   about each axis before anything on your note changes. Notes that are closed hear nothing: finished
-  work does not reopen because a DM got chatty or Jira ticked.
-- **Jira offers a change, not an update.** An issue's `updated` moves on every comment; what the sync
-  compares is status and assignee, against the state the last tick judged it in. Unchanged is skipped
-  with that reason. The state is recorded only by a tick that judged — the automatic path — so a tick
-  that held on the classifier sees the same change again, and `pj intake --dry-run` never marks
-  anything seen.
+  work does not reopen because a DM got chatty or Jira ticked. A card still in the queue tracks nothing
+  itself — one that extends a note stands in for it.
+- **Jira offers a change, not an update.** An issue's `updated` moves on every comment; the jira
+  connector writes an issue event only when its status or assignee is new, so every one a pass reads is
+  a move.
 
 **The model proposes; your vocabulary disposes.** Every facet value and every merge target is checked
 against the vault before anything is written — an invented value is dropped and the rest of the card
@@ -1198,63 +1220,26 @@ classify:
 # command: claude
 ```
 
-`command` is spawned as written, and so is `mcp.command` below. A bare `claude` that is not on the
+`command` is spawned as written. A bare `claude` that is not on the
 server's PATH — a server started from a launcher or a non-login shell often has no `~/.local/bin` there —
 falls back to `~/.local/bin/claude`, where Claude Code's installer puts it, before the tick gives up and
 holds.
 
 A channel's candidates are judged in batches of `batch`, so a slow model answers for eight at a time
-rather than for eighteen in one breath, and the tick line shows what judging cost. If a tick still
-holds on the classifier, the channels judged before the hold keep their notes and their cursors —
-only the one that held, and those after it, are seen again next tick.
+rather than for eighteen in one breath, and the tick line shows what judging cost. If a pass still
+holds on the classifier, the channels judged before the hold keep their cards and their record in the
+kernel — only the one that held, and those after it, are read again next pass.
 
 **It learns from what you decide.** Every decline you take back is the strongest example there is —
 it says the judgement was wrong in the direction that costs you the item, where a decline you leave
 alone only says you agreed. Recent rescues, recent declines and recently kept notes go into the prompt,
 rescues first. Nothing is configured for this; using the queue is what trains it.
 
-**Slack and Gmail are fetched by a relay, not a summariser.** `pj` holds no credential for either;
-a headless `claude -p` does, through the MCP servers your Claude Code already has. What it is asked to
-be is the whole design: it makes a fixed set of tool calls — a search for what was said *to* you and
-one for what you said, since the cursor — and copies every field of every result into one JSON shape.
-It filters nothing, summarises nothing and decides nothing. Everything that follows is computed in
-`pj`: conversations, whose move it is, whether the vault tracks it, the fingerprint. It is a shared
-channel where a mistake would be visible to other people, so there is no wildcard: name only read tools
-and everything else is refused, and the relay is told to call only the search tool. `pages` bounds
-each search per tick. A Slack run that runs out of pages moves its cursor to the last message both
-searches reached and picks up the rest next tick — which the server brings forward to
-`poll.catchUpSeconds` while it is behind; a Gmail run that does holds its cursor, because Gmail
-pages newest-first. The relay also copies each page's result count, and a run whose records do not add
-up to it offers what it transcribed and holds its cursor — the channel's log line says so — rather than
-moving past messages nobody examined.
-
-```yaml
-mcp:
-  command: claude
-  model: haiku
-  pages: 5            # pages per search per tick
-  timeout: 600        # seconds one relay run may take before the channel reports itself unfetched
-  slack: [mcp__yourserver__slack_search_public_and_private]
-  gmail: [mcp__yourserver__search_threads]
-```
-
-Leave a channel's tools out and that channel is not fetched. Gmail may be read through `gogcli`
-instead, under its runtime read-only guards, for a vault that would rather register a Google OAuth
-client than run an agent — set `gmail.transport: gog`, or name no Gmail tools. Neither transport is
-tried as a fallback for the other: one that fails says so.
-
-```yaml
-gmail:
-  transport: gog          # default: mcp when mcp.gmail names tools, gog otherwise
-  command: gog
-  account: you@example.com
-```
-
 **A secret's value never enters a note.** A scratchpad DM is exactly where a token or a password ends
-up, and this pipeline writes notes from what it swept with nobody watching. The relay copies verbatim
-on purpose, so for it the rule is applied in code rather than asked for: credential shapes that can be
-recognised without reading — an AWS key id, a GitHub or Slack token, a private key block, a JWT — are
-redacted before any text is parsed, and say what they were. The classifier's prompt still carries the
+up, and this pipeline writes notes from what the connectors gathered with nobody watching. The
+connectors' relays copy verbatim on purpose, so for them the rule is applied in code rather than asked
+for: credential shapes that can be recognised without reading — an AWS key id, a GitHub or Slack token,
+a private key block, a JWT — are redacted before anything reaches the kernel, and say what they were. The classifier's prompt still carries the
 rule in words for everything else: say that a credential is there and what it is for, and leave the
 value out of everything that gets written. A note about a token is about rotating it, never a place to
 keep it. If you replace the instructions with `.projector/classify.md`, that rule is yours to restate —
@@ -1267,33 +1252,35 @@ server tells the tab and the tab tells your operating system — so there is no 
 nothing leaves the machine. Permission is asked the first time there is something to say, and refusing
 costs you nothing: the note is on the board either way.
 
-**If it cannot judge, it does not write.** A tick that cannot reach the classifier holds the channel
-it was judging and every one after it — nothing more written, those cursors not moved — and the next
-one tries again; what earlier channels wrote and advanced stands. That is deliberate: falling back to
+**If it cannot judge, it does not write.** A pass that cannot reach the classifier holds the channel
+it was judging and every one after it — nothing more written or recorded — and the next one reads the
+same events and tries again; what earlier channels wrote and recorded stands. That is deliberate: falling back to
 writing everything down would hand you the pile the judgement exists to prevent, and you would find
 out by looking at the board. `classify: {enabled: false}` is how you ask for that pile on purpose.
 
 **Saying no is a step too, and it is one verb.** **`pj decline <id> --reason "…"`** — or `⌫` on a
 card, whose reason is `declined from the queue` — removes the card and records its fingerprint as
-declined, so no later sweep offers it again. It is the same thing the classifier does to a candidate it
+declined, so no later pass offers it again. It is the same thing the classifier does to a candidate it
 drops, and it teaches the classifier the same way: your reason is the example it reads. Given a
 fingerprint no note holds, `pj decline` says no to something that never became a card.
 
-**Deleting is not declining.** `pj rm` on a card deletes it and records nothing, so a sweep may offer it
-again. Deleting a note you had already accepted — `pj rm`, or `⌫` on it — says something else: the work
-is finished with, not that it should never have been offered. Its fingerprints are recorded so no sweep
+**Deleting is not declining.** `pj rm` on a card deletes it and records nothing, so a later pass may
+offer it again if its source moves. Deleting a note you had already accepted — `pj rm`, or `⌫` on it — says something else: the work
+is finished with, not that it should never have been offered. Its fingerprints are recorded so no pass
 re-offers what you closed, and nothing learns from them.
 
 **Archive it** — keep the note and set `status: archived`. For one considered rejection you would like
 to find again; the note and its fingerprint both stay.
 
 Read the pile back with **`,d`** in the browser — or `pj intake declined` — and undo any of it with
-`bring back`, or `pj intake restore`. Bringing one back does two things: it lifts the decline, and it
-forgets that channel's cursor, so the next sweep can actually reach the item again rather than only
-stopping it being hidden. What arrives is a **new card**, written fresh from the commit or session or
-issue the source still holds — not the card you deleted, and not your edits to it. One limit worth
-knowing: the channel falls back to its default window, so something declined longer ago than that will
-not return on its own — `pj intake --dry-run --since 2026-01-01` reaches further. The pile only ever grows, so both are paged and searchable:
+`bring back`, or `pj intake restore`. Bringing back something the classifier declined does two things:
+it lifts the decline, and it offers the connector event the decline was of to the judge once more on the
+next pass — read back from the kernel by id, though the cursor has long passed it — so the item is in
+reach again rather than only no longer hidden. What arrives is a **new card**, written fresh from the
+event — not the card you deleted, and not your edits to it — or, if the judge declines it again, a
+second decline; either way it is offered once. One limit worth knowing: a card *you* declined on the
+board recorded its fingerprint and not its event, so bringing that back lifts the decline and the item
+returns only when its source next moves. The pile only ever grows, so both are paged and searchable:
 the search reaches the reason as well as the title, because someone hunting for a card they
 half-remember often remembers how the refusal was worded. `--q` and `--limit` on the CLI; in the panel,
 a box and a pager — twenty rows to a page, `[` and `]` for the page before and after, and the search
@@ -1307,42 +1294,22 @@ A row you bring back **stays where it is**, struck through and marked `brought b
 the page. Dropping it would leave a gap in a page of twenty and put a different row under the cursor —
 and the point of a page is that it holds still while you read it.
 
-**A watermark is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
-duplicate whether or not a cursor knows the item exists. The cursor only decides how far back to look,
-so deleting `.projector/intake.db` degrades a sweep to a default window: noisier, never wrong. That is also why
-it is its own file rather than a table in `.projector/enrich.db`, which is a cache and is meant to be
-throwaway-able.
-
-Channels work **oldest-first from the cursor**, and a run truncated by `--limit` holds its cursor: a
-cursor is one value, so it may only advance to a boundary with nothing unexamined behind it.
-
-**A cursor is not followed back past its channel's window** — 7 days for most channels, 14 for Gmail,
-the same window a channel with no cursor reads. When a stored cursor is older than that, because a
-run that could not finish held it for weeks or the machine was off, the next run reads from the
-window's start instead, and the cursor moves on from there. This is deliberate, not a shortcut:
-**intake is for current asks.** An ask three weeks old has been answered somewhere since, or was
-asked again in a message the window still reads; following the cursor back a page a tick would spend
-days of relay runs on what is settled before reaching today's. What was stepped over is not silent.
-The tick's line for that channel says `skipped 2026-09-23 → 2026-10-07: older than the 7-day window`,
-and `pj intake status` keeps the last such span under its table — `skipped: { from, to, at }` in
-`--json` — until a later one replaces it. Before the run, status says the cursor is older than the
-window and where the next tick will read from (`stale: true`). A tick that holds — the classifier
-unreachable, the relay short of a page — loses nothing: the cursor and the span stay where they were
-until a tick resolves. A channel that keeps finding nothing newer sits at the window's edge, and each
-later tick's few hours are added to the same span rather than reported as a new one. To reach
-further back on purpose, `pj intake --dry-run --since` still reads from exactly where it is told.
+**The cursor is not what makes this correct.** `source_fingerprint` on the notes is — it stops a
+duplicate whether or not anything knows the item was seen. `.projector/intake.db` holds only the
+declines and the rescues: losing it costs some noise, never a duplicate note. It is its own file rather
+than a table in `.projector/enrich.db`, which is a cache and is meant to be throwaway-able. A store from
+before intake read the kernel still has cursors and the state each tracked item was last seen in; it
+loses those tables when it opens, since the kernel answers both now.
 
 **What `pj` decides, and what it does not.** It decides only what is decidable — a ref already on a
-note, a fingerprint already captured, a session too short to be work. Everything else arrives as
+note, a fingerprint already captured, a session too short to be work or outside every declared repo,
+your own message. Each of those is a skip with its reason, recorded in the kernel like a judgment.
+Everything else arrives as
 `evidence`, and each match carries the mechanical reason it matched: `workspace`, `cwd`, `worktree`, `branch`,
 `mentions PROJ-303`, `text`. There is no score and no verdict here, because the failure that would make
 this useless is a confident wrong one — a session linked to the wrong note puts its history where
 nobody will look. Choosing between note, extension and neither is the classifier's job, on the evidence
 this hands it.
-
-Slack and Gmail are fetched by the relay agent through MCP, or Gmail by `gog` under runtime read-only
-guards when a vault chose that. `pj` keeps every cursor, because a watermark is a property of where
-the sweep got to, not of which transport fetched it.
 
 ---
 
@@ -1361,10 +1328,13 @@ projector registers, and `orient` lists them under `system:projector`:
 | `projector/vault-intents` | `prefix=vault:<vault>:` | every intent about this vault's notes: status, statement, horizon, the latest verdict and who gave it, who proposed it — the `kernel` axis, the panel's row and `pj kernel status` |
 | `projector/vault-status-events` | `alias=vault:<vault>:` (or one note's alias) | the `vault/status` events projector has sent, so `pj kernel import` knows what changed since |
 | `projector/intake-proposals` | — | the intents intake proposed that you have not answered yet |
+| `projector/intake-newest` | — | the newest `intake/<channel>` event per channel: intake's cursor |
+| `projector/connector-events-since` | `since=<instant>`, `kinds= :claude/session … ` | the connector events newer than the cursor — what a pass triages |
+| `projector/connector-event` | `event=<kernel id>` | one connector event, offered again when you take its decline back |
 
 You can run any of them yourself: `bin/kernel query --saved projector/vault-intents --in
 prefix=vault:work: --json`. Nothing the kernel answers is kept in the vault or in `.projector/`: the axis
-lives in memory for half a minute, and the import asks again each time. A kernel that has not
+lives in memory for half a minute, the import asks again each time, and so does every intake pass. A kernel that has not
 registered projector's queries refuses them, and the line it leaves says to run `pj kernel register`.
 
 **What the board sees.** Every intent in the kernel about a note of this vault
@@ -1677,15 +1647,15 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `pj decline <id\|fp>… --reason <why> [--title t]` | the no to a card: removes it and records its fingerprints, with the reason the judge learns from. A fingerprint no note holds is recorded as it is; `--title` names it in the pile |
 | `pj link <id> <ref> … [--remove] [--session] [--cwd dir]` | add or remove links. `--session` names the live Claude session working here, so it is a way of spelling a ref rather than a command of its own — for a session outside a `pj work` workspace, since one inside is already found through `workspace:` |
 | `pj context <id> [--fresh] [--json]` | everything known about a note, assembled. Links show what is cached; `--fresh` re-resolves every one first and waits for it |
-| `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `search`, `context` (`fresh: true` is `pj context --fresh`), `log`, `did`, `vault_status` — counts, `pj check`, the rule views, the inbox's size, each intake channel's last tick and cursor, and every saved view — `memory`, which reads `memory/AGENTS.md`, one day of `memory/theories/` (the newest by default) and `memory/patterns/`, and writes nothing there, and `propose`, which answers a batch of changes (`add`, `set`, `link`, `accept`, `decline`) with the `pj` commands, each checked as `pj` would check it, a refused one reported by its number, and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
+| `pj --vault <name\|path> mcp` | serve the vault to an MCP client — Claude Desktop, claude.ai, anything that speaks MCP — over stdio. Tools `ls`, `search`, `context` (`fresh: true` is `pj context --fresh`), `log`, `did`, `vault_status` — counts, `pj check`, the rule views, the inbox's size, whether intake has a kernel to triage from and which connector gathers each channel, and every saved view — `memory`, which reads `memory/AGENTS.md`, one day of `memory/theories/` (the newest by default) and `memory/patterns/`, and writes nothing there, and `propose`, which answers a batch of changes (`add`, `set`, `link`, `accept`, `decline`) with the `pj` commands, each checked as `pj` would check it, a refused one reported by its number, and applies nothing; saved views are resources and `projector://note/{id}` reads one note. `--vault` is required, and a call may name another registered vault but not a path |
 | `pj work <id> [--dry-run] [--no-open] [--new]` | multi-repo worktree workspace, briefing, `workspace:` on the note, a session in the app — reopening one already working there unless `--new` |
-| `pj intake [<channel>…]` | one tick by hand: fetch each channel from its cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, advance what it fetched |
-| `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a tick would find since each channel's cursor. Files nothing, moves no cursor |
-| `pj intake status [--json]` | each channel's cursor, last run and counts, whether the cursor is older than its window, and the last span a tick skipped for being older |
+| `pj intake [<channel>…]` | one pass by hand: read the connector events in the kernel newer than each channel's cursor, judge, file what deserves a card into `inbox/`, record the rest as declined, and record every event it looked at in the kernel as `intake:<key>`. Fetches nothing; with the kernel block off, reads nothing and says so |
+| `pj intake --dry-run [<channel>…] [--since iso] [--limit n] [--json] [--verbose]` | the preview: what a pass would judge since each channel's cursor. Judges, files and records nothing |
+| `pj intake status [--json]` | asked of the kernel: each channel's cursor, the connector events waiting behind it and how many the next pass would judge, and the connector that gathers it |
 | `pj intake rejudge [--limit n]` | run the pass again over cards still unjudged, rewriting title, body and facets in place. Never deletes |
-| `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | read the pile back, paged and searchable · lift the decline and rewind that channel, so the next sweep offers it again |
-| `pj intake advance [--captured n]` · `pj intake known <ref>…` · `pj intake cursor set --channel c --cursor v` · `pj intake cursor reset [--channel c]` | integration and recovery commands: promote the cursors a `--dry-run` proposed, once you resolved it by hand · inspect deduplication · set a raw cursor · forget one |
-| `poll:` · `classify:` · `gmail:` · `mcp:` in `.projector/config.yaml` | sweep on a timer · local classifier provider/model · read-only Gmail CLI · Slack MCP tools. `.projector/classify.md` replaces the instructions |
+| `pj intake declined [--q text] [--limit n] [--json]` · `pj intake restore <fp>…` | read the pile back, paged and searchable · lift the decline; the next pass offers its connector event to the judge again, once |
+| `pj intake known <ref>…` | inspect deduplication: which notes already carry a fingerprint or ref. There are no cursor commands — the cursor is the kernel's |
+| `poll:` · `classify:` · `kernel:` in `.projector/config.yaml` | triage on a timer · local classifier provider/model · the kernel intake reads and records in. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check [--json]` | under *Validity*, every note file and every saved view against the same vocabulary; then under *Rules*, every saved view declaring `expect: empty`, with the notes breaking it. Exits non-zero on a validity error or a broken rule — warnings alone pass |
 | `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel sync` · `pj kernel import [--dry-run] [--json]` · `pj kernel register` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner · write the kernel's verdicts into files that disagree · send the vault's commitments and days · register projector with the kernel. See [Projector over the kernel](#projector-over-the-kernel) |
@@ -1736,7 +1706,7 @@ under their own heading. See [Rules you can check](#rules-you-can-check).
     facets.yaml                  # facet vocabulary, order, constraints
     views/
       home.yaml  projects.yaml … # flat: a shape is a field, not a folder
-    index.db  enrich.db  intake.db  # derived · cache · cursors — all gitignored
+    index.db  enrich.db  intake.db  # derived · cache · declines — all gitignored
 ```
 
 Delete `.projector/` and what is left is plain markdown in plainly named folders. That is the test the

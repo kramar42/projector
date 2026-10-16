@@ -1,0 +1,20 @@
+;; The connector events projector's intake triages, newer than ?since: every event whose kind is
+;; one of ?kinds, a space-separated list padded with spaces (" :claude/session :git/commit "), with
+;; its kernel id, its kind, when it happened, each alias of each entity it is about ("" for none) and
+;; its payload. One row per event and alias; src/intake/connectors.ts folds them into one event each
+;; and recovers the key the connector wrote it under, which the kernel derives the id from.
+[:find ?event ?kind ?at ?about ?payload
+ :in ?since ?kinds
+ :where
+ [?event :event/at ?at]
+ [(> ?at ?since)]
+ [?event :event/kind ?k]
+ [(str ?k) ?kind]
+ [(str " " ?kind " ") ?padded]
+ [(clojure.string/includes? ?kinds ?padded)]
+ [?event :event/payload ?payload]
+ (or-join [?event ?about]
+   (and [?event :event/about ?e]
+        [?e :entity/aliases ?about])
+   (and (not [?event :event/about _])
+        [(ground "") ?about]))]

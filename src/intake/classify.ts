@@ -7,7 +7,7 @@ import { resolveCommand, run } from '../sources/run.ts';
 import { rescues, suppressions } from './db.ts';
 import { settingsFor } from '../settings.ts';
 import type { Facets, Note } from '../schema/types.ts';
-import { addCost, costFromEnvelope } from './relay.ts';
+import { addCost, costFromEnvelope } from './cost.ts';
 import type { Candidate, Cost } from './types.ts';
 
 /**
@@ -369,7 +369,7 @@ export function claudeAsk(command: string, model: string, timeoutMs = 180_000, c
       ],
       // Inside the vault's own `.projector`, so the transcript this run leaves
       // under `~/.claude` is recognisable as the app's and never swept back in as
-      // the owner's work (see `intake/claude.ts`).
+      // the owner's work (see `placeOf` in `intake/run.ts`).
       { timeoutMs, ...(cwd && existsSync(cwd) ? { cwd } : {}) },
     );
     if (!res.ok) return null;

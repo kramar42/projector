@@ -429,24 +429,39 @@ test('a kernel that refuses the batch, or the query, is a clear message, a non-z
   }
 });
 
-test('an intake.db that still has the old kernel_status table opens, keeps the rest, and loses only that table', () => {
+test('an intake.db from before opens without the tables the kernel now answers for, and keeps its declines', () => {
   const v = scratch();
   try {
     const file = paths(v.root).intakeDb;
     mkdirSync(dirname(file), { recursive: true });
     const old = new DatabaseSync(file);
-    old.exec(`CREATE TABLE seen (key TEXT PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
+    // The shape intake.db had while intake fetched: cursors, the state each
+    // tracked item was seen in, the import's old record, and a decline with
+    // none of the columns added since.
+    old.exec(`CREATE TABLE watermark (channel TEXT PRIMARY KEY, cursor TEXT, ran_at TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0, captured INTEGER NOT NULL DEFAULT 0);
+      INSERT INTO watermark VALUES ('jira', '2026-10-14T10:00:00Z', '2026-10-14T10:00:00Z', 3, 1);
+      CREATE TABLE seen (key TEXT PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
       INSERT INTO seen VALUES ('jira:K-1', 'Done', '2026-10-15T10:00:00Z');
       CREATE TABLE kernel_status (vault TEXT NOT NULL, note TEXT NOT NULL, seq INTEGER NOT NULL, status TEXT, key TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (vault, note, seq));
-      INSERT INTO kernel_status VALUES ('scratch', 'ship', 0, 'active', 'vault:scratch:ship:active', '2026-10-15T10:00:00Z');`);
+      INSERT INTO kernel_status VALUES ('scratch', 'ship', 0, 'active', 'vault:scratch:ship:active', '2026-10-15T10:00:00Z');
+      CREATE TABLE suppressed (fingerprint TEXT PRIMARY KEY, channel TEXT, title TEXT, reason TEXT NOT NULL, at TEXT NOT NULL);
+      INSERT INTO suppressed VALUES ('git:r@sha', 'git', 'a typo', 'trivial', '2026-10-15T10:00:00Z');
+      CREATE TABLE rescued (fingerprint TEXT PRIMARY KEY, channel TEXT, title TEXT, reason TEXT NOT NULL, at TEXT NOT NULL);`);
     old.close();
 
     const db = openIntakeDb(v.root);
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name);
-    assert.ok(!tables.includes('kernel_status'));
-    assert.ok(tables.includes('watermark'));
-    assert.deepEqual({ ...(db.prepare('SELECT state FROM seen WHERE key = ?').get('jira:K-1') as object) }, { state: 'Done' });
+    for (const gone of ['kernel_status', 'watermark', 'seen']) assert.ok(!tables.includes(gone), gone);
+    assert.deepEqual(tables.sort(), ['rescued', 'suppressed']);
+    // The decline survives, defaulted to a person's and gaining the event column empty.
+    assert.deepEqual(
+      { ...(db.prepare('SELECT reason, decided_by, was_judged, event FROM suppressed WHERE fingerprint = ?').get('git:r@sha') as object) },
+      { reason: 'trivial', decided_by: 'person', was_judged: 0, event: null },
+    );
+    const rescued = (db.prepare('PRAGMA table_info(rescued)').all() as { name: string }[]).map((c) => c.name);
+    assert.ok(rescued.includes('event') && rescued.includes('offered'));
   } finally {
+    closeIntakeDb(v.root);
     v.cleanup();
   }
 });
@@ -523,6 +538,9 @@ test('the manifest declares what projector writes and reads, and every batch it 
       ['vault-intents', 'queries/vault-intents.edn', ['prefix:string']],
       ['vault-status-events', 'queries/vault-status-events.edn', ['alias:string']],
       ['intake-proposals', 'queries/intake-proposals.edn', []],
+      ['intake-newest', 'queries/intake-newest.edn', []],
+      ['connector-events-since', 'queries/connector-events-since.edn', ['since:instant', 'kinds:string']],
+      ['connector-event', 'queries/connector-event.edn', ['event:uuid']],
     ],
   );
   for (const q of m.queries as { name: string; query: string; inputs: { name: string }[]; description: string }[]) {
@@ -548,7 +566,7 @@ test('the manifest declares what projector writes and reads, and every batch it 
       'jira',
       [
         {
-          candidate: { channel: 'jira', fingerprint: 'jira:K-1', title: 'K-1', links: ['jira:K-1'], evidence: { linkedTo: ['ship'] }, state: { key: 'jira:K-1', value: 'Done · Bob' } },
+          candidate: { channel: 'jira', fingerprint: 'jira:K-1', title: 'K-1', links: ['jira:K-1'], evidence: { linkedTo: ['ship'] } },
           verdict: { fingerprint: 'jira:K-1', decision: 'keep', reason: 'r', title: 'Answer K-1' },
           decision: 'keep',
           reason: 'r',

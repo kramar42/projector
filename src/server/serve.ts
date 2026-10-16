@@ -1129,9 +1129,10 @@ app.post('/api/intake/declined/:fp/restore', (c) => {
   const root = vaultOf(c);
   const fp = decodeURIComponent(c.req.param('fp'));
   const back = unsuppress(root, fp);
-  // `rewound` is the channel whose cursor went back, so the surface can say what
-  // will actually happen rather than implying the note reappears here and now.
-  return c.json({ restored: Boolean(back), rewound: back?.rewound ?? null });
+  // `offered` says what will actually happen rather than implying the note
+  // reappears here and now: the next pass offers the connector event again, or —
+  // with no event recorded — the item returns when its source next moves.
+  return c.json({ restored: Boolean(back), offered: Boolean(back?.event) });
 });
 
 app.get('/api/events', (c) =>

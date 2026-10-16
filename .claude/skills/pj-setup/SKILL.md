@@ -1,6 +1,6 @@
 ---
 name: pj-setup
-description: Set up a projector vault's channels and credentials — ask which sources this vault should sweep, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; the intake poller files them, and the owner judges what it filed with pj accept or pj decline.
+description: Set up a projector vault's channels and credentials — ask which intake channels this vault should triage, verify each one actually answers, and write .projector/config.yaml. Use when a vault is new, when `pj intake` or a link says something is not configured, when asked to connect Jira / GitHub / Slack / Gmail, or when asked to check what projector can reach. Do not use to file or sort notes; the intake poller files them, and the owner judges what it filed with pj accept or pj decline.
 ---
 
 # Setup
@@ -24,7 +24,7 @@ Every channel and every enrichment kind, each with a `status`:
 | `ready` | it answered | nothing — say so and move on |
 | `unconfigured` | nothing is set | offer it; `fix` is the exact change |
 | `failing` | set, and refused or unreachable | say what failed; `fix` names the likely cause |
-| `agent` | **you** fetch it over MCP; `pj` holds no credential | check whether you have that MCP server |
+| `agent` | the kernel's connector gathers it; `pj` holds no credential | say the owner syncs it with `bin/kernel sync <connector>` |
 | `off` | this vault turned it off | leave it unless the user asks |
 
 Lead with what already works. A user who has `gh` signed in and a Jira token in their environment
@@ -34,16 +34,17 @@ should be told they are two answers from done, not walked through five questions
 
 Three questions, and only for the ones the report leaves open.
 
-**Which channels should this vault sweep?** Name what each is good for, in one line, and say that a
-channel can be added later:
+**Which channels should this vault triage?** Intake fetches nothing: the kernel's connectors gather
+(`bin/kernel sync claude-code`, `git`, `jira`, `slack`, `gmail`, which the owner runs), and intake
+judges what they gathered. So every channel needs the vault's `kernel:` block on, and nothing else
+here. Name what each is good for, in one line, and say that a channel can be added later:
 
-- `claude` — Claude sessions that moved. No credential; it reads `~/.claude` on this machine.
-- `git` — your own branches and commits with nothing tracking them. Needs a project note to declare
-  `project.repos`; there is nothing to sweep until one does.
-- `jira` — issues that moved and concern you. Needs a host, an account and an API token.
-- `slack`, `gmail` — **you** fetch these over MCP. Nothing to configure here; if you have no Slack
-  MCP server, say so plainly rather than enabling a channel that will never produce anything.
+- `claude` — Claude sessions that moved. Only sessions inside a repo a project note declares count.
+- `git` — your own branches and commits with nothing tracking them.
+- `jira` — issues that moved and concern you.
+- `slack`, `gmail` — conversations with something new from someone else.
 
+Credentials for those live with the connectors (`KERNEL_JIRA_*`, `KERNEL_SLACK_TOOLS`, …), never here.
 A vault of reading notes wants none of these, and that is a legitimate answer: `channels: false`.
 
 **Is enrichment wanted?** It resolves `jira:`, `gh:`, `claude:` and `doc:` refs into readable rows.
@@ -83,9 +84,10 @@ pj setup
 Run it after they have edited. Report what changed. If something is still `failing`, give the
 `fix` line and stop — do not try credentials yourself, and do not loop.
 
-Finish by saying what a bare `pj intake` will now fetch and file into `inbox/`, which is the enabled
-channels and nothing else. A bare `pj intake` is a real tick — it files cards and moves cursors — so
-if they want to see what it would find first, `pj intake --dry-run` lists it and writes nothing.
+Finish by saying what a bare `pj intake` will now judge and file into `inbox/`: what the connectors
+gathered for the enabled channels, and nothing else. A bare `pj intake` is a real pass — it files
+cards and records its judgments in the kernel — so if they want to see what it would find first,
+`pj intake --dry-run` lists it and writes nothing.
 
 ## What the file holds, and why it is not committed
 

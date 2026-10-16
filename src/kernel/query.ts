@@ -27,6 +27,12 @@ export const QUERIES = {
   vaultStatusEvents: 'vault-status-events',
   /** The intents intake proposed that the owner has not answered. No input. */
   intakeProposals: 'intake-proposals',
+  /** Intake's cursor: the newest `intake/` event per channel. No input. */
+  intakeNewest: 'intake-newest',
+  /** The connector events intake triages. Inputs `since` (an instant) and `kinds` (space-padded, space-separated). */
+  connectorEventsSince: 'connector-events-since',
+  /** One connector event by its kernel id. Input `event`. */
+  connectorEvent: 'connector-event',
 } as const;
 
 export type QueryName = (typeof QUERIES)[keyof typeof QUERIES];

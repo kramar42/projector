@@ -146,6 +146,13 @@ export function materialise(
 
   const out: Materialised = { created: [], skipped: 0, extending: 0, updates: 0, linked: [], notify: [] };
   let notes: Map<string, { links: { raw: string }[] }> | null = null;
+  /**
+   * The links each note has after this run's attachments so far. The notes are
+   * read once, so two candidates linked onto one note in one run — a project's
+   * ten sessions — would otherwise each write the note's links as they were
+   * before the run, and every attachment but the last would be lost.
+   */
+  const attached = new Map<string, string[]>();
   for (const { candidate: c, verdict: v } of kept) {
     if (alreadyAnswered(c, v)) {
       out.skipped++;
@@ -165,8 +172,9 @@ export function materialise(
         continue;
       }
       try {
-        const links = [...new Set([...target.links.map((l) => l.raw), ...c.links])];
+        const links = [...new Set([...(attached.get(v.target) ?? target.links.map((l) => l.raw)), ...c.links])];
         patchNote(root, v.target, { links, absorb: { values: [c.fingerprint], mode: 'add' } });
+        attached.set(v.target, links);
         out.linked.push({ id: v.target, fingerprint: c.fingerprint });
       } catch {
         out.skipped++;

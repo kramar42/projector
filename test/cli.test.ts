@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
 import { settingsPath } from '../src/settings.ts';
 import { readAll } from '../src/index/indexer.ts';
-import { place } from './fixture.ts';
+import { connectorAnswer, connectorEvents, place, WORK_REPO } from './fixture.ts';
 
 /**
  * The CLI, run as a binary.
@@ -25,6 +25,7 @@ import { place } from './fixture.ts';
  */
 
 const CLI = new URL('../src/cli/pj.ts', import.meta.url).pathname;
+const FAKE = new URL('./fake-kernel', import.meta.url).pathname;
 
 interface Run {
   out: string;
@@ -239,89 +240,99 @@ test('canonical intake verbs reach the existing intake operations', () => {
     const listed = run([...base, 'declined']);
     assert.match(listed.out, /git:example/);
 
+    // A person's decline names no connector event, so taking it back lifts it
+    // and says when the item returns, rather than promising it now.
     const restored = run([...base, 'restore', 'git:example']);
     assert.equal(restored.code, 0, restored.out);
-    assert.match(restored.out, /back in the next sweep/);
+    assert.match(restored.out, /git:example — no longer declined; it returns when its source next moves/);
 
-    const cursor = run([...base, 'cursor', 'set', '--channel', 'git', '--cursor', 'abc']);
-    assert.equal(cursor.code, 0, cursor.out);
-    assert.match(cursor.out, /git cursor abc/);
-
-    const reset = run([...base, 'cursor', 'reset', '--channel', 'git']);
-    assert.equal(reset.code, 0, reset.out);
-    assert.match(reset.out, /forgot 1 cursor/);
+    // The cursor is the kernel's now: the commands that moved one are gone, and
+    // read as channel names they are refused before anything is read.
+    for (const gone of ['advance', 'cursor', 'reset', 'commit']) {
+      const r = run([...base, gone]);
+      assert.equal(r.code, 1, `pj intake ${gone} is gone`);
+      assert.match(r.out, new RegExp(`unknown channel\\(s\\): ${gone}`), r.out);
+    }
   } finally {
     v.cleanup();
   }
 });
 
 /**
- * `pj intake` is the tick; `--dry-run` is the preview.
+ * `pj intake` is the pass; `--dry-run` is the preview.
  *
- * Applying used to be the opt-in (`pj intake apply`) because it wrote cards among
- * your notes. Cards land in `inbox/` now, which is not your notes, so fetching and
- * filing is one harmless step and the preview is what has to be asked for.
- *
- * Driven through the git channel against a repo made here, with judging off, so
- * the spawned CLI fetches something real and spends nothing: every candidate is
- * kept, which is the write path with an empty verdict.
+ * Driven against `test/fake-kernel`, answering connector events shaped like the
+ * real connectors' and placed in the last hour, with judging off, so the
+ * spawned CLI reads something real and spends nothing: every candidate is kept,
+ * which is the write path with an empty verdict. The fake records what the pass
+ * sends, and answers the next pass's cursor from it, as the kernel does.
  */
-test('pj intake files into inbox/ and advances; --dry-run files nothing and moves no cursor', () => {
+test('pj intake files into inbox/ and records it in the kernel; --dry-run files and records nothing', () => {
   const v = vault();
-  const repo = mkdtempSync(join(tmpdir(), 'pj-cli-repo-'));
-  const git = (...args: string[]) =>
-    execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd: repo, stdio: 'ignore' });
+  const k = mkdtempSync(join(tmpdir(), 'pj-cli-kernel-'));
   try {
-    git('init', '-q', '-b', 'main');
-    git('config', 'user.email', 'me@example.com');
-    git('config', 'user.name', 'Me');
-    writeFileSync(join(repo, 'a.txt'), 'a', 'utf8');
-    git('add', 'a.txt');
-    git('commit', '-qm', 'Teach the widget to count');
+    writeFileSync(join(k, 'connector-events-since.json'), JSON.stringify(connectorAnswer(connectorEvents(new Date()))), 'utf8');
     writeFileSync(
-      place(v.root, 'projects', 'proj', 'README.md'),
-      `---\nid: proj\ntitle: Proj\nproject:\n  repos:\n    - path: ${repo}\n---\n\nb\n`,
+      place(v.root, 'projects', 'widget', 'README.md'),
+      `---\nid: widget\ntitle: Widget\nproject:\n  repos:\n    - path: ${WORK_REPO}\n---\n\nb\n`,
       'utf8',
     );
-    writeFileSync(settingsPath(v.root), 'channels: [git]\nclassify:\n  enabled: false\n', 'utf8');
-    const env = { PROJECTOR_VAULTS: v.registry, PROJECTOR_GIT_AUTHOR: 'me@example.com' };
+    const config = `classify:\n  enabled: false\nkernel:\n  enabled: true\n  bin: ${FAKE}\n`;
+    writeFileSync(settingsPath(v.root), config, 'utf8');
+    const batches = join(k, 'batches');
+    const env = { PROJECTOR_VAULTS: v.registry, FAKE_KERNEL_QUERIES: k, FAKE_KERNEL_BATCHES: batches };
     const base = ['--vault', v.root, 'intake'];
     const inbox = () => (existsSync(join(v.root, 'inbox')) ? readdirSync(join(v.root, 'inbox')) : []);
     const status = () => run([...base, 'status', '--json'], env).out;
 
     const before = status();
+    const waiting = JSON.parse(before) as { ok: boolean; channels: { channel: string; cursor: string | null; waiting: number }[] };
+    assert.ok(waiting.ok);
+    assert.deepEqual(waiting.channels.map((c) => [c.channel, c.cursor, c.waiting]), [
+      ['claude', null, 3],
+      ['git', null, 2],
+      ['jira', null, 2],
+      ['slack', null, 2],
+      ['gmail', null, 1],
+    ], 'status asks the kernel what waits behind each cursor');
+
     const preview = run([...base, '--dry-run'], env);
     assert.equal(preview.code, 0, preview.out);
-    assert.match(preview.out, /Teach the widget to count/, 'the preview lists the candidate');
+    assert.match(preview.out, /Wire the webhook retries/, 'the preview lists the candidates');
+    assert.match(preview.out, /gathered by bin\/kernel sync claude-code/);
     assert.deepEqual(inbox(), [], 'and files nothing');
-    assert.equal(status(), before, 'and pj intake status reads as it did: no cursor moved, no run recorded');
+    assert.equal(existsSync(batches), false, 'and records nothing in the kernel');
+    assert.equal(status(), before, 'so status reads as it did');
 
     // The preview's own flags shape a preview; without --dry-run they are refused
-    // rather than ignored, because a tick from an arbitrary --since would advance
-    // a cursor past what it never looked at.
+    // rather than ignored.
     for (const flag of [['--since', '2026-01-01'], ['--limit', '3'], ['--json'], ['--verbose']]) {
       const r = run([...base, ...flag], env);
       assert.equal(r.code, 1, `${flag[0]} without --dry-run should fail`);
       assert.match(r.out, /--dry-run/, r.out);
     }
-    assert.deepEqual(inbox(), [], 'and a refused run fetched nothing');
+    assert.deepEqual(inbox(), [], 'and a refused run read nothing');
 
-    const tick = run([...base, 'git'], env);
-    assert.equal(tick.code, 0, tick.out);
-    assert.match(tick.out, /^new\s+\S+/m, 'a tick names each card it wrote');
-    assert.match(tick.out, /cursor moved for git/);
-    assert.equal(inbox().length, 1, 'the card is in the inbox');
-    const git_ = (JSON.parse(status()) as { channel: string; cursor: string | null; ranAt: string | null }[]).find(
-      (s) => s.channel === 'git',
-    )!;
-    assert.ok(git_.cursor, 'the cursor moved');
-    assert.ok(git_.ranAt, 'and the run is recorded');
+    const pass = run(base, env);
+    assert.equal(pass.code, 0, pass.out);
+    assert.match(pass.out, /^new\s+\S+/m, 'a pass names each card it wrote');
+    assert.match(pass.out, /10 recorded in the kernel/);
+    assert.equal(inbox().length, 5, 'one card per candidate, judging being off');
+    const after = JSON.parse(status()) as typeof waiting;
+    assert.ok(after.channels.every((c) => c.cursor && c.waiting === 0), 'every cursor moved past what it judged');
 
     const again = run(base, env);
     assert.equal(again.code, 0, again.out);
-    assert.equal(inbox().length, 1, 'running twice writes nothing twice');
+    assert.match(again.out, /^claude +read 0, judged 0$/m);
+    assert.equal(inbox().length, 5, 'running twice writes nothing twice');
+
+    // With the kernel block off there is nothing to read, and it says so.
+    writeFileSync(settingsPath(v.root), 'classify:\n  enabled: false\n', 'utf8');
+    const off = run(base, env);
+    assert.equal(off.code, 1);
+    assert.match(off.out, /nothing read — the kernel block is off for this vault, so intake has nothing to read/);
   } finally {
-    rmSync(repo, { recursive: true, force: true });
+    rmSync(k, { recursive: true, force: true });
     v.cleanup();
   }
 });
@@ -375,8 +386,8 @@ test('help is progressive, and prints without a vault', () => {
     assert.match(run(['help', 'context'], { PROJECTOR_VAULTS: v.registry }).out, /--fresh/);
     const advanced = run(['help', 'intake', 'advanced'], { PROJECTOR_VAULTS: v.registry });
     assert.equal(advanced.code, 0);
-    assert.match(advanced.out, /pj intake cursor set/);
-    assert.match(advanced.out, /pj intake advance/);
+    assert.match(advanced.out, /pj intake known/);
+    assert.doesNotMatch(advanced.out, /pj intake (cursor|advance)/, 'the cursor is the kernel’s');
     assert.doesNotMatch(advanced.out, /\bpoll\b/, 'apply is gone, and so is its old spelling');
 
     // One registered: the header names it.

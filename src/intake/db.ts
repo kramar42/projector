@@ -4,74 +4,44 @@ import { dirname } from 'node:path';
 import { paths } from '../config.ts';
 
 /**
- * Where the last sweep got to, per channel. A third SQLite file, deliberately.
+ * Which candidates were declined, and which of those somebody took back. A
+ * third SQLite file, deliberately.
  *
  * `.index.db` is derived from the note files and rebuilt from scratch whenever
  * they change. `.enrich.db` is a cache: TTL'd, clearable, and losing it costs one
- * refetch. Watermarks are neither — lose them and the next sweep re-proposes
- * every message and commit of the last three months. Different lifecycles,
- * different stores, which is the same argument `server/enrich.ts` already makes
- * for not being a table in the index.
+ * refetch. A decline is neither — it is a judgement, not reproducible, and the
+ * reason it needs somewhere to live. Different lifecycles, different stores,
+ * which is the same argument `server/enrich.ts` makes for not being a table in
+ * the index.
  *
- * **What keeps this safe is that the watermark is not load-bearing.**
- * Correctness comes from `source_fingerprint` on the notes: a candidate already
- * captured is dropped whether or not the cursor knows about it. The watermark
- * only decides how far back to *look*, so deleting this file degrades a sweep to
- * a seven-day window — noisier, never wrong, and never duplicating a note.
+ * **Where intake got to is not here.** It used to be — a cursor per channel, and
+ * the state each tracked source item was last seen in — because intake fetched,
+ * and a fetcher has to remember where it stopped. It fetches nothing now: the
+ * kernel's connectors gather, and intake's cursor is the newest `intake/` event
+ * it wrote to the kernel (`connectors.ts`), so a second record here could only
+ * disagree with it (C11). A store from before loses those tables when it opens.
  *
- * Nothing here is note data, so C1 is untouched: no question about the work has
- * two answers.
- *
- * A third table, `seen`, arrived with the sync: the state each tracked source
- * item was last examined in, so a channel can tell "updated again" from "moved".
- * Same lifecycle, same argument — lose it and the next sweep offers every tracked
- * issue in the window as a possible update once, and the classifier drops the
- * ones where nothing changed. Noisier, never wrong.
+ * Still not load-bearing: lose this file and a later pass may offer again what
+ * was declined. Noisier, never wrong, and never a duplicate note, because
+ * `source_fingerprint` on the notes is what stops those.
  */
 
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS watermark (
-  channel   TEXT PRIMARY KEY,
-  -- Channel-defined and opaque: an ISO timestamp for the ones pj fetches, a
-  -- Slack ts or a Gmail date for externally fetched channels.
-  cursor    TEXT,
-  ran_at    TEXT NOT NULL,
-  -- What the run saw and what came of it, for intake status. Advisory.
-  seen      INTEGER NOT NULL DEFAULT 0,
-  captured  INTEGER NOT NULL DEFAULT 0,
-  -- Where the last sweep *would* move the cursor to, and when it proposed that.
-  -- Written by a sweep, read only by \`commit --advance\`. A sweep still advances
-  -- nothing: an abandoned one leaves a pending value nobody promotes.
-  pending_cursor TEXT,
-  pending_seen   INTEGER,
-  pending_at     TEXT,
-  -- The span the pending sweep would step over, its cursor being older than
-  -- the channel's window. Promoted with the cursor, like the rest of pending.
-  pending_skipped_from TEXT,
-  pending_skipped_to   TEXT,
-  -- The last span a committed run stepped over rather than read, and when.
-  -- Kept until a later skip replaces it: once the cursor has moved, nothing
-  -- else remembers where it had been, so this is not derivable (C11).
-  skipped_from TEXT,
-  skipped_to   TEXT,
-  skipped_at   TEXT
-);
-
--- A candidate somebody judged as "not a note", so a later sweep stops offering it.
+-- A candidate somebody judged as "not a note", so a later pass stops offering it.
 --
 -- Only *judgements* land here, never a channel's own mechanical skip. The
 -- difference is reproducibility: a channel declining a merge commit or a session
--- with no prompt re-derives that answer identically on every sweep, so storing it
+-- with no prompt re-derives that answer identically on every pass, so storing it
 -- would be storing something derivable (C11). A judgement about whether work
 -- matters is not reproducible — a different threshold or a different model
 -- answers differently — and that is precisely why it needs somewhere to live.
 --
--- Still not load-bearing, on the same argument as the watermark: lose this table
--- and a re-sweep re-proposes what was declined. Noisier, never wrong, and never a
+-- Not load-bearing: lose this table and a later pass may offer again what was
+-- declined. Noisier, never wrong, and never a
 -- duplicate note, because \`source_fingerprint\` on the notes is what stops those.
 CREATE TABLE IF NOT EXISTS suppressed (
   -- The candidate's fingerprint, which is derived from the thing itself and not
-  -- its wording, so a re-sweep matches what was judged rather than something that
+  -- its wording, so a later pass matches what was judged rather than something that
   -- merely reads like it.
   fingerprint TEXT PRIMARY KEY,
   channel     TEXT,
@@ -94,10 +64,14 @@ CREATE TABLE IF NOT EXISTS suppressed (
   -- about the offer, and a classifier taught from it learns to withhold the kind
   -- of thing you keep for a month and then let go.
   --
-  -- Both still suppress, because both have to stop a later sweep re-proposing the
+  -- Both still suppress, because both have to stop a later pass re-proposing the
   -- thing. Only one of them teaches: suppressions({ wasJudged: false }) is what
   -- classify.ts calibrates from.
-  was_judged  INTEGER NOT NULL DEFAULT 0
+  was_judged  INTEGER NOT NULL DEFAULT 0,
+  -- The connector event declined, by its kernel id, when a pass declined one:
+  -- what bringing it back offers to the judge again. Null for a card a person
+  -- declined, whose event the card does not record.
+  event       TEXT
 );
 
 -- A decline somebody took back.
@@ -116,74 +90,55 @@ CREATE TABLE IF NOT EXISTS rescued (
   -- Why it had been declined. The example is the pairing: this text, and the
   -- fact that a person disagreed with it.
   reason      TEXT NOT NULL,
-  at          TEXT NOT NULL
+  at          TEXT NOT NULL,
+  -- The connector event to offer again, carried over from the decline, and when
+  -- a pass offered it: once, so a rescue the judge answers is not asked twice.
+  event       TEXT,
+  offered     TEXT
 );
 
--- The state a tracked source item was last examined in.
---
--- Keyed by the item's stable identity (\`jira:KEY\`), not by the per-update
--- fingerprint a candidate carries, because the question it answers is "has this
--- moved since I last looked" and the answer has to survive the fingerprint
--- changing. \`state\` is channel-defined and opaque: the channel that wrote it is
--- the only reader, and it compares for equality and nothing else.
---
--- Written only after a candidate has been judged (see \`server/poll.ts\`), never
--- at fetch time: a tick that held on the classifier must see the same change
--- again next time, or the change is lost to a table nobody reads.
-CREATE TABLE IF NOT EXISTS seen (
-  key    TEXT PRIMARY KEY,
-  state  TEXT NOT NULL,
-  at     TEXT NOT NULL
-);
 `;
 
 /**
- * Add the pending columns to a store that predates them.
+ * Bring a store from before into shape, in place.
  *
  * `CREATE TABLE IF NOT EXISTS` does nothing to an existing table, and dropping
- * this file to get the new shape would cost a real re-sweep — the watermarks in
- * it are the only reason the next run does not re-propose three months of mail.
+ * this file to get the new shape would cost every decline in it.
  */
 function migrate(conn: DatabaseSync): void {
-  const have = new Set(
-    (conn.prepare('PRAGMA table_info(watermark)').all() as { name: string }[]).map((r) => r.name),
-  );
-  for (const [col, type] of [
-    ['pending_cursor', 'TEXT'],
-    ['pending_seen', 'INTEGER'],
-    ['pending_at', 'TEXT'],
-    ['pending_skipped_from', 'TEXT'],
-    ['pending_skipped_to', 'TEXT'],
-    ['skipped_from', 'TEXT'],
-    ['skipped_to', 'TEXT'],
-    ['skipped_at', 'TEXT'],
-  ] as const) {
-    if (!have.has(col)) conn.exec(`ALTER TABLE watermark ADD COLUMN ${col} ${type}`);
-  }
+  const columns = (table: string) =>
+    new Set((conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((r) => r.name));
 
-  // Same reasoning for the suppressions table, which predates knowing who
-  // decided. An existing row is defaulted to 'person', which is what every row
-  // written before the classifier existed actually was.
-  const supp = new Set(
-    (conn.prepare('PRAGMA table_info(suppressed)').all() as { name: string }[]).map((r) => r.name),
-  );
+  // The suppressions table predates knowing who decided. An existing row is
+  // defaulted to 'person', which is what every row written before the
+  // classifier existed actually was.
+  const supp = columns('suppressed');
   if (supp.size && !supp.has('decided_by')) {
     conn.exec("ALTER TABLE suppressed ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'person'");
   }
-
   // And `was_judged`, where 0 is right for every row that predates it: the only
   // writer that sets it is the delete cascade, and until it could, nothing told a
   // declined offer apart from a discarded note.
   if (supp.size && !supp.has('was_judged')) {
     conn.exec('ALTER TABLE suppressed ADD COLUMN was_judged INTEGER NOT NULL DEFAULT 0');
   }
+  // The connector event a decline was of, which a row from before never knew.
+  if (supp.size && !supp.has('event')) conn.exec('ALTER TABLE suppressed ADD COLUMN event TEXT');
+  const resc = columns('rescued');
+  if (resc.size && !resc.has('event')) conn.exec('ALTER TABLE rescued ADD COLUMN event TEXT');
+  if (resc.size && !resc.has('offered')) conn.exec('ALTER TABLE rescued ADD COLUMN offered TEXT');
 
   // `kernel_status` was `pj kernel import`'s own record of the status events it
-  // had sent. The kernel answers that now (the saved query
-  // `projector/vault-status-events`), and a second record could only disagree
-  // with it (C11), so a store that still has the table loses it. Nothing else in
-  // the file is touched, and nothing reads the table.
+  // had sent; the kernel answers that now (`projector/vault-status-events`).
+  // `watermark` and `seen` were intake's cursors and the state each tracked item
+  // was last fetched in; the kernel answers where intake got to now
+  // (`projector/intake-newest`), and its connectors key a moved item as a new
+  // event. A second record of either could only disagree with the kernel (C11),
+  // so a store that still has them loses them. Nothing else is touched, and
+  // nothing reads them.
   conn.exec('DROP TABLE IF EXISTS kernel_status');
+  conn.exec('DROP TABLE IF EXISTS watermark');
+  conn.exec('DROP TABLE IF EXISTS seen');
 }
 
 const connections = new Map<string, DatabaseSync>();
@@ -195,7 +150,7 @@ const connections = new Map<string, DatabaseSync>();
  * leaving the sidecars — which is what deleting "the file" looks like to anyone
  * who has not thought about WAL — makes the next open fail outright with a disk
  * I/O error. That would break the property the whole design rests on: losing this
- * store is meant to cost a wider sweep, never a working command.
+ * store is meant to cost some noise, never a working command.
  *
  * Narrow on purpose. It fires only when the database itself is absent and a
  * sidecar is present, which is unambiguously "somebody deleted it" and has
@@ -238,193 +193,6 @@ export function closeIntakeDb(dataRoot: string): void {
   connections.delete(file);
 }
 
-export interface Watermark {
-  channel: string;
-  cursor: string | null;
-  /** When a run last committed this channel; empty while only a preview has touched it. */
-  ranAt: string;
-  seen: number;
-  captured: number;
-  /** What the last sweep proposed, unpromoted. Null cursor means "hold where it is". */
-  pending?: Pending;
-  /** The last span a committed run stepped over, its cursor being older than the window. */
-  skipped?: SkippedSpan & { at: string };
-}
-
-/** From the old cursor to where reading started instead. Both ends as the cursor store holds them. */
-export interface SkippedSpan {
-  from: string;
-  to: string;
-}
-
-export interface Pending {
-  cursor: string | null;
-  seen: number;
-  at: string;
-  /** The span this sweep stepped over, promoted with the cursor. */
-  skipped?: SkippedSpan;
-}
-
-export function watermarks(dataRoot: string): Watermark[] {
-  const rows = openIntakeDb(dataRoot)
-    .prepare(
-      `SELECT channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at,
-              pending_skipped_from, pending_skipped_to, skipped_from, skipped_to, skipped_at
-         FROM watermark ORDER BY channel`,
-    )
-    .all() as unknown as {
-    channel: string;
-    cursor: string | null;
-    ran_at: string;
-    seen: number;
-    captured: number;
-    pending_cursor: string | null;
-    pending_seen: number | null;
-    pending_at: string | null;
-    pending_skipped_from: string | null;
-    pending_skipped_to: string | null;
-    skipped_from: string | null;
-    skipped_to: string | null;
-    skipped_at: string | null;
-  }[];
-  return rows.map((r) => ({
-    channel: r.channel,
-    cursor: r.cursor,
-    ranAt: r.ran_at,
-    seen: r.seen,
-    captured: r.captured,
-    // `pending_at` is what makes a pending note exist: a truncated run notes
-    // a null cursor on purpose, and that is not the same as never having swept.
-    ...(r.pending_at
-      ? {
-          pending: {
-            cursor: r.pending_cursor,
-            seen: r.pending_seen ?? 0,
-            at: r.pending_at,
-            ...(r.pending_skipped_from && r.pending_skipped_to
-              ? { skipped: { from: r.pending_skipped_from, to: r.pending_skipped_to } }
-              : {}),
-          },
-        }
-      : {}),
-    ...(r.skipped_from && r.skipped_to && r.skipped_at
-      ? { skipped: { from: r.skipped_from, to: r.skipped_to, at: r.skipped_at } }
-      : {}),
-  }));
-}
-
-/**
- * Note what a sweep would advance this channel to, without advancing it.
- *
- * The sweep used to write nothing at all, which is why resolving one meant
- * copying an opaque Slack `ts` from one process into the next by hand. It still
- * advances nothing — a pending value is inert until `commitWatermark` promotes
- * it — so an abandoned sweep swallows exactly as little as before.
- *
- * Nor is a preview a run. A channel with no row yet gets one with an empty
- * `ran_at` (the column is NOT NULL, and a store that predates this keeps it), so
- * `pj intake status` still says *never* and `lastTick` still finds no tick:
- * stamped now, a `--dry-run` made a vault that had never ticked read as fresh to
- * the server's first tick and to pj-day's freshness rule alike.
- */
-export function recordPending(
-  dataRoot: string,
-  channel: string,
-  cursor: string | null,
-  seen: number,
-  skipped?: SkippedSpan,
-): void {
-  const now = new Date().toISOString();
-  openIntakeDb(dataRoot)
-    .prepare(
-      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, pending_cursor, pending_seen, pending_at,
-                              pending_skipped_from, pending_skipped_to)
-       VALUES (?, NULL, '', 0, 0, ?, ?, ?, ?, ?)
-       ON CONFLICT(channel) DO UPDATE SET
-         pending_cursor = excluded.pending_cursor,
-         pending_seen   = excluded.pending_seen,
-         pending_at     = excluded.pending_at,
-         pending_skipped_from = excluded.pending_skipped_from,
-         pending_skipped_to   = excluded.pending_skipped_to`,
-    )
-    .run(channel, cursor, seen, now, skipped?.from ?? null, skipped?.to ?? null);
-}
-
-export function watermarkFor(dataRoot: string, channel: string): Watermark | null {
-  return watermarks(dataRoot).find((w) => w.channel === channel) ?? null;
-}
-
-/**
- * Move a channel's cursor forward.
- *
- * Called **after** a proposal has been resolved, never after fetching: a sweep
- * abandoned halfway must not swallow what it had already listed.
- *
- * Once committed, an item declined as "not a note" is behind the cursor. What
- * keeps that from losing it is `suppress` — a declined candidate recorded by
- * fingerprint, with its reason, readable afterwards through `suppressions` and
- * reversible through `unsuppress`. Before that table existed the cursor was the
- * only trace that anything had been considered, and the advice was to keep the
- * rejection as a note with `status: archived` — which is still right for one
- * considered no, and absurd at the volume a sweep of your own commits produces.
- */
-export function commitWatermark(
-  dataRoot: string,
-  channel: string,
-  cursor: string | null,
-  counts: { seen?: number; captured?: number; skipped?: SkippedSpan } = {},
-): Watermark {
-  const now = new Date().toISOString();
-  const skip = counts.skipped;
-  openIntakeDb(dataRoot)
-    .prepare(
-      `INSERT INTO watermark (channel, cursor, ran_at, seen, captured, skipped_from, skipped_to, skipped_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(channel) DO UPDATE SET
-         -- A null cursor means "leave it where it was": a run that fetched
-         -- nothing has no new boundary to note, and overwriting with null
-         -- would reopen the whole window on the next sweep.
-         cursor   = COALESCE(excluded.cursor, watermark.cursor),
-         ran_at   = excluded.ran_at,
-         seen     = excluded.seen,
-         captured = excluded.captured,
-         -- A run that skipped nothing leaves the last skip where it was: it is
-         -- the record of a gap, and a later run reading normally closes none.
-         skipped_from = COALESCE(excluded.skipped_from, watermark.skipped_from),
-         skipped_to   = COALESCE(excluded.skipped_to, watermark.skipped_to),
-         skipped_at   = COALESCE(excluded.skipped_at, watermark.skipped_at),
-         -- A promoted proposal is spent. Leaving it would let a second
-         -- \`--advance\` re-commit a cursor that has already moved.
-         pending_cursor = NULL,
-         pending_seen   = NULL,
-         pending_at     = NULL,
-         pending_skipped_from = NULL,
-         pending_skipped_to   = NULL`,
-    )
-    .run(
-      channel,
-      cursor,
-      now,
-      counts.seen ?? 0,
-      counts.captured ?? 0,
-      skip?.from ?? null,
-      skip?.to ?? null,
-      skip ? now : null,
-    );
-  return watermarkFor(dataRoot, channel)!;
-}
-
-/** Forget a channel's cursor, so the next sweep falls back to the default window. */
-export function resetWatermark(dataRoot: string, channel?: string): number {
-  const conn = openIntakeDb(dataRoot);
-  if (!channel) {
-    const n = (conn.prepare('SELECT count(*) AS n FROM watermark').get() as { n: number }).n;
-    conn.exec('DELETE FROM watermark');
-    return n;
-  }
-  return conn.prepare('DELETE FROM watermark WHERE channel = ?').run(channel).changes as number;
-}
-
 // --------------------------------------------------------------- suppressions
 
 export type DecidedBy = 'model' | 'person';
@@ -444,14 +212,13 @@ export interface Suppression {
  * Record that a candidate was judged not to deserve a note.
  *
  * The counterpart to `pj add`: capture says yes and writes a file, this says no
- * and writes a row. Both are needed for a sweep to converge, and only one of them
- * existed — a declined candidate used to leave nothing behind but a moved cursor,
- * so nothing could tell "seen and rejected" from "never fetched", and the
+ * and writes a row. Both are needed for intake to converge — a declined candidate
+ * that left nothing behind could not be told from one never offered, and the
  * rejection could not inform anything later.
  *
  * Re-suppressing the same fingerprint replaces the reason rather than failing:
- * the second judgement is the current one, and a caller re-running a sweep should
- * not have to care whether it already answered for this item.
+ * the second judgement is the current one, and a caller judging again should not
+ * have to care whether it already answered for this item.
  */
 export function suppress(
   dataRoot: string,
@@ -464,6 +231,8 @@ export function suppress(
     by?: DecidedBy;
     /** True when what is being declined had already been accepted. See `was_judged`. */
     wasJudged?: boolean;
+    /** The connector event declined, by kernel id, when a pass declined one. */
+    event?: string;
   },
 ): Suppression {
   const at = new Date().toISOString();
@@ -471,11 +240,12 @@ export function suppress(
   const wasJudged = entry.wasJudged ?? false;
   openIntakeDb(dataRoot)
     .prepare(
-      `INSERT INTO suppressed (fingerprint, channel, title, reason, at, decided_by, was_judged)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO suppressed (fingerprint, channel, title, reason, at, decided_by, was_judged, event)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(fingerprint) DO UPDATE SET
          channel = COALESCE(excluded.channel, suppressed.channel),
          title   = COALESCE(excluded.title, suppressed.title),
+         event   = COALESCE(excluded.event, suppressed.event),
          reason  = excluded.reason,
          at      = excluded.at,
          -- A person overruling the model is the point of the pile being readable,
@@ -491,6 +261,7 @@ export function suppress(
       at,
       by,
       wasJudged ? 1 : 0,
+      entry.event ?? null,
     );
   return {
     fingerprint: entry.fingerprint,
@@ -504,7 +275,7 @@ export function suppress(
 }
 
 /**
- * Un-hide a candidate, so the next sweep offers it again.
+ * Un-hide a candidate, so the next pass offers it again.
  *
  * The reason this exists at all is an asymmetry worth stating: getting the
  * ordering wrong costs a reader some scrolling, and suppressing wrongly costs them
@@ -514,75 +285,42 @@ export function suppress(
 export interface Restored {
   fingerprint: string;
   /**
-   * The channel whose cursor was walked back, or null when none could be named.
-   * Null is not a failure: the row is gone either way, and a sweep that already
-   * reaches this item needed no help.
+   * The connector event the next pass offers the judge again, by kernel id — or
+   * null when the decline named none: a card a person declined, or a row from
+   * before intake read the kernel. Null is not a failure: the row is gone either
+   * way, and the item comes back when its source moves again.
    */
-  rewound: string | null;
-}
-
-/**
- * Which channel to reach back into, for a fingerprint.
- *
- * Every channel builds `<name>:<whatever it identifies things by>` — `git:repo@sha`,
- * `jira:KEY`, `claude:<uuid>` — so the prefix is the channel, and a row written
- * before `channel` was recorded still says which one it came from. Nothing here
- * checks the name against the registry: `resetWatermark` matches a row or matches
- * nothing, and a fingerprint with no colon simply names no channel.
- */
-function channelOf(row: { fingerprint: string; channel: string | null }): string | null {
-  if (row.channel) return row.channel;
-  const at = row.fingerprint.indexOf(':');
-  return at > 0 ? row.fingerprint.slice(0, at) : null;
+  event: string | null;
 }
 
 export function unsuppress(dataRoot: string, fingerprint: string): Restored | null {
   const conn = openIntakeDb(dataRoot);
   const row = conn
-    .prepare('SELECT fingerprint, channel, title, reason FROM suppressed WHERE fingerprint = ?')
-    .get(fingerprint) as Suppression | undefined;
+    .prepare('SELECT fingerprint, channel, title, reason, event FROM suppressed WHERE fingerprint = ?')
+    .get(fingerprint) as (Suppression & { event: string | null }) | undefined;
   if (!row) return null;
 
-  // Recorded before the delete, and kept after it. A rescue is the one signal
-  // that says the judgement was wrong the expensive way, and it existed nowhere
-  // until now — the row it corrects was simply removed.
+  /**
+   * Recorded before the delete, and kept after it. A rescue is the one signal
+   * that says the judgement was wrong the expensive way.
+   *
+   * **And it is what brings the item back within reach.** The connector event was
+   * judged, so it sits behind intake's cursor, and lifting the decline alone would
+   * only stop it being filtered. The rescue carries the event, unoffered, and the
+   * next pass reads it from the kernel and offers it to the judge once more
+   * (`run.ts`) — a pile whose one repair is a no-op is worse than no pile.
+   */
   conn
     .prepare(
-      `INSERT INTO rescued (fingerprint, channel, title, reason, at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO rescued (fingerprint, channel, title, reason, at, event, offered)
+       VALUES (?, ?, ?, ?, ?, ?, NULL)
        ON CONFLICT(fingerprint) DO UPDATE SET
-         reason = excluded.reason, at = excluded.at`,
+         reason = excluded.reason, at = excluded.at,
+         event = COALESCE(excluded.event, rescued.event), offered = NULL`,
     )
-    .run(row.fingerprint, row.channel ?? null, row.title ?? null, row.reason, new Date().toISOString());
+    .run(row.fingerprint, row.channel ?? null, row.title ?? null, row.reason, new Date().toISOString(), row.event ?? null);
   conn.prepare('DELETE FROM suppressed WHERE fingerprint = ?').run(fingerprint);
-
-  /**
-   * Walk that channel's cursor back, or the un-hiding means nothing.
-   *
-   * Every channel fetches forward of its watermark, so removing the row only
-   * stops the item being *filtered* — it does not bring it back within reach, and
-   * for anything but the last sweep's work it never will. A pile whose one repair
-   * is a no-op is worse than no pile, because it reads as a repair.
-   *
-   * **The whole cursor, not a step back to the item.** Rewinding precisely would
-   * mean knowing when the underlying thing happened, and a cursor is
-   * channel-defined and opaque — an ISO date for the ones `pj` fetches, a Slack
-   * `ts` or a Gmail date for the ones an agent does — so there is often nothing an
-   * item's timestamp could be compared against. Recording the time on the row
-   * would fix that for a candidate the classifier dropped and not for a card you
-   * deleted, because a card records the fingerprint and the links and never the
-   * source's own clock.
-   *
-   * So it falls back to the channel's default window, which is cheap for the
-   * reason this store already gives about losing itself: everything behind the
-   * cursor is either on a note — where `source_fingerprint` stops it being
-   * captured twice — or still suppressed. A re-sweep re-proposes almost nothing.
-   * What it costs is the only real limit here, and it is worth saying out loud:
-   * **an item older than that window does not come back on its own.**
-   */
-  const channel = channelOf(row);
-  if (channel) resetWatermark(dataRoot, channel);
-  return { fingerprint, rewound: channel };
+  return { fingerprint, event: row.event ?? null };
 }
 
 export interface Rescue {
@@ -600,6 +338,29 @@ export function rescues(dataRoot: string, limit = 12): Rescue[] {
       `SELECT fingerprint, channel, title, reason, at FROM rescued ORDER BY at DESC LIMIT ?`,
     )
     .all(limit) as unknown as Rescue[];
+}
+
+/**
+ * Rescues a pass has yet to offer again: each carries its connector event, and
+ * none is declined once more. Oldest first, so they are offered in the order
+ * they were taken back.
+ */
+export function unofferedRescues(dataRoot: string): { fingerprint: string; channel: string | null; event: string }[] {
+  return openIntakeDb(dataRoot)
+    .prepare(
+      `SELECT r.fingerprint, r.channel, r.event FROM rescued r
+        WHERE r.event IS NOT NULL AND r.offered IS NULL
+          AND NOT EXISTS (SELECT 1 FROM suppressed s WHERE s.fingerprint = r.fingerprint)
+        ORDER BY r.at`,
+    )
+    .all() as unknown as { fingerprint: string; channel: string | null; event: string }[];
+}
+
+/** A pass offered this rescue again, whatever the judge said: it is not offered twice. */
+export function markOffered(dataRoot: string, fingerprint: string): void {
+  openIntakeDb(dataRoot)
+    .prepare('UPDATE rescued SET offered = ? WHERE fingerprint = ?')
+    .run(new Date().toISOString(), fingerprint);
 }
 
 export interface SuppressionQuery {
@@ -620,11 +381,11 @@ export interface SuppressionQuery {
    * Keep reading below this row, which is the previous page's last one.
    *
    * A cursor rather than an offset because the list only ever grows, and it grows
-   * at the end being read from: a sweep landing between two pages of an offset
+   * at the end being read from: a pass landing between two pages of an offset
    * walk shifts every row down one, so the reader sees a row twice and never sees
    * another. Paging on the value being sorted by cannot do that.
    *
-   * **The whole row, not its `at`.** `at` is `Date.toISOString()`, so a sweep that
+   * **The whole row, not its `at`.** `at` is `Date.toISOString()`, so a pass that
    * declines four candidates in one synchronous loop writes four rows with the
    * same millisecond — and `at DESC` alone is then not an order at all, so which
    * of the four a page ends on is the engine's choice and `at < ?` skips the other
@@ -667,7 +428,7 @@ const DEFAULT_PAGE = 50;
 /**
  * A page of the declined pile, newest judgement first.
  *
- * Paged because it never shrinks: every sweep that declines something adds to it
+ * Paged because it never shrinks: every pass that declines something adds to it
  * and nothing removes a row but an explicit rescue. A surface that read the whole
  * table would get slower for exactly the vaults that use the feature most.
  */
@@ -749,7 +510,7 @@ export function suppressions(dataRoot: string, opts: SuppressionQuery = {}): Sup
 }
 
 /**
- * Every suppressed fingerprint, for the sweep to drop candidates against.
+ * Every suppressed fingerprint, for a pass to skip candidates against.
  *
  * A set rather than a query per candidate, for the reason `readVault` gives about
  * the index: one round trip answers for a whole run.
@@ -759,24 +520,4 @@ export function suppressedFingerprints(dataRoot: string): Set<string> {
     .prepare('SELECT fingerprint FROM suppressed')
     .all() as unknown as { fingerprint: string }[];
   return new Set(rows.map((r) => r.fingerprint));
-}
-
-// ---------------------------------------------------------------------- seen
-
-/** The state `key` was last examined in, or null when it never was. */
-export function seenState(dataRoot: string, key: string): string | null {
-  const row = openIntakeDb(dataRoot)
-    .prepare('SELECT state FROM seen WHERE key = ?')
-    .get(key) as { state: string } | undefined;
-  return row?.state ?? null;
-}
-
-/** Record the state `key` was examined in. Replaces: the latest look is the one that counts. */
-export function markSeen(dataRoot: string, key: string, state: string): void {
-  openIntakeDb(dataRoot)
-    .prepare(
-      `INSERT INTO seen (key, state, at) VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET state = excluded.state, at = excluded.at`,
-    )
-    .run(key, state, new Date().toISOString());
 }

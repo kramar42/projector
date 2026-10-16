@@ -1,0 +1,30 @@
+{
+ "columns": [
+  "event",
+  "kind",
+  "at",
+  "about",
+  "payload"
+ ],
+ "rows": [
+  [
+   "0ff9f2cf-f2b2-34bc-8fac-804c0ea161a2",
+   ":gmail/message",
+   "2026-10-16T07:55:00Z",
+   "gmail:thread:18f2a3b4c5d6e7f8",
+   {
+    "thread": "18f2a3b4c5d6e7f8",
+    "subject": "Your October invoice",
+    "from": "billing@vendor.example",
+    "snippet": "Your invoice for October is attached.",
+    "labels": [
+     "INBOX"
+    ],
+    "url": "https://mail.google.com/mail/u/0/#all/18f2a3b4c5d6e7f8",
+    "message": "18f2a3b4c5d6e7f9"
+   }
+  ]
+ ],
+ "count": 1,
+ "query": "projector/connector-event"
+}

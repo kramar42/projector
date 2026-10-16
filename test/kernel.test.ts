@@ -1,26 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { paths } from '../src/config.ts';
-import { closeIntakeDb, watermarkFor } from '../src/intake/db.ts';
-import { CHANNELS } from '../src/intake/run.ts';
-import { eventKey, kernelBatch, sendToKernel, vaultName, type Examined, type KernelBatch, type Runner } from '../src/intake/kernel.ts';
+import { closeIntakeDb } from '../src/intake/db.ts';
+import { KERNEL_OFF } from '../src/intake/run.ts';
+import { eventsOf, intakeKey, type ConnectorEvent } from '../src/intake/connectors.ts';
+import { eventId, parseAnswer } from '../src/kernel/query.ts';
+import { eventKey, kernelBatch, sendToKernel, spawnRunner, vaultName, type Examined, type KernelBatch, type Runner } from '../src/intake/kernel.ts';
 import { channelLine, pollOnce, stopPolling, tickLine } from '../src/server/poll.ts';
-import { fileURLToPath } from 'node:url';
 import { settingsFor, settingsPath } from '../src/settings.ts';
 import type { Ask } from '../src/intake/classify.ts';
-import type { Candidate, Channel } from '../src/intake/types.ts';
-import { place } from './fixture.ts';
+import type { Candidate } from '../src/intake/types.ts';
+import { againstFake, connectorAnswer, connectorEvents, FAKE_KERNEL, FIXTURE_BASE, place, WORK_REPO } from './fixture.ts';
 
 /**
- * The kernel sink: what a tick examined, sent to the owner's kernel as a source
- * batch. Two things are worth pinning. The mapping — one event per examined
- * candidate, one proposal per card and nothing more, about the vault notes it
- * names — because the kernel's idempotence keys on exactly those values. And
- * that a kernel which cannot be reached costs the tick nothing: the card is
- * written and the cursor moves, and the failure is a line.
+ * The kernel: where intake reads what the connectors gathered, and where it
+ * records what it judged. Two things are worth pinning. The mapping — one
+ * `intake:` event per connector event looked at, one proposal per card and
+ * nothing more, about the vault notes it names — because the kernel's
+ * idempotence keys on exactly those values. And the pass against
+ * `test/fake-kernel`: it reads, judges, writes, and records, and the record is
+ * the next pass's cursor.
  */
 
 function vault(config = ''): string {
@@ -84,7 +86,7 @@ test('every examined candidate is an event; only a card is a proposal', () => {
   ];
   const b = kernelBatch('demo', 'git', examined, notes);
 
-  assert.deepEqual(b.events.map((e) => e.key), ['git:r@new', 'git:r@more', 'git:r@typo', 'git:r@silent', 'git:r@progress', 'git:r@had']);
+  assert.deepEqual(b.events.map((e) => e.key), ['intake:git:r@new', 'intake:git:r@more', 'intake:git:r@typo', 'intake:git:r@silent', 'intake:git:r@progress', 'intake:git:r@had']);
   assert.ok(b.events.every((e) => e.kind === 'intake/git' && e.at === '2026-10-15T09:00:00.000Z'));
   assert.deepEqual(b.events.map((e) => e.payload.verdict), ['keep', 'extend', 'drop', 'unjudged', 'link', 'keep']);
   assert.deepEqual(b.events[1]!.about, ['vault:demo:alpha'], 'about the note it matched and extends, once');
@@ -93,6 +95,7 @@ test('every examined candidate is an event; only a card is a proposal', () => {
   assert.deepEqual(b.events[4]!.about, ['vault:demo:beta'], 'what tracks it');
   assert.deepEqual(b.events[1]!.payload, {
     title: 'more on alpha',
+    fingerprint: 'git:r@more',
     detail: 'detail of more on alpha',
     links: ['gh:branch:o/r@git:r@more'],
     evidence: { matches: [{ id: 'alpha', title: 'Alpha', why: 'branch' }] },
@@ -105,8 +108,8 @@ test('every examined candidate is an event; only a card is a proposal', () => {
   assert.equal(b.events[2]!.payload.reason, 'trivial', 'a decline carries its reason');
 
   assert.deepEqual(b.proposals, [
-    { statement: 'Review the new thing', about: [], evidence: ['git:r@new'] },
-    { statement: 'Finish alpha', about: ['vault:demo:alpha'], evidence: ['git:r@more'] },
+    { statement: 'Review the new thing', about: [], evidence: ['intake:git:r@new'] },
+    { statement: 'Finish alpha', about: ['vault:demo:alpha'], evidence: ['intake:git:r@more'] },
   ], 'keep and extend, by the proposed title; not a decline, a link, or what a note already answers for');
 
   assert.deepEqual(b.entities, [
@@ -116,21 +119,30 @@ test('every examined candidate is an event; only a card is a proposal', () => {
   assert.deepEqual(b.links, []);
 });
 
-test('a candidate carrying its source’s state is keyed by it, so a later sighting is an event of its own', () => {
-  const seen = (value: string, fingerprint = 'jira:K-1'): Examined => ({
-    candidate: cand(fingerprint, 'K-1', { channel: 'jira', state: { key: 'jira:K-1', value } }),
-    verdict: { fingerprint, decision: 'keep', reason: 'r', title: 'Answer K-1' },
+test('a candidate read from the kernel is keyed by its connector event, and carries it as evidence', () => {
+  const event = (key: string | null, at: string): ConnectorEvent => ({
+    id: key ? eventId(key) : '0e6f1c53-6a3b-3f6e-9c1d-1f2e3d4c5b6a',
+    kind: key ? 'jira/issue' : 'jira/transition',
+    key,
+    at,
+    about: ['jira:K-1'],
+    payload: { key: 'K-1', status: 'Done', assignee: 'Bob' },
+  });
+  const seen = (e: ConnectorEvent): Examined => ({
+    candidate: cand('jira:K-1', 'K-1', { channel: 'jira', when: '2026-01-01T00:00:00.000Z', event: e }),
+    verdict: { fingerprint: 'jira:K-1', decision: 'keep', reason: 'r', title: 'Answer K-1' },
     decision: 'keep',
     reason: 'r',
   });
-  const first = kernelBatch('demo', 'jira', [seen('To Do · Bob')], notes);
-  const later = kernelBatch('demo', 'jira', [seen('In Progress · Bob')], notes);
-  assert.equal(first.events[0]!.key, 'jira:K-1@To Do · Bob');
-  assert.equal(later.events[0]!.key, 'jira:K-1@In Progress · Bob', 'the same issue, moved: a second event');
-  assert.deepEqual(first.proposals[0]!.evidence, ['jira:K-1@To Do · Bob'], 'the proposal cites the event by its key');
-  assert.equal(eventKey({ fingerprint: 'claude:s1', state: { key: 'claude:s1', value: '2026-10-15T09:00:00Z' } }), 'claude:s1@2026-10-15T09:00:00Z');
-  assert.equal(eventKey({ fingerprint: 'jira:K-1@To Do · Bob', state: { key: 'jira:K-1', value: 'To Do · Bob' } }), 'jira:K-1@To Do · Bob', 'not twice');
-  assert.equal(eventKey({ fingerprint: 'git:r@abc' }), 'git:r@abc', 'no state, the fingerprint alone');
+  const moved = event('jira:K-1@Done · Bob', '2026-10-15T09:30:00.000Z');
+  const b = kernelBatch('demo', 'jira', [seen(moved)], notes);
+  assert.equal(b.events[0]!.key, 'intake:jira:K-1@Done · Bob', 'intake: and the connector’s key, never the key itself');
+  assert.equal(b.events[0]!.at, '2026-10-15T09:30:00.000Z', 'when the connector event happened: the cursor');
+  assert.deepEqual((b.events[0]!.payload.evidence as { event: ConnectorEvent }).event, moved, 'the connector event, whole');
+  assert.deepEqual(b.proposals[0]!.evidence, ['intake:jira:K-1@Done · Bob'], 'the proposal cites the intake event');
+  const unkeyed = event(null, '2026-10-15T09:31:00.000Z');
+  assert.equal(eventKey({ fingerprint: 'jira:K-1', event: unkeyed }), `intake:jira/transition:${unkeyed.id}`, 'no key to recover: kind and kernel id');
+  assert.equal(eventKey({ fingerprint: 'git:r@abc' }), 'intake:git:r@abc', 'no connector event, the fingerprint');
 });
 
 test('a candidate with no date is an event the kernel dates itself', () => {
@@ -239,231 +251,308 @@ test('the real spawn path: a kernel that exits non-zero is reported with what it
   }
 });
 
-// ------------------------------------------------------------------ in the tick
+// ------------------------------------------------------------------ the pass, against the fake kernel
 
-/** Keeps `fake:keep`, drops `fake:drop`. */
-const judge: Ask = async (_system, user) =>
-  JSON.stringify(
-    (JSON.parse(user) as { fp: string }[]).map((c) =>
-      c.fp === 'fake:drop'
-        ? { fp: c.fp, decision: 'drop', reason: 'chatter' }
-        : { fp: c.fp, decision: 'ask', reason: 'a real ask', title: 'Answer the real ask' },
-    ),
-  );
-
-function withFake(run: (root: string) => Promise<void>, config: string) {
-  return async () => {
-    const root = vault(`channels: [fake]\n${config}`);
-    const fake: Channel = {
-      name: 'fake',
-      defaultDays: 1,
-      collect: (ctx) => ({
-        channel: 'fake',
-        cursor: ctx.cursor,
-        nextCursor: '2026-10-15T12:00:00.000Z',
-        fetched: true,
-        candidates: [cand('fake:keep', 'raw ask', { channel: 'fake' }), cand('fake:drop', 'thanks!', { channel: 'fake' })],
-        skipped: [],
-      }),
-    };
-    CHANNELS.push(fake);
-    try {
-      await run(root);
-    } finally {
-      CHANNELS.splice(CHANNELS.indexOf(fake), 1);
-      stopPolling(root);
-      closeIntakeDb(root);
-      rmSync(root, { recursive: true, force: true });
-    }
-  };
-}
-
-test(
-  'a tick sends what it examined: both candidates as events, the card as a proposal',
-  withFake(async (root) => {
-    const sent: KernelBatch[] = [];
-    const calls: string[][] = [];
-    const run: Runner = async (_bin, args, input) => {
-      calls.push(args);
-      if (args[0] === 'attempt') {
-        return { code: 0, stdout: args[1] === 'start' ? '{"id":"a77e3f00-0000-4000-8000-000000000001"}' : '{}', stderr: '' };
-      }
-      sent.push(JSON.parse(input) as KernelBatch);
-      return { code: 0, stdout: '{"events-new":2,"proposals-new":1}', stderr: '' };
-    };
-    const res = await pollOnce(root, judge, { kernel: run });
-    assert.equal(res.created.length, 1, 'the card is still written');
-    assert.equal(sent.length, 1, 'one batch per channel');
-    assert.deepEqual(sent[0]!.events.map((e) => [e.key, e.kind, e.payload.verdict, e.attempt]), [
-      ['fake:keep', 'intake/fake', 'keep', 'a77e3f00-0000-4000-8000-000000000001'],
-      ['fake:drop', 'intake/fake', 'drop', 'a77e3f00-0000-4000-8000-000000000001'],
-    ], 'each event lands in the tick’s attempt');
-    assert.deepEqual(calls.map((a) => a.slice(0, 2)), [['attempt', 'start'], ['ingest', '--source'], ['attempt', 'end']]);
-    assert.deepEqual(sent[0]!.proposals, [{ statement: 'Answer the real ask', about: [], evidence: ['fake:keep'] }]);
-    const c = res.channels.find((x) => x.channel === 'fake')!;
-    assert.deepEqual(c.kernel, { ok: true, events: 2, proposals: 1 });
-    assert.match(channelLine(c), /kernel 2 events, 1 proposed/);
-  }, 'kernel:\n  enabled: true\n  bin: kernel\n'),
-);
-
-test(
-  'a kernel that cannot be reached neither holds the cursor nor fails the tick',
-  withFake(async (root) => {
-    const res = await pollOnce(root, judge);
-    assert.equal(res.held, undefined, 'not held');
-    assert.equal(res.created.length, 1, 'the card is written');
-    assert.equal(res.declined, 1, 'and the decline recorded');
-    assert.ok(res.advanced.includes('fake'), 'the cursor moves');
-    assert.equal(watermarkFor(root, 'fake')?.cursor, '2026-10-15T12:00:00.000Z');
-    const c = res.channels.find((x) => x.channel === 'fake')!;
-    assert.equal(c.kernel?.ok, false);
-    assert.match(channelLine(c), /kernel not reached: .*ENOENT/);
-  }, `kernel:\n  enabled: true\n  bin: ${join(tmpdir(), 'no-such-kernel', 'bin', 'kernel')}\n`),
-);
-
-test(
-  'off by default: nothing is sent and the line is as it was',
-  withFake(async (root) => {
-    let calls = 0;
-    const res = await pollOnce(root, judge, {
-      kernel: async () => {
-        calls++;
-        return { code: 0, stdout: '{}', stderr: '' };
-      },
-    });
-    assert.equal(calls, 0);
-    const c = res.channels.find((x) => x.channel === 'fake')!;
-    assert.equal(c.kernel, undefined);
-    assert.doesNotMatch(channelLine(c), /kernel/);
-  }, ''),
-);
-
-// ------------------------------------------------------------------ the tick as an attempt of judge-intake
-
-const FAKE = fileURLToPath(new URL('./fake-kernel', import.meta.url));
-
-/** Runs `body` with test/fake-kernel logging every call and batch, and hands both back. */
-async function againstFake(body: (read: () => { calls: string[]; batches: KernelBatch[] }) => Promise<void>, env: Record<string, string> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'pj-fake-kernel-'));
-  const log = join(dir, 'log');
-  const batches = join(dir, 'batches');
-  const keys = ['FAKE_KERNEL_LOG', 'FAKE_KERNEL_BATCHES', 'FAKE_KERNEL_ATTEMPT_FAIL', 'FAKE_KERNEL_FAIL'];
-  const before = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  Object.assign(process.env, { FAKE_KERNEL_LOG: log, FAKE_KERNEL_BATCHES: batches, ...env });
-  const lines = (f: string) => {
-    try {
-      return readFileSync(f, 'utf8').split('\n').filter(Boolean);
-    } catch {
-      return [];
-    }
-  };
-  try {
-    await body(() => ({ calls: lines(log).map((l) => l.slice(l.indexOf('|') + 1)), batches: lines(batches).map((l) => JSON.parse(l) as KernelBatch) }));
-  } finally {
-    for (const k of keys) {
-      if (before[k] === undefined) delete process.env[k];
-      else process.env[k] = before[k];
-    }
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
+const FAKE = FAKE_KERNEL;
 const ID = 'a77e3f00-0000-4000-8000-000000000001';
+/** An hour after the shipped fixture's events: inside every channel's window. */
+const NOW = FIXTURE_BASE.getTime() + 3_600_000;
+const EVENTS = connectorEvents(FIXTURE_BASE);
 
-test(
-  'a tick that judges is an attempt of judge-intake: started, its events in it, ended with the counts',
-  withFake(
-    (root) =>
-      againstFake(async (read) => {
-        const res = await pollOnce(root, judge);
-        const { calls, batches } = read();
-        assert.equal(calls[0], 'attempt start judge-intake --executor agent:projector-intake --json', 'started before judging, by the judge, no intent named');
-        assert.match(calls[1]!, /^ingest --source system:projector --json$/);
-        const end = calls[2]!.match(/^attempt end (\S+) (\S+) --result (.*) --json$/);
-        assert.ok(end, calls[2]);
-        assert.equal(end![1], ID);
-        assert.equal(end![2], 'done');
-        assert.deepEqual(JSON.parse(end![3]!), { seen: 2, created: 1, extending: 0, updates: 0, linked: 0, declined: 1, unanswered: 0, skipped: 0, advanced: 1 });
-        assert.equal(calls.length, 3);
-        assert.deepEqual(batches[0]!.events.map((e) => [e.key, e.attempt]), [['fake:keep', ID], ['fake:drop', ID]], 'the events are the attempt’s evidence');
-        assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'done' });
-        assert.match(tickLine(res, 1000), /kernel attempt a77e3f00 done$/);
+/**
+ * The judge, by channel: the owner's session is a drop, the commits are their
+ * own progress (linked onto the project whose repo they are in), the Jira move
+ * and the Slack ask are cards, the invoice is a drop. Counts what it was asked.
+ */
+function judgeOf() {
+  const asked: string[] = [];
+  const ask: Ask = async (_system, user) =>
+    JSON.stringify(
+      (JSON.parse(user) as { fp: string }[]).map((c) => {
+        asked.push(c.fp);
+        const ch = c.fp.split(':')[0];
+        if (ch === 'git') return { fp: c.fp, decision: 'progress', reason: 'the owner’s commits' };
+        if (ch === 'jira') return { fp: c.fp, decision: 'ask', reason: 'a secret to rotate', title: 'Rotate the webhook signing secret' };
+        if (ch === 'slack') return { fp: c.fp, decision: 'promise', reason: 'said will do', title: 'Review the webhook PR for Vivek' };
+        return { fp: c.fp, decision: 'drop', reason: ch === 'gmail' ? 'a receipt' : 'nothing open' };
       }),
-    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
-  ),
-);
+    );
+  return { ask, asked };
+}
 
-test(
-  'a held tick ends its attempt failed, with why',
-  withFake(
-    (root) =>
-      againstFake(async (read) => {
-        const res = await pollOnce(root, async () => null);
-        assert.ok(res.held, 'the judge could not be reached');
-        const { calls, batches } = read();
-        assert.equal(calls.length, 2, 'started and ended, nothing sent');
-        assert.equal(batches.length, 0);
-        const end = calls[1]!.match(/^attempt end (\S+) failed --result (.*) --json$/);
-        assert.ok(end, calls[1]);
-        assert.equal(JSON.parse(end![2]!).held, res.held);
-        assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'failed' });
-      }),
-    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
-  ),
-);
+function passVault(kernel = `kernel:\n  enabled: true\n  bin: ${FAKE}\n`): string {
+  const root = vault(kernel);
+  writeFileSync(place(root, 'widget', 'README.md'), `---\nid: widget\ntitle: Widget\nproject:\n  repos:\n    - path: ${WORK_REPO}\n---\n\nbody\n`, 'utf8');
+  return root;
+}
 
-test(
-  'an attempt the kernel will not start is a line: the events go without one and the tick goes on',
-  withFake(
-    (root) =>
-      againstFake(
-        async (read) => {
-          const res = await pollOnce(root, judge);
-          assert.equal(res.created.length, 1);
-          const { calls, batches } = read();
-          assert.deepEqual(calls.map((c) => c.split(' ')[0]), ['attempt', 'ingest'], 'no end for an attempt that never started');
-          assert.deepEqual(batches[0]!.events.map((e) => e.attempt), [undefined, undefined]);
-          assert.equal(res.attempt?.ok, false);
-          assert.match(tickLine(res, 1000), /kernel attempt not recorded: kernel attempt start exited 1: error: no spec named judge-intake/);
-        },
-        { FAKE_KERNEL_ATTEMPT_FAIL: '1' },
-      ),
-    `kernel:\n  enabled: true\n  bin: ${FAKE}\n`,
-  ),
-);
+function cleanup(root: string) {
+  stopPolling(root);
+  closeIntakeDb(root);
+  rmSync(root, { recursive: true, force: true });
+}
 
-test(
-  'off when the kernel block is: no attempt, and the tick line is as it was',
-  withFake(
-    (root) =>
-      againstFake(async (read) => {
-        const res = await pollOnce(root, judge);
-        assert.deepEqual(read().calls, []);
-        assert.equal(res.attempt, undefined);
-        assert.doesNotMatch(tickLine(res, 1000), /kernel/);
-      }),
-    `kernel:\n  enabled: false\n  bin: ${FAKE}\n`,
-  ),
-);
+const inbox = (root: string) => {
+  try {
+    return readdirSync(join(root, 'inbox')).sort();
+  } catch {
+    return [];
+  }
+};
 
-test('a tick with nothing to judge starts no attempt, so a quiet hour is no verdict', async () => {
-  const root = vault(`channels: [quiet]\nkernel:\n  enabled: true\n  bin: ${FAKE}\n`);
-  const quiet: Channel = {
-    name: 'quiet',
-    defaultDays: 1,
-    collect: (ctx) => ({ channel: 'quiet', cursor: ctx.cursor, nextCursor: null, fetched: true, candidates: [], skipped: [] }),
-  };
-  CHANNELS.push(quiet);
+test('a pass judges the connector events in the kernel, writes the cards, and records the attempt', async () => {
+  const root = passVault();
   try {
     await againstFake(async (read) => {
-      const res = await pollOnce(root, judge);
-      assert.deepEqual(read().calls, []);
+      const { ask, asked } = judgeOf();
+      const res = await pollOnce(root, ask, { now: NOW });
+      const { calls, batches } = read();
+
+      // It read the kernel and fetched nothing: the cursor, then the events.
+      assert.equal(calls[0], 'query --saved projector/intake-newest --json');
+      assert.match(calls[1]!, /^query --saved projector\/connector-events-since --in since=\S+ --in kinds= :claude\/session :git\/commit :jira\/issue :jira\/transition :slack\/message :gmail\/message  --limit 10000 --json$/);
+      assert.equal(calls[2], 'attempt start judge-intake --executor agent:projector-intake --json', 'started before the first judgment');
+      assert.deepEqual(calls.slice(3, 8).map((c) => c.split(' ').slice(0, 3).join(' ')), Array(5).fill('ingest --source system:projector'));
+      const end = calls[8]!.match(/^attempt end (\S+) (\S+) --result (.*) --json$/);
+      assert.ok(end, calls[8]);
+      assert.equal(end![1], ID);
+      assert.equal(end![2], 'done');
+      assert.deepEqual(JSON.parse(end![3]!), { seen: 5, created: 2, extending: 0, updates: 0, linked: 1, declined: 2, unanswered: 0, skipped: 5, recorded: 10 });
+      assert.equal(calls.length, 9);
+
+      // One candidate per piece of work: the session in the declared repo, the
+      // branch's two commits as one, the issue with its transition, the DM, the mail.
+      assert.deepEqual(asked.map((fp) => fp.split(':')[0]), ['claude', 'git', 'jira', 'slack', 'gmail']);
+      assert.ok(asked.includes('git:widget@feature/webhooks'));
+      assert.ok(asked.includes('claude:c0ffee00-1111-4222-8333-444455556666'));
+      assert.ok(asked.includes('jira:WID-7'));
+
+      // Two cards in inbox/, the commits linked onto the project they were in.
+      assert.equal(res.created.length, 2);
+      assert.equal(inbox(root).length, 2);
+      assert.equal(res.linked, 1);
+      assert.match(readFileSync(place(root, 'widget', 'README.md'), 'utf8'), /git:widget@feature\/webhooks/);
+
+      // Every connector event the pass looked at is one intake event in the attempt,
+      // at the instant the connector event happened, carrying it as evidence.
+      const events = batches.flatMap((b) => b.events);
+      assert.equal(events.length, EVENTS.length);
+      for (const e of events) {
+        assert.equal(e.attempt, ID);
+        const source = (e.payload.evidence as { event: { key: string | null; at: string; kind: string } }).event;
+        const fixture = EVENTS.find((f) => eventId(f.key) === (e.payload.evidence as { event: { id: string } }).event.id)!;
+        assert.ok(fixture, e.key);
+        assert.equal(source.kind, fixture.kind);
+        assert.equal(e.at, fixture.at);
+        assert.equal(e.kind, `intake/${{ 'claude/session': 'claude', 'git/commit': 'git', 'jira/issue': 'jira', 'jira/transition': 'jira', 'slack/message': 'slack', 'gmail/message': 'gmail' }[fixture.kind]}`);
+      }
+      const verdicts = Object.fromEntries(events.map((e) => [e.key, e.payload.verdict]));
+      assert.equal(verdicts['intake:jira:WID-7@In Progress · Olena'], 'keep');
+      assert.equal(verdicts[`intake:${EVENTS[1]!.key}`], 'skip', 'a session outside every declared repo is skipped, and recorded');
+      assert.match(String(events.find((e) => e.key === `intake:${EVENTS[1]!.key}`)!.payload.reason), /outside every declared repo/);
+
+      // A card is a proposal citing its intake event.
+      assert.deepEqual(
+        batches.flatMap((b) => b.proposals).map((p) => p.evidence),
+        [['intake:jira:WID-7@In Progress · Olena'], [`intake:${EVENTS[7]!.key}`]],
+      );
+      assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'done' });
+      assert.match(tickLine(res, 1000), /2 notes written, 1 link attached, 2 declined, 10 recorded in the kernel {2}— kernel attempt a77e3f00 done$/);
+    });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a second pass judges nothing new: the cursor is the intake events the first one wrote', async () => {
+  const root = passVault();
+  try {
+    await againstFake(async (read) => {
+      const first = judgeOf();
+      await pollOnce(root, first.ask, { now: NOW });
+      const before = read().calls.length;
+
+      const second = judgeOf();
+      const res = await pollOnce(root, second.ask, { now: NOW });
+      const { calls } = read();
+      assert.deepEqual(second.asked, [], 'the judge is asked nothing');
+      assert.equal(res.created.length, 0);
+      assert.equal(res.recorded, 0);
+      assert.equal(res.attempt, undefined, 'nothing to judge starts no attempt');
+      assert.deepEqual(calls.slice(before).map((c) => c.split(' ').slice(0, 3).join(' ')), [
+        'query --saved projector/intake-newest',
+        'query --saved projector/connector-events-since',
+      ], 'it read the cursor and the events, and wrote nothing');
+      assert.ok(res.channels.every((c) => c.read === 0), 'every channel a row of zeroes');
+      assert.equal(inbox(root).length, 2);
+    });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('with the kernel block off, a pass has nothing to read, says so, and never fetches', async () => {
+  const root = passVault(`kernel:\n  enabled: false\n  bin: ${FAKE}\n`);
+  try {
+    await againstFake(async (read) => {
+      const { ask, asked } = judgeOf();
+      const res = await pollOnce(root, ask, { now: NOW });
+      assert.equal(res.idle, KERNEL_OFF);
+      assert.match(res.idle!, /nothing to read/);
+      assert.deepEqual(read().calls, [], 'the kernel is not asked');
+      assert.deepEqual(asked, []);
+      assert.equal(res.created.length, 0);
+      assert.deepEqual(res.channels, []);
       assert.equal(res.attempt, undefined);
     });
   } finally {
-    CHANNELS.splice(CHANNELS.indexOf(quiet), 1);
-    stopPolling(root);
-    closeIntakeDb(root);
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
+});
+
+test('intake events are keyed intake:<the connector event’s key>, never the connector’s own key', async () => {
+  const root = passVault();
+  try {
+    await againstFake(async (read) => {
+      await pollOnce(root, judgeOf().ask, { now: NOW });
+      const keys = read().batches.flatMap((b) => b.events.map((e) => e.key));
+      assert.ok(keys.every((k) => k.startsWith('intake:')), keys.join('\n'));
+      const connector = new Set(EVENTS.map((e) => e.key));
+      assert.ok(keys.every((k) => !connector.has(k)), 'no intake event collides with the event it judged');
+      // Every key the payload lets it recover is the connector's own, prefixed;
+      // a transition's names a changelog entry its payload omits, so it goes by
+      // its kind and kernel id instead.
+      const transition = EVENTS.find((e) => e.kind === 'jira/transition')!;
+      assert.deepEqual(
+        keys.sort(),
+        EVENTS.map((e) => (e === transition ? `intake:jira/transition:${eventId(e.key)}` : `intake:${e.key}`)).sort(),
+      );
+    });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a held pass ends its attempt failed, records nothing for that channel, and the next reads it again', async () => {
+  const root = passVault();
+  try {
+    await againstFake(async (read) => {
+      const res = await pollOnce(root, async () => null, { now: NOW });
+      assert.ok(res.held, 'the judge could not be reached');
+      const { calls, batches } = read();
+      assert.equal(batches.length, 0, 'nothing recorded, so the cursor has not moved');
+      const end = calls.at(-1)!.match(/^attempt end (\S+) failed --result (.*) --json$/);
+      assert.ok(end, calls.at(-1));
+      assert.equal(JSON.parse(end![2]!).held, res.held);
+      assert.deepEqual(res.attempt, { ok: true, id: ID, status: 'failed' });
+
+      const again = judgeOf();
+      const next = await pollOnce(root, again.ask, { now: NOW });
+      assert.equal(next.held, undefined);
+      assert.equal(again.asked.length, 5, 'the same events, judged this time');
+    });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('an attempt the kernel will not start is a line: the events go without one and the pass goes on', async () => {
+  const root = passVault();
+  try {
+    await againstFake(
+      async (read) => {
+        const res = await pollOnce(root, judgeOf().ask, { now: NOW });
+        assert.equal(res.created.length, 2);
+        const { calls, batches } = read();
+        assert.ok(!calls.some((c) => c.startsWith('attempt end')), 'no end for an attempt that never started');
+        assert.ok(batches.flatMap((b) => b.events).every((e) => e.attempt === undefined));
+        assert.equal(res.attempt?.ok, false);
+        assert.match(tickLine(res, 1000), /kernel attempt not recorded: kernel attempt start exited 1: error: no spec named judge-intake/);
+      },
+      { FAKE_KERNEL_ATTEMPT_FAIL: '1' },
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a kernel that cannot be read is a pass that read nothing, never a hold or a fetch', async () => {
+  const root = passVault();
+  try {
+    await againstFake(
+      async () => {
+        const { ask, asked } = judgeOf();
+        const res = await pollOnce(root, ask, { now: NOW });
+        assert.match(res.idle!, /kernel query projector\/intake-newest exited 2: error: store is locked/);
+        assert.equal(res.held, undefined);
+        assert.deepEqual(asked, []);
+      },
+      { FAKE_KERNEL_FAIL: '1' },
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a batch the kernel refuses costs a second read, never a second card', async () => {
+  const root = passVault();
+  const real = (bin: string, args: string[], input: string, env: Record<string, string | undefined>, ms: number) =>
+    spawnRunner(bin, args, input, env, ms);
+  const refusing: Runner = async (bin, args, input, env, ms) =>
+    args[0] === 'ingest' ? { code: 1, stdout: '', stderr: 'error: store is locked {}' } : real(bin, args, input, env, ms);
+  try {
+    await againstFake(async () => {
+      const res = await pollOnce(root, judgeOf().ask, { now: NOW, kernel: refusing });
+      assert.equal(res.created.length, 2, 'the cards are written first');
+      const jira = res.channels.find((c) => c.channel === 'jira')!;
+      assert.equal(jira.kernel?.ok, false);
+      assert.match(channelLine(jira), /kernel not written: kernel ingest exited 1: error: store is locked \{\} — the next pass judges these again/);
+
+      // Nothing was recorded, so the next pass reads all of it again — and finds
+      // every piece already answered for: the cards captured, the commits linked,
+      // the drops declined. Nothing is judged twice, and nothing written twice.
+      const again = judgeOf();
+      const next = await pollOnce(root, again.ask, { now: NOW });
+      assert.deepEqual(again.asked, []);
+      assert.equal(next.created.length, 0);
+      assert.equal(next.recorded, EVENTS.length, 'and this time the kernel takes the record');
+      assert.equal(inbox(root).length, 2);
+    });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a pass with nothing to judge starts no attempt, so a quiet hour is no verdict', async () => {
+  const root = passVault();
+  const dir = mkdtempSync(join(tmpdir(), 'pj-quiet-'));
+  writeFileSync(join(dir, 'connector-events-since.json'), JSON.stringify(connectorAnswer([])), 'utf8');
+  try {
+    await againstFake(
+      async (read) => {
+        const res = await pollOnce(root, judgeOf().ask, { now: NOW });
+        assert.deepEqual(read().calls.map((c) => c.split(' ')[0]), ['query', 'query']);
+        assert.equal(res.attempt, undefined);
+        assert.equal(res.created.length, 0);
+      },
+      { FAKE_KERNEL_QUERIES: dir },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    cleanup(root);
+  }
+});
+
+test('the shipped fixture is the connectors’ shape, and every key is recovered from its payload but the transition’s', () => {
+  const shipped = JSON.parse(readFileSync(new URL('./kernel-queries/connector-events-since.json', import.meta.url), 'utf8'));
+  assert.deepEqual(shipped, connectorAnswer(EVENTS), 'test/kernel-queries is generated from test/fixture.ts');
+  const events = eventsOf(parseAnswer(JSON.stringify(shipped)));
+  assert.equal(events.length, EVENTS.length, 'one event per id, however many aliases');
+  for (const e of events) {
+    const f = EVENTS.find((x) => eventId(x.key) === e.id)!;
+    assert.equal(e.key, f.kind === 'jira/transition' ? null : f.key, f.kind);
+    assert.equal(e.at, f.at, 'milliseconds restored');
+    assert.deepEqual(e.about, [...f.about].sort());
+  }
+  assert.equal(intakeKey(events.find((e) => e.kind === 'claude/session')!), `intake:${EVENTS[0]!.key}`);
 });

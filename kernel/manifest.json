@@ -1,7 +1,7 @@
 {
   "system": "projector",
   "name": "Projector",
-  "role": "The owner's notes over a markdown vault: a note with a status is work, one without a thought. The owner's commitments are the notes the vault's kernel.commitments axis calls open or answered; the days are its daily notes; intake gathers what happened elsewhere into inbox cards and proposals, each tick an attempt of judge-intake. The owner plans here, so projector publishes the daily plan and the weekly review, over every open intent in the ledger.",
+  "role": "The owner's notes over a markdown vault: a note with a status is work, one without a thought. The owner's commitments are the notes the vault's kernel.commitments axis calls open or answered; the days are its daily notes; intake triages what the kernel's connectors gathered (claude-code, git, jira, slack, gmail, run by the owner with bin/kernel sync) into inbox cards and proposals, each judging pass an attempt of judge-intake, and gathers nothing itself. The owner plans here, so projector publishes the daily plan and the weekly review, over every open intent in the ledger.",
   "where": "~/Code/projects/projector; vaults listed in its vaults.json, each configured in <vault>/.projector/config.yaml",
   "reach": [
     "pj CLI",
@@ -100,6 +100,41 @@
       "description": "The intents projector's intake proposed that the owner has not answered yet: still proposed, with when and what each is about.",
       "query": "queries/intake-proposals.edn",
       "inputs": []
+    },
+    {
+      "name": "intake-newest",
+      "description": "Where intake's triage got to: the newest intake/ event projector wrote, per intake channel. Projector judges the connector events newer than it, so the cursor is this answer and nothing is stored in the vault.",
+      "query": "queries/intake-newest.edn",
+      "inputs": []
+    },
+    {
+      "name": "connector-events-since",
+      "description": "The connector events intake triages: every event of the given kinds newer than an instant, with its kernel id, kind, when it happened, what it is about and its payload. One row per event and alias.",
+      "query": "queries/connector-events-since.edn",
+      "inputs": [
+        {
+          "name": "since",
+          "type": "instant",
+          "description": "read events that happened after this instant"
+        },
+        {
+          "name": "kinds",
+          "type": "string",
+          "description": "the kinds to read, space-separated and padded with spaces: \" :claude/session :git/commit \""
+        }
+      ]
+    },
+    {
+      "name": "connector-event",
+      "description": "One connector event by its kernel id, in connector-events-since's columns: how intake offers a declined candidate again once the owner takes the decline back.",
+      "query": "queries/connector-event.edn",
+      "inputs": [
+        {
+          "name": "event",
+          "type": "uuid",
+          "description": "the event's kernel id"
+        }
+      ]
     }
   ]
 }

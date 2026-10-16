@@ -4,14 +4,14 @@ import { parse } from 'yaml';
 import { paths, resolvePath } from './config.ts';
 
 /**
- * What a vault needs to reach the world: which channels it sweeps, whether its
- * links are enriched, and the credentials both of those want.
+ * What a vault needs to reach the world: which intake channels it triages,
+ * whether its links are enriched, and the credentials enrichment wants.
  *
  * **Why this lives in the vault and not beside the app.** A credential belongs
- * to the channel that spends it, and which channels are worth sweeping is a fact
+ * to the channel that spends it, and which channels are worth triaging is a fact
  * about *this* set of notes — a vault of work notes wants Jira and the project
  * repos; a vault of reading notes wants neither, and being asked about them
- * every sweep is noise. `vaults.json` stays what it always was: a list of paths
+ * every pass is noise. `vaults.json` stays what it always was: a list of paths
  * an install has opened, holding nothing you would mind reading aloud.
  *
  * **The file is not committed.** `pj setup` writes `.projector/config.yaml` and
@@ -35,27 +35,30 @@ import { paths, resolvePath } from './config.ts';
 
 /** Everything a channel or fetcher may ask a vault for. */
 export interface Settings {
-  /** Channel names this vault sweeps. `null` means all of them — the default. */
+  /**
+   * Intake channels this vault triages from the kernel's connector events. `null`
+   * means all of them — the default. Which connectors gather is the kernel's
+   * business (`bin/kernel sync`); this only says which of their events this
+   * vault's judge reads.
+   */
   channels: string[] | null;
   /** Link kinds to enrich. `null` means every kind that has a fetcher. */
   enrich: string[] | null;
+  /** Jira, for enrichment and `pj did`. Intake reads the kernel's jira connector instead. */
   jira: { url: string; email: string; token: string } | null;
-  /** Overrides the default intake query. */
-  jql: string | null;
+  /** Whose commits `pj did` counts. */
   gitAuthor: string | null;
   /** Where `pj work` puts worktrees. */
   workspaces: string | null;
   /** A template like `cursor://file{path}` for opening a `doc:` ref. */
   docUrl: string | null;
   /**
-   * Sweeping on a timer, in the server, writing candidates into the vault.
+   * Triaging on a timer, in the server, writing candidates into the vault.
    *
    * **Off unless a vault asks**, and that is not timidity. Everything else here
    * changes how a command answers when you run it; this one makes the app write
-   * notes you did not ask for, at whatever rate your commits and sessions happen.
-   * Nothing judges them yet, so a vault that turned it on by default would fill
-   * with its owner's own progress and the first thing anyone would do is turn it
-   * off — which is a worse outcome than never having offered it.
+   * notes you did not ask for, at whatever rate your connectors gather. A pass
+   * never fetches: it judges what the kernel's connectors already gathered.
    */
   poll: {
     enabled: boolean;
@@ -68,14 +71,14 @@ export interface Settings {
      */
     hours: { from: number; until: number } | null;
     /**
-     * Seconds to the next tick while a channel is behind — the last tick moved
-     * its cursor and left more after it. Never longer than `everySeconds`,
-     * which it exists to shorten.
+     * Seconds to the next tick while a channel is behind — the last pass judged
+     * one slice of a longer backlog. Never longer than `everySeconds`, which it
+     * exists to shorten.
      */
     catchUpSeconds: number;
   };
   /**
-   * Who judges the candidates a sweep found.
+   * Who judges the candidates a pass found.
    *
    * On by default, because an unjudged queue of your own commits is the failure
    * the queue exists to prevent, and arriving there by omission would be worse
@@ -102,40 +105,17 @@ export interface Settings {
     timeoutSeconds: number;
   };
   /**
-   * How Gmail is read. `mcp` is the relay agent over the tools named below;
-   * `gog` is gogcli under its runtime read-only guards. Unset, it follows the
-   * tools: named means `mcp`, unnamed means `gog`.
-   */
-  gmail: { command: string; account: string | null; transport: 'mcp' | 'gog' };
-  /**
-   * Which MCP tools the relay may call, per channel, and how far it may page.
-   *
-   * Empty is the default, and a channel with no tools is not fetched. Nothing
-   * here can tell a read tool from a write one by its name, so nothing guesses.
-   * The vault lists tools explicitly and Claude Code refuses everything else.
-   * `pages` bounds each search the relay runs; a run that hits it reports itself
-   * truncated and holds its cursor, so nothing is skipped — only deferred.
-   */
-  mcp: {
-    slack: string[];
-    gmail: string[];
-    command: string;
-    model: string;
-    pages: number;
-    /** How long one relay run may take before the channel reports itself unfetched. */
-    timeoutSeconds: number;
-  };
-  /**
    * Where `pj did` looks for your work: directories whose git repos and Claude
    * sessions count. Empty means only the repos project notes declare and the
    * workspaces notes recorded — the narrow answer, never a guessed folder.
    */
   did: { roots: string[] };
   /**
-   * The owner's kernel, as a second destination for what a tick examined: an
-   * `intake/<channel>` event per candidate and a proposed intent per card,
-   * through `<bin> ingest`. **Off unless the file says so**, like `poll`,
-   * because it writes to a store outside the vault. `db` is passed as
+   * The owner's kernel: where intake reads what the connectors gathered, and
+   * where it records what it judged — an `intake/<channel>` event per connector
+   * event and a proposed intent per card, through `<bin> ingest`. **Off unless
+   * the file says so**, like `poll`, because it writes to a store outside the
+   * vault; off, intake has nothing to read. `db` is passed as
    * `KERNEL_DB`; absent, the kernel's own default store is used. `vault`
    * names this vault in the kernel's aliases (`vault:<vault>:<note id>`);
    * absent, the registered name, else the folder's.
@@ -189,7 +169,7 @@ export function settingsPath(root: string): string {
 interface Raw {
   channels?: unknown;
   enrich?: unknown;
-  jira?: { url?: unknown; email?: unknown; token?: unknown; jql?: unknown };
+  jira?: { url?: unknown; email?: unknown; token?: unknown };
   git?: { author?: unknown };
   doc?: { url?: unknown };
   workspaces?: unknown;
@@ -203,7 +183,6 @@ interface Raw {
     batch?: unknown;
     timeout?: unknown;
   };
-  gmail?: { command?: unknown; account?: unknown; transport?: unknown };
   did?: { roots?: unknown };
   kernel?: {
     enabled?: unknown;
@@ -215,14 +194,6 @@ interface Raw {
     onVerdict?: unknown;
     commitments?: { axis?: unknown; open?: unknown; horizon?: unknown };
     days?: unknown;
-  };
-  mcp?: {
-    slack?: unknown;
-    gmail?: unknown;
-    command?: unknown;
-    model?: unknown;
-    pages?: unknown;
-    timeout?: unknown;
   };
 }
 
@@ -279,7 +250,6 @@ const OVERRIDES = [
   'PROJECTOR_JIRA_URL',
   'PROJECTOR_JIRA_EMAIL',
   'PROJECTOR_JIRA_TOKEN',
-  'PROJECTOR_INTAKE_JQL',
   'PROJECTOR_GIT_AUTHOR',
   'PROJECTOR_WORKSPACES',
   'PROJECTOR_DOC_URL',
@@ -313,15 +283,14 @@ export function settingsFor(root: string): Settings {
     namedProvider === 'claude' || legacyClaude ? 'claude' : 'ollama';
 
   // Floored so a typo cannot turn the loop into a spin. The default is fifteen
-  // minutes: a sweep reads `git log` and a Jira search, and the things it looks
-  // for do not happen faster than that.
+  // minutes: the owner syncs connectors by hand, and nothing they gather needs
+  // judging faster than that.
   const everySeconds = Math.max(60, Number(raw.poll?.every ?? 900) || 900);
 
   const value: Settings = {
     channels: list(raw.channels),
     enrich: list(raw.enrich),
     jira: url && email && token ? { url: url.replace(/\/+$/, ''), email, token } : null,
-    jql: str(env.PROJECTOR_INTAKE_JQL) ?? str(raw.jira?.jql),
     gitAuthor: str(env.PROJECTOR_GIT_AUTHOR) ?? str(raw.git?.author),
     workspaces: (() => {
       const w = str(env.PROJECTOR_WORKSPACES) ?? str(raw.workspaces);
@@ -331,8 +300,8 @@ export function settingsFor(root: string): Settings {
     poll: {
       enabled: raw.poll?.enabled === true,
       everySeconds,
-      // Ten minutes: a relay that moves twenty messages a tick drains a busy
-      // day in an hour or two at this rate, rather than in days at `every`.
+      // Ten minutes: a week of sessions synced at once drains a slice a tick
+      // in an hour or two at this rate, rather than in days at `every`.
       // Floored like `every`, and capped by it — a catch-up slower than the
       // normal cadence would be a slow-down.
       catchUpSeconds: Math.min(everySeconds, Math.max(60, Number(raw.poll?.catchUpSeconds ?? 600) || 600)),
@@ -357,27 +326,6 @@ export function settingsFor(root: string): Settings {
       // room. Floored at one and capped so a typo cannot ask for a thousand.
       batch: Math.max(1, Math.min(100, Number(raw.classify?.batch ?? 8) || 8)),
       timeoutSeconds: Math.max(30, Number(raw.classify?.timeout ?? 300) || 300),
-    },
-    gmail: {
-      command: str(raw.gmail?.command) ?? 'gog',
-      account: str(raw.gmail?.account),
-      transport: (() => {
-        const named = str(raw.gmail?.transport);
-        if (named === 'mcp' || named === 'gog') return named;
-        return (list(raw.mcp?.gmail) ?? []).length ? 'mcp' : 'gog';
-      })(),
-    },
-    mcp: {
-      slack: list(raw.mcp?.slack) ?? [],
-      gmail: list(raw.mcp?.gmail) ?? [],
-      command: str(raw.mcp?.command) ?? 'claude',
-      model: str(raw.mcp?.model) ?? 'haiku',
-      // Five pages of twenty is a hundred messages per search per tick. Past
-      // that the run reports itself truncated and the next tick resumes.
-      pages: Math.max(1, Math.min(20, Number(raw.mcp?.pages ?? 5) || 5)),
-      // Four days of one busy person's DMs took the relay four minutes; ten is
-      // the ceiling before the channel gives up and says so.
-      timeoutSeconds: Math.max(60, Number(raw.mcp?.timeout ?? 600) || 600),
     },
     did: { roots: (list(raw.did?.roots) ?? []).map((r) => resolvePath(r, root)) },
     kernel: {
@@ -462,7 +410,7 @@ function onVerdictMap(
   return out;
 }
 
-/** Whether this vault sweeps a channel. Unconfigured vaults sweep everything. */
+/** Whether this vault triages a channel. Unconfigured vaults triage every one. */
 export function channelEnabled(root: string, name: string): boolean {
   const { channels } = settingsFor(root);
   return channels === null || channels.includes(name);
@@ -494,16 +442,17 @@ export function settingsTemplate(channels: string[], enrich: boolean): string {
 # often a git repository. Any PROJECTOR_* variable you export overrides the value
 # here for that run.
 
-# Channels \`pj intake\` sweeps. Remove one to stop being asked about it;
-# \`channels: false\` sweeps none.
+# Intake channels \`pj intake\` triages from the kernel's connector events.
+# Remove one to stop being asked about it; \`channels: false\` triages none.
+# Gathering is the kernel's: bin/kernel sync claude-code (jira, slack, gmail), and git's post-commit hook.
 channels: [${channels.join(', ')}]
 
-# Sweep on a timer, in the server, and write what deserves a note.
+# Triage on a timer, in the server, and write what deserves a note.
 # poll:
 #   enabled: true
 #   every: 7200               # seconds between ticks
 #   hours: [8, 20]            # local hours a tick may run in, from inclusive to until exclusive
-#   catchUpSeconds: 600       # seconds to the next tick while a channel has more pages behind
+#   catchUpSeconds: 600       # seconds to the next tick while a channel has more waiting
 
 # Link kinds to resolve for display. \`false\` turns enrichment off entirely and
 # every link renders as its raw ref.
@@ -513,10 +462,9 @@ enrich: ${enrich ? 'true' : 'false'}
 #   url: https://your-org.atlassian.net
 #   email: you@example.com
 #   token: <an Atlassian API token, not your password>
-#   jql: <optional — overrides the default intake query>
 
 # git:
-#   author: you@example.com   # defaults to this repository's git config
+#   author: you@example.com   # whose commits pj did counts; defaults to each repo's git config
 
 # doc:
 #   url: 'cursor://file{path}'   # how a doc: ref opens; defaults to the OS
@@ -532,25 +480,10 @@ enrich: ${enrich ? 'true' : 'false'}
 #   batch: 8                   # candidates per call; a slow local model wants fewer
 #   timeout: 300               # seconds one call may take before the tick holds
 #
-# Slack and Gmail are fetched by a relay agent over the MCP tools named here — a
-# headless \`claude -p\` that may call only these and copies what they return.
-# mcp:
-#   slack: [mcp__yourserver__slack_search_public_and_private]
-#   gmail: [mcp__yourserver__search_threads]
-#   model: haiku
-#   pages: 5                   # pages per search per tick
-#   timeout: 600               # seconds one relay run may take
-#
-# Gmail may be read through gogcli instead, under its runtime read-only guards.
-# gmail:
-#   transport: gog             # default: mcp when mcp.gmail names tools, gog otherwise
-#   command: gog
-#   account: you@example.com   # optional when gog has one/default account
-#
-# The owner's kernel: each tick also sends what it examined there — an
-# intake/<channel> event per candidate, a proposed intent per card — through
-# \`<bin> ingest\`. Off unless enabled; a kernel that cannot be reached is logged
-# and never holds a tick.
+# The owner's kernel: intake reads what its connectors gathered there and
+# records what it judged — an intake/<channel> event per connector event, a
+# proposed intent per card — through \`<bin> ingest\`. Off unless enabled, and
+# off, intake has nothing to read.
 # kernel:
 #   enabled: true
 #   bin: ~/Code/projects/kernel/bin/kernel

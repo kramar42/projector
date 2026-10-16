@@ -183,20 +183,18 @@ things.
   a second one wants the same thing.
 
 - **The secrets rule is applied by code where the model copies, and asked of it where it writes.**
-  The relay copies verbatim, so `scrubSecrets` in `src/intake/relay.ts` redacts the recognisable
-  shapes — an AWS key id, GitHub and Slack tokens, a PEM block, a JWT — before any text is parsed;
-  that is the deterministic floor this entry used to ask for. What is still asked of a model is the
+  The connectors' relays copy verbatim, so `scrub` in the kernel's `kernel/connectors/connector.bb`
+  redacts the recognisable shapes — an AWS key id, GitHub and Slack tokens, a PEM block, a JWT — before
+  anything reaches the kernel, and so before intake reads it; that is the deterministic floor this
+  entry used to ask for. What is still asked of a model is the
   classifier's own prose, and full secret detection stays non-deterministic: redacting anything that
   merely looks entropic would eat commit hashes, so the scrub knows shapes and nothing else. Extend the
   list when a shape turns up in a card; do not widen it to entropy.
 
 - **Slack through a user token instead of the relay.** The relay is the honest answer while the only
-  authorized transport is the MCP server an agent holds, and it is deterministic in what it is asked
-  for — but it is still a model in the fetch path, it costs an agent run per tick, and read-only rests
-  on the tool allowlist rather than on scopes. A Slack app installed in the workspace with read scopes
-  would make the channel look like Jira: a GET, JSON, `C2` by construction. Parked until unattended
-  polling is on and either the tick's cost or the relay's fidelity is what hurts; the channel contract
-  (`RelayMessage` → `conversationsFrom`) is transport-neutral, so the swap touches `collect` alone.
+  authorized transport is the MCP server an agent holds — but it is still a model in the fetch path,
+  and read-only rests on the tool allowlist rather than on scopes. It is the kernel's slack connector's
+  now: projector fetches nothing, and reads `slack/message` events whichever transport wrote them.
 
 - **A DM is one conversation, however many things it is about.** Tracking is by container for DMs and
   group DMs — a message an open note links makes the whole DM tracked — and fingerprints are by the
@@ -217,11 +215,34 @@ things.
   it also reaches a mailbox or a mention. Fetching comments is one more field and a bigger payload;
   worth it the first time a comment is the thing that was missed.
 
-- **The manual path never marks anything seen.** `pj intake --dry-run` proposes and
-  `pj intake advance` promotes, and neither knows what the person did with a tracked candidate in
-  between, so `seen` is written only by a judging tick. A person who resolves a preview by hand will be
-  offered the same Jira change once more by the next tick, and the classifier drops it. Recording on
-  `advance` would be a guess about what was applied.
+- **Intake's cursor is an instant per channel, so a connector event that arrives late is stepped
+  over.** The cursor is the newest `intake/<channel>` event's `at`, which is the instant the judged
+  connector event happened. A connector that writes an event older than one already judged in its
+  channel — a repo whose commits are synced a day after another repo's, through the git hook — lands
+  behind the cursor and is never offered. Per channel rather than one instant for all is what keeps
+  the ordinary case right (connectors are synced one at a time, by hand); closing the rest wants the
+  kernel to answer "connector events with no `intake:` event citing them", which it cannot while it
+  keeps an event's id and not its key. Worth doing the first time a late commit is missed.
+
+- **A `jira/transition` is recorded by its kernel id, not its key.** The jira connector keys it
+  `jira:<KEY>/changelog/<history id>` and its payload omits the history id, so projector cannot rebuild
+  the key and records the judgment as `intake:jira/transition:<kernel id>`. The connector carrying
+  `history` in the payload would make it `intake:<key>` like every other.
+
+- **One vault per kernel triages.** The intake events are keyed by the connector event alone, so a
+  second vault with its kernel block on pointed at the same store reads every event as judged by the
+  first. Keying by vault would let two vaults triage the same events differently, which nobody has
+  asked for.
+
+- **A card a person declined cannot be offered again on its own.** A model's decline carries the
+  connector event it was of, and taking it back offers that event to the judge once more; a card
+  declined on the board records its fingerprint, not its event, so taking that back lifts the decline
+  and the item returns only when its source next moves.
+
+- **A conversation is the messages one pass read.** The connectors write one event per message and a
+  pass judges what is newer than its cursor, so a reply that arrives after an ask was judged is shown
+  to the judge with no earlier lines. Reading the conversation's earlier events back from the kernel is
+  one more query per conversation; worth it the first time an answered ask is offered again.
 
 - **`pj work` does not resume a *finished* session in the workspace.** It reopens a live one and
   starts a new one otherwise, and a closed transcript in that directory stays history rather than
@@ -314,11 +335,9 @@ things it still does better.
   GET. One test, and C2 is checked rather than trusted.
 
   **The stakes went up after this was filed.** When it was written, the worst a mistake could do was a
-  `POST` in a fetcher nobody would notice. Slack now hands an agent real tools, and the only thing
-  between that and a write is a list in a config file. Gmail moved to `gogcli`, whose runtime
-  `--readonly` and `--gmail-no-send` guards make it amenable to an adapter check. Nothing checks that
-  Slack's listed tools are reads or that the list is not a wildcard. A grep over adapters therefore
-  still does not cover the whole rule; the MCP allowlist wants a check of its own.
+  `POST` in a fetcher nobody would notice. The Slack and Gmail relays — which hand an agent real
+  tools, with only a list between that and a write — are the kernel's connectors now, not projector's;
+  that allowlist wants its check there.
 
 - **A verb allow-list checked before the subprocess spawns.** A frozen set of safe git verbs, plus the
   flags that are writes wearing one — `branch -D`, `remote add`, `config --global` — refused before

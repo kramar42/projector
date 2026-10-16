@@ -71,13 +71,15 @@ step. The mechanisms a neighbouring product could not truthfully copy:
   under `.projector/` — opened the way Obsidian opens one. It is a git repository, which is where
   `pj log` reads history from. Two ship in this one: `vaults/tutorial`, which a fresh clone opens
   onto, and `vaults/coverage`, the fixture.
-- **Intake channels:** Claude transcripts, git branches and lone commits, Jira JQL, Gmail through a
-  read-only CLI — plus Slack, which is read by an agent through MCP. A tick — the server's timer, or
-  `pj intake` — files what it judged worth a card into `inbox/`, which is not your notes, and nothing
-  leaves it until you accept or decline the card; `pj intake --dry-run` previews and writes nothing.
+- **Intake channels:** Claude Code sessions, git branches and lone commits, Jira issues, Slack and
+  Gmail conversations — gathered by the owner's kernel's connectors (`bin/kernel sync`), never by
+  projector. A pass — the server's timer, or `pj intake` — judges what they gathered, files what it
+  judged worth a card into `inbox/`, which is not your notes, and records the judgment in the kernel;
+  nothing leaves `inbox/` until you accept or decline the card; `pj intake --dry-run` previews and
+  writes nothing.
 - **`pj work`** prepares a multi-repo git worktree workspace, a briefing with the note's full context,
   and a terminal running a Claude session in it.
-- **Configuration is the vault's.** `.projector/config.yaml` says which channels this vault sweeps,
+- **Configuration is the vault's.** `.projector/config.yaml` says which channels this vault triages,
   whether links are enriched, and holds the credentials both need — gitignored, because a vault is
   often a repository. The matching `PROJECTOR_*` variables still override it for one run. `pj setup`
   writes the file and reports what actually answered; GitHub is the exception with nothing to store,

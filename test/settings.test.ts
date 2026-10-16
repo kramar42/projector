@@ -27,7 +27,6 @@ const OVERRIDES = [
   'PROJECTOR_JIRA_URL',
   'PROJECTOR_JIRA_EMAIL',
   'PROJECTOR_JIRA_TOKEN',
-  'PROJECTOR_INTAKE_JQL',
   'PROJECTOR_GIT_AUTHOR',
   'PROJECTOR_WORKSPACES',
   'PROJECTOR_DOC_URL',
@@ -68,8 +67,8 @@ test('a vault with no config file behaves exactly as one did before there was on
       batch: 8,
       timeoutSeconds: 300,
     });
-    assert.deepEqual(s.gmail, { command: 'gog', account: null, transport: 'gog' }, 'no tools named, so gog');
-    assert.deepEqual(s.mcp, { slack: [], gmail: [], command: 'claude', model: 'haiku', pages: 5, timeoutSeconds: 600 });
+    // Intake fetches nothing, so nothing of a fetcher's is left to configure.
+    for (const gone of ['gmail', 'mcp', 'jql']) assert.equal(gone in s, false, gone);
     assert.deepEqual(s.poll, { enabled: false, everySeconds: 900, catchUpSeconds: 600, hours: null }, 'off, and any hour, until a vault says otherwise');
     for (const c of ['claude', 'git', 'jira', 'slack', 'gmail']) {
       assert.equal(channelEnabled(root, c), true, c);

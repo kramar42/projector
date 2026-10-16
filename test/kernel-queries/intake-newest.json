@@ -1,0 +1,9 @@
+{
+ "columns": [
+  "kind",
+  "(max ?at)"
+ ],
+ "rows": [],
+ "count": 0,
+ "query": "projector/intake-newest"
+}

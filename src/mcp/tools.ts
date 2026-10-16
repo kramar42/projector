@@ -24,9 +24,9 @@ import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { shellQuote } from '../agent/worktree.ts';
 import { parseDay } from '../did/day.ts';
 import { DID_SOURCES, did, renderDid } from '../did/run.ts';
-import { channelNames, statusOf } from '../intake/run.ts';
+import { CHANNELS } from '../intake/connectors.ts';
+import { channelEnabled, settingsFor } from '../settings.ts';
 import type { Note } from '../schema/types.ts';
-import { ago } from '../sources/run.ts';
 
 /**
  * What the MCP server can be asked, one entry per tool.
@@ -277,23 +277,20 @@ function vaultStatus(args: z.infer<typeof statusInput>, vault: Vault): string {
 }
 
 /**
- * Each channel's last tick and cursor, from the store `pj intake status` reads.
+ * Where intake reads from, in one line per channel.
  *
- * A vault that has never ticked has no store, and asking does not make one: the
- * cursors are the one thing under `.projector/` that is not derived, and their
- * file should appear when a tick writes it, not when somebody looked.
+ * Intake's cursor is in the kernel — the newest `intake/` event per channel —
+ * and this tool reads only the vault, in-process, with nothing spawned. So it
+ * says whether there is a kernel to triage from and which connector gathers each
+ * channel, and leaves the cursors to `pj intake status`, which asks the kernel.
  */
 function intakeStatus(root: string): string[] {
-  if (!existsSync(paths(root).intakeDb)) return ['intake: never ticked', ...channelNames().map((c) => `  ${c.padEnd(10)} never`)];
-  const channels = statusOf(root);
-  const ticks = channels.map((c) => c.ranAt).filter((t): t is string => !!t && Number.isFinite(Date.parse(t)));
-  const newest = ticks.sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const k = settingsFor(root).kernel;
+  if (!k.enabled) return ['intake: the kernel block is off, so there is nothing to triage'];
   return [
-    newest ? `intake: last tick ${newest} (${ago(newest)})` : 'intake: never ticked',
-    ...channels.map(
-      (c) =>
-        `  ${c.channel.padEnd(10)} ${c.ranAt ? `ran ${c.ranAt} (${ago(c.ranAt)})` : 'never'}` +
-        (c.cursor ? `  cursor ${c.cursor}` : ''),
+    'intake: triages the kernel’s connector events — `pj intake status` asks the kernel how far it got',
+    ...CHANNELS.filter((c) => channelEnabled(root, c.name)).map(
+      (c) => `  ${c.name.padEnd(10)} gathered by ${c.gather}`,
     ),
   ];
 }
@@ -620,7 +617,7 @@ export const TOOLS: Tool[] = [
     title: 'Vault status',
     description:
       'The vault’s path, note and axis counts, `pj check` error and warning counts, every rule view with what breaks it, ' +
-      'how many cards wait in the inbox, each intake channel’s last tick and cursor — whether what the vault knows of the world is recent — ' +
+      'how many cards wait in the inbox, whether intake has a kernel to triage from and which connector gathers each channel — ' +
       'and every saved view with its query (any name works as `ls` view).',
     input: statusInput,
     run: (a, v) => vaultStatus(statusInput.parse(a), v),

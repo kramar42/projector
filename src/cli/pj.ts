@@ -25,25 +25,18 @@ import { findView, loadViewFiles, loadViews } from '../server/views.ts';
 import { formatHistory, history, isRepo } from '../agent/history.ts';
 import { freshNoteContext, noteContext, renderContext } from '../agent/context.ts';
 import {
-  advance,
   candidateCount,
   channelNames,
-  commitWatermark,
   DEFAULT_LIMIT,
   known,
-  renderAdvance,
+  pending,
+  renderPreview,
   renderStatus,
   statusOf,
-  renderSweep,
-  sweep,
 } from '../intake/run.ts';
 import { channelLine, pollOnce, tickLine } from '../server/poll.ts';
 import { rejudge } from '../intake/rejudge.ts';
-import {
-  resetWatermark,
-  suppressions,
-  unsuppress,
-} from '../intake/db.ts';
+import { suppressions, unsuppress } from '../intake/db.ts';
 import { NotWorkable, plannedBriefing, planWork, startWork } from '../agent/work.ts';
 import { BRIEFING_PROMPT, shellQuote } from '../agent/worktree.ts';
 import { pickSession } from '../sources/claude.ts';
@@ -262,9 +255,9 @@ Work with notes
   mcp                serve the vault read-only to MCP clients, over stdio
 
 Intake
-  intake             fetch, judge, file into inbox/; --dry-run previews
+  intake             judge what the kernel's connectors gathered, file into inbox/; --dry-run previews
   accept, decline    file an inbox card, or say no to it
-  intake status      inspect channels and cursors
+  intake status      how far each channel got, asked of the kernel
   intake declined    inspect declined candidates
 
 Kernel
@@ -278,7 +271,7 @@ Vault and maintenance
 
 Run \`pj help <command>\` (or \`pj --help <command>\`) for usage and flags.
 Run \`pj help intake\` for the intake workflow, or \`pj help intake advanced\`
-for recovery and integration commands.`;
+for integration commands.`;
 
 const COMMAND_HELP: Record<string, string> = {
   ls: `Usage: pj ls [--view <name>] [--group <facet>[,<facet>]] [--filter f=v,v]
@@ -412,34 +405,31 @@ List and manage the local vault registry.`,
        pj intake restore <fingerprint>...
        pj intake rejudge [--limit n]
 
-\`pj intake\` runs one tick, the one the server runs on a timer: fetch each
-channel from its cursor, judge, file what deserves a card into inbox/, record
-the rest as declined, and advance the cursors it fetched. Naming channels runs
-only those. \`--dry-run\` previews instead: it lists the candidates, files
-nothing and moves no cursor. \`restore\` makes a declined candidate eligible
-again.
+\`pj intake\` runs one triage pass, the one the server runs on a timer. It
+fetches nothing: it reads the connector events already in the kernel that it
+has not judged — gathered by the kernel's connectors, which you run
+(\`bin/kernel sync claude-code\`, jira, slack, gmail; git's post-commit hook) —
+judges them, files what deserves a card into inbox/,
+records the rest as declined, and writes what it decided back to the kernel as
+intake/<channel> events, which is where the next pass starts. Naming channels
+judges only those. \`--dry-run\` previews instead: it lists the candidates and
+judges, files and records nothing. \`restore\` takes a decline back; the next
+pass offers it to the judge again.
 
-A cursor older than its channel's window (7 days; Gmail 14) is not followed
-back: intake is for current asks, so the tick reads from the window's start
-and says what it skipped. \`status\` shows a cursor that old before the tick,
-and the last span skipped after it. \`--dry-run --since\` reads further back.
+With the vault's kernel block off, intake has nothing to read, and says so.
 
-Run \`pj help intake advanced\` for raw cursor and deduplication commands.
+A channel that has judged nothing yet, or whose newest judgment is older than
+its window (7 days; Gmail 14), reads from the window's start: intake is for
+current asks. \`--dry-run --since\` reads further back.
+
 Judging a card is \`pj accept\` or \`pj decline\`.`,
   'intake advanced': `Advanced intake commands
 
-  pj intake advance [--channel c] [--captured n]
-      Promote the cursors the last \`--dry-run\` proposed, once what it listed
-      has been filed or declined by hand.
   pj intake known <fingerprint-or-ref>...
       Check which notes already carry refs; useful to integrations before capture.
-  pj intake cursor set --channel <c> --cursor <value> [--seen n] [--captured n]
-      Set a channel watermark manually.
-  pj intake cursor reset [--channel c]
-      Forget cursor state so the next sweep uses its default window.
 
-The old \`commit\`, \`suppressed\`, \`unsuppress\`, and \`reset\` spellings
-remain compatibility aliases, but are intentionally omitted from normal help.`,
+There are no cursor commands: intake's cursor is the newest intake/ event it
+wrote to the kernel, and \`pj intake status\` reads it.`,
 };
 
 function printHelp(topic: string[]): void {
@@ -812,31 +802,29 @@ async function cmdSync(argv: string[]): Promise<void> {
 }
 
 /**
- * `pj intake`: one tick, run by hand.
+ * `pj intake`: one triage pass, run by hand.
  *
- * The same tick the server runs on a timer — same classifier, same
- * suppressions, same cursor rule — so a vault that does not want a server
- * running is not a vault that has to do this by conversation instead. It files
- * into `inbox/`, which is not your notes, so it needs no preview first.
+ * The same pass the server runs on a timer — same classifier, same
+ * suppressions, the same cursor in the kernel — so a vault that does not want a
+ * server running is not a vault that has to do this by conversation instead. It
+ * files into `inbox/`, which is not your notes, so it needs no preview first.
  */
 async function tick(root: string, only: string[]): Promise<void> {
   const started = Date.now();
   const res = await pollOnce(root, undefined, { only });
-  if (res.held) {
-    console.log(`held — ${res.held}. Nothing written, no cursor moved.`);
+  if (res.idle) {
+    console.log(`nothing read — ${res.idle}`);
     process.exit(1);
   }
-  // The same lines the poller logs, so a tick reads the same by hand and on the
-  // timer — including what each channel cost to fetch and judge.
-  for (const c of res.channels) {
-    console.log(`${pad(c.channel, 10)} ${c.unreachable ? `not fetched — ${c.unreachable}` : channelLine(c)}`);
+  if (res.held) {
+    console.log(`held — ${res.held}. Nothing written or recorded for it; the next pass reads the same events.`);
+    process.exit(1);
   }
+  // The same lines the poller logs, so a pass reads the same by hand and on the
+  // timer — including what each channel cost to judge.
+  for (const c of res.channels) console.log(`${pad(c.channel, 10)} ${channelLine(c)}`);
   for (const id of res.created) console.log(`${pad('new', 10)} ${id}`);
-  console.log(
-    tickLine(res, Date.now() - started) +
-      `, ${res.skipped} already known` +
-      (res.advanced.length ? ` — cursor moved for ${res.advanced.join(', ')}` : ''),
-  );
+  console.log(tickLine(res, Date.now() - started));
 }
 
 /**
@@ -1138,10 +1126,8 @@ if (asking) {
       process.exit(1);
     }
     /**
-     * A bare `pj intake` is the tick: it files into `inbox/` and advances. Only
-     * `--dry-run` proposes and stops, and a preview never advances a cursor —
-     * `pj intake advance` promotes it once what it listed is resolved by hand,
-     * because a run that fetched is not a run that was resolved.
+     * A bare `pj intake` is the pass: it judges, files into `inbox/` and records
+     * what it judged in the kernel. Only `--dry-run` reads and stops.
      */
     case 'intake': {
       const { flags, rest } = argFlags(argv, [
@@ -1151,63 +1137,14 @@ if (asking) {
         'json',
         'verbose',
         'channel',
-        'cursor',
-        'seen',
-        'captured',
-        'advance',
         'q',
-      ], ['dry-run', 'json', 'verbose', 'advance']);
+      ], ['dry-run', 'json', 'verbose']);
       const [sub, ...channels] = rest;
 
       if (sub === 'status') {
-        console.log(flags.has('json') ? JSON.stringify(statusOf(root), null, 2) : renderStatus(root));
-        break;
-      }
-
-      if (sub === 'advance' || (sub === 'commit' && flags.has('advance'))) {
-        const channel = flags.get('channel')?.[0];
-        if (channel && !channelNames().includes(channel)) {
-          fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
-        }
-
-        const capturedRaw = flags.get('captured')?.[0];
-        const res = advance(root, {
-          ...(channel ? { channel } : {}),
-          ...(capturedRaw && capturedRaw !== 'true' ? { captured: Number(capturedRaw) } : {}),
-        });
-        console.log(renderAdvance(res));
-        // Nothing to promote anywhere is a mistake worth noticing — a sweep was
-        // meant to come first.
-        if (!res.moved.length) process.exit(1);
-        break;
-      }
-
-      if (sub === 'cursor' || sub === 'commit') {
-        const action = sub === 'cursor' ? channels.shift() : 'set';
-        if (action === 'reset') {
-          const channel = flags.get('channel')?.[0];
-          const n = resetWatermark(root, channel);
-          console.log(
-            n
-              ? `forgot ${n} cursor(s)${channel ? ` for ${channel}` : ''} — the next sweep uses the default window`
-              : 'nothing to forget',
-          );
-          break;
-        }
-        if (action !== 'set') fail('pj intake cursor set --channel <c> --cursor <value>');
-        const channel = flags.get('channel')?.[0];
-        if (!channel) fail('pj intake cursor set --channel <c> --cursor <value>');
-        if (!channelNames().includes(channel)) {
-          fail(`unknown channel "${channel}" — have ${channelNames().join(', ')}`);
-        }
-        if (sub === 'cursor' && !flags.get('cursor')?.[0]) {
-          fail('pj intake cursor set --channel <c> --cursor <value>');
-        }
-        const w = commitWatermark(root, channel, flags.get('cursor')?.[0] ?? null, {
-          seen: Number(flags.get('seen')?.[0] ?? 0),
-          captured: Number(flags.get('captured')?.[0] ?? 0),
-        });
-        console.log(`${w.channel} cursor ${w.cursor ?? '(unchanged, none)'} — ran at ${w.ranAt}`);
+        const s = await statusOf(root);
+        console.log(flags.has('json') ? JSON.stringify(s, null, 2) : renderStatus(s));
+        if (!s.ok) process.exit(1);
         break;
       }
 
@@ -1289,43 +1226,33 @@ if (asking) {
         for (const fp of channels) {
           const back = unsuppress(root, fp);
           console.log(
-            back
-              ? `${fp} — back in the next sweep` +
-                  // Naming it because it is a side effect on a different table
-                  // than the one the command is about, and because it is what
-                  // makes the first half of the sentence true.
-                  (back.rewound ? ` (${back.rewound}'s cursor reset, so it is in reach again)` : '')
-              : `${fp} — was not declined`,
+            !back
+              ? `${fp} — was not declined`
+              : back.event
+                ? `${fp} — the next pass offers it to the judge again`
+                : // A decline that named no connector event — a card a person
+                  // declined — has nothing to offer again; the source moving is
+                  // what brings it back.
+                  `${fp} — no longer declined; it returns when its source next moves`,
           );
         }
         break;
       }
 
-      if (sub === 'reset') {
-        const channel = flags.get('channel')?.[0];
-        const n = resetWatermark(root, channel);
-        console.log(
-          n
-            ? `forgot ${n} cursor(s)${channel ? ` for ${channel}` : ''} — the next sweep uses the default window`
-            : 'nothing to forget',
-        );
-        break;
-      }
-
       // No subcommand: the positional arguments are channel names, checked before
-      // anything is fetched — a removed verb (\`apply\`, \`decline\`) reads as one,
-      // and must not cost a relay run on its way to failing.
+      // anything is read — a removed verb (\`advance\`, \`cursor\`, \`reset\`) reads as
+      // one, and is refused by name.
       const only = sub ? [sub, ...channels] : [];
       const unknown = only.filter((c) => !channelNames().includes(c));
       if (unknown.length) fail(`unknown channel(s): ${unknown.join(', ')} — have ${channelNames().join(', ')}`);
 
       if (!flags.has('dry-run')) {
-        // These shape a preview. A tick from an arbitrary \`--since\` would advance
-        // a cursor past what it never looked at, so they are refused, not ignored.
+        // These shape a preview. A pass from an arbitrary \`--since\` would record
+        // judgments out of order, so they are refused, not ignored.
         const previewOnly = ['since', 'limit', 'json', 'verbose'].filter((f) => flags.has(f));
         if (previewOnly.length) {
           const named = previewOnly.map((f) => '--' + f).join(', ');
-          fail(`${named} ${previewOnly.length === 1 ? 'shapes' : 'shape'} a preview: add --dry-run, or drop ${previewOnly.length === 1 ? 'it' : 'them'} to run the tick`);
+          fail(`${named} ${previewOnly.length === 1 ? 'shapes' : 'shape'} a preview: add --dry-run, or drop ${previewOnly.length === 1 ? 'it' : 'them'} to run the pass`);
         }
         await tick(root, only);
         break;
@@ -1335,19 +1262,17 @@ if (asking) {
       const since = sinceRaw ? new Date(sinceRaw) : undefined;
       if (since && !Number.isFinite(since.getTime())) fail(`--since "${sinceRaw}" is not a date`);
 
-      const result = await sweep(root, {
+      const result = await pending(root, {
         only,
-        since,
+        ...(since ? { since } : {}),
         limit: Number(flags.get('limit')?.[0] ?? DEFAULT_LIMIT),
       });
-      if (result.unknown.length && !result.reports.length) {
-        fail(`unknown channel(s): ${result.unknown.join(', ')} — have ${channelNames().join(', ')}`);
-      }
       if (flags.has('json')) {
-        console.log(JSON.stringify({ candidates: candidateCount(result), ...result }, null, 2));
-        break;
+        console.log(JSON.stringify(result.ok ? { candidates: candidateCount(result.reports), ...result } : result, null, 2));
+      } else {
+        console.log(renderPreview(result, { verbose: flags.has('verbose') }));
       }
-      console.log(renderSweep(result, { verbose: flags.has('verbose') }));
+      if (!result.ok) process.exit(1);
       break;
     }
 

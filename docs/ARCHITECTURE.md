@@ -124,16 +124,16 @@ the two are expected to be editing the same note at the same time.
 | `src/schema/` | note and facet types, frontmatter read/write, validation, how notes fold together, and `body.ts` — the references a body carries, read out of its markdown |
 | `src/index/` | the indexer, the query compiler, the reference graph, the index memo |
 | `src/view/` | `ViewSpec` — the one description of a view, shared by URL, file and CLI flags — `payload.ts`, the one answer to it, shared by `GET /api/query` and `pj ls --json` — `intents.ts`, the edits a control makes to a view, `dropOutcome.ts`, what a drag means, `keys.ts`, what a keystroke means and which letters a vault may not claim, and `undo.ts`, the write that puts a write back |
-| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding, `poll.ts` — the sweep on a timer — and `log.ts`, what the background says about itself |
+| `src/server/` | hono routes, mutations, file watcher, SSE, vault seeding, `poll.ts` — intake's triage pass on a timer — and `log.ts`, what the background says about itself |
 | `src/web/` | React: sidebar, three shapes, note panel. `cursor.ts` is where the keyboard is and `views/motion.ts` is where it can go; `embed.ts` is one half of the app inside another page's frame, the query travelling through the host (C9 read from outside) |
 | `src/sync/` | a view as a folder of markdown outside the vault: `render.ts` — one note as the bytes a reader gets — and `plan.ts` — what a sync would write, what it would remove, and the report that is read before it does |
 | `src/cli/` | `pj` |
 | `src/mcp/` | `pj mcp`: the vault served to MCP clients over stdio. `server.ts` is the JSON-RPC framing and the resources, `tools.ts` the read commands as tools, `memory` reading the agent's `memory/`, and `propose`, which prints a batch of writes rather than making them |
 | `src/sources/` | the read-only way out: subprocess transport, Jira credential + GET, Claude transcripts |
 | `src/enrich/` | read-only link fetchers, each with a TTL |
-| `src/intake/` | channels that discover refs the vault does not have, where each last got to, which were declined and which of those were taken back, `classify.ts` — which deserve a note and what the note is — `materialise.ts` — a candidate becoming one — and `kernel.ts`, the same tick sent to the owner's kernel as a source batch |
+| `src/intake/` | the triage of what the kernel's connectors gathered: `connectors.ts` — the connector events read back through projector's saved queries, and each one's key recovered — `run.ts` — those events as candidates with the vault's evidence, or skips with a reason — `conversation.ts` — Slack and Gmail messages as the conversations they belong to — which were declined and which of those were taken back, `classify.ts` — which deserve a note and what the note is — `materialise.ts` — a candidate becoming one — and `kernel.ts`, what the pass judged recorded in the kernel, which is also its cursor. It fetches nothing |
 | `src/kernel/` | projector over the owner's kernel: `state.ts` — the answer as data, which intent speaks for a note and the `kernel` axis value it gives it, pure and importable by the panel — `query.ts`, projector's saved queries run through `<bin> query --saved projector/<name> --json`, the only way it reads the kernel — `read.ts`, the `vault-intents` query read once per index rebuild and TTL, `write.ts`, `<bin> observe` as the owner: accept, overrule, the status write-through, and the verdict written back into the note through the same map read backwards, with `pj kernel sync` for the files that disagree — `import.ts`, `pj kernel import`: the vault as the owner's commitments, status changes and days in one batch, keyed from the status events the kernel already holds (the `vault-status-events` query), and `register.ts`, `pj kernel register` |
-| `kernel/` | projector as a registered kernel system: `manifest.json` — what projector is and writes, checked by the kernel against every batch it sends — `specs/note-conventions.edn`, the convention it publishes, `specs/work-a-note.edn`, the capability whose procedure is the `pj-work` skill, the two loops the owner plans with, `specs/daily-plan.edn` and `specs/weekly-review.edn`, whose procedures are the `plan-day` and `review-week` skills and which read every open intent in the ledger, not only the vault's — the owner plans here, so projector publishes them and the kernel only fires and judges them — and `specs/judge-intake.edn`, intake's judgment as a spec, of which every judging tick is an attempt; `queries/*.edn`, the saved queries the manifest names — `vault-intents`, `vault-status-events` and `intake-proposals` — which the kernel checks against its allow-list on registering and which are everything projector reads of it; the manifest's `develop` block says how the kernel's `develop` spec changes this repo. Beside the code that writes what it declares, so the two change together |
+| `kernel/` | projector as a registered kernel system: `manifest.json` — what projector is and writes, checked by the kernel against every batch it sends — `specs/note-conventions.edn`, the convention it publishes, `specs/work-a-note.edn`, the capability whose procedure is the `pj-work` skill, the two loops the owner plans with, `specs/daily-plan.edn` and `specs/weekly-review.edn`, whose procedures are the `plan-day` and `review-week` skills and which read every open intent in the ledger, not only the vault's — the owner plans here, so projector publishes them and the kernel only fires and judges them — and `specs/judge-intake.edn`, intake's judgment as a spec, of which every judging tick is an attempt; `queries/*.edn`, the saved queries the manifest names — `vault-intents`, `vault-status-events`, `intake-proposals`, and intake's `intake-newest`, `connector-events-since` and `connector-event` — which the kernel checks against its allow-list on registering and which are everything projector reads of it; the manifest's `develop` block says how the kernel's `develop` spec changes this repo. Beside the code that writes what it declares, so the two change together |
 | `src/did/` | `pj did`: one local day of your own traces — vault notes, commits, sessions, Jira — gathered and never judged: the source-level report. The day recap as tasks is the kernel's `bin/kernel did`, to which the retired `pj-did` skill points |
 | `src/agent/` | note context assembly, worktree workspaces, briefings, git history — and `work.ts`, the plan-and-launch both `pj work` and `POST /api/note/:id/work` reach, so the CLI and the panel cannot disagree about which branch, which directory or which link |
 | `src/scripts/` | maintenance run by hand, not by the app: `redate.mjs` moves the coverage vault's dates back to today |
@@ -621,68 +621,83 @@ thing the collapse gave up.
 **Three SQLite files, three lifecycles.** `.projector/index.db` is derived from the note files and
 rebuilt from scratch whenever they change — C1 means it can never be the authority, so it needs no
 migration. `.projector/enrich.db` is a cache: TTL'd, clearable, and losing it costs one refetch of
-data that took a second to fetch. `.projector/intake.db` is neither. Delete it and the next sweep re-proposes every message and commit of
-the last three months, so it cannot be rebuilt from anything and cannot be thrown away casually.
+data that took a second to fetch. `.projector/intake.db` is neither: it holds judgements, which are not
+reproducible — a different threshold or a different reader answers differently — so it cannot be
+rebuilt from anything.
 
-It holds three tables. Two are the halves of resolving a sweep: `watermark` is how far each channel
-has been read, and `suppressed` is which candidates somebody judged not to deserve a note. The third,
-`seen`, is the sync's memory: the state — status and assignee, for Jira — each tracked source item was
-last judged in, so the next tick can tell *moved* from *updated again*. Same lifecycle, so the same
-file — all three are answers no note records, and all three degrade a sweep rather than breaking it
-when lost: without `seen`, every tracked issue in the window is offered as an update once and the
-classifier drops the ones where nothing changed. It is in WAL mode, so it is three files on disk;
-deleting the database and leaving the sidecars used to fail the next open outright, which is why
-`openIntakeDb` clears an orphaned log before opening (see `dropOrphanedWal`). A property that only
-holds when you delete the right three files is not the property the paragraph above claims.
+It holds two tables: `suppressed`, which candidates somebody judged not to deserve a note, and
+`rescued`, which of those somebody took back. **Where intake got to is not in it.** It used to be — a
+`watermark` per channel and a `seen` table of the state each tracked item was last judged in — because
+intake fetched, and a fetcher has to remember where it stopped. Intake fetches nothing now, and the
+kernel answers both questions (below), so a second record here could only disagree with it (C11): a
+store from before loses `watermark` and `seen` when it opens, as it lost `kernel_status`. It is in WAL
+mode, so it is three files on disk; deleting the database and leaving the sidecars used to fail the next
+open outright, which is why `openIntakeDb` clears an orphaned log before opening (see
+`dropOrphanedWal`). A property that only holds when you delete the right three files is not the
+property the paragraph above claims.
 
 Merging any two of them breaks whichever has the shorter life: enrichment in the index would be
-discarded on every reindex, and watermarks in the enrichment cache would be discarded by
+discarded on every reindex, and declines in the enrichment cache would be discarded by
 `clearEnrichment`.
 
-**A watermark is not load-bearing, and that is what makes it safe to keep at all.** It is the one piece
-of state projector holds that is not derived from the note files. Correctness does not rest on it:
-`source_fingerprint` is what stops a duplicate, and it stops one whether or not a cursor knows the
-item exists. So the watermark only decides how far back to *look* — losing it degrades a sweep to a
-default window, which is noisier and never wrong. Nothing about the work has two answers, so C1 is
-untouched.
+**Intake triages; the kernel's connectors gather.** Projector fetches nothing for intake. The kernel's
+connectors — `claude-code`, `git`, `jira`, `slack`, `gmail`, beside the kernel and run by the owner
+(`bin/kernel sync <connector>`, or git's post-commit hook) — write what happened as events, and a pass
+reads the ones it has not judged back through projector's saved queries (`src/intake/connectors.ts`).
+The channel fetchers, their relay agent, their transports and their settings are gone; so is every
+path by which intake could fall back to fetching. With the vault's kernel block off a pass reads
+nothing and says so (`KERNEL_OFF`), and the server starts no loop for it.
 
-**A cursor may only move to a boundary with nothing unexamined behind it.** A cursor is one value, so a
-channel that returned the *newest* N items and then advanced would step over everything older it never
-looked at. Channels therefore work **oldest-first from the cursor**, and a run truncated by its limit
-holds its cursor where it was: the next sweep resumes at the same place, and the backlog drains through
-fingerprint dedup rather than through the cursor. `pj intake --dry-run` is also the only command that
-reads external state and writes nothing of its own — it rebuilds the derived index the way every read
-does, and notes where each cursor *would* go without moving it, because a run that fetched is not a run
-that was resolved.
+**The cursor is a query, per channel.** `projector/intake-newest` answers the newest `intake/<channel>`
+event projector has written; an intake event's `at` is the instant of the connector event it judged,
+so `projector/connector-events-since` with that instant answers exactly the connector events the
+channel has not judged. Nothing is stored in the vault or in `.projector/` (C11): a pass that judged
+writes its intake events, and the next pass's cursor has moved; a pass that held writes none, and the
+next one reads the same events again. One instant per channel rather than one for all, because the
+owner syncs one connector at a time and a Jira sync an hour after a Claude Code sync brings events
+older than the newest session judged. What it cannot see is an event a connector writes *behind* its
+own channel's cursor — a repo's commits synced a day after another's — which NEXT.md records.
+`startOf` bounds the read by the channel's window: a channel that never judged, or whose cursor is older
+than `defaultDays`, reads from the window's start and its report says what it stepped over. Intake is
+for current asks; an ask older than the window has been settled or asked again in a message the window
+still reads.
 
-**A sweep has two answers, and only one of them used to have somewhere to go.** `pj add` records a
-yes and leaves a note carrying the candidate's fingerprint, so no later sweep offers it again. A no
-left nothing behind but a moved cursor — which made "seen and declined" indistinguishable from "never
-fetched", except that the first could never come back, and it meant a rejection could not inform
-anything afterwards. `pj decline` is the missing half: a fingerprint, a reason, and a
-timestamp, dropped from the candidates of every later sweep — named directly, or as the card that
-answers for it, which is removed. `restore` puts it back.
+**The cursor is not load-bearing for correctness.** `source_fingerprint` is what stops a duplicate,
+and it stops one whether or not anything knows the item was seen — which is what makes a refused batch
+cheap: the cards are written before the batch goes, so the next pass reads the same events and finds
+each already a card, a link or a decline.
 
-**Un-declining is a re-offer, not an undo.** `restore` removes the row *and forgets that channel's
-cursor*, because removing the row on its own repairs nothing: every channel fetches forward of its
-watermark, so an item behind the cursor stops being filtered and stays out of reach, and a repair that
-repairs nothing is worse than none because it reads as one. What comes back is a **fresh card**, written
-by the next sweep out of raw material the source still holds — the commit is in the repo, the transcript
-on disk, the issue in Jira — and not the card that was there before. Losing that card is the design
-rather than a cost: it was a proposal, and its replacement is written against calibration that has moved
-since it was turned down.
+**A pass judges a slice, and never cuts an instant.** `pending` takes the longest run of a channel's
+oldest events that maps to at most `DEFAULT_LIMIT` candidates, cut only between two instants
+(`sliceOf`, a binary search over prefixes, since a candidate is a group and only mapping says how many a
+prefix holds): the cursor is an instant, so everything up to the cut is recorded and nothing after it,
+and a cut between two events of one instant would leave the second behind a cursor that has already
+passed it. Skips do not count against it — a backlog of the app's own sessions costs the judge nothing. A channel with more waiting reports `truncated`, the channel line
+says `more behind this slice`, and the loop comes back at `poll.catchUpSeconds`.
 
-**The rewind is the whole cursor, not a step back to the item.** Rewinding precisely would mean
-comparing the item's own timestamp against the cursor, and a cursor is channel-defined and opaque — an
-ISO date for direct channels, a Slack `ts`, or a Gmail date — so
-there is frequently nothing to compare it with. Recording the time on the row would answer for a
-candidate the classifier dropped and not for a card somebody deleted, because a card records its
-fingerprint and its links and never the source's own clock. So the channel falls back to its default
-window, which is cheap for the reason this store already gives about losing itself: everything behind
-the cursor is either on a note, where `source_fingerprint` prevents a second capture, or still
-suppressed, so a re-sweep re-proposes almost nothing. The limit is worth stating rather than burying —
-**an item older than that window does not come back on its own**, and `pj intake --dry-run --since` is
-how to reach further.
+**What a pass decides, it decides mechanically and records.** `mapEvents` turns each connector event
+into a candidate with the vault's evidence (`match.ts`) or a skip with its reason: a session too short
+to be work, one outside every declared repo or under a `.projector` (the app's own judge), the owner's
+own message, an item a note already carries or one declined before. Several events that are one thing
+fold into one candidate — a session that moved twice, a branch's commits, a conversation's asks, an
+issue's transitions — and the rest are skips naming it. Skips are not stored in `intake.db` (C11: they
+re-derive identically), but every one is an intake event in the kernel like a judgment, so the cursor
+passes it and the kernel can say what intake chose not to judge. A suppressed candidate is a skip, not
+an absence: a pass that quietly discarded a third of what it read would read as a quiet channel.
+
+**A pass has two answers, and both have somewhere to go.** `pj add` records a yes and leaves a note
+carrying the candidate's fingerprint, so no later pass offers it again. `pj decline` is the other half:
+a fingerprint, a reason, and a timestamp, skipped by every later pass — named directly, or as the card
+that answers for it, which is removed. `restore` puts it back.
+
+**Un-declining is a re-offer, not an undo.** The connector event a decline was of has been judged, so
+it sits behind the cursor, and removing the row alone would repair nothing — a repair that repairs
+nothing is worse than none because it reads as one. So a model's decline carries the connector event's
+kernel id (`suppressed.event`), `restore` moves it onto the rescue (`rescued.event`, unoffered), and the
+next pass reads it back by id (`projector/connector-event`) and offers it to the judge once more,
+marking the rescue offered whatever the judge says. What comes back is a **fresh card**, written against
+calibration that has moved since it was turned down, not the card that was there before. A card a
+person declined records its fingerprint and not its event, so taking that back only lifts the decline.
 
 **A decline is a decline, and two acts share the delete key.** Declining a card is *declining an
 offer*: the same act the classifier performs when it drops a candidate, worth the same to it, and
@@ -690,7 +705,7 @@ recorded as the same row — which is why there is one table and not two. Deleti
 and worked on is a different sentence. It says the work is finished with, which is no verdict on the
 offer that produced it; taught as a decline it reads as *you should not have shown me this*, and what a
 model learns from it is to withhold the kind of thing you keep for a month and then let go. Both
-suppress, because both have to stop a later sweep re-proposing the thing. `was_judged` on the row is
+suppress, because both have to stop a later pass re-proposing the thing. `was_judged` on the row is
 which, and `calibrationFor` learns from the offers alone.
 
 **The verb says which, not the key.** `pj decline` is the one no — `declineCards`, refusing anything
@@ -705,66 +720,33 @@ pile and the line before it in the calibration block, so a reason that quotes it
 prompt line spent saying nothing. It used to append `(was "⟨title⟩")`, which in a clipped cell pushed
 out the one word that distinguished the two.
 
-Only *judgements* are stored. A channel declining a merge commit or a session with no prompt re-derives
-that answer identically on every run, so keeping it would be storing something derivable (C11). A
-judgement about whether work matters is not reproducible — a different threshold or a different reader
-answers differently — and that is exactly why it needs a home. A suppressed candidate is moved into
-the run's `skipped` list rather than dropped silently, so the count still includes it and `--verbose`
-still names it: a sweep that quietly discarded a third of what it fetched would read as a quiet
-channel, and that reading must not be available.
-
-**A tick writes the candidate down, and that is what earns the cursor.** The poller and `pj intake` run
-the same tick, `pollOnce`: each candidate it keeps is materialised as a note in `inbox/` — unjudged by
-being there — and the answer is left for later. Filing there needs nobody standing by, because
-`inbox/` is not the person's notes; a sweep that proposed and stopped was the default only while cards
-landed among them. `pj intake --dry-run` still proposes and stops, for diagnosis.
-
-That difference decides which of them may advance a watermark. The rule has always been that a cursor
-may only pass a boundary with nothing unexamined behind it — and a preview cannot satisfy it,
-because what it examined exists only in a terminal buffer. It notes the boundary it reached as
-pending, with `ran_at` left empty on a channel that has none, since a preview is not a run, and
-`pj intake advance` promotes it once what it listed was resolved by hand. A materialising run can: everything behind
-its new boundary is a file, or was already answered for. **So the queue now guarantees what the cursor
-was being asked to**, and the cursor is demoted to what it should always have been — where to resume
-fetching. A truncated run still holds, unchanged and for the original reason.
-
-**The window bounds the cursor, not only its absence.** `startOf` in `src/intake/run.ts` decides where
-each run reads from: `--since`, else the cursor, else the channel's `defaultDays` — and a cursor older
-than `defaultDays` is replaced by the window's start. Intake is for current asks; an ask older than
-the window has been settled or asked again in a message the window still reads, and the Slack cursor
-that a completeness hold stalled for three weeks showed what following one back costs — weeks of a
-relay reading a page a tick. The channel is handed the window's start *as its cursor*, so everything
-it does relative to the cursor — which messages are new, where the Slack page boundary lands, whether
-the boundary moved — works from where reading began. `sweep` then holds a truncated or empty run at
-that start rather than at the old cursor, which would undo the skip; a channel that could not be
-reached read nothing and keeps its cursor. The span stepped over travels with the pending cursor and
-is committed with it (`skipped_from`/`skipped_to`/`skipped_at` on the watermark row): once the cursor
-has moved nothing else remembers where it was, so it is stored rather than derived (C11), while
-`stale` in `statusOf` — the cursor is older than the window now — is derived on every read. A held
-tick commits nothing, and the next run recomputes the same span from the cursor the hold kept. A skip
-that starts where the recorded one ended — a channel still pinned at the window's edge — extends that
-record and is not announced again, or a quiet channel would report a new hour-long gap every tick,
-each of which the tick before had read.
-
-One channel failing is that channel's news. A thrown `collect` used to take the whole run with it, so a
-lapsed token meant no git candidates either; it now lands as `fetched: false` with the reason, which is
-the shape the report already had for Slack and Gmail. That matters more with nobody reading the output.
+**A pass writes the candidate down, then records it.** The poller and `pj intake` run the same pass,
+`pollOnce`: each candidate it keeps is materialised as a note in `inbox/` — unjudged by being there —
+and the answer is left for later. Filing there needs nobody standing by, because `inbox/` is not the
+person's notes. Then the channel's batch goes to the kernel: one `intake/<channel>` event per connector
+event looked at, keyed `intake:<the connector event's key>` — never the connector's key itself, which
+names the connector's own event — at its instant, carrying the event whole as `evidence.event`. The
+kernel does not store an event's key, only the id it derives from it, so `keyOf` rebuilds each
+connector's key from the payload by that connector's own rule and keeps only one whose derived id
+matches; an event whose key cannot be rebuilt (a `jira/transition`, whose changelog id the payload
+omits) goes by `intake:<kind>:<kernel id>`. `pj intake --dry-run` reads and stops, for diagnosis, and
+records nothing.
 
 **The server starts the loop, not a request.** `serve.ts` hands every registered vault to
 `pollAtStartup` once it is listening, so running the server is enough for intake to tick; the loop
 used to start on the first request naming a vault, and a server with no board open polled nothing for
 days. Each request still calls `startPolling`, idempotent per vault, so a vault that turns
-`poll.enabled` on later starts without a restart. The first tick waits out what is left of the
-interval since the newest channel `ranAt` (C11 — the cursors already record when a tick ran), because
-`bun run dev` restarts on every save and a tick on every start was a full sweep per save.
+`poll.enabled` on later starts without a restart. A vault whose kernel block is off starts no loop,
+and the startup line says why. The first tick runs at once: it used to wait out the interval since the
+last, because a tick then fetched and `bun run dev` restarts on every save, and a pass with nothing new
+now costs two kernel queries.
 
 **Each tick schedules the next.** The loop is a self-rescheduling timeout rather than an interval,
 because how long to wait is the tick's own answer: `poll.every` after it started, keeping the rhythm;
-or `poll.catchUpSeconds` after it finished when `isBehind` — some channel reported `moreBehind`, a
-cursor that moved with more of the source after it, which only the Slack relay's page boundary sets.
-A held cursor does not count: a sooner tick would buy the same pages again. Ticks no longer overlap,
-`hours` is still checked by every tick, and `stopPolling` cancels the pending timeout and stops a tick
-in flight from scheduling another.
+or `poll.catchUpSeconds` after it finished when `isBehind` — some channel read a slice of a longer
+backlog and its batch was taken. A held pass does not count, nor one whose batch the kernel refused:
+a sooner tick would read the same slice. Ticks no longer overlap, `hours` is still checked by every
+tick, and `stopPolling` cancels the pending timeout and stops a tick in flight from scheduling another.
 
 **A tick judges before it writes, and describes what it keeps.** `src/intake/classify.ts` answers two
 questions in one pass — does this candidate deserve a note, and what is the note — because the model
@@ -802,26 +784,25 @@ Which is what makes `intake: unjudged` mean something stronger than "new": **not
 been confirmed by a human.** Title, body and facets are all proposals, and judging is accepting them or
 fixing them first.
 
-One call per batch, not per candidate. A sweep's candidates arrive together and are frequently *one
+One call per batch, not per candidate. A pass's candidates arrive together and are frequently *one
 thing* — an afternoon on a branch — and a model shown all of them can say so where a model shown each
 alone cannot. It was one call per channel until a channel of eighteen conversations met a local model
 generating at six tokens a second and no timeout a tick can afford was long enough; a channel's
 candidates are now judged `classify.batch` at a time and the verdicts merged, with the cost summed. One
-batch the model cannot answer holds the whole channel, because a half-judged channel would advance its
-cursor past candidates nobody judged. The default transport is Ollama's local chat API in JSON mode,
+batch the model cannot answer holds the whole channel, because a half-judged channel would record
+intake events — and so move its cursor — past candidates nobody judged. The default transport is Ollama's local chat API in JSON mode,
 with thinking disabled, temperature zero and no tools. The compatibility transport is a stripped
 `claude -p`: default system prompt replaced, tools disallowed, MCP off. In either case what is left is
 classification rather than an agent, since a classifier able to read files would eventually read them.
 
-**It fails closed, per channel.** A tick that cannot reach the classifier for a channel, or cannot
-parse what came back, writes nothing for that channel or those after it and advances neither; the next
-tick sees exactly what it saw there. Channels judged before the hold keep their notes, their declines
-and their cursors, because each was resolved on its own terms — everything behind its boundary is a
-file or answered for — and the two relay fetches a tick pays for must not be paid again because the
-*last* channel's judgement timed out. Materialising everything instead would reach the bad outcome by
+**It fails closed, per channel.** A pass that cannot reach the classifier for a channel, or cannot
+parse what came back, writes and records nothing for that channel or those after it; the next pass
+reads exactly what it read there. Channels judged before the hold keep their cards, their declines and
+their intake events, because the cursor is per channel and each was resolved on its own terms — and
+their judging must not be paid again because the *last* channel's judgement timed out. Materialising everything instead would reach the bad outcome by
 accident, and no reading of "the judge is down" makes writing down everything the right answer. `classify.enabled: false` is how a vault asks for that on purpose —
 reachable by decision, never by omission. A candidate the model failed to mention is **asked about once more, alone**; one still unanswered is
-handed back as `unjudged` and the tick declines it with exactly that reason. The rule used to be
+handed back as `unjudged` and the pass declines it with exactly that reason. The rule used to be
 *keep*, on the argument that keeping costs a glance and dropping costs the item — and it wrote raw cards:
 the message text for a title, the provenance line for a body, "no reason given" where the reason goes.
 The pile made the argument obsolete: a decline is recorded, searchable and reversible in one click, so
@@ -831,80 +812,48 @@ the safe direction is the one that costs no attention, and the prompt's tie-brea
 tracked and handed no target — and the separation is worth keeping: one file decides what is *true*,
 another decides what *matters*.
 
-**Intake is a sync, and three mechanisms make it one.** A sweep used to discover and nothing else: a
-candidate whose link was already on a note was skipped at the channel or at `materialise`, so the vault
-could learn that a ticket existed and never that it had moved, and the agent fetching Slack saw one
-message at a time and reported a question without knowing it had been answered.
+**Intake is a sync, and three mechanisms make it one.** A candidate whose link was already on a note
+used to be skipped, so the vault could learn that a ticket existed and never that it had moved, and a
+question the owner had answered eleven minutes later still arrived as a card.
 
-*The agent-fetched channels are fed by a relay, not a summariser* (`src/intake/relay.ts`). The headless
-`claude -p` is told which tool to call, with which arguments — a search for what was said to the owner
-and one for what the owner said, since the cursor, paged to a bound — and to copy every field of every
-result into one JSON shape. It filters nothing and decides nothing, which is what makes a model in the
-fetch path tolerable: a model copying a tool result is close to deterministic where a model
-characterising one is a judge with no evidence. Every record it returns is validated — a Slack ts, a
-channel id, a permalink, an ISO date — and a record that fails is counted and named, never smuggled
-through. Known credential shapes are redacted in the parser, which is the deterministic floor the
-secrets rule was waiting for (NEXT.md): the relay copies verbatim on purpose, so the rule cannot be
-asked of it. An agent also stops paginating when it feels like it, whatever it is told, and reports
-`more`. For Slack, whose pages come oldest-first and contiguous from the cursor, that is not a hold:
-the run moves the cursor to the earlier of the two searches' newest messages (`slackBoundary`) and says
-the rest is behind it — holding would make an agent that stops early an agent that never gets past the
-same first pages, re-paying them every tick. Gmail's pages come newest-first, so a cut-short run there
-holds like every other truncated run. And a model can leave records out without failing any
-validation — one run transcribed six conversations from pages that had held twenty-four — so the relay
-copies each page's own result count and `transcribedAll` compares, in one direction: fewer records than
-the pages held means something was left out, so what was transcribed is still offered and the cursor
-holds, with the reason on the channel's log line, and the next run pays the fetch again — the price of
-not trusting a copy. More records than pages reported loses nothing and passes; a rule that held on that
-too held a real Gmail run that had transcribed every thread.
-
-*The unit is a conversation*: a Slack channel or thread, a Gmail thread. `conversationsFrom` groups the
-records, marks the owner's messages (the `from:me` search, or Gmail's `SENT` label), and computes what
-the classifier used to be unable to see — whose move it is, when the owner last spoke, and the exchange
-itself, oldest first with the owner's lines marked `you`. `ball` is a fact handed to the model, not a
-gate: the same last word from the owner is an answer in one thread and a promise in the next, and only
-reading tells which (C8 says compute what is computable; this is where it stops being computable). A
-conversation with nothing new from anyone else since the cursor is skipped with that reason.
+*The unit is a conversation*: a Slack channel or thread, a Gmail thread. The connectors write one event
+per message; `conversationsFrom` (`src/intake/conversation.ts`) groups the messages a pass read, marks
+the owner's (the connectors attribute them to `kernel:owner`: the `from:me` search, Gmail's `SENT`),
+and computes what the classifier used to be unable to see — whose move it is, when the owner last
+spoke, and the exchange itself, oldest first with the owner's lines marked `you`. `ball` is a fact
+handed to the model, not a gate: the same last word from the owner is an answer in one thread and a
+promise in the next, and only reading tells which (C8 says compute what is computable; this is where it
+stops being computable). The owner's own messages are skips; the conversation's other asks fold into
+the one candidate. What it shows is the messages this pass read: a reply that arrives after its ask
+was judged is shown without the earlier lines (NEXT.md).
 
 *Anything the vault already tracks arrives as an update.* `knownFor` reads the notes' own links and
 fingerprints — a Slack permalink, a `slack:<channel>/<ts>` fingerprint, a Gmail thread URL, a `jira:`
 key — and a conversation that shares a DM, a thread or a message with one of them, or an issue a note
-links, is tracked. `evidence.linkedTo` names the notes; it used to mean *nothing to do* and now means
-*this is news about that*. Such a candidate may only **extend** one of those notes or be dropped:
-`classify` coerces `keep` to `extend` onto the tracking note, because the vault already tracking the
-thing is a mechanical fact that outranks the verdict's spelling, and `materialise` refuses to write a
-tracked candidate that arrives with no target — which is what one looks like with the classifier
-switched off. The model is shown the tracked note as it stands (title, facets, the head of its body) so
-what it proposes is a delta, and the delta lands as the `extends` card the fold dialog already turns
-into one question per axis. Closed notes are excluded from tracking on purpose: finished work does not
-reopen because a DM got chatty or Jira ticked. So are cards still in the queue: a proposal must not
-collect further proposals — one live run chained an update onto the previous tick's card instead of onto
-the note — so a card that `extends` a note stands in for that note, and a card that extends nothing
-tracks nothing until somebody accepts it.
+links, is tracked. `evidence.linkedTo` names the notes; it means *this is news about that*. Such a
+candidate may only **extend** one of those notes or be dropped: `classify` coerces `keep` to `extend`
+onto the tracking note, because the vault already tracking the thing is a mechanical fact that outranks
+the verdict's spelling, and `materialise` refuses to write a tracked candidate that arrives with no
+target — which is what one looks like with the classifier switched off. The model is shown the tracked
+note as it stands (title, facets, the head of its body) so what it proposes is a delta, and the delta
+lands as the `extends` card the fold dialog already turns into one question per axis. Closed notes are
+excluded from tracking on purpose: finished work does not reopen because a DM got chatty or Jira
+ticked. So are cards still in the queue: a proposal must not collect further proposals, so a card that
+`extends` a note stands in for that note, and a card that extends nothing tracks nothing until somebody
+accepts it — for Jira, it has captured the issue, and the move is skipped.
 
-For Jira the change signal is the `seen` table rather than the cursor, because `updated` moves on every
-comment and comments are not fetched: the channel compares status and assignee with the state the last
-tick judged the issue in, skips an unchanged one with that reason, and fingerprints a moved one per
-update (`jira:KEY@<updated>`) so each move is its own offer and its own decline while the stable key
-travels as the link and in `state`. **The state is recorded only after judgement**, by the automatic
-path (`pollOnce`) and for every candidate that carries one — a held tick must see the same change
-again, and a discovery that becomes a note is tracked from then on, so its first update should be a
-change rather than the state it was filed in. The manual path never marks anything seen; it cannot know
-what the person did with the proposal.
+*Jira offers a change.* An issue's `updated` moves on every comment; the jira connector writes a
+`jira/issue` event only when its status or assignee is new, keyed by that state, so every one a pass
+reads is a move. A tracked one is fingerprinted per move (`jira:KEY@<updated>`) so each is its own offer
+and its own decline, while the stable key travels as the link. Its `jira/transition` events fold into
+it.
 
-**The claude channel counts declined sessions as skipped before the limit, not after.** `sweep` moves
-suppressed candidates to `skipped` centrally, which is right — but the channel had already counted them
-against `ctx.limit`, so twenty-five declined sessions filled the limit, every run reported itself
-truncated with nothing to show, and the cursor never moved. Declining is what a reader does most; it
-must not be what stalls the channel. The skip now happens before the transcript is opened.
-
-**A tick says what it cost.** Two channels run an agent and the classifier runs a model, and from the
-board a tick that took two minutes and forty thousand tokens is indistinguishable from one that took two
-seconds. `Cost` travels on the channel report (read off the `claude -p` envelope: duration, turns,
-token counts, dollars) and on the classifier's reply (Ollama's own counts and clock; the same envelope
-for the compatibility transport), and `pollOnce` sums them per channel and per tick. `pj intake`
+**A pass says what it cost.** The classifier runs a model, and from the board a pass that took two
+minutes and forty thousand tokens is indistinguishable from one that took two seconds. `Cost` travels
+on the classifier's reply (Ollama's own counts and clock; the `claude -p` envelope for the compatibility
+transport, read by `src/intake/cost.ts`), and `pollOnce` sums it per channel and per pass. `pj intake`
 prints the same lines the poller logs, through the same two functions, so the two surfaces cannot
-describe one tick differently.
+describe one pass differently.
 
 **The declined pile is a surface, not a view.** A declined candidate never became a file, so there is
 nothing for the query compiler to answer about it and no shape to draw it in — C9 is about views over
@@ -914,13 +863,12 @@ way `?note=` reaches the panel: no second route, still deep-linkable, back butto
 scan, so the head can say them in one sentence without them being two populations — and `meta.declined`
 carries the count, which the sidebar draws
 with the vault stats rather than in the footer: the footer answers *what is on screen, and why it is
-not more* about the current query, and a pile a sweep turned down does not move when you filter. `,d` opens it from the keyboard.
+not more* about the current query, and a pile intake turned down does not move when you filter. `,d` opens it from the keyboard.
 
 It is **paged on `(at, fingerprint)` and searched with `LIKE`**, because the pile only ever grows:
-every sweep that declines something adds a row and only a rescue removes one. A cursor rather than an
-offset, for the reason the watermark gives about itself — the list grows at the end being read from, so
-an offset walk interrupted by a sweep shows a row twice and never shows another. **Both halves of the
-cursor**, because a sweep declines in a synchronous loop and `at` is `toISOString()`: several rows share
+every pass that declines something adds a row and only a rescue removes one. A cursor rather than an
+offset — the list grows at the end being read from, so an offset walk interrupted by a pass shows a row
+twice and never shows another. **Both halves of the cursor**, because a pass declines in a synchronous loop and `at` is `toISOString()`: several rows share
 a millisecond, `at DESC` alone is therefore not an order, and a boundary of `at < ?` dropped every row
 that tied with the one a page ended on. Ordering by the pair makes the sequence total and lets a cursor
 land exactly between two rows.
@@ -1039,13 +987,13 @@ change refetches the board, this interrupts a person, and a client treating them
 every write or on none. Permission is asked on the first notification rather than on load, and a
 refusal costs nothing, the note being on the board either way.
 
-**Enrichment and intake are mirror images that share only the way out.** Enrichment is given a ref and
-answers how to display it; intake is given a channel and a cursor and answers which refs nobody has
-filed. Same Jira token, same `~/.claude/projects`, opposite question. `src/sources/` holds what is
-genuinely common — the credential, the subprocess, the transcript parser — and neither directory
-imports the other. Gmail is read through `gogcli`, Jira through GET-only HTTP, and Slack by an agent
-through MCP. `pj` keeps every cursor, because a watermark is a property of where the sweep got to and
-not of which transport did the fetching.
+**Enrichment and intake are mirror images, and only enrichment fetches.** Enrichment is given a ref
+and answers how to display it, reaching Jira over GET-only HTTP and `~/.claude/projects` itself; intake
+is given what the kernel's connectors gathered and answers which of it nobody has filed. The
+connectors, not projector, read Jira, git, Claude Code, Slack and Gmail for intake, so the transports
+and their credentials are the kernel's. `src/sources/` holds what enrichment and `pj did` share — the
+credential, the subprocess, the transcript parser, read-only git — and neither directory imports the
+other.
 
 **Instructions are configuration, not prose.** They live in the `project:` block. They were once a
 `## Instructions` heading in the body matched by regex — the only place where renaming a heading
@@ -1199,7 +1147,7 @@ C2 says everything external is read-only. Concretely, every operation that write
 |---|---|---|
 | `pj add` / `POST /api/note` | one new note file, in the place `placeFor` names — `notes/`, `daily/`, or the folder of its one project | never overwrites an existing file |
 | `pj log` | nothing | reads `git log`; it is the one command with no write at all |
-| `pj mcp` | `.projector/index.db`, as every read does, and only in the vault named by `--vault` or by a *registered* name in a call | never a note, nor `memory/`, which `memory` only reads. Its tools are the read commands run in-process; `propose` prints the `pj` commands for a batch of changes, checked through `checkFacets`, `planAccept` and `planDecline`, and runs nothing — the owner applies them. `vault_status` reads intake's cursors and does not create `.projector/intake.db` where none exists |
+| `pj mcp` | `.projector/index.db`, as every read does, and only in the vault named by `--vault` or by a *registered* name in a call | never a note, nor `memory/`, which `memory` only reads. Its tools are the read commands run in-process; `propose` prints the `pj` commands for a batch of changes, checked through `checkFacets`, `planAccept` and `planDecline`, and runs nothing — the owner applies them. `vault_status` says whether intake has a kernel to triage from and which connector gathers each channel, spawning nothing, and does not create `.projector/intake.db` where none exists |
 | `pj link`, `pj set`, `PATCH /api/note/:id` | one note's frontmatter, or its body when `body` is sent — plus, when the write added a `project:` block, the note file **moved** to `projects/<id>/README.md`; and when it removed `intake` from a card in `inbox/`, the card **moved** by `relocateNote` to its place, with every body and `doc:` link to it repointed and its own body links rebased | a frontmatter change never touches body bytes. The move is a rename, so the bytes are the ones just written; it refuses rather than overwrites when that README exists, and it never moves a note that is already a folder's README |
 | `pj mv <id> <new-id>` | the renamed note file or project folder, its asset directory, every declared reference facet that points at it, every `doc:` link naming its file or reaching into its assets — the note's own included — every **body** link doing the same, and saved-view references or arrangement entries that name it | validates every destination before it writes; relations are read from the vocabulary rather than naming `parent` or `project`, so a new reference facet follows automatically. A facet moves by id, a `doc:` link by path and a body link by a path *relative to the note holding it*, which is why they are three sweeps and not one — and why a body link is computed against where its holder will be, since renaming a folder note moves every note inside it |
 | `pj set --set path=yaml` | only the top-level keys the paths touch | comments and formatting elsewhere in the file survive |
@@ -1214,18 +1162,17 @@ C2 says everything external is read-only. Concretely, every operation that write
 | `pj sync <view> <folder> --apply` | files in the folder named on the command line — **outside the vault**, the only write that is — and removals of files a previous run recorded writing that this view no longer shares. The record of what it owns is written in the vault, under `.projector/sync/<view>-<hash of target>.json`, never in the target | plans and prints first; `--apply` is a second decision, which is the whole guard on a membership that is computed rather than listed. The folder and the exclusion are arguments, not view keys: a view is a query, and nothing in the vault records that one is shared. **A sync owns only what it wrote** — a path no run recorded is `unmanaged` and a recorded path whose bytes changed is a `conflict`; neither is written and neither is deleted, and `--adopt` is the only way past. The front page is seeded when absent and then never regenerated or pruned |
 | `POST /api/note/:id/asset` | one file under `assets/<id>/` | never overwrites: the name is a content hash |
 | `POST`/`DELETE /api/vaults` | `vaults.json` beside the app — plus, when `create` is passed for a path that is not a vault yet, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault, and never overwrites a file that exists |
-| `pj intake --dry-run` | `.projector/index.db`, because a sweep reads the vault through `reindex` like any other read; each channel's *pending* cursor in `.projector/intake.db`, with the span it would skip as older than the window | proposes; it writes no note, moves no cursor and records no run |
-| `pj intake advance` / `cursor set` / `cursor reset` | one row in `.projector/intake.db` | never a note, and never on its own initiative |
-| `pj intake restore` | one `suppressed` row removed, one in `rescued` written, and that channel's `watermark` row removed | never a note; un-declining walks the cursor back so a later sweep can still reach it |
-| the poller (`src/server/poll.ts`) and `pj intake` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, plus that channel's cursor and any span it skipped as older than the window | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Advances only channels it actually fetched. Off unless the vault asks |
-| the kernel sink (`src/intake/kernel.ts`), from the same tick | nothing in the vault: the tick as an attempt of `judge-intake` — `<kernel.bin> attempt start judge-intake --executor agent:projector-intake --json` before the first channel with candidates is judged, and `attempt end <id> done\|failed --result <counts> --json` when the tick is over (`failed` when it held or threw) — and one batch per judged channel to `<kernel.bin> ingest --source system:projector`, with `KERNEL_DB` from `kernel.db` — an `intake/<channel>` event per examined candidate, keyed by its fingerprint and, when the candidate carries one, the source's state (`eventKey`), in the tick's attempt when the kernel started one, and a proposal per `keep` or `extend` card | the kernel's store, never a note. Runs after the channel's cards are written and its cursor moved, so it cannot hold either; a failure is that channel's line. Never `--owner`: the kernel checks the batch against the manifest's `writes`, and proposals land `proposed`, which is the kernel's invariant, not this code's. Off unless the vault asks |
+| `pj intake --dry-run` | `.projector/index.db`, because a pass reads the vault through `reindex` like any other read | reads the kernel and proposes; it judges nothing, writes no note and records nothing in the kernel |
+| `pj intake restore` | one `suppressed` row removed, one in `rescued` written carrying the decline's connector event, unoffered | never a note; the next pass offers that event to the judge once more |
+| the poller (`src/server/poll.ts`) and `pj intake` | one note per kept candidate through `createNote`, into `inbox/`; for **progress** on a branch or in a workspace that resolves to a note by directory or name, that existing note's `links` and `absorbed_fingerprints` through `patchNote` — the one way a tick writes to a note you already have; one `suppressed` row per declined one, carrying its connector event's kernel id; a rescue it offered again marked offered | judges before it writes, and writes nothing at all when it cannot judge. Never attaches on a text match alone. Fetches nothing: reads the kernel's connector events, and with the kernel block off reads nothing. Off unless the vault asks |
+| the kernel sink (`src/intake/kernel.ts`), from the same pass | nothing in the vault: the pass as an attempt of `judge-intake` — `<kernel.bin> attempt start judge-intake --executor agent:projector-intake --json` before the first channel with candidates is judged, and `attempt end <id> done\|failed --result <counts> --json` when the pass is over (`failed` when it held or threw) — and one batch per channel it read to `<kernel.bin> ingest --source system:projector`, with `KERNEL_DB` from `kernel.db` — an `intake/<channel>` event per connector event looked at, keyed `intake:<the connector event's key>` (`intakeKey`), at that event's instant and carrying it as evidence, in the pass's attempt when the kernel started one, and a proposal per `keep` or `extend` card | the kernel's store, never a note. Those events are intake's cursor. Runs after the channel's cards are written, so a refused batch costs a second read and never a card; the failure is that channel's line. Never `--owner`: the kernel checks the batch against the manifest's `writes`, and proposals land `proposed`, which is the kernel's invariant, not this code's. Off unless the vault asks |
 | `pj kernel import` (`src/kernel/import.ts`) | nothing in the vault: one batch to `<kernel.bin> ingest --source system:projector --owner --json` — an entity per note on the `kernel.commitments` axis or in the `kernel.days` folder, a `vault/status` event per status change since the status events the kernel holds — read first through `<kernel.bin> query --saved projector/vault-status-events` — a `vault/day` event per day, and the commitments block with each note's state through the vault's map | only when asked, and only with the `kernel:` block enabled and naming commitments or days. `--dry-run` asks the same query, prints the batch and writes nothing anywhere. Nothing is recorded here: a refused batch leaves the kernel without it, so the next import sends it whole, and a kernel that cannot answer the query is a refused import with nothing sent; the kernel writes an event once per key and a commitment's unchanged state as nothing, so an import twice writes nothing twice. Never a note: an inbox card is not reported, and no value is written back |
 | `pj kernel register` (`src/kernel/register.ts`) | nothing here: `<kernel.bin> register <checkout>/kernel/manifest.json`, with `KERNEL_DB` from `kernel.db` | only when asked; the kernel records a manifest it has seen as nothing |
 | `pj kernel accept` / `overrule`, the panel's kernel row through `POST /api/note/:id/kernel` | one `<kernel.bin> observe <intent> <verdict> --note …` with `KERNEL_DB` from `kernel.db` — accept is the draft's verdict (or `met` with no draft), overrule `missed`, `dropped` or `partial` — and then, for a verdict that closes the intent, one note's frontmatter through `patchNote`: the axis `kernel.verdicts` maps that verdict from, set to the first value mapping to it or the one `kernel.onVerdict` chooses | runs as the owner, never an agent, and only on an open intent; a closed one or a note with none is refused before the kernel is asked, and a kernel that refuses writes no file. `partial` writes no file, nor does a verdict nothing maps to (said in one line). The file write is `patchNote` called directly, beneath the status write-through, so it never observes a second time (the intent is closed by then anyway, which `writeThrough` skips). No guard: there is no base to send. The answer is the kernel's line as it then reads, and what became of the file |
 | `pj kernel sync` | the frontmatter of each note the kernel reads `met`, `missed` or `dropped` while the file holds no value `kernel.verdicts` maps on that axis — the mapped value, through `patchNote`, as above | only when asked: nothing runs it on a read or a schedule. Never the kernel — it reads, it does not observe — and never a note whose file already holds a mapped value, even another one; without `kernel.verdicts` nothing at all |
 | the status write-through, after `pj set`, `PATCH /api/note/:id`, `POST /api/bulk` ops `facet`/`move` and `PUT /api/note/:id/frontmatter` | after the note is written exactly as before: one `<kernel.bin> observe <intent> met\|missed\|dropped` per note whose watched axis *arrived* at a value `kernel.verdicts` maps, when the note has an open intent (or a proposed one, for `dropped`) | never blocks or fails the vault write (C1): the server runs it after the response, `pj set` after its last write, and a refusal is a log line or a stderr line. No `verdicts:` map, no write — which axis is the lifecycle is the vault's to say (C4) |
 | `pj intake rejudge` | title, body and facets of notes still carrying `intake: unjudged` | the only path that overwrites a note rather than creating one; touches nothing judged, and never deletes |
-| `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, one channel's cursor forgotten | never a note; the only write the declined surface makes |
+| `POST /api/intake/declined/:fp/restore` | `unsuppress`, so: one `suppressed` row removed, one `rescued` row written, carrying the connector event the next pass offers again | never a note; the only write the declined surface makes |
 | `pj accept`, and the panel's ✓ / `+` through `POST /api/note/:id/fold` | `acceptCards`: a card of its own **moved** by `relocateNote` to its place, as `PATCH` moves it; an `extends` card merged into its target, then the axes taken — every one the card proposes, those `--only` names (a single-valued axis replaced, a many-valued one unioned), or the dialog's answers — one at a time through the checked path | refuses anything out of `inbox/`, and checks every card before it files one — so the route folds a judged note that still names a target, which the panel still offers ✓ on, through `foldInto` directly. Merge runs **first**, being the half that can refuse — so a refusal leaves the target untouched rather than carrying facets from a fold that did not happen |
 | `pj work`, `POST /api/note/:id/work` | a workspace directory under `$PROJECTOR_WORKSPACES`, `AGENT_BRIEFING.md` in it, a git worktree plus its branch in each declared repo, and `workspace:<path>` appended to the note | never modifies a tracked file in a declared repo. The one note write is an append of a ref derived from the note itself, so it carries no base mtime — appending it twice is a no-op, and it cannot fail the command: the worktrees are already on disk by then, so a failure comes back as `recordError` rather than a refusal. `{commit: false}` writes nothing at all: it is the plan the panel's confirm is built from |
 | `pj vaults add` / `forget` | `vaults.json` beside the app — plus, with `--create`, everything `initVault` seeds | never writes into a non-empty directory that is not already a vault |
@@ -1274,8 +1221,8 @@ The complete filesystem surface, audited. Nothing else on disk is read or writte
 | `<vault>/assets/<id>/` | images pasted into a body | you paste one |
 | `<vault>/.projector/views/*.yaml` | saved views | you save a view or its arrangement |
 | `<vault>/.projector/index.db`, `…/enrich.db` | the derived index and the enrichment cache | continuously; both are disposable and gitignored |
-| `<vault>/.projector/intake.db` | where each intake channel last got to, which candidates were declined, and the state each tracked source item was last judged in. Nothing of the kernel's: a file from before still holding `kernel_status`, the import's old record of what it sent, loses that table when it is opened | `pj intake advance`/`cursor`, `pj decline`, a `--dry-run`'s pending cursors, a judging tick — `pj intake` or the poller; gitignored |
-| `<kernel.db>`, through `<kernel.bin> ingest` and `<kernel.bin> attempt` | what each tick examined, as kernel events in the tick's attempt of `judge-intake` and proposed intents; and the vault's commitments, status changes and days, as the owner | a judging tick, and `pj kernel import`, when `kernel.enabled`; the store is the kernel's, written only by its own CLI |
+| `<vault>/.projector/intake.db` | which candidates were declined — with the connector event a pass declined — and which of those were taken back. Nothing of the kernel's: a file from before still holding `kernel_status`, `watermark` or `seen` — the import's old record, intake's old cursors and the state each tracked item was last fetched in — loses those tables when it is opened | `pj decline`, `pj intake restore`, a judging pass — `pj intake` or the poller; gitignored |
+| `<kernel.db>`, through `<kernel.bin> ingest` and `<kernel.bin> attempt` | every connector event a pass looked at, as `intake:` events in the pass's attempt of `judge-intake`, and proposed intents; and the vault's commitments, status changes and days, as the owner | a judging pass, and `pj kernel import`, when `kernel.enabled`; the store is the kernel's, written only by its own CLI |
 | `<kernel.db>`, through `<kernel.bin> register` | `kernel/manifest.json`: projector as a registered system and its specs | `pj kernel register` |
 | `<kernel.db>`, through `<kernel.bin> observe` | the owner's verdict on a note's intent | accept or overrule in the panel or `pj kernel`, and a status the vault's `kernel.verdicts` maps — when `kernel.enabled` |
 | `<app>/vaults.json` | the list of vaults you have opened | you open or forget a vault |
@@ -1293,26 +1240,24 @@ what makes it safe to hand to whoever edits it next, the point of moving it out 
 
 | Path | Why | Surface |
 |---|---|---|
-| `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link, reading back every session a `workspace:` directory has held, and discovering sessions that moved | read-only |
+| `~/.claude/projects/**`, `~/.claude/sessions` | resolving a `claude:` link, reading back every session a `workspace:` directory has held, and `pj did`. Intake's sessions are the claude-code connector's, read from the kernel | read-only |
 | `~/Library/Application Support/Claude/claude-code-sessions/<org>/<account>/*.json` | the Claude Desktop store — a different vendor surface with its own `local_` id space, for a `claude:` link whose session lives there | read-only |
 | any absolute or `../` path in a `doc:` link | the link points there deliberately | read-only, one file |
 | any directory, via `GET /api/vaults/browse` | the folder picker | directory *names* only, no file contents |
-| `<kernel.db>`, through `<kernel.bin> query --saved projector/<name> --json` | `vault-intents` (`--in prefix=vault:<vault>:`): the `kernel` axis and the panel's kernel row; `vault-status-events` (`--in alias=vault:<vault>:`): what `pj kernel import` has sent, to key the next change | read-only, and only the queries `kernel/manifest.json` registers; the axis once per index rebuild and TTL, held in memory only, the status events once per import and never kept |
-| a project's declared `repos` | starting work, through `git`; `pj intake` reading `git log` | `git worktree`, `git fetch`, `git log` |
+| `<kernel.db>`, through `<kernel.bin> query --saved projector/<name> --json` | `vault-intents` (`--in prefix=vault:<vault>:`): the `kernel` axis and the panel's kernel row; `vault-status-events` (`--in alias=vault:<vault>:`): what `pj kernel import` has sent, to key the next change; `intake-newest`, `connector-events-since` (`--in since=… --in kinds=…`) and `connector-event` (`--in event=<id>`): intake's cursor, the connector events behind it, and one taken back | read-only, and only the queries `kernel/manifest.json` registers; the axis once per index rebuild and TTL, held in memory only, the status events once per import and intake's once per pass, never kept |
+| a project's declared `repos` | starting work, through `git`; `pj did` reading `git log`; intake reading a repo's origin and base branch for a commit's link | `git worktree`, `git fetch`, `git log`, `git remote get-url`, `git symbolic-ref` |
 
 `doc:` and the folder picker are the two places a path outside the vault is reachable, and both are
 deliberate: a `doc:` ref is something you typed, and a picker that cannot leave one directory cannot
 pick a folder. Neither reads anything you have not named.
 
 **Subprocesses:** `git` (worktrees in declared repos, `log`/`cat-file` in the vault for `pj log`, and
-`log`/`branch`/`config`/`remote` in declared repos for `pj intake git`),
+`log`/`config`/`remote` in declared repos for `pj did`, and `remote`/`symbolic-ref` for an intake commit's link),
 `gh` (`pr view`, `api` GETs), `open` (handing one `claude://` deep link to the desktop app, `pj work`
 only), `ps` (one `ppid`
 read per level, walking up the process tree to find which live Claude session is asking), `claude -p`
-(the Slack and Gmail relay, allowed exactly the MCP tools the vault named and nothing else; and the
-compatibility classifier, with every tool disallowed and MCP off), and `gog` (Gmail, only under
-`gmail.transport: gog`, always with `--readonly --gmail-no-send --no-input`), and the owner's kernel
-(`<kernel.bin>`: `ingest` from a tick and from `pj kernel import`, `query --saved projector/<name> --json` to read, `observe`
+(the compatibility classifier, with every tool disallowed and MCP off), and the owner's kernel
+(`<kernel.bin>`: `ingest` and `attempt` from a pass and `ingest` from `pj kernel import`, `query --saved projector/<name> --json` to read, `observe`
 for the owner's verdict — only when the vault's `kernel:` block is enabled — and `register` from
 `pj kernel register`). No shell —
 `execFile`/`execFileSync`/`spawnSync`, always with an argument array, so
@@ -1320,16 +1265,17 @@ nothing is interpolated into a command line. There is no quoting layer left in t
 workspace and the prompt travel as URL parameters, and the one shell string — the `cd … && claude …`
 printed when `open` fails — is never executed by this code.
 
-**Where configuration lives.** A vault's own `.projector/config.yaml` holds which channels it
-sweeps, whether its links are enriched, and the credentials those need — read by `src/settings.ts`,
+**Where configuration lives.** A vault's own `.projector/config.yaml` holds which intake channels it
+triages, whether its links are enriched, and the credentials enrichment needs — read by `src/settings.ts`,
 memoised per vault on the file's mtime *and* on the overriding variables, because one server process
 holds several vaults open and none of them may answer with another's token. `pj setup`
-(`src/setup.ts`) writes the file, adds it to the vault's `.gitignore`, and probes each channel by
-making the request rather than checking that a value is present: configured-and-wrong and
-never-configured look identical otherwise.
+(`src/setup.ts`) writes the file, adds it to the vault's `.gitignore`, and probes each enrichment
+source by making the request rather than checking that a value is present: configured-and-wrong and
+never-configured look identical otherwise. An intake channel has nothing of projector's to probe — its
+connector is the kernel's — so its line says whether the vault has a kernel and which connector gathers it.
 
-It also holds `poll:`, `classify:` and `gmail:` — the keys that let the app write notes nobody asked
-for, choose the local or compatibility model transport, and select the read-only Gmail CLI account.
+It also holds `poll:`, `classify:` and `kernel:` — the keys that let the app write notes nobody asked
+for, choose the local or compatibility model transport, and name the kernel intake reads and records in.
 Polling is off unless a vault sets it; classification is on unless a vault turns it off, which is the
 asymmetry the two failure modes deserve.
 
@@ -1343,9 +1289,8 @@ or a one-off run needs:
 | `PROJECTOR_DATA` | the vault, for the CLI |
 | `PROJECTOR_PORT` | server port (default 8092) |
 | `PROJECTOR_WORKSPACES` | where worktrees go. **Required** — starting work refuses rather than guessing a directory to create real worktrees in, from the CLI and from the panel alike |
-| `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | Jira, for both enrichment and intake; absent means Jira links show their key and nothing more |
-| `PROJECTOR_INTAKE_JQL` | overrides the JQL `pj intake jira` searches with |
-| `PROJECTOR_GIT_AUTHOR` | whose commits `pj intake git` looks for (default: each repo's own `user.email`) |
+| `PROJECTOR_JIRA_URL`, `PROJECTOR_JIRA_EMAIL`, `PROJECTOR_JIRA_TOKEN` | Jira, for enrichment and `pj did`; absent means Jira links show their key and nothing more. Intake's Jira is the kernel's jira connector, with its own `KERNEL_JIRA_*` |
+| `PROJECTOR_GIT_AUTHOR` | whose commits `pj did` counts (default: each repo's own `user.email`) |
 | `PROJECTOR_VAULTS` | where the registry file lives (default: `vaults.json` beside the app — the qualifier on *Why the registry is a file*) |
 | `PROJECTOR_CLAUDE_HOME` | where `~/.claude` is, for transcripts and live sessions |
 | `PROJECTOR_CLAUDE_DESKTOP` | where the Claude Desktop session store is |
@@ -1490,18 +1435,18 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `canvas.test.ts` | nested `--set` and its validation against the result — resolved by id, since making a note a project moves its file — deleting a note's inbound references, clusters, bands, the layout following only the relation shown, a brood of childless members wrapping into a grid, and faces sized by their content so ranked rows cannot overlap |
 | `note.test.ts` | frontmatter round-trips byte-for-byte, surgical key patching, link parsing and hrefs, typed and single-valued facets, the two filenames that mean something — a `README.md` taking its folder's name while the root's keeps its own, and `AGENTS.md` never being a note — the error that says where `project.instructions` went, and the leniency an adopted vault depends on: a foreign date stamp and an unusable `id:` costing their field rather than the note, with writes still validated, and the references a body carries: a link found only where markdown means one — never in a fence, an indented block or a code span — a bare bracket told apart from a task box and a reference definition, a rewrite that repoints, unwraps and leaves every other byte alone, and an href resolved relative to the note holding it |
 | `sync.test.ts` | syncing a view into a folder: a `## Private` section leaving with its subsections and stopping at its peer while a sample of one in a fence stays, a reference repointed when its target travels and unwrapped when it does not — an asset the same, an image never, since a hole in a document is worse than a missing pointer — only the link kinds a reader can follow travelling and a `doc:` ref only when what it names does, the title arriving as the heading and nothing else from the frontmatter, and the same note rendering the same bytes twice, which is what telling an outside edit apart rests on; then the plan on disk: the index in view order, a held note named with the value that held it and the links into it reported cut, a second apply writing nothing, a note leaving the view leaving the folder, and a dotfile never touched so the target can be a git repository; and what a sync owns: a file nobody recorded left alone rather than overwritten, `--adopt` as the only way past, a copy edited after the sync wrote it surviving as a conflict, a note leaving the view removed only while its copy is untouched, the record living in the vault and the target getting nothing but its notes, keyed so two views into one folder do not share one, and a hand-written front page neither regenerated nor pruned |
-| `cli.test.ts` | every command refusing an unknown flag; exact long flags with short aliases and prefixes refused; progressive root, command and advanced intake help; `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one; `--json` being the payload the app receives; the registry; `set` accepting a card out of the inbox by emptying `intake`; a repeated `--facet` accumulating; `created`/`updated` stamped with the local date; `check` printing validity and then the rules under their own headings, failing on a broken rule; `context --fresh` re-resolving a note's links where a plain `context` never fetches; `enrich` and `audit` staying deleted; exit codes |
+| `cli.test.ts` | every command refusing an unknown flag; exact long flags with short aliases and prefixes refused; progressive root, command and advanced intake help with no cursor commands; `pj intake` against `test/fake-kernel` filing into `inbox/` and recording in the kernel, `--dry-run` judging and recording nothing, `status` asking the kernel, a second pass writing nothing twice, and the kernel block off reading nothing and saying so; the removed cursor verbs refused as channel names; `--vault` taking a registered name ahead of a path and refusing a vault that is not on disk rather than reporting an empty one; `--json` being the payload the app receives; the registry; `set` accepting a card out of the inbox by emptying `intake`; a repeated `--facet` accumulating; `created`/`updated` stamped with the local date; `check` printing validity and then the rules under their own headings, failing on a broken rule; `context --fresh` re-resolving a note's links where a plain `context` never fetches; `enrich` and `audit` staying deleted; exit codes |
 | `client.test.ts` | body sanitising, asset path rewriting, why a screen is empty — which of the filter, the search or an axis nobody has ever set is to blame, including the one hop from a computed blocking value to the axis underneath it — the task list a body checkbox writes back to — the ordinal a click carries must name the same line the renderer drew a box for, fenced look-alikes included — edge collapse and direction, clearing a URL-only override, and that only `vault=` is context — every other parameter is something the reader asked for, so the landing `home` view may not overwrite it, and the queue's own axis drawing in the pin's register before the app's, and the two halves of a body reference: the href the renderer writes — a note as the app's own deep link, a document as an asset URL, an outward link untouched, and nothing at all rewritten without a file to resolve against — read back by the `noteHrefId` the panel intercepts it with |
 | `did.test.ts` | `pj did`'s window and identity: a local half-open day that refuses a date the calendar lacks, repos found under a root without descending into one or into build output, the app's own sessions out of scope, commits judged by author date with someone else's and yesterday's left out and one commit counted once across a clone and a cherry-pick, a repo that cannot be opened named by its path as not a repository rather than as missing a `user.email`, a note closed in the working tree read as closed against its last commit, and a session counting only its turns inside the day — the prompts a person typed, never a tool result, a harness message, a subagent's prompt or the summary a compacted session restarts from — with a session outside the roots left out and counted; and a Jira issue kept only for the changes, comments and worklogs you authored inside the day — a nominated issue somebody else moved is dropped, an issue you created counts, and every request is a read |
 | `delegate.test.ts` | the CLI asking a live server instead of walking: a vouched stamp hydrates the persisted payload with lazy bodies intact, a stamp the payload was not built from is a fallback rather than an answer, and silence — no server, or `PROJECTOR_NO_DELEGATE` — is a quiet null that never even asks |
 | `enrich.test.ts` | the fetch coalescer: awaited refreshes, cached errors, borrowed fetches, a thrower that still settles; and a fresh note context forcing every link it carries, fresh ones included |
-| `mcp.test.ts` | `pj mcp`: a version agreed at initialize, every tool declaring itself read-only, `ls` through a view answering exactly what `pj ls --json` answers, a wrong id offered its near matches, a broken rule named by `vault_status`, which also lists every saved view, each intake channel's last tick and the inbox's size without creating intake's store, the `views` tool gone, `context` with `fresh` re-resolving a link, `propose` drafting a batch — accept and decline included — whose block holds exactly the entries that would run while each refused one is reported by number, leaving every note, card and intake's store byte-identical, `memory` reading AGENTS.md, the newest day of theories or a named one, and the patterns, answering a vault without `memory/` without an error and refusing a day or part that could name a path, a call naming a registered vault but never a path, views as resources and a note as a template, and over a real pipe every stdout line parsing — a bad one answered in order — with `--vault` required |
+| `mcp.test.ts` | `pj mcp`: a version agreed at initialize, every tool declaring itself read-only, `ls` through a view answering exactly what `pj ls --json` answers, a wrong id offered its near matches, a broken rule named by `vault_status`, which also lists every saved view, whether intake has a kernel to triage from and which connector gathers each channel, and the inbox's size, without creating intake's store, the `views` tool gone, `context` with `fresh` re-resolving a link, `propose` drafting a batch — accept and decline included — whose block holds exactly the entries that would run while each refused one is reported by number, leaving every note, card and intake's store byte-identical, `memory` reading AGENTS.md, the newest day of theories or a named one, and the patterns, answering a vault without `memory/` without an error and refusing a day or part that could name a path, a call naming a registered vault but never a path, views as resources and a note as a template, and over a real pipe every stdout line parsing — a bad one answered in order — with `--vault` required |
 | `log.test.ts` | the background log's format — level, local time, padded area — and that it writes nothing until a sink is set |
 | `fetchers.test.ts` | each fetcher's parse-and-explain half, with nothing reaching the network; and `claude` resolved to where its installer puts it when PATH does not find it |
 | `gesture.test.ts` | drag semantics: replace / ⌥ add / ⇧ remove, `(none)`, reorder, matrix diagonals, connect, and a composition's half-live drag — lanes write, columns cannot |
-| `intake.test.ts` | the watermark discipline: an opaque cursor round-trips, a null commit leaves it, a truncated run holds it, a sweep writes nothing, dedup works with no cursor at all, and un-declining forgets the cursor so the item is back in reach rather than merely un-hidden; that a declined offer teaches the classifier and a discarded note does not; that the pile pages over rows sharing one instant without losing any of them, and that a filtered read counts what matches as well as the whole pile; plus evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators; the relay — its records validated and counted rather than trusted, conversations that say whose move it is and show the exchange with the owner marked, a conversation on an open note being an update and on a closed one nothing, Gmail's `SENT` telling the owner's mail apart and the two searches' overlap collapsing to one message, a fake agent's envelope becoming candidates with what it cost, a tool list without the search tool being reported rather than guessed for, and known secret shapes redacted in code; the sync — a tracked candidate coerced to extend the note that tracks it, an update landing as an extension and never beside the note, a tracked Jira issue offered when it moved and skipped when it did not, the seen state recorded by a judged tick and not by a held one, a tick's cost summed from fetching and judging; and declined sessions not counting against the claude channel's limit; a channel's candidates judged in batches with the verdicts and cost merged and one unanswerable batch holding the channel; and a channel judged before a hold keeping its notes and its cursor; and a Slack run that ran out of pages moving its cursor to where both searches reached; and a relay that transcribed fewer records than the pages held offering what it has and holding the cursor; and an unjudged card tracking nothing itself while one that extends a note stands in for it; and a tick outside the polling hours staying home while the timer keeps its cadence; the window bounding the cursor — a cursor older than it read from the window's start and handed to the channel as its cursor, the skipped span on the tick's line and in status and not announced twice while the cursor sits at the window's edge, `--since` still winning and a preview's skip promoted with its cursor, a held tick losing neither the cursor nor the span, a truncated run holding at the window's start while an unreachable channel keeps its cursor, and a Slack relay's page boundary and completeness hold both working from the new start; a catch-up interval defaulting to ten minutes, floored, and never above the interval, and a tick that leaves a channel behind bringing the next one forward and saying so; the first tick waiting out the rest of the interval since the newest channel ran, so a restart does not sweep again, while a stale vault ticks at once; the server starting every vault that asked to be polled and saying, one line each, which are and when they next tick; the typed contract — an ask or a promise becoming a card carrying who waits or when, information attaching to a note or a project or being nothing, the owner's own progress linking onto the note it belongs to and never becoming a card, a change having to change something while a tracked ask still lands as an extension, a candidate the judge left out being asked again and then declined rather than written raw, a link attaching the branch to the note and writing no card, and a session counting as the vault's work only inside a declared repo or a recorded workspace; and a rejudged card that extends a note being judged as news about that note |
-| `kernel.test.ts` | the kernel sink: every examined candidate one `intake/<channel>` event keyed by its fingerprint — and by its source's state when it carries one, so a moved Jira issue or a later sighting of a session is an event of its own, cited by the proposal under that key — about the vault notes it names as `vault:<vault>:<id>` entities named by title, and a proposal only for a `keep` or `extend` card the vault does not already answer for, titled by the judge and about the note it extends; the vault named by the file before its folder; the `kernel:` block off by default; a batch going to `<bin> ingest --source system:projector` on stdin with `KERNEL_DB`; every way of not reaching the kernel — no `bin`, no such file, a non-zero exit, garbled output, a throw — a reason rather than a throw; in the tick, the card written and the cursor moved when the kernel cannot be reached, and nothing sent when the vault did not ask; and against `test/fake-kernel`, a judging tick as an attempt of `judge-intake` — started by `agent:projector-intake` before the batch, every event in it, ended `done` with the tick's counts — a held tick's ended `failed` with why, an attempt the kernel will not start a line with the events sent without one, no attempt with the kernel block off or nothing to judge |
-| `import.test.ts` | projector as a registered kernel system, against `test/fake-kernel`, which records every batch and answers projector's saved queries from `test/kernel-queries/` or from what a test says the kernel holds: a scratch vault — an active note, a done one, one in planning, one on hold, a thought, a card and two days — mapping to open and met commitments, planning and on-hold as no commitment, the thought and the card not reported, the old vault reader's status keys and `vault/day` events at their dates; the status events the kernel answers `vault-status-events` with deciding the next — each key recovered from the event's id, nothing for an unchanged status, `@n` for a repeat, `none` for a value gone, another vault's note not ours; `kernel.commitments` and `kernel.days` read from the file, a verdict outranking `open` and every other value none; an import refused when the vault asked for nothing, and a day without a date skipped; `pj kernel import` asking the kernel what it holds and sending the dry run's batch as the owner with `KERNEL_DB`, keeping nothing in `.projector/`, a second import sending no status event, a changed status exactly one and a return to an earlier status `@2`; a kernel refusing the batch or the query a non-zero exit with nothing sent on a refused query and the batch sent whole after a refused ingest, an unregistered query naming `pj kernel register`; an old `intake.db` with `kernel_status` opening without that table and with the rest intact; `pj kernel register` naming this checkout's manifest; the manifest's `writes` covering every event kind and entity alias the import and the sink send, its `queries` naming each EDN file with inputs matching its `:in`, and the plan's and the review's; its specs: the convention and `work-a-note` (naming the `pj-work` skill) manual, `daily-plan` and `weekly-review` on the kernel's schedule naming the `plan-day` and `review-week` skills, which read every open intent in the ledger, and `judge-intake` an agent capability with a budget; and its `develop` block |
+| `intake.test.ts` | the triage's read and its judgment. The read — each channel named with the connector that gathers it and the kinds it judges, an unknown channel named rather than read away, a channel's start being its cursor, else its window, with a cursor older than the window read from the window's start and saying so and `--since` winning, and a backlog read a slice at a time and never cut between two events of one instant; connector events as candidates — a session counting as the vault's work only inside a declared repo or a recorded workspace, one too short or outside skipped with the reason, two moves of one session folded into the newer; Slack messages becoming conversations that say whose move it is and show the exchange with the owner marked, the owner's own messages skipped, several asks folded into the first, a message with no permalink still linking back on the workspace the vault already uses, a conversation on an open note being an update keyed by its newest ask and on a closed one or none not, Gmail threads with the owner's `SENT` mail marked and a thread an open note links an update keyed by the new message; a tracked Jira issue that moved an update with its transition folded in, one a closed note tracks skipped, one a queued card captured skipped; an unjudged card tracking nothing itself while one that extends a note stands in for it. Then the judgment and its write: dedup by fingerprint with nothing of intake's own on disk, evidence reasons, worktree path parsing, a recorded `workspace:` answering for a cwd anywhere inside it, a worktree branch resolving through the project's own template rather than the note id, and an FTS query built from a prompt full of operators; that a declined offer teaches the classifier and a discarded note does not; that the pile pages over rows sharing one instant without losing any of them, and that a filtered read counts what matches as well as the whole pile; a decline taken back offered to the judge again, once, though the cursor has passed it; the sync — a tracked candidate coerced to extend the note that tracks it and an update landing as an extension and never beside the note; a channel's candidates judged in batches with the verdicts and cost merged and one unanswerable batch holding the channel, a channel judged before a hold keeping its cards and its record; a pass outside the polling hours staying home while the timer keeps its cadence; a catch-up interval defaulting to ten minutes, floored, and never above the interval, and a pass that leaves a channel behind bringing the next one forward and saying so; polling only for a vault that asked and has a kernel, and the server saying, one line each, which vaults poll and why the others do not; the typed contract — an ask or a promise becoming a card carrying who waits or when, information attaching to a note or a project or being nothing, the owner's own progress linking onto the note it belongs to and never becoming a card, a change having to change something while a tracked ask still lands as an extension, a candidate the judge left out being asked again and then declined rather than written raw, a link attaching the branch to the note and writing no card, several onto one note in one run keeping every link; and a rejudged card that extends a note being judged as news about that note |
+| `kernel.test.ts` | the kernel sink and the pass over it: every connector event looked at one `intake/<channel>` event keyed `intake:<the connector event's key>` — never the connector's own — at its instant and carrying it as evidence, a candidate with no connector event keyed by its fingerprint, an event whose key cannot be recovered by its kind and kernel id, about the vault notes it names as `vault:<vault>:<id>` entities named by title, and a proposal only for a `keep` or `extend` card the vault does not already answer for, titled by the judge, citing its intake event and about the note it extends; the vault named by the file before its folder; the `kernel:` block off by default; a batch going to `<bin> ingest --source system:projector` on stdin with `KERNEL_DB`; every way of not reaching the kernel — no `bin`, no such file, a non-zero exit, garbled output, a throw — a reason rather than a throw. Against `test/fake-kernel` answering connector events shaped like the connectors' real ones: a pass reading the cursor and the events and fetching nothing, judging one candidate per piece of work, writing the cards and the link, and recording every event in one attempt of `judge-intake` ended `done` with its counts; a second pass judging nothing new because the cursor is the intake events the first wrote; a disabled kernel block reading nothing and saying so; a held pass ended `failed`, recording nothing, its events judged by the next; an attempt the kernel will not start a line with the events sent without one; a kernel that cannot be read a pass that read nothing; a refused batch costing a second read and never a second card; no attempt with nothing to judge; and the shipped fixture generated from `test/fixture.ts`, every key but a transition's recovered from its payload |
+| `import.test.ts` | projector as a registered kernel system, against `test/fake-kernel`, which records every batch and answers projector's saved queries from `test/kernel-queries/` or from what a test says the kernel holds: a scratch vault — an active note, a done one, one in planning, one on hold, a thought, a card and two days — mapping to open and met commitments, planning and on-hold as no commitment, the thought and the card not reported, the old vault reader's status keys and `vault/day` events at their dates; the status events the kernel answers `vault-status-events` with deciding the next — each key recovered from the event's id, nothing for an unchanged status, `@n` for a repeat, `none` for a value gone, another vault's note not ours; `kernel.commitments` and `kernel.days` read from the file, a verdict outranking `open` and every other value none; an import refused when the vault asked for nothing, and a day without a date skipped; `pj kernel import` asking the kernel what it holds and sending the dry run's batch as the owner with `KERNEL_DB`, keeping nothing in `.projector/`, a second import sending no status event, a changed status exactly one and a return to an earlier status `@2`; a kernel refusing the batch or the query a non-zero exit with nothing sent on a refused query and the batch sent whole after a refused ingest, an unregistered query naming `pj kernel register`; an old `intake.db` with `kernel_status`, `watermark` and `seen` opening without them and with its declines intact and the event columns added; `pj kernel register` naming this checkout's manifest; the manifest's `writes` covering every event kind and entity alias the import and the sink send, its `queries` naming each EDN file with inputs matching its `:in`, and the plan's and the review's; its specs: the convention and `work-a-note` (naming the `pj-work` skill) manual, `daily-plan` and `weekly-review` on the kernel's schedule naming the `plan-day` and `review-week` skills, which read every open intent in the ledger, and `judge-intake` an agent capability with a budget; and its `develop` block |
 | `intents.test.ts` | projector over the kernel, against `test/fake-kernel` answering `projector/vault-intents`: each note getting the intent that speaks for it — the open one over a superseded one, another vault's ignored — and its value, a verdict by someone other than the owner being a draft and the owner's own never one, a proposed intent drawing nothing; the query's rows folded into one intent each — its aliases, its latest verdict's evidence counted once, `""` read as none — read leniently and refused only when it is not an answer; the reader asking the saved query once per index and TTL with `KERNEL_DB` and sharing a read in flight, an absent kernel an empty answer warned once, a kernel refusing the query an empty answer saying to register and the next read recovering, and a vault without one spawning nothing; the `kernel` axis filtering, grouping in order and showing on a card while the note file is untouched; accept writing the draft's verdict as the owner, overrule `missed` or `partial`, a closed intent or a note without one refused before the kernel; the verdict read backwards through `kernel.verdicts` and `kernel.onVerdict`, accept writing the mapped value into the file with the kernel observed exactly once, `partial` and an unmapped verdict leaving the file byte-for-byte, a vault without `verdicts:` never touching a file, `pj kernel status` listing what disagrees and `pj kernel sync` fixing it without asking the kernel to observe, and `POST /api/note/:id/kernel` on a spawned server doing what the CLI does; a status mapping to a verdict only when it arrives, through the vault's own map; the write-through skipping a closed intent, declining a proposed one, and failing quietly; and `pj kernel status`, `accept`, `overrule`, `pj ls --filter kernel=…` and `pj set` writing the note first and the kernel second, a refusing kernel failing nothing |
 | `keys.test.ts` | the trail's two stacks — a jump from nowhere recording nothing (the shared-link case, where a cold `?note=` left the cursor unset and `H` did nothing), landing where you already are not being a jump, a new jump abandoning forward, and the cap dropping the oldest — the keyboard grammar, the registry behind its flat half — every binding is what pressing its stroke does, no stroke answers without an entry (swept exhaustively over printable ASCII and the named keys), every command kind is reached by a binding or by a sequence that says which, and the cheatsheet accounts for each binding once — and that a pointer and a keyboard reach the same things — every command the grammar emits is one the dispatcher acts on (`palette` the one parked exception, named with its reason), and every component that draws a control either wires it into the grammar or is listed as deliberately Tab-only: the reserved set, whose key a stroke is, the prefix state machine and its fallbacks, a bare digit expanding to the grouped axis, a bare *shifted* axis letter reaching the other end while an undeclared one stays unbound, `g [` / `g ]` stepping the pin ring while the bare brackets still walk lanes and neither costs the vocabulary a letter, ⌥ read off the physical key, and the cheatsheet listing nothing the dispatcher ignores |
 | `mutate.test.ts` | the write gate: per-note moves, bulk modes, vocabulary enforcement, cycle refusal, mtime conflicts, assets — and promotion settling a project into a folder named for its id, joining one that exists, refusing an occupied README, leaving an existing folder note alone, and not moving anything back when the block is removed; plus the other half of a reference, the `doc:` link that moves by path rather than by id — rewritten pure over a file, an asset tail and a sibling folder that only looks like a child, then at each of the three writes that move a note: dropped by a delete, carried by a rename including the renamed note's own, and pointed at the survivor and its adopted assets by a merge; and the third half, the reference written in a sentence — repointed by a rename and unwrapped to its own text by a delete, pure and then through both writes, including a note's own link into its own assets and the folder rename whose children move at the same time as their target |
@@ -1509,7 +1454,7 @@ carry a band, and the bands must be exactly the buckets the vault's own `facets.
 | `project.test.ts` | project resolution and inheritance, reference chains, cycles terminating rather than hanging, multi-project order being topological — every project ahead of anything that names it, ties broken by declaration order — and instructions read from `AGENTS.md` beside each project note, concatenated in that same order, with the vault's own root copy deliberately not among them |
 | `query.test.ts` | the compiler: filters, `(none)`, ranges, computed axes, buckets, references, focus traversals, grouping, counts, FTS — and that there is no `triage` axis, the queries that replaced it asked instead; plus vault-wide axis population, the fact that tells an over-tight filter apart from an axis nobody has ever set, absent for an unused axis and never present for a computed one |
 | `selection.test.ts` | cmd-click, shift-click runs, and a selection never mutated in place |
-| `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials, and polling hours parsed as a local window with anything malformed meaning always |
+| `settings.test.ts` | per-vault settings: an absent file behaving exactly as no file did, with no fetcher setting left to read, `false` meaning none, `gh` covering its three ref kinds, the environment overriding the file, and `--init` refusing to overwrite a config holding credentials, and polling hours parsed as a local window with anything malformed meaning always |
 | `source.test.ts` | no source file hides a control byte from grep |
 | `spec.test.ts` | `ViewSpec` round-trips through URL params and files; which relation lays a canvas out; every key the writer emits being one `VIEW_KEYS` knows; and a focus emptying the structural filter that would cancel it while leaving every preference filter alone |
 | `theme.test.ts` | the design system's invariants: the size and radius scales, token declare/use symmetry, DESIGN.md naming the same tokens and every `components:` reference resolving — plus the rules that were prose until they drifted, namely uppercase only at the Label step, `appearance: none` on the shared field rule, no keyframes and no transition over 140ms, one `@media`, every hue a vocabulary names being a family the stylesheet defines, every `className` resolving to a rule, no rule about the canvas library sharing a bare selector *and* a property with the library's own stylesheet — which is bundled after ours, so a tie is decided by order and the losing declaration reads as though it worked — and this table naming the tests that exist — plus **contrast**, which was the last rule prose guarded alone: both themes' tokens are resolved and every text colour is measured against every surface it can land on, and every hue against the tinted fill a chip actually gets rather than the `-bg` token it is mixed from |

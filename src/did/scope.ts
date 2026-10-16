@@ -91,9 +91,9 @@ export function inScope(scope: Scope, cwd: string | undefined): boolean {
   return scope.roots.some((r) => inside(here, r)) || scope.repos.some((r) => inside(here, r.path));
 }
 
-/** The matcher's context, with the parts only a sweep needs left empty. */
+/** The matcher's context: the vault, read once. */
 export function ctxOf(vault: VaultRead): IntakeContext {
-  return { ...vault, since: new Date(0), cursor: null, limit: 0 };
+  return { ...vault };
 }
 
 /**

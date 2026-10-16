@@ -155,7 +155,7 @@ export const api = {
     return get<DeclinedPage>(`/api/intake/declined${qs ? `?${qs}` : ''}`);
   },
   restoreDeclined: (fingerprint: string) =>
-    req<{ restored: boolean; rewound: string | null }>(
+    req<{ restored: boolean; offered: boolean }>(
       'POST',
       `/api/intake/declined/${encodeURIComponent(fingerprint)}/restore`,
     ),

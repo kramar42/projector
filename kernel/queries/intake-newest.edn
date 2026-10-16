@@ -1,0 +1,13 @@
+;; Where projector's triage got to, per intake channel: the newest :event/at among the intake/
+;; events system:projector wrote, one row per :intake/<channel> kind. An intake event happens when
+;; the connector event it judged did, so a channel's connector events newer than this are the ones
+;; it has not judged (src/intake/connectors.ts reads it as the cursor; nothing is stored in the
+;; vault). No row for a channel never judged, which reads its window instead.
+[:find ?kind (max ?at)
+ :where
+ (alias ?s "system:projector")
+ (of-system ?e ?s)
+ [?e :event/kind ?k]
+ [(str ?k) ?kind]
+ [(clojure.string/starts-with? ?kind ":intake/")]
+ [?e :event/at ?at]]

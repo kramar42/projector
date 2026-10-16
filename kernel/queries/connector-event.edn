@@ -1,0 +1,15 @@
+;; One connector event by its kernel id, in connector-events-since's columns: its kind, when it
+;; happened, each alias it is about ("" for none) and its payload. projector's triage reads it to
+;; offer a declined candidate again once the owner takes the decline back (pj intake restore).
+[:find ?event ?kind ?at ?about ?payload
+ :in ?event
+ :where
+ [?event :event/kind ?k]
+ [(str ?k) ?kind]
+ [?event :event/at ?at]
+ [?event :event/payload ?payload]
+ (or-join [?event ?about]
+   (and [?event :event/about ?e]
+        [?e :entity/aliases ?about])
+   (and (not [?event :event/about _])
+        [(ground "") ?about]))]

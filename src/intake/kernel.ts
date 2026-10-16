@@ -8,21 +8,23 @@ import { alreadyAnswered } from './materialise.ts';
 import type { Verdict } from './classify.ts';
 import type { Candidate } from './types.ts';
 import type { Note } from '../schema/types.ts';
+import { intakeKey } from './connectors.ts';
 
 /**
- * The kernel sink: what a tick examined, written to the owner's kernel as a
- * source batch, beside the inbox card.
+ * The kernel sink: what a pass judged, written back to the owner's kernel beside
+ * the inbox card — and, since intake reads the kernel, its cursor.
  *
- * The kernel is the owner's ledger of intentions and what became of them; in
- * its terms projector's intake *gathers*, so it is a source: it writes events
- * about what it saw and **proposes** intents, and never opens one. Every
- * candidate a tick judged becomes one `intake/<channel>` event keyed by its
- * fingerprint — and by the source's state when the candidate carries one, so a
- * Jira issue or a Claude session seen again after it moved is a second event
- * rather than the first one again; a candidate kept as a card (`keep` or
- * `extend`) also becomes one proposal citing that event, which the kernel files
- * as a proposed intent by `system:projector`, waiting for the owner's `opened`
- * or `dropped`. Declines, links and unanswered candidates are events only.
+ * The kernel's connectors gather; projector's intake judges what they gathered.
+ * Every connector event a pass looked at becomes one `intake/<channel>` event
+ * keyed `intake:<the connector event's key>` — never the connector's own key,
+ * which the kernel already holds for the connector's event — at the instant the
+ * connector event happened, carrying that event whole as its evidence, the
+ * decision and the reason. That instant is what moves the cursor: the next pass
+ * reads the connector events newer than the newest intake event of the channel
+ * (`connectors.ts`). A candidate kept as a card (`keep` or `extend`) also becomes
+ * one proposal citing its intake event, which the kernel files as a proposed
+ * intent by `system:projector`, waiting for the owner's `opened` or `dropped`.
+ * Declines, links, skips and unanswered candidates are events only.
  *
  * **As the registered system.** The batch goes in as `system:projector`, the
  * system `kernel/manifest.json` registers, so the kernel checks every item
@@ -30,29 +32,28 @@ import type { Note } from '../schema/types.ts';
  * entities, proposals — and refuses the batch whole when one falls outside.
  *
  * Both halves are idempotent in the kernel — an event by its key, a proposal by
- * its statement and evidence — so a candidate examined twice, or a batch sent
+ * its statement and evidence — so a connector event judged twice, or a batch sent
  * twice, lands once.
  *
  * **The card stays the UI's view.** The inbox is still where a person judges a
- * candidate, and nothing here reads back from the kernel; a later step makes the
- * board read commitment from the kernel, and until then the card and the
- * proposal are two drafts of one decision, the card being the one the UI shows.
+ * candidate; the card and the proposal are two drafts of one decision, the card
+ * being the one the UI shows.
  *
- * **Each tick that judged something is an attempt.** Intake's judgment is
+ * **Each pass that judged something is an attempt.** Intake's judgment is
  * projector's spec `judge-intake` (`kernel/specs/judge-intake.edn`), so the
- * kernel judges the judging the way it judges any work: the tick starts an
+ * kernel judges the judging the way it judges any work: the pass starts an
  * attempt of it before the first channel with candidates is judged
  * (`startAttempt`, executor `agent:projector-intake`, the judge), every event
- * a channel sends carries that attempt, and the tick ends it with its counts
+ * a channel sends carries that attempt, and the pass ends it with its counts
  * as the result (`endAttempt`) — `failed` when the judge could not be reached.
- * A tick with nothing to judge starts none, so a quiet hour is no verdict.
+ * A pass with nothing to judge starts none, so a quiet hour is no verdict.
  *
- * **It never holds a tick.** The kernel is a second destination, not a
- * precondition: the cursor rule is about what the vault has written down, and a
- * kernel that cannot be reached changes nothing there. So a failure is logged
- * against the channel and the tick carries on; it does not retry, and the next
- * tick sends only what it examines itself (C2 is not touched: the kernel is the
- * owner's own store, read by nobody else).
+ * **A send that fails costs a second read, never a card.** The cards are
+ * written before the batch goes, so a pass whose batch the kernel refused is read
+ * again by the next one — the events are still newer than the cursor — which
+ * finds each one already a card, a link or a decline and writes nothing twice
+ * (`createNote` short-circuits on a fingerprint the vault holds). The failure is
+ * that channel's line.
  */
 
 export interface KernelEntity {
@@ -65,7 +66,7 @@ export interface KernelEvent {
   key: string;
   kind: string;
   at?: string;
-  /** The running attempt of `judge-intake` this tick is, when the kernel started one. */
+  /** The running attempt of `judge-intake` this pass is, when the kernel started one. */
   attempt?: string;
   about: string[];
   payload: Record<string, unknown>;
@@ -84,13 +85,13 @@ export interface KernelBatch {
   proposals: KernelProposal[];
 }
 
-/** One candidate a tick examined, and what the tick decided about it. */
+/** One connector event a pass looked at, and what the pass decided about it. */
 export interface Examined {
   candidate: Candidate;
-  /** The judge's verdict; absent for a candidate declined for want of one. */
+  /** The judge's verdict; absent for a candidate declined for want of one, or skipped before the judge. */
   verdict?: Verdict;
-  /** `drop` and `unjudged` carry their reason here; a verdict carries its own. */
-  decision: Verdict['decision'] | 'unjudged';
+  /** `drop`, `unjudged` and `skip` carry their reason here; a verdict carries its own. */
+  decision: Verdict['decision'] | 'unjudged' | 'skip';
   reason: string;
 }
 
@@ -111,17 +112,13 @@ export const INTAKE_SPEC = 'judge-intake';
 export const INTAKE_EXECUTOR = 'agent:projector-intake';
 
 /**
- * The key a candidate's event goes by: its fingerprint, and the state the
- * source was in when the candidate carries one. A fingerprint names the thing
- * — `jira:KEY`, `claude:<session>` — and the kernel writes an event once per
- * key, so without the state the second sighting of a moved issue would be the
- * first event again and never recorded. A fingerprint that already ends in the
- * state (a Jira update with no timestamp) is not given it twice.
+ * The key a candidate's intake event goes by: `intake:` and its connector
+ * event's key (`intakeKey`). A candidate with no connector event — handed to the
+ * sink by a caller rather than read from the kernel — goes by `intake:` and its
+ * fingerprint.
  */
-export function eventKey(c: Pick<Candidate, 'fingerprint' | 'state'>): string {
-  const value = c.state?.value;
-  if (!value || c.fingerprint.endsWith(`@${value}`)) return c.fingerprint;
-  return `${c.fingerprint}@${value}`;
+export function eventKey(c: Pick<Candidate, 'fingerprint' | 'event'>): string {
+  return c.event ? intakeKey(c.event) : `intake:${c.fingerprint}`;
 }
 
 /**
@@ -136,15 +133,15 @@ export function vaultName(root: string, settings: Settings = settingsFor(root)):
 }
 
 /**
- * A channel's examined candidates as one kernel batch. Pure: everything it
- * needs is passed in, so the mapping is testable without a kernel.
+ * A channel's examined events as one kernel batch. Pure: everything it needs is
+ * passed in, so the mapping is testable without a kernel.
  */
 export function kernelBatch(
   vault: string,
   channel: string,
   examined: Examined[],
   notes: Map<string, Pick<Note, 'id' | 'title'>>,
-  /** The tick's attempt: every event lands in it, as the attempt's evidence. */
+  /** The pass's attempt: every event lands in it, as the attempt's evidence. */
   attempt?: string,
 ): KernelBatch {
   const entities = new Map<string, KernelEntity>();
@@ -173,17 +170,20 @@ export function kernelBatch(
     const about = [...new Set(ids)].filter((id) => notes.has(id)).map((id) => entity(id, titles.get(id)));
 
     const key = eventKey(c);
+    const at = c.event?.at ?? c.when;
     events.push({
       key,
       kind: `intake/${channel}`,
-      ...(c.when ? { at: c.when } : {}),
+      ...(at ? { at } : {}),
       ...(attempt ? { attempt } : {}),
       about,
       payload: {
         title: c.title,
+        fingerprint: c.fingerprint,
         ...(c.detail ? { detail: c.detail } : {}),
         links: c.links,
-        evidence: ev,
+        // The connector event judged, whole: what the judgment is evidence of.
+        evidence: { ...ev, ...(c.event ? { event: c.event } : {}) },
         verdict: decision,
         ...(v?.kind ? { kind: v.kind } : {}),
         ...(v?.target ? { target: v.target } : {}),
@@ -303,8 +303,9 @@ export async function startAttempt(cfg: Settings['kernel'], run: Runner = spawnR
 export type AttemptStatus = 'done' | 'failed';
 export const ATTEMPT_DONE: AttemptStatus = 'done';
 
-/** What a tick counted, the attempt's result. */
+/** What a pass counted, the attempt's result. */
 export interface TickCounts {
+  /** Candidates sent to the judge. */
   seen: number;
   created: number;
   extending: number;
@@ -312,11 +313,13 @@ export interface TickCounts {
   linked: number;
   declined: number;
   unanswered: number;
+  /** Candidates the vault already answered for, and connector events skipped before the judge. */
   skipped: number;
-  advanced: number;
-  /** Why the tick held, when it did: the judge could not be reached. */
+  /** Intake events sent to the kernel: every connector event the pass looked at. */
+  recorded: number;
+  /** Why the pass held, when it did: the judge could not be reached. */
   held?: string;
-  /** Why the tick failed, when it threw. */
+  /** Why the pass failed, when it threw. */
   error?: string;
 }
 
@@ -335,7 +338,7 @@ export async function endAttempt(
   return call(cfg, ['attempt', 'end', id, status, '--result', JSON.stringify(result), '--json'], '', run);
 }
 
-/** The intake sink's send: one tick's batch, as the system and never as the owner. */
+/** The intake sink's send: one channel's batch, as the system and never as the owner. */
 export async function sendToKernel(
   cfg: Settings['kernel'],
   batch: KernelBatch,
@@ -347,7 +350,7 @@ export async function sendToKernel(
 }
 
 /**
- * The sink as a tick calls it: map, send, and answer for one channel. Nothing
+ * The sink as a pass calls it: map, send, and answer for one channel. Nothing
  * when the vault has not turned the kernel on, or the channel examined nothing.
  */
 export async function sinkToKernel(
@@ -355,7 +358,7 @@ export async function sinkToKernel(
   channel: string,
   examined: Examined[],
   run: Runner = spawnRunner,
-  /** The tick's attempt, when the kernel started one. */
+  /** The pass's attempt, when the kernel started one. */
   attempt?: string,
 ): Promise<Sent | null> {
   const settings = settingsFor(root);

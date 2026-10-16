@@ -16,7 +16,7 @@ import { queryPayload } from '../src/view/payload.ts';
 import { parseSpec } from '../src/view/spec.ts';
 import { COMPUTED } from '../src/index/query.ts';
 import { LINK_KINDS } from '../src/schema/links.ts';
-import { channelNames } from '../src/intake/run.ts';
+import { channelNames } from '../src/intake/connectors.ts';
 import { paths } from '../src/config.ts';
 import { place } from './fixture.ts';
 
@@ -67,7 +67,7 @@ function code(text: string): string {
 const ALLOWED: { file: string; word: string; why: string }[] = [
   { file: 'enrich/jira.ts', word: 'priority', why: "Jira's field name, in a Jira fetcher" },
   { file: 'enrich/jira.ts', word: 'done', why: "Jira's statusCategory key" },
-  { file: 'intake/jira.ts', word: 'status', why: "Jira's field name, in a Jira sweep" },
+  { file: 'intake/run.ts', word: 'status', why: "Jira's field name, read off the jira connector's events" },
   { file: 'sources/jira.ts', word: 'status', why: "Jira's field name, in a Jira client" },
   { file: 'cli/pj.ts', word: 'status', why: '`pj intake status` — a subcommand, not an axis' },
   { file: 'setup.ts', word: 'status', why: '`gh auth status` — the gh CLI\'s subcommand' },
