@@ -376,7 +376,7 @@ test('pj kernel register hands the kernel this checkout’s manifest', async () 
 test('the manifest declares what projector writes, and every batch it sends fits it', () => {
   const m = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   assert.equal(m.system, 'projector');
-  assert.deepEqual(m.writes, { events: ['vault/', 'intake/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false });
+  assert.deepEqual(m.writes, { events: ['vault/', 'intake/'], entities: ['vault:'], proposals: true, commitments: true, judgments: false, conversations: ['intake/slack', 'intake/gmail', 'intake/claude'] });
   assert.deepEqual(m.sync, [{ name: 'vault', run: 'pj kernel import', when: 'after edits, or hourly' }]);
   const dir = join(appRoot, 'kernel');
   for (const spec of m.specs) {
