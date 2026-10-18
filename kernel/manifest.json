@@ -174,5 +174,13 @@
         }
       ]
     }
-  ]
+  ],
+  "mcp": {
+    "command": "~/.local/bin/pj",
+    "args": [
+      "--vault",
+      "work",
+      "mcp"
+    ]
+  }
 }
