@@ -23,6 +23,21 @@ things.
 
 ## Parked
 
+- **Only the lifecycle axis is recorded.** Each change on `kernel.status` reaches the kernel as a
+  `vault/status` event; `priority`, `due` and the rest do not, so the kernel cannot learn what the
+  owner reprioritised. One more event kind (`vault/facet`, keyed like the status) when a spec wants it.
+- **A plain file edit with no server running is recorded late.** The server records on every
+  rebuild, and `pj` only after its own writes to the recorded axis, so an agent's file write while the
+  app is closed reaches the kernel at the next server start, `pj set`, or `pj kernel import`. `via` is
+  best known: a change the server's rebuild records before `pj` does is the file's.
+- **A drag that closes a note does not pop a question.** The ask is on the `kernel` axis (`ask`) and
+  in the note's panel, which is where the owner answers it; a notice after a board drag would say the
+  same thing in a third place. Worth it if asks pile up unanswered on a board nobody groups by `kernel`.
+- **The intents projector reported as commitments before 2026-10-19 are still open in the kernel.**
+  Every active note became an intent whose criterion was its own status; the owner's sweep in the
+  kernel (keep the few they want help with, drop the rest as not an intent) is what clears them. Until
+  then most active notes read `open` on the `kernel` axis.
+
 - **`new card here` has no keyboard address.** The `add` IconButton in a board column
   (`views/BoardView.tsx`) and in a calendar day (`views/CalendarView.tsx`) is the same control, and
   neither can be reached by a key — it is mouse or Tab. `keys.test.ts` never caught it: its unit is

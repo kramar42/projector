@@ -26,9 +26,9 @@ export type { Resolved } from '../server/enrich.ts';
 
 import type { NoteDetailDTO } from '../view/dto.ts';
 import type { ResolvedProject } from '../schema/types.ts';
-import type { KernelNote } from '../kernel/state.ts';
+import type { Ask, KernelNote } from '../kernel/state.ts';
 import type { KernelWork } from '../kernel/worktree.ts';
-export type { KernelNote } from '../kernel/state.ts';
+export type { Ask, KernelNote } from '../kernel/state.ts';
 import type { QueryPayload } from '../view/payload.ts';
 import type { ViewSpec as Spec } from '../view/spec.ts';
 
@@ -76,6 +76,10 @@ export interface NoteDetail {
   project: ResolvedProject | null;
   /** What the owner's kernel says about this note, or null when it has no intent there. */
   kernel: KernelNote | null;
+  /** What the panel asks when the note's lifecycle and its intent part ways (`askOf`), or null. */
+  ask: Ask | null;
+  /** The vault has a kernel that answered: an intent can be opened about this note. */
+  kernelOn: boolean;
 }
 
 /**

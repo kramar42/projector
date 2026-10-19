@@ -58,6 +58,12 @@ no one's yes; `pj` has no command for it, and the MCP `memory` tool reads it. An
 it and leaves it as it is — what projector tells the kernel about a note when work starts on it names
 `memory/AGENTS.md` when there is one.
 
+**A status is anyone's to set; an intent is the owner's.** Set a note's status directly — a plain
+file write or `pj set` — and the vault records the change in the owner's kernel as a fact. Never
+open an intent about a note (`pj kernel intent`) or judge one (`pj kernel accept`, `overrule`) on
+the owner's behalf: those write as the owner. When work meets an intent's criterion, say so; over
+the kernel's MCP server `judge` is a draft the owner accepts or overrules.
+
 **A note with no frontmatter is still a note.** Its id is its filename lowercased with everything else
 turned to dashes, and its title is its leading `# Heading`, or the filename if there is none. Do not
 "fix" such a file by adding frontmatter to it: the derived identity is deliberate, and any `pj` write

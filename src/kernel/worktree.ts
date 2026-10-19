@@ -1,7 +1,7 @@
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
 import { patchNote } from '../server/mutate.ts';
-import { settingsFor, type Settings } from '../settings.ts';
+import { settingsFor } from '../settings.ts';
 import { spawnRunner, vaultName, type Runner } from '../intake/kernel.ts';
 import { kernelEnv } from './query.ts';
 import { readIntents } from './read.ts';
@@ -111,7 +111,7 @@ export async function openIntentOf(root: string, id: string, run: Runner = spawn
   const read = await readIntents(cfg, vault, run);
   if (!read.ok) throw new KernelFailed(`the kernel could not be read: ${read.reason}`);
   const k = notesOf(vault, read.intents).get(id);
-  if (!k) throw new NotWorkable(noIntent(id, settings.kernel.commitments));
+  if (!k) throw new NotWorkable(noIntent(id));
   if (k.status === 'open') return k.intent;
   throw new NotWorkable(
     k.status === 'proposed'
@@ -120,13 +120,10 @@ export async function openIntentOf(root: string, id: string, run: Runner = spawn
   );
 }
 
-function noIntent(id: string, commitments: Settings['kernel']['commitments']): string {
-  if (!commitments) {
-    return `"${id}" has no intent in the kernel, and this vault names no kernel.commitments axis, so none of its notes becomes one`;
-  }
+function noIntent(id: string): string {
   return (
-    `"${id}" has no intent in the kernel, so there is nothing to start work on: give the note a status first ` +
-    `(${commitments.axis}: ${commitments.open.join(', ')}), then \`pj kernel import\` sends it`
+    `"${id}" has no intent in the kernel, so there is nothing to start work on: open one first — what should ` +
+    `happen and how to judge it — in the note's panel, or with \`pj kernel intent ${id} --criterion <how to judge>\``
   );
 }
 

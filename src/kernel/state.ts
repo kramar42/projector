@@ -18,12 +18,15 @@ export const KERNEL_AXIS = 'kernel';
 /**
  * The values the axis takes, in the order a board draws them.
  *
- * `draft` is the one value no kernel status spells: the intent is still open,
- * and its latest verdict — `met`, `missed` or `dropped` — came from somebody
- * other than the owner. That is a draft waiting for you, which is the
- * column a board grouped by this axis exists to show.
+ * Two values no kernel status spells, both waiting for you. `draft`: the
+ * intent is still open, and its latest verdict — `met`, `missed` or `dropped` —
+ * came from somebody other than the owner. `ask`: the note and its intent have
+ * parted ways — the note's lifecycle is closed while the intent is open, or the
+ * intent is closed while the note's lifecycle is not (`askOf`). Neither changes
+ * the other; the owner is asked, which is the column a board grouped by this
+ * axis exists to show.
  */
-export const KERNEL_VALUES = ['open', 'draft', 'met', 'missed', 'dropped'] as const;
+export const KERNEL_VALUES = ['open', 'ask', 'draft', 'met', 'missed', 'dropped'] as const;
 export type KernelValue = (typeof KERNEL_VALUES)[number];
 
 /** An intent's status, as the kernel's `vault-intents` query reports it. */
@@ -224,10 +227,60 @@ export function notesOf(vault: string, intents: KernelIntent[]): Map<string, Ker
   return out;
 }
 
-/** The axis, as the query compiler takes it: note id to its one value. */
-export function axisValues(notes: Map<string, KernelNote>): Map<string, KernelValue> {
+/**
+ * What the owner is asked about a note whose lifecycle and intent part ways.
+ *
+ * `judge`: the note holds a closed value while its intent is open and nobody
+ * has drafted a verdict — judge the intent? `close`: the intent is met, missed
+ * or dropped while the note holds no closed value — close the note too? The
+ * answer is the owner's, through the kernel's judge or the note's own write;
+ * neither side ever writes the other.
+ */
+export type Ask =
+  | { kind: 'judge'; value: string }
+  | { kind: 'close'; verdict: 'met' | 'missed' | 'dropped'; axis: string; values: string[] };
+
+/** The vault's lifecycle, as the panel reads it: the recorded axis and the values its facet calls closed. */
+export interface Lifecycle {
+  axis: string;
+  closed: readonly string[];
+}
+
+/** The lifecycle the vault records (`kernel.status`), with its facet's closed values. Null when none is recorded. */
+export function lifecycleOf(axis: string | null, facets: Readonly<Record<string, { closed?: readonly string[] }>>): Lifecycle | null {
+  return axis ? { axis, closed: [...(facets[axis]?.closed ?? [])] } : null;
+}
+
+/** `axisValues`' `asks`, over the notes the index read. Undefined when the vault records no lifecycle. */
+export function asking(
+  life: Lifecycle | null,
+  notes: ReadonlyMap<string, { facets: Record<string, string[]> }>,
+): ((id: string, k: KernelNote) => boolean) | undefined {
+  return life ? (id, k) => askOf(k, notes.get(id)?.facets[life.axis], life) !== null : undefined;
+}
+
+/** The ask for one note, given what it holds on the lifecycle axis. Null when they agree, or the vault names no closed value. */
+export function askOf(k: KernelNote | null | undefined, held: readonly string[] | undefined, life: Lifecycle | null): Ask | null {
+  if (!k || !life || !life.closed.length) return null;
+  const closed = (held ?? []).find((v) => life.closed.includes(v));
+  if (k.status === 'open' && !k.draft && closed) return { kind: 'judge', value: closed };
+  if ((k.status === 'met' || k.status === 'missed' || k.status === 'dropped') && !closed) {
+    return { kind: 'close', verdict: k.status, axis: life.axis, values: [...life.closed] };
+  }
+  return null;
+}
+
+/**
+ * The axis, as the query compiler takes it: note id to its one value. `asks`,
+ * when given, says which notes' lifecycle and intent part ways: those read
+ * `ask` unless a draft already waits on them.
+ */
+export function axisValues(notes: Map<string, KernelNote>, asks?: (id: string, k: KernelNote) => boolean): Map<string, KernelValue> {
   const out = new Map<string, KernelValue>();
-  for (const [id, k] of notes) if (k.value) out.set(id, k.value);
+  for (const [id, k] of notes) {
+    const value = k.value !== 'draft' && asks?.(id, k) ? 'ask' : k.value;
+    if (value) out.set(id, value);
+  }
   return out;
 }
 

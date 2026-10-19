@@ -1,26 +1,27 @@
-import { settingsFor, type Settings, type StatusVerdict } from '../settings.ts';
-import { spawnRunner, type Runner } from '../intake/kernel.ts';
-import type { Note } from '../schema/types.ts';
+import { settingsFor, type Settings } from '../settings.ts';
+import { ingest, noteAlias, spawnRunner, vaultName, type Runner } from '../intake/kernel.ts';
 import { paths } from '../config.ts';
 import { readAll } from '../index/indexer.ts';
-import { patchNote } from '../server/mutate.ts';
-import { forgetKernel, kernelIndex, type KernelIndex } from './read.ts';
+import { forgetKernel, kernelIndex } from './read.ts';
 import { kernelEnv, said } from './query.ts';
 import { shortId, type KernelNote } from './state.ts';
 
 /**
- * The kernel write: `<kernel.bin> judge <intent> <verdict> [--note text]`.
+ * The owner's two writes to the kernel about a note: opening an intent about it
+ * (`<kernel.bin> capture … --about vault:<vault>:<id>`), and judging that intent
+ * (`<kernel.bin> judge <intent> <verdict> [--note text]`).
  *
- * **Always as the owner.** The kernel's CLI judges as its owner unless told
+ * **Always as the owner.** The kernel's CLI writes as its owner unless told
  * otherwise, and nothing here tells it otherwise: every write on this page is
- * something the owner did in the owner's own UI or shell — accepting a draft,
- * overruling it, setting a status. No agent reaches it, and the intake sink,
- * which *is* an agent, stays on `ingest` and its proposals.
+ * something the owner did in the owner's own UI or shell — opening an intent,
+ * accepting a draft, overruling it, answering the panel's ask. No agent reaches
+ * it, and the intake sink, which *is* an agent, stays on `ingest` and its
+ * proposals.
  *
- * **Additional, never blocking.** The note file is still the truth for content
- * (C1) and is written exactly as it was before this existed; the kernel write
- * comes after, its failure is a reason and a log line, and nothing the vault
- * holds waits on it.
+ * **Never the note.** An intent is a layer over the vault, not a copy of its
+ * state (C1, C11): a verdict here writes nothing into a file, and a status set
+ * in a file judges nothing here. When the two part ways the panel asks
+ * (`askOf`), and the owner answers on whichever side they choose.
  */
 
 export type JudgeVerdict = 'met' | 'missed' | 'dropped' | 'partial';
@@ -60,28 +61,13 @@ export type OverruleVerdict = 'missed' | 'dropped' | 'partial';
 export const OVERRULE_VERDICTS: readonly OverruleVerdict[] = ['missed', 'dropped', 'partial'];
 
 export type Decided =
-  | {
-      ok: true;
-      note: string;
-      intent: string;
-      verdict: JudgeVerdict;
-      said: string;
-      kernel: KernelNote | null;
-      /** What became of the note's file: null for `partial`, which closes nothing and so writes nothing. */
-      file: Filed | null;
-    }
+  | { ok: true; note: string; intent: string; verdict: JudgeVerdict; said: string; kernel: KernelNote | null }
   | { ok: false; note: string; reason: string };
 
 /**
- * The owner's answer to a note's kernel line: accept is `met` (or the drafted
+ * The owner's verdict on a note's open intent: accept is `met` (or the drafted
  * verdict, when there is a draft); overrule is `missed` or `dropped`, or
  * `partial` to say "not yet" and keep the intent open.
- *
- * A verdict that closes the intent is then written into the note too —
- * `kernel.verdicts` read backwards (`fileVerdict`) — so the status chip and the
- * `kernel` axis say the same thing. The kernel goes first: a refusal there
- * writes nothing anywhere, and a file that cannot be written after an accepted
- * judgment is a reason in `file`, not a failed answer.
  *
  * Refused, not attempted, when there is nothing to answer: the vault has no
  * kernel, the note has no intent, or the intent is no longer open — the kernel
@@ -122,269 +108,70 @@ export async function decide(
   const res = await judge(cfg, k.intent, verdict, note, run);
   forgetKernel(root);
   if (!res.ok) return { ok: false, note: id, reason: res.reason };
-  // Straight to the validated note write, beneath the status write-through
-  // that wraps it in `PATCH /api/note/:id` and `pj set`: this value *is* the
-  // kernel's answer, so it must not travel back to the kernel as a second
-  // judgment. (Were it to, the intent is closed by now and `writeThrough`
-  // skips a closed intent — but the guard is not having the path at all.)
-  const file = verdict === 'partial' ? null : fileVerdict(root, id, verdict);
   const after = await kernelIndex(root, 'owner-answer', { fresh: true, run });
-  return { ok: true, note: id, intent: k.intent, verdict, said: res.said, kernel: after.notes.get(id) ?? null, file };
+  return { ok: true, note: id, intent: k.intent, verdict, said: res.said, kernel: after.notes.get(id) ?? null };
 }
 
-// ------------------------------------------------------------ the verdict, back into the note
+// ------------------------------------------------------------ an intent about a note
 
-/** A value on an axis: where a verdict lands in a note. */
-export interface Mapped {
-  axis: string;
-  value: string;
+export interface IntentAsk {
+  /** What should be true. Absent, the note's title. */
+  statement?: string;
+  /** How to judge it met. Absent, the kernel takes the statement. */
+  criterion?: string;
+  /** YYYY-MM-DD, when it is due. */
+  horizon?: string;
 }
+
+export type Opened =
+  | { ok: true; note: string; intent: string; said: string; kernel: KernelNote | null }
+  | { ok: false; note: string; reason: string };
 
 /**
- * The value a verdict writes into a note: `kernel.verdicts` read backwards.
+ * Open an intent about a note, as the owner: the owner's entry point into
+ * asking the kernel for help with it, or to be held to it. The note's entity
+ * goes first (`ingest`, kind `note`, named by its title) because the kernel's
+ * `capture --about` names only an entity it holds, and a thought the vault never
+ * recorded has none yet; then `<kernel.bin> capture <statement> [--criterion c]
+ * [--horizon d] --about vault:<vault>:<id>`.
  *
- * The first axis in the map's order with any value mapping to the verdict — the
- * same axis `verdictFor` lets speak first — and on it, `kernel.onVerdict`'s
- * choice when it names one, else the first value that maps to the verdict. No
- * value is named here (C4): with no map, or none that maps to this verdict,
- * there is nothing to write.
+ * Refused when the vault has no kernel, the note does not exist, or an intent
+ * about it is still open — one at a time, so the panel's line has one answer.
+ * Never throws.
  */
-export function valueFor(cfg: Settings['kernel'], verdict: StatusVerdict): Mapped | null {
-  for (const [axis, map] of Object.entries(cfg.verdicts)) {
-    const values = Object.keys(map).filter((v) => map[v] === verdict);
-    if (!values.length) continue;
-    const chosen = cfg.onVerdict[axis]?.[verdict];
-    return { axis, value: chosen && values.includes(chosen) ? chosen : values[0]! };
-  }
-  return null;
-}
-
-export type Filed =
-  | { outcome: 'written'; axis: string; value: string; was: string[] }
-  | { outcome: 'already'; axis: string; value: string }
-  | { outcome: 'unmapped' | 'failed'; reason: string };
-
-/**
- * Write the value a verdict maps to into the note, through `patchNote` — the
- * write `PATCH /api/note/:id` makes, so the vocabulary validates it exactly as
- * it would a chip. The axis is *set* to that one value: it is the lifecycle,
- * and a note is not both active and done. Never throws; a note already holding
- * the value is left byte-for-byte alone.
- */
-export function fileVerdict(root: string, id: string, verdict: StatusVerdict): Filed {
-  const cfg = settingsFor(root).kernel;
-  const target = valueFor(cfg, verdict);
-  if (!target) {
-    const axes = Object.keys(cfg.verdicts);
-    return {
-      outcome: 'unmapped',
-      reason: axes.length
-        ? `no ${axes.join(' or ')} value maps to ${verdict} in kernel.verdicts`
-        : 'kernel.verdicts is not set',
-    };
-  }
-  try {
-    const was = readAll(paths(root).notes).notes.get(id)?.facets[target.axis] ?? [];
-    if (was.length === 1 && was[0] === target.value) return { outcome: 'already', ...target };
-    patchNote(root, id, { facet: { name: target.axis, values: [target.value], mode: 'set' } });
-    return { outcome: 'written', ...target, was: [...was] };
-  } catch (e) {
-    return { outcome: 'failed', reason: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-/** One line for what `fileVerdict` did, for `pj` and the server log. */
-export function filedLine(id: string, verdict: StatusVerdict, f: Filed): string {
-  if (f.outcome === 'written') {
-    return `${id}: ${f.axis} ${f.was.length ? f.was.join(',') : '(none)'} → ${f.value} in the file (kernel ${verdict})`;
-  }
-  if (f.outcome === 'already') return `${id}: the file already says ${f.axis}=${f.value} (kernel ${verdict})`;
-  if (f.outcome === 'unmapped') return `${id}: the file is unchanged — ${f.reason}`;
-  return `${id}: the file could not be written — ${f.reason}`;
-}
-
-// ------------------------------------------------------------ reconciliation
-
-const CLOSED: readonly string[] = ['met', 'missed', 'dropped'];
-
-/** A note the kernel has closed while its file still reads as open. */
-export interface Disagreement {
-  id: string;
-  intent: string;
-  verdict: StatusVerdict;
-  axis: string;
-  /** What the file holds on `axis` — none of it a value `kernel.verdicts` maps. */
-  holds: string[];
-  /** What `pj kernel sync` would write, or null when no value maps to the verdict. */
-  target: Mapped | null;
-}
-
-/**
- * Every note where the kernel reads `met`, `missed` or `dropped` and the file
- * holds no value the map names on the axis that verdict lands on — a status the
- * map leaves unmapped (`active`), or none at all. A file that already says a
- * closed value, even a different one, is the owner's own word and is not
- * second-guessed. Without `kernel.verdicts` there is no axis to compare, so
- * there is never a disagreement. Pure; the reconciliation is `reconcile`.
- */
-export function disagreements(
-  cfg: Settings['kernel'],
-  kernel: Map<string, KernelNote>,
-  notes: Map<string, Pick<Note, 'facets'>>,
-): Disagreement[] {
-  const axes = Object.keys(cfg.verdicts);
-  if (!axes.length) return [];
-  const out: Disagreement[] = [];
-  for (const id of [...kernel.keys()].sort()) {
-    const k = kernel.get(id)!;
-    const rec = notes.get(id);
-    if (!rec || !CLOSED.includes(k.status)) continue;
-    const verdict = k.status as StatusVerdict;
-    const target = valueFor(cfg, verdict);
-    const axis = target?.axis ?? axes[0]!;
-    const holds = rec.facets[axis] ?? [];
-    if (holds.some((v) => cfg.verdicts[axis]![v])) continue;
-    out.push({ id, intent: k.intent, verdict, axis, holds: [...holds], target });
-  }
-  return out;
-}
-
-/** One line per disagreement, for `pj kernel status`. */
-export function disagreementLine(d: Disagreement): string {
-  const file = d.holds.length ? `the file says ${d.axis}=${d.holds.join(',')}` : `the file has no ${d.axis}`;
-  const fix = d.target ? `\`pj kernel sync\` writes ${d.target.value}` : `no ${d.axis} value maps to ${d.verdict}`;
-  return `${d.id}: kernel reads ${d.verdict} on ${shortId(d.intent)}, ${file} — ${fix}`;
-}
-
-export type Reconciled =
-  | { ok: true; results: { id: string; verdict: StatusVerdict; file: Filed }[] }
-  | { ok: false; reason: string };
-
-/**
- * `pj kernel sync`: write the kernel's verdict into every file that disagrees
- * with it, and nothing else. Only when the owner asks — nothing runs this on a
- * schedule or a read, because a file the kernel disagrees with may be the one
- * that is right, and only the owner can say which.
- */
-export async function reconcile(root: string, opts: { run?: Runner } = {}): Promise<Reconciled> {
-  const cfg = settingsFor(root).kernel;
-  if (!cfg.enabled) return { ok: false, reason: 'this vault has no kernel: block with enabled: true' };
-  const index = await kernelIndex(root, 'reconcile', { fresh: true, run: opts.run ?? spawnRunner });
-  if (index.reason) return { ok: false, reason: index.reason };
-  const found = disagreements(cfg, index.notes, readAll(paths(root).notes).notes);
-  return { ok: true, results: found.map((d) => ({ id: d.id, verdict: d.verdict, file: fileVerdict(root, d.id, d.verdict) })) };
-}
-
-// ------------------------------------------------------------ status write-through
-
-/** What one note's watched axes held, by axis. */
-export type Watched = Map<string, Record<string, string[]>>;
-
-/** The axes `kernel.verdicts` names: the only ones whose change is worth comparing. */
-export function watchedAxes(cfg: Settings['kernel']): string[] {
-  return cfg.enabled && cfg.bin ? Object.keys(cfg.verdicts) : [];
-}
-
-/** What `ids` hold on `axes`, copied out — the caller may read `notes` once and let it go. */
-export function snapshot(notes: Map<string, Pick<Note, 'facets'>>, ids: Iterable<string>, axes: string[]): Watched {
-  const out: Watched = new Map();
-  if (!axes.length) return out;
-  for (const id of ids) {
-    const rec = notes.get(id);
-    if (!rec) continue;
-    out.set(id, Object.fromEntries(axes.map((a) => [a, [...(rec.facets[a] ?? [])]])));
-  }
-  return out;
-}
-
-export interface Through {
-  axis: string;
-  value: string;
-  verdict: StatusVerdict;
-}
-
-/**
- * Which verdict a change says, if any.
- *
- * Only a value that *arrived*: an axis whose values did not change says nothing,
- * so re-saving a note in `done` does not judge `met` again, and moving from one
- * value to another that maps to the same verdict says nothing new either. A value
- * the map does not name writes nothing — `active` is not a verdict. The first
- * mapped axis in the map's order wins, so two mapped axes cannot both speak.
- */
-export function verdictFor(
-  verdicts: Settings['kernel']['verdicts'],
-  before: Record<string, string[]> | undefined,
-  after: Record<string, string[]> | undefined,
-): Through | null {
-  for (const [axis, map] of Object.entries(verdicts)) {
-    const was = before?.[axis] ?? [];
-    const now = after?.[axis] ?? [];
-    if (was.length === now.length && was.every((v, i) => v === now[i])) continue;
-    const value = now.find((v) => map[v]);
-    if (!value) continue;
-    const verdict = map[value]!;
-    if (was.some((v) => map[v] === verdict)) continue;
-    return { axis, value, verdict };
-  }
-  return null;
-}
-
-export type ThroughResult = { id: string; through: Through } & (
-  | { outcome: 'written'; intent: string; said: string }
-  | { outcome: 'skipped' | 'failed'; reason: string }
-);
-
-/**
- * The kernel half of a status write, after the vault half has landed.
- *
- * `before` and `after` are what the watched axes held on either side of the
- * write. A note with no intent is not a skip worth reporting — most notes have
- * none — so it yields nothing. An intent that is not open is skipped with its
- * reason, with one exception: `dropped` on a proposed intent is the owner
- * dropping it, which the kernel takes from the owner and only the owner.
- */
-export async function writeThrough(
-  root: string,
-  before: Watched,
-  after: Watched,
-  opts: { run?: Runner; index?: KernelIndex } = {},
-): Promise<ThroughResult[]> {
-  const cfg = settingsFor(root).kernel;
-  if (!watchedAxes(cfg).length) return [];
-  const changes = [...after.keys()]
-    .map((id) => ({ id, through: verdictFor(cfg.verdicts, before.get(id), after.get(id)) }))
-    .filter((c): c is { id: string; through: Through } => c.through !== null);
-  if (!changes.length) return [];
+export async function openIntent(root: string, id: string, ask: IntentAsk, opts: { run?: Runner } = {}): Promise<Opened> {
+  const settings = settingsFor(root);
+  const cfg = settings.kernel;
+  if (!cfg.enabled) return { ok: false, note: id, reason: 'this vault has no kernel: block with enabled: true' };
+  if (!cfg.bin) return { ok: false, note: id, reason: 'kernel.bin is not set' };
+  const rec = readAll(paths(root).notes).notes.get(id);
+  if (!rec) return { ok: false, note: id, reason: `no note ${id}` };
+  const horizon = ask.horizon?.trim();
+  if (horizon && !/^\d{4}-\d{2}-\d{2}$/.test(horizon)) return { ok: false, note: id, reason: `a horizon is YYYY-MM-DD, not "${horizon}"` };
+  const statement = ask.statement?.trim() || rec.title;
+  const criterion = ask.criterion?.trim();
 
   const run = opts.run ?? spawnRunner;
-  const index = opts.index ?? (await kernelIndex(root, 'write-through', { fresh: true, run }));
-  const out: ThroughResult[] = [];
-  for (const { id, through } of changes) {
-    const k = index.notes.get(id);
-    if (!k) {
-      if (index.reason) out.push({ id, through, outcome: 'failed', reason: index.reason });
-      continue;
-    }
-    const takes = k.status === 'open' || (k.status === 'proposed' && through.verdict === 'dropped');
-    if (!takes) {
-      out.push({ id, through, outcome: 'skipped', reason: `intent ${shortId(k.intent)} is ${k.status}` });
-      continue;
-    }
-    const res = await judge(cfg, k.intent, through.verdict, `${through.axis} set to ${through.value} in projector`, run);
-    out.push(
-      res.ok
-        ? { id, through, outcome: 'written', intent: k.intent, said: res.said }
-        : { id, through, outcome: 'failed', reason: res.reason },
-    );
+  const before = await kernelIndex(root, 'owner-intent', { fresh: true, run });
+  if (before.reason) return { ok: false, note: id, reason: before.reason };
+  const live = before.notes.get(id);
+  if (live && (live.status === 'open' || live.status === 'proposed')) {
+    return { ok: false, note: id, reason: `${id} already has an ${live.status} intent, ${shortId(live.intent)}: answer it first` };
   }
-  if (out.some((r) => r.outcome === 'written')) forgetKernel(root);
-  return out;
-}
 
-/** One line per result, for the server log and for `pj set`. */
-export function throughLine(r: ThroughResult): string {
-  const what = `${r.id}: ${r.through.axis}=${r.through.value}`;
-  if (r.outcome === 'written') return `${what} → kernel ${r.through.verdict} on ${shortId(r.intent)}`;
-  return `${what} → kernel ${r.through.verdict} ${r.outcome === 'skipped' ? 'skipped' : 'not written'}: ${r.reason}`;
+  const alias = noteAlias(vaultName(root, settings), id);
+  const entity = await ingest(cfg, { entities: [{ alias, kind: 'note', name: rec.title }], events: [], links: [], proposals: [] }, run);
+  if (!entity.ok) return { ok: false, note: id, reason: entity.reason };
+  try {
+    const args = ['capture', statement, ...(criterion ? ['--criterion', criterion] : []), ...(horizon ? ['--horizon', horizon] : []), '--about', alias];
+    const { code, stdout, stderr } = await run(cfg.bin, args, '', kernelEnv(cfg), cfg.timeoutSeconds * 1000);
+    forgetKernel(root);
+    if (code !== 0) return { ok: false, note: id, reason: `kernel capture ${said(code, stdout, stderr)}` };
+    const line = stdout.trim().split('\n').pop() ?? '';
+    const after = await kernelIndex(root, 'owner-intent', { fresh: true, run });
+    const k = after.notes.get(id) ?? null;
+    return { ok: true, note: id, intent: k?.intent ?? /intent\s+(\S+)/.exec(line)?.[1] ?? '', said: line, kernel: k };
+  } catch (e) {
+    return { ok: false, note: id, reason: e instanceof Error ? e.message : String(e) };
+  }
 }

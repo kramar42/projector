@@ -13,9 +13,9 @@ ends. You work it with the kernel's MCP tools alone (`attempts`, `brief`, `inten
 here needs a shell or `pj`.
 
 **The plan reads every open intent in the ledger, not only the vault's.** The brief's open intents
-are the kernel's query (`:status :open`, a horizon within 14 days, not standing): a vault note's
-commitment, an intent the owner captured in the kernel, one another system proposed and the owner
-opened. Plan them all alike; an intent that is not about a vault note is no less the owner's.
+are the kernel's query (`:status :open`, a horizon within 14 days, not standing): an intent the
+owner opened about a vault note, one captured in the kernel, one another system proposed and the
+owner opened. Plan them all alike; an intent that is not about a vault note is no less the owner's.
 
 ## The stance: a scientist, not an autocomplete
 

@@ -62,7 +62,7 @@ test('a legacy workspace name still makes a legal directory name from a branch w
 
 const INTENT = 'aaaaaaaa-0000-4000-8000-000000000001';
 
-const ON = 'kernel:\n  enabled: true\n  bin: /fake/kernel\n  db: ./kdb\n  vault: fake\n  commitments: { axis: status, open: [active] }\n';
+const ON = 'kernel:\n  enabled: true\n  bin: /fake/kernel\n  db: ./kdb\n  vault: fake\n  status: status\n';
 
 /**
  * A vault with one project declaring a repo, a branch template and instructions,
@@ -241,7 +241,7 @@ test('a note without an open intent is refused before the kernel is asked to sta
   try {
     const none = fakeKernel([row('open', INTENT, 'vault:fake:another')], never);
     await assert.rejects(startWork(root, 'ship-it', { commit: false, run: none.run }), (e: Error) =>
-      e instanceof NotWorkable && /give the note a status first \(status: active\)/.test(e.message) && /pj kernel import/.test(e.message));
+      e instanceof NotWorkable && /has no intent in the kernel/.test(e.message) && /pj kernel intent ship-it/.test(e.message));
 
     const met = fakeKernel([row('met')], never);
     await assert.rejects(startWork(root, 'ship-it', { commit: false, run: met.run }), (e: Error) =>

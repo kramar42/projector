@@ -95,7 +95,7 @@ behave identically — filter, group, sort, count — and carry `ƒ` to say noth
 | `blocked` | one value per `blocking:` facet, then `clear` | a reference naming something not `closed` · any other blocking axis holding a value |
 | `linked` | `jira`, `gh:pr`, `doc`, `slack`, `url`, … | which kinds of link a note carries |
 | `staleness` | `week`, `month`, `older`, `undated` | `updated` against today — and it reads as **Updated**, because that is the field it is |
-| `kernel` | `open`, `draft`, `met`, `missed`, `dropped` | what your kernel says became of the intent about the note — only in a vault with a `kernel:` block; see [Projector over the kernel](#projector-over-the-kernel) |
+| `kernel` | `open`, `ask`, `draft`, `met`, `missed`, `dropped` | what your kernel says became of the intent about the note, and `ask` where the note and its intent part ways — only in a vault with a `kernel:` block; see [Projector over the kernel](#projector-over-the-kernel) |
 
 Each computes over something a facet cannot describe: a `project:` block, the reference graph, an
 absence, a note's links, the app-written `updated` field, or a store outside the vault. Each is a count, a date comparison or
@@ -1319,8 +1319,12 @@ this hands it.
 # Projector over the kernel
 
 Your kernel is the ledger of what you meant to do and what became of it; the vault is where the work
-is written down. With a `kernel:` block turned on, each reads the other where the two meet — a note
-with an intent about it — and neither stores the other's answer.
+is written down. With a `kernel:` block turned on, the vault tells the kernel what changed in it, and
+you can ask the kernel for help with a note — an intent about it — and neither stores the other's
+answer. A note's status stays in its file: projector works on any folder, with or without a kernel,
+and an agent may edit any file directly. An intent is a layer on top, yours to open when you want
+the kernel's help with a note or to be held to it; when the kernel is away, the layer is simply not
+drawn.
 
 **Projector reads the kernel only through its own saved queries.** `kernel/manifest.json` names them,
 each an EDN file in `kernel/queries/`, so the kernel checks them against its query allow-list when
@@ -1329,7 +1333,7 @@ projector registers, and `orient` lists them under `system:projector`:
 | query | input | what projector reads with it |
 |---|---|---|
 | `projector/vault-intents` | `prefix=vault:<vault>:` | every intent about this vault's notes: status, statement, horizon, the latest verdict and who gave it, who proposed it — the `kernel` axis, the panel's row and `pj kernel status` |
-| `projector/vault-status-events` | `alias=vault:<vault>:` (or one note's alias) | the `vault/status` events projector has sent, so `pj kernel import` knows what changed since |
+| `projector/vault-status-events` | `alias=vault:<vault>:` (or one note's alias) | the `vault/status` events projector has sent, so a record knows what changed since |
 | `projector/intake-proposals` | — | the intents intake proposed that you have not answered yet |
 | `projector/intake-newest` | — | the newest `intake/<channel>` event per channel: intake's cursor |
 | `projector/connector-events-since` | `since=<instant>`, `kinds= :claude/session … ` | the connector events newer than the cursor — what a pass triages |
@@ -1337,7 +1341,7 @@ projector registers, and `orient` lists them under `system:projector`:
 
 You can run any of them yourself: `bin/kernel query --saved projector/vault-intents --in
 prefix=vault:work: --json`. Nothing the kernel answers is kept in the vault or in `.projector/`: the axis
-lives in memory for half a minute, the import asks again each time, and so does every intake pass. A kernel that has not
+lives in memory for half a minute, each record asks again, and so does every intake pass. A kernel that has not
 registered projector's queries refuses them, and the line it leaves says to run `pj kernel register`.
 
 **What the board sees.** Every intent in the kernel about a note of this vault
@@ -1347,6 +1351,7 @@ registered projector's queries refuses them, and the line it leaves says to run 
 | | means |
 |---|---|
 | `open` | the intent is open, and nobody has drafted a verdict — or you have, and kept it open |
+| `ask` | the note and its intent part ways: the note holds a value its lifecycle facet calls `closed` while the intent is open, or the intent is closed while the note holds none — a question waiting for you |
 | `draft` | open, and its latest verdict — `met`, `missed` or `dropped` — came from somebody other than you: a draft waiting for your answer |
 | `met` · `missed` · `dropped` | closed, with that verdict |
 
@@ -1354,14 +1359,14 @@ A note with no intent has no value, so `(none)` is the ordinary refinement and a
 kernel is never offered the axis. A *proposed* intent — a card intake drafted, waiting for your
 `opened` — draws nothing here; the inbox is where you answer those. When several intents name one
 note, the open one speaks for it. The axis filters, groups and sorts like any other, so a board grouped
-by `kernel` is the queue of drafts to answer:
+by `kernel` is the queue of drafts and asks to answer:
 
 ```yaml
 # views/drafts.yaml — what the kernel has drafted for you
 title: Drafts
 shape: table
 filter:
-  kernel: [draft]
+  kernel: [draft, ask]
 show: [kernel, status]
 ```
 
@@ -1371,102 +1376,69 @@ a minute, since an agent drafting a verdict changes nothing in the vault. A kern
 read leaves every note with no value and says so once in the server log (`pj` says it on stderr);
 nothing else fails.
 
-**The note panel** draws a *Kernel* row under the facets of a note with an intent: the intent's
-statement and short id, what the kernel reads, and the latest verdict with who gave it and when.
-When that verdict is a draft, three buttons answer it, as you:
+**The note panel** draws a *Kernel* row under the facets. A note with no intent offers **Add
+intent…**: what should happen (the title, unless you say otherwise), how to judge it (`Done when …`),
+and when it is due. It runs `<bin> capture <statement> --criterion … --horizon … --about
+vault:<vault>:<note id>` as you, after telling the kernel the note exists; `pj kernel intent <note id>
+[--statement …] [--criterion …] [--horizon YYYY-MM-DD]` does the same from a shell. One open intent
+per note: answer it before opening another. Starting work on a note (▶) needs an open intent — the
+attempt is in pursuit of it.
 
-- **Accept** tells the kernel what the draft said — `met`, for the usual draft of an agent that finished
-  the work. With no draft, `pj kernel accept` is you saying `met` outright.
-- **Overrule: missed** says it was not met.
-- **Not yet** says `partial`, which keeps the intent open.
+A note with an intent shows its statement and short id, what the kernel reads, when it is due, and
+the latest verdict with who gave it and when. An open intent takes your word: **Met**, **Missed**,
+**Dropped**, or **Not yet** (`partial`, which keeps it open). When its latest verdict is a draft,
+**Accept** says what the draft said and **Overrule: missed** says it was not met. Each runs `<bin>
+judge <intent> <verdict> --note …` as you; `pj kernel accept` and `pj kernel overrule` are the same
+from a shell. A closed intent has nothing to answer and is refused. **None of it writes the note.**
 
-Each runs `<bin> judge <intent> <verdict> --note …` as the owner. A closed intent has nothing to
-answer and is refused.
+**When the two part ways, projector asks.** The vault says which values of the recorded axis are
+closed — the facet's own `closed:` list in `.projector/facets.yaml` — so no value is named in the
+app:
 
-**Setting a status tells the kernel too.** Name, per axis, which of your values are a verdict:
+- the note is closed while its intent is still open — you set it `done`, or an agent did — so the
+  row says so and offers the verdicts, **Met** first;
+- the intent is closed while the note is not — you judged it in the kernel's own screen, say — so the
+  row offers the closed values to set, each the note's own write.
 
-```yaml
-kernel:
-  enabled: true
-  bin: ~/Code/projects/kernel/bin/kernel
-  verdicts:
-    status: { done: met, archived: dropped, cancelled: dropped }
-```
+Neither side ever writes the other, and nothing asks twice: the `kernel` axis reads `ask` until you
+answer on one side or the other, and `pj kernel status` ends with one line per note that asks, with
+the command that answers it. `pj set` says the same when the note it just closed has an open intent.
 
-When you then set one of those values — a chip in the panel, a drag across a status column, the bulk
-bar, the raw frontmatter, or `pj set <id> --facet status=done` — and the note has an open intent, the
-kernel is told: `judge <intent> met --note "status set to done in projector"`. A value that is not in
-the map, or that the note already held, writes nothing; `dropped` also drops a still-*proposed*
-intent; an intent that is already closed is left alone. The note is written first and exactly as
-before — the file is the truth for content — and the kernel write follows it: a refusal is a log line
-(in `pj set`, a line on stderr), never a failed edit. Without `verdicts:` no status reaches the kernel:
-which axis is your lifecycle, and which of its values means finished, is your vocabulary's to say,
-not the app's.
-
-**Answering the kernel sets the status too.** The same `verdicts:` map, read backwards, is what an
-answer writes into the note, so the status chip and the `kernel` axis say the same thing. When Accept
-or an overrule closes the intent — `met`, `missed` or `dropped` — and the kernel has taken it, the
-note's axis is set to the first value that maps to that verdict: `met` writes `done` above. When
-several values map to one verdict, `onVerdict:` says which to write:
-
-```yaml
-kernel:
-  verdicts:
-    status: { done: met, archived: dropped, cancelled: dropped }
-  onVerdict:
-    status: { dropped: cancelled }   # without it, dropped writes archived, the first
-```
-
-It is the same validated write a status chip makes, and it does not tell the kernel a second time.
-**Not yet** writes nothing to the file; nor does a verdict no value maps to — `missed`, above — which
-says so in one line (`the file is unchanged — no status value maps to missed`). Without `verdicts:`
-no answer touches a file. If the two still disagree — a verdict given in the kernel's own UI, or
-before this existed — `pj kernel status` ends with one line per note the kernel has closed while its
-file holds no mapped value, and `pj kernel sync` writes the mapped values into those files, one line
-per note. A file that already holds a mapped value, even a different one, is your word and is left
-alone. Neither runs on its own; you ask.
-
-**Your commitments come from the vault: `pj kernel import`.** Which of your notes are promises is the
-vault's to say, so the `kernel:` block names it — the axis, the values that are open, and, through the
-`verdicts:` map above, the values that are met, missed or dropped. Every other value is *no commitment*:
-a note in planning is not a promise yet, and one on hold is not a broken one. A folder of day notes is
-named the same way:
+**What changed is recorded: a fact, never an intent.** Name the axis whose changes the kernel should
+learn from, and the folder of your days:
 
 ```yaml
 kernel:
   enabled: true
   bin: ~/Code/projects/kernel/bin/kernel
-  verdicts:
-    status: { done: met, archived: dropped, cancelled: dropped }
-  commitments:
-    axis: status
-    open: [active]
-    horizon: due          # optional: a date axis, the intent's horizon
+  status: status          # each change of a note's value here is recorded
   days: daily             # optional: a folder whose notes are your days
 ```
 
-`pj kernel import` reads the vault the way the board does and sends the kernel one batch, as you:
+After each index rebuild — any note changing, however it changed — the server sends the kernel what
+changed since its last record, and `pj set` or `pj add` does the same after a write that touched that
+axis:
 
 | | becomes, in the kernel |
 |---|---|
-| a note with a value on the axis | the entity `vault:<vault>:<note id>`, and a commitment keyed by it: `open` for a value in `open`, `met`/`missed`/`dropped` for a value `verdicts` maps, `none` for any other. Its statement is the title; its criterion the body's `Done when …` line, else the axis reaching a `met` value |
-| a status change since the last import | one `vault/status` event, keyed `vault:<vault>:<note id>:<status>` — `none` when the value went away, `@<n>` on a status the note held before |
-| a note in the `days` folder | one `vault/day` event, keyed `vault:<vault>:day:<date>`, at that date, its text as the payload — never a commitment. The date is the one in the file's name |
+| a note with a value on the axis | the entity `vault:<vault>:<note id>` |
+| a change of that value | one `vault/status` event, keyed `vault:<vault>:<note id>:<status>` — `none` when the value went away, `@<n>` on a status the note held before — with `via`: `app` (this app), `cli` (`pj`), or `file` (found in the file: an agent, an editor, a pull) |
+| a note in the `days` folder | one `vault/day` event, keyed `vault:<vault>:day:<date>`, at that date, its text as the payload. The date is the one in the file's name |
 | an inbox card, or a note with no value on the axis | nothing — the intake sink already sends cards as proposals |
 
-The kernel turns each change of status into your judgment — a new `open` opens an intent, `met`
-closes it, `none` drops an open one — and the same status again into nothing, so running the import
-twice writes nothing twice. Nothing in the vault is written, and nothing is remembered here: before it
-plans, the import asks the kernel which status events it already holds
-(`projector/vault-status-events`), which is how an unchanged status sends nothing and a return to an
-earlier status gets its `@<n>`. The kernel is the only record of what was sent. `--dry-run` asks the
-same and prints the batch instead of sending it, `--json` prints it (or, sent, the kernel's answer with
-it) as JSON. A kernel that refuses the batch, or cannot answer the query, is one line and a non-zero
-exit, the kernel takes nothing, and the next import sends it whole.
+A status change is never a verdict and never opens an intent: what you meant to do is the intent's,
+what you did with the note is the note's. A rebuild that changed no status and no day sends nothing
+and starts no process. Before it sends, a record asks the kernel which status events it already
+holds (`projector/vault-status-events`), so the server and a `pj` recording the same change send it
+once, and a return to an earlier status gets its `@<n>`; the kernel is the only record of what was
+sent. A kernel that is away or refuses costs one warning, never a write, and the next record sends
+what it missed. `pj kernel import` sends the whole of it by hand, to catch up: `--dry-run` asks the
+same and prints the batch instead, `--json` prints it (or, sent, the kernel's answer with it) as
+JSON; a refusal is one line and a non-zero exit.
 
 **Projector is a registered kernel system.** `kernel/manifest.json` in this checkout tells the kernel
-what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities, proposals and
-your commitments, no judgments — names the saved queries it reads with (above), and brings specs,
+what projector is and what it writes — `vault/` and `intake/` events, `vault:` entities and
+proposals, no judgments — names the saved queries it reads with (above), and brings specs,
 `kernel/specs/`, among them `note-conventions`, the
 convention for writing a note. Its `develop` block tells the kernel's `develop`
 spec how projector's own code is changed: from `main` on a `kernel/<attempt>` branch, `bun test` and
@@ -1481,11 +1453,11 @@ records nothing.
 **From a shell**, the same reader and writer, so a session can drive it without the UI:
 
 ```
-pj kernel status [--json]                                          every intent about this vault's notes, the value each gives its note, and the files that disagree
+pj kernel status [--json]                                          every intent about this vault's notes, the value each gives its note, and what asks
+pj kernel intent <note id> [--statement …] [--criterion …] [--horizon YYYY-MM-DD]   open an intent about the note, as you
 pj kernel accept <note id> [--note text]                           the draft's verdict, or met
 pj kernel overrule <note id> [--verdict missed|dropped|partial]    missed by default; partial keeps it open
-pj kernel sync                                                     write the kernel's verdict into the files that disagree
-pj kernel import [--dry-run] [--json]                              send the vault's commitments, status changes and days
+pj kernel import [--dry-run] [--json]                              send the vault's status changes and days, to catch up
 pj kernel register                                                 register projector's manifest with the kernel
 ```
 
@@ -1520,9 +1492,9 @@ repositories with their bases; `branch`, the project's branch template applied t
 Jira key, else the id; and `title`. The alias names the vault, by the name it goes by in the kernel
 (`kernel.vault`, else its registered name), so the command needs no `--vault`.
 
-A note can be worked when it has an open intent: it carries an open value of the vault's
-`kernel.commitments` axis and `pj kernel import` has sent it. A note with no status, a closed or still
-proposed intent, or a vault whose `kernel:` block is off is refused with the reason, and so is a note
+A note can be worked when it has an open intent: one you opened about it (Add intent in its panel,
+or `pj kernel intent`). A note with no intent, a closed or still proposed one, or a vault whose
+`kernel:` block is off is refused with the reason, and so is a note
 whose project declares no repos — the kernel's refusal, in its words.
 
 Three ways in:
@@ -1664,7 +1636,7 @@ a missing vault as an empty one, so a typo would otherwise come back as `0 match
 | `poll:` · `classify:` · `kernel:` in `.projector/config.yaml` | triage on a timer · local classifier provider/model · the kernel intake reads and records in. `.projector/classify.md` replaces the instructions |
 | `pj setup [--json]` · `pj setup --init [--channels a,b] [--no-enrich]` | what this vault can actually reach, asked rather than assumed · write `.projector/config.yaml` and gitignore it. It refuses to overwrite an existing one |
 | `pj check [--json]` | under *Validity*, every note file and every saved view against the same vocabulary; then under *Rules*, every saved view declaring `expect: empty`, with the notes breaking it. Exits non-zero on a validity error or a broken rule — warnings alone pass |
-| `pj kernel status [--json]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel sync` · `pj kernel import [--dry-run] [--json]` · `pj kernel register` | what your kernel says of this vault's notes · answer a drafted verdict, as the owner · write the kernel's verdicts into files that disagree · send the vault's commitments and days · register projector with the kernel. See [Projector over the kernel](#projector-over-the-kernel) |
+| `pj kernel status [--json]` · `pj kernel intent <id> [--criterion …] [--horizon …]` · `pj kernel accept <id>` · `pj kernel overrule <id> [--verdict missed\|dropped\|partial]` · `pj kernel import [--dry-run] [--json]` · `pj kernel register` | what your kernel says of this vault's notes, and what asks · open an intent about a note, as the owner · judge it, as the owner · send the vault's status changes and days, to catch up · register projector with the kernel. See [Projector over the kernel](#projector-over-the-kernel) |
 | `pj reindex` · `pj search <q>` | rebuild the index and report what it holds · full text, most relevant first |
 
 **Flags use their full long spelling.** `pj ls --json`, `pj ls --group status` and

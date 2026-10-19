@@ -114,8 +114,15 @@ export function NoteTiers({
       <div className="panel-tier">
         <Facets defs={meta.facets} values={card.facets} write={write} lit={lit} />
         {/* Beside the facets because it answers the question `status` asks, from
-            the kernel's side: what became of the intent. Absent without one. */}
-        <KernelLine id={card.id} kernel={data.kernel ?? null} />
+            the kernel's side: what became of the intent, or the offer to open one. */}
+        <KernelLine
+          id={card.id}
+          title={card.title}
+          kernel={data.kernel ?? null}
+          ask={data.ask ?? null}
+          on={data.kernelOn ?? false}
+          setFacet={(name, values) => write.facet(name, values, 'set')}
+        />
       </div>
 
       <div className="panel-tier">

@@ -12,8 +12,8 @@ You work it with the kernel's MCP tools alone (`attempts`, `brief`, `intents`, `
 `propose`, `end_attempt`); the tick's session has nothing else.
 
 **The review reads every open intent in the ledger, not only the vault's.** The brief's open intents
-are the kernel's query (`:status :open`): a vault note's commitment, an intent the owner captured in
-the kernel, one another system proposed and the owner opened, standing intents too. Review them
+are the kernel's query (`:status :open`): an intent the owner opened about a vault note, one captured
+in the kernel, one another system proposed and the owner opened, standing intents too. Review them
 all alike.
 
 ## The stance

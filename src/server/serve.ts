@@ -59,25 +59,16 @@ import {
 } from './mutate.ts';
 import { KernelFailed, NoNote, NotWorkable, startWork } from '../kernel/worktree.ts';
 import { clearEnrichment, readCached, refresh } from './enrich.ts';
-import { info, logTo, warn as warnLine } from './log.ts';
+import { info, logTo } from './log.ts';
 import { SEED_FACETS, SEED_VIEWS } from './seed.ts';
 import { streamSSE } from 'hono/streaming';
 import { pollAtStartup, startPolling } from './poll.ts';
 import { foldRows } from '../schema/fold.ts';
 import { suppressions, unsuppress } from '../intake/db.ts';
 import { kernelIndex, type KernelIndex } from '../kernel/read.ts';
-import { axisValues } from '../kernel/state.ts';
-import {
-  decide,
-  filedLine,
-  OVERRULE_VERDICTS,
-  snapshot,
-  throughLine,
-  watchedAxes,
-  writeThrough,
-  type OverruleVerdict,
-  type Watched,
-} from '../kernel/write.ts';
+import { askOf, asking, axisValues, lifecycleOf } from '../kernel/state.ts';
+import { decide, openIntent, OVERRULE_VERDICTS, type OverruleVerdict } from '../kernel/write.ts';
+import { noteWrites, recordSoon } from '../kernel/record.ts';
 import { settingsFor } from '../settings.ts';
 
 const PORT = Number(process.env.PROJECTOR_PORT ?? 8092);
@@ -125,6 +116,9 @@ function build(root: string) {
   const facets = loadFacets(p.facets);
   const { db, notes } = reindex(root);
   const views = loadViews(root);
+  // What changed goes to the kernel as events, after the rebuild and off the
+  // request — see `kernel/record.ts`. A rebuild that changed no status starts nothing.
+  recordSoon(root);
   return { facets, db, notes, views, p, generation: ++generations };
 }
 
@@ -155,29 +149,9 @@ async function kernelFor(root: string): Promise<KernelIndex> {
   return kernelIndex(root, String(load(root).generation));
 }
 
-/**
- * The kernel half of an owner's status write: what the watched axes held
- * before, taken synchronously from the memo, and — once the response has gone —
- * what they hold now, compared and written through `kernel/write.ts`. Never
- * blocks and never fails the write it follows (C1: the file is the truth for
- * content); every outcome is a log line, and a written one refreshes the board.
- */
-function kernelWatch(root: string, ids: readonly string[]): Watched | null {
-  const axes = watchedAxes(settingsFor(root).kernel);
-  return axes.length ? snapshot(load(root).notes, ids, axes) : null;
-}
-
-function kernelFollow(root: string, before: Watched | null): void {
-  if (!before?.size) return;
-  setTimeout(() => {
-    const after = snapshot(load(root).notes, before.keys(), watchedAxes(settingsFor(root).kernel));
-    writeThrough(root, before, after)
-      .then((results) => {
-        for (const r of results) (r.outcome === 'written' ? info : warnLine)('kernel', throughLine(r));
-        if (results.some((r) => r.outcome === 'written')) bump(root);
-      })
-      .catch((e: unknown) => warnLine('kernel', `write-through failed: ${e instanceof Error ? e.message : String(e)}`));
-  }, 0);
+/** `axisValues` for this vault, with the notes whose lifecycle and intent part ways reading `ask`. */
+function kernelAxis(root: string, k: KernelIndex, notes: ReturnType<typeof load>['notes'], facets: ReturnType<typeof load>['facets']) {
+  return axisValues(k.notes, asking(lifecycleOf(settingsFor(root).kernel.status, facets), notes));
 }
 
 const app = new Hono();
@@ -369,8 +343,9 @@ app.get('/api/query', async (c) => {
   const root = vaultOf(c);
   // Before `load`: the read may wait on the kernel, and nothing may wait between
   // a load and the last read of what it returned.
-  const kernel = axisValues((await kernelFor(root)).notes);
+  const k = await kernelFor(root);
   const { facets, db, notes, views } = load(root);
+  const kernel = kernelAxis(root, k, notes, facets);
 
   const resolved = resolveSpec(root, c.req.url);
   if ('error' in resolved) return c.json({ error: resolved.error }, 404);
@@ -402,7 +377,7 @@ app.get('/api/note/:id', async (c) => {
         // The panel edits `facets` and never `computed`, but a DTO that reports no
         // computed values at all is a DTO that lies about this card — and it is the
         // same card the board just drew.
-        computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10), axisValues(kernel.notes))(rec),
+        computed: computedReader(notes, facets, new Date().toISOString().slice(0, 10), kernelAxis(root, kernel, notes, facets))(rec),
         refCount: inbound.get(rec.id) ?? 0,
         blockedBy: blockedBy(rec.id, notes, facets),
         unblocks: unblocks(rec.id, notes, facets),
@@ -459,20 +434,25 @@ app.get('/api/note/:id', async (c) => {
     project,
     // What the owner's kernel says about this note, for the panel's kernel line:
     // the intent, its status, the latest verdict and who gave it. Null for a note
-    // with no intent and for a vault with no kernel.
+    // with no intent and for a vault with no kernel. `ask` is what the panel asks
+    // when the note's lifecycle and its intent part ways; `kernelOn` whether the
+    // vault has a kernel to open an intent in at all.
     kernel: kernel.notes.get(rec.id) ?? null,
+    ask: (() => {
+      const life = lifecycleOf(settingsFor(root).kernel.status, facets);
+      return askOf(kernel.notes.get(rec.id), life ? rec.facets[life.axis] : undefined, life);
+    })(),
+    kernelOn: kernel.enabled && !kernel.reason,
   });
 });
 
 /**
- * The owner's answer to a note's kernel line: `accept` judges `met` (or what
+ * The owner's verdict on a note's open intent: `accept` judges `met` (or what
  * the draft said); `overrule` judges `missed` or `dropped`, or `partial` to
  * keep the intent open. Runs the kernel's CLI as the owner, since this is the
- * owner's UI — `decide`, the same call `pj kernel` makes. A verdict that closes
- * the intent is then written into the note as the value `kernel.verdicts` maps
- * it to, through `patchNote` and not through this server's PATCH route, so the
- * status write-through never sends it back to the kernel. The answer is the
- * note's kernel line as the kernel now reads it, and what became of the file.
+ * owner's UI — `decide`, the same call `pj kernel` makes. The note's file is
+ * never touched (C1): when the verdict closes the intent and the note is not,
+ * the panel asks. The answer is the note's kernel line as the kernel now reads it.
  */
 app.post('/api/note/:id/kernel', async (c) => {
   const root = vaultOf(c);
@@ -489,11 +469,29 @@ app.post('/api/note/:id/kernel', async (c) => {
   });
   if (!res.ok) return c.json({ error: res.reason }, 409);
   info('kernel', `${res.note}: ${body.decision} → kernel ${res.verdict} on ${res.intent.slice(0, 8)}`);
-  const file = res.file && res.verdict !== 'partial' ? filedLine(res.note, res.verdict, res.file) : null;
-  if (file) (res.file!.outcome === 'failed' ? warnLine : info)('kernel', file);
-  // The board's kernel axis changed, and the note's file with it.
+  // The board's kernel axis changed.
   bump(root);
-  return c.json({ kernel: res.kernel, verdict: res.verdict, file: res.file, fileLine: file });
+  return c.json({ kernel: res.kernel, verdict: res.verdict });
+});
+
+/**
+ * The owner opens an intent about this note: what should happen and how to
+ * judge it, with an optional horizon — `openIntent`, the same call `pj kernel
+ * intent` makes. The answer is the note's kernel line as the kernel now reads it.
+ */
+app.post('/api/note/:id/intent', async (c) => {
+  const root = vaultOf(c);
+  const body = (await c.req.json().catch(() => ({}))) as { statement?: unknown; criterion?: unknown; horizon?: unknown };
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const res = await openIntent(root, c.req.param('id'), {
+    statement: text(body.statement),
+    criterion: text(body.criterion),
+    horizon: text(body.horizon),
+  });
+  if (!res.ok) return c.json({ error: res.reason }, 409);
+  info('kernel', `${res.note}: intent ${res.intent.slice(0, 8)} opened`);
+  bump(root);
+  return c.json({ kernel: res.kernel });
 });
 
 /**
@@ -557,10 +555,9 @@ app.patch('/api/note/:id', async (c) => {
   try {
     const body = (await c.req.json()) as Parameters<typeof patchNote>[2];
     const id = c.req.param('id');
-    const before = body.facets || body.facet ? kernelWatch(root, [id]) : null;
+    if (body.facets || body.facet) noteWrites(root, [id], 'app');
     const res = patchNote(root, id, body);
     bump(root);
-    kernelFollow(root, before);
     return c.json(res);
   } catch (err) {
     return fail(c, err);
@@ -572,6 +569,7 @@ app.post('/api/note', async (c) => {
   try {
     const body = (await c.req.json()) as Parameters<typeof createNote>[1];
     const res = createNote(root, body);
+    noteWrites(root, [res.id], 'app');
     bump(root);
     return c.json(res, 201);
   } catch (err) {
@@ -611,9 +609,9 @@ app.post('/api/bulk', async (c) => {
       dragMode?: DragMode;
     };
     const ids = b.ids ?? [];
-    // A board dragged across a status column and the bulk bar both set an axis,
-    // so both reach the kernel the way a panel edit does.
-    const before = b.op === 'facet' || b.op === 'move' ? kernelWatch(root, ids) : null;
+    // A board dragged across a status column and the bulk bar both set an axis:
+    // the rebuild records them in the kernel as the app's, the way a panel edit is.
+    if (b.op === 'facet' || b.op === 'move') noteWrites(root, ids, 'app');
     let res: unknown;
     if (b.op === 'facet') res = bulkFacet(root, ids, b.facet!, b.values ?? [], b.mode ?? 'set');
     // A drag, one note at a time: the values are per note, so only the endpoints
@@ -630,7 +628,6 @@ app.post('/api/bulk', async (c) => {
     }
     else throw new Invalid(`unknown bulk op "${String(b.op)}"`);
     bump(root);
-    kernelFollow(root, before);
     return c.json(res as object);
   } catch (err) {
     return fail(c, err);
@@ -706,10 +703,9 @@ app.put('/api/note/:id/frontmatter', async (c) => {
   try {
     const body = (await c.req.json()) as { yaml: string; baseMtime?: number };
     const id = c.req.param('id');
-    const before = kernelWatch(root, [id]);
+    noteWrites(root, [id], 'app');
     const res = putFrontmatter(root, id, body.yaml ?? '', body.baseMtime);
     bump(root);
-    kernelFollow(root, before);
     return c.json(res);
   } catch (err) {
     return fail(c, err);

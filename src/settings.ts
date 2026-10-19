@@ -124,27 +124,13 @@ export interface Settings {
    * names this vault in the kernel's aliases (`vault:<vault>:<note id>`);
    * absent, the registered name, else the folder's.
    *
-   * `verdicts` is the other direction: which values of which axis, set by the
-   * owner, also tell the kernel what became of a note's intent — `met`,
-   * `missed` or `dropped` through `<bin> judge`. A vault's vocabulary is its
-   * own (C4), so nothing here knows which axis is the lifecycle or which of its
-   * values means finished; absent, a status change writes nothing to the kernel.
-   *
-   * The same map, read backwards, is what the owner's answer in the kernel
-   * writes into the note: for a verdict, the first value that maps to it.
-   * `onVerdict` (`{ <axis>: { <verdict>: <value> } }`) chooses when several do
-   * — `{ status: { dropped: cancelled } }` — and names only values `verdicts`
-   * already maps to that verdict, so the two can never disagree.
-   *
-   * `commitments` and `days` are what `pj kernel import` reports (`kernel/import.ts`).
-   * `commitments` names the axis whose values say whether a note is one of the
-   * owner's commitments: a value in `open` is an open one, a value
-   * `verdicts[axis]` maps is `met`, `missed` or `dropped`, and every other value
-   * — or none — is no commitment at all. `horizon` names a date axis for the
-   * intent's horizon. `days` is a folder, relative to the vault, whose notes are
-   * the owner's days: `vault/day` events, never commitments. Both absent, the
-   * import has nothing to send. As with `verdicts`, the code knows no value of
-   * any axis (C4); the vault says them all.
+   * `status` names the axis whose changes the vault records in the kernel: each
+   * index rebuild sends a `vault/status` event per note whose value on it changed
+   * (`kernel/record.ts`), a fact and never an intent or a verdict. Its values
+   * are the vault's own (C4); the facet's `closed` list is what the panel reads
+   * when a note and the intent about it part ways, and asks the owner. `days`
+   * is a folder, relative to the vault, whose notes are the owner's days:
+   * `vault/day` events. Both absent, there is nothing to record.
    */
   kernel: {
     enabled: boolean;
@@ -152,16 +138,10 @@ export interface Settings {
     db: string | null;
     vault: string | null;
     timeoutSeconds: number;
-    verdicts: Record<string, Record<string, StatusVerdict>>;
-    onVerdict: Record<string, Partial<Record<StatusVerdict, string>>>;
-    commitments: { axis: string; open: string[]; horizon: string | null } | null;
+    status: string | null;
     days: string | null;
   };
 }
-
-/** What a status value may tell the kernel. `partial` keeps an intent open, so it is the owner's word in the panel, not a status. */
-export type StatusVerdict = 'met' | 'missed' | 'dropped';
-const STATUS_VERDICTS: readonly string[] = ['met', 'missed', 'dropped'];
 
 export const CONFIG_FILE = 'config.yaml';
 
@@ -194,9 +174,7 @@ interface Raw {
     db?: unknown;
     vault?: unknown;
     timeout?: unknown;
-    verdicts?: unknown;
-    onVerdict?: unknown;
-    commitments?: { axis?: unknown; open?: unknown; horizon?: unknown };
+    status?: unknown;
     days?: unknown;
   };
 }
@@ -348,16 +326,7 @@ export function settingsFor(root: string): Settings {
       // An ingest is a babashka start and one transaction, well under a second;
       // the ceiling is for a kernel whose store is locked by another writer.
       timeoutSeconds: Math.max(5, Number(raw.kernel?.timeout ?? 60) || 60),
-      verdicts: verdictMap(raw.kernel?.verdicts),
-      onVerdict: onVerdictMap(raw.kernel?.onVerdict, verdictMap(raw.kernel?.verdicts)),
-      commitments: (() => {
-        // Without an axis there is no question to ask of a note, so the block
-        // is absent rather than half-read.
-        const c = raw.kernel?.commitments;
-        const axis = c && typeof c === 'object' ? str(c.axis) : null;
-        if (!c || !axis) return null;
-        return { axis, open: list(c.open) ?? [], horizon: str(c.horizon) };
-      })(),
+      status: str(raw.kernel?.status),
       // Vault-relative, as a folder: `./daily/` and `daily` are the same place.
       days: str(raw.kernel?.days)?.replace(/^(\.\/)+/, '').replace(/\/+$/, '') || null,
     },
@@ -365,53 +334,6 @@ export function settingsFor(root: string): Settings {
 
   cache.set(root, { key, value });
   return value;
-}
-
-/**
- * `kernel.verdicts`: `{ <axis>: { <value>: met|missed|dropped } }`. Anything
- * else — a list, a verdict the kernel would refuse for a status — is dropped
- * rather than guessed at, so a typo writes nothing instead of the wrong thing.
- */
-function verdictMap(v: unknown): Record<string, Record<string, StatusVerdict>> {
-  const out: Record<string, Record<string, StatusVerdict>> = {};
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
-  for (const [axis, values] of Object.entries(v as Record<string, unknown>)) {
-    if (!values || typeof values !== 'object' || Array.isArray(values)) continue;
-    const row: Record<string, StatusVerdict> = {};
-    for (const [value, verdict] of Object.entries(values as Record<string, unknown>)) {
-      const said = str(verdict);
-      if (said && STATUS_VERDICTS.includes(said)) row[value] = said as StatusVerdict;
-    }
-    if (Object.keys(row).length) out[axis.trim()] = row;
-  }
-  return out;
-}
-
-/**
- * `kernel.onVerdict`: `{ <axis>: { <verdict>: <value> } }`, the tie-break for
- * a verdict several values map to. A choice `verdicts` does not back — an axis
- * it does not name, a value it maps elsewhere or not at all — is dropped, so
- * reading the map backwards always lands on a value that reads forwards to the
- * same verdict.
- */
-function onVerdictMap(
-  v: unknown,
-  verdicts: Record<string, Record<string, StatusVerdict>>,
-): Record<string, Partial<Record<StatusVerdict, string>>> {
-  const out: Record<string, Partial<Record<StatusVerdict, string>>> = {};
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
-  for (const [rawAxis, choices] of Object.entries(v as Record<string, unknown>)) {
-    const axis = rawAxis.trim();
-    const forwards = verdicts[axis];
-    if (!forwards || !choices || typeof choices !== 'object' || Array.isArray(choices)) continue;
-    const row: Partial<Record<StatusVerdict, string>> = {};
-    for (const [verdict, value] of Object.entries(choices as Record<string, unknown>)) {
-      const chosen = str(value);
-      if (chosen && STATUS_VERDICTS.includes(verdict) && forwards[chosen] === verdict) row[verdict as StatusVerdict] = chosen;
-    }
-    if (Object.keys(row).length) out[axis] = row;
-  }
-  return out;
 }
 
 /** Whether this vault triages a channel. Unconfigured vaults triage every one. */
@@ -493,21 +415,10 @@ enrich: ${enrich ? 'true' : 'false'}
 #   bin: ~/Code/projects/kernel/bin/kernel
 #   db: ~/.kernel/db           # passed as KERNEL_DB; default: the kernel's own
 #   vault: work                # the name in vault:<vault>:<note id>; default: the registered name
-#   # When you set one of these values, the note's kernel intent is told too,
-#   # through \`<bin> judge\`. Other values write nothing to the kernel.
-#   verdicts:
-#     status: { done: met, archived: dropped, cancelled: dropped }
-#   # Accepting or overruling a verdict writes it back into the note: the first
-#   # value that maps to it, or the one named here when several do.
-#   onVerdict:
-#     status: { dropped: cancelled }
-#   # \`pj kernel import\`: which notes are your commitments. A value in open is
-#   # an open one, a value verdicts maps is met, missed or dropped, and any
-#   # other value (planning, on-hold) is no commitment at all.
-#   commitments:
-#     axis: status
-#     open: [active]
-#     horizon: due             # a date axis, for the intent's horizon
+#   # Each change of a note's value on this axis is recorded in the kernel, as a
+#   # vault/status event: a fact, never an intent. An intent about a note is
+#   # yours to open, in its panel or with \`pj kernel intent <id>\`.
+#   status: status
 #   days: daily                # a folder whose notes are your days: vault/day events
 #
 # Where Claude itself lives is a fact about the machine, not about this vault, so

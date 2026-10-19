@@ -269,19 +269,12 @@ async function call(cfg: Settings['kernel'], args: string[], input: string, run:
 }
 
 /**
- * Send one batch: `<bin> ingest --source system:projector [--owner] --json`,
- * the batch on stdin, `KERNEL_DB` from `kernel.db` when the file sets it.
- * `owner` is for the owner's own reports — the import's commitments — and
- * never for the intake sink, whose proposals are an agent's. Never throws:
+ * Send one batch: `<bin> ingest --source system:projector --json`, the batch on
+ * stdin, `KERNEL_DB` from `kernel.db` when the file sets it. Never throws:
  * every way of failing is a `reason`.
  */
-export async function ingest(
-  cfg: Settings['kernel'],
-  batch: object,
-  opts: { owner?: boolean } = {},
-  run: Runner = spawnRunner,
-): Promise<Ingested> {
-  return call(cfg, ['ingest', '--source', KERNEL_SOURCE, ...(opts.owner ? ['--owner'] : []), '--json'], JSON.stringify(batch), run);
+export async function ingest(cfg: Settings['kernel'], batch: object, run: Runner = spawnRunner): Promise<Ingested> {
+  return call(cfg, ['ingest', '--source', KERNEL_SOURCE, '--json'], JSON.stringify(batch), run);
 }
 
 /** The pass's attempt, as the kernel started it, or why it did not. */
@@ -344,7 +337,7 @@ export async function sendToKernel(
   batch: KernelBatch,
   run: Runner = spawnRunner,
 ): Promise<Sent> {
-  const r = await ingest(cfg, batch, {}, run);
+  const r = await ingest(cfg, batch, run);
   if (!r.ok) return r;
   return { ok: true, events: Number(r.answer['events-new'] ?? 0), proposals: Number(r.answer['proposals-new'] ?? 0) };
 }

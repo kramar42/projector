@@ -174,7 +174,7 @@ test('the kernel is off unless the file turns it on', () => {
   const on = vault('kernel:\n  enabled: true\n  bin: ~/k/bin/kernel\n  db: scratch/db\n  timeout: 1\n');
   const bare = vault('kernel:\n  enabled: true\n  bin: kernel\n');
   try {
-    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60, verdicts: {}, onVerdict: {}, commitments: null, days: null });
+    assert.deepEqual(settingsFor(none).kernel, { enabled: false, bin: null, db: null, vault: null, timeoutSeconds: 60, status: null, days: null });
     const k = settingsFor(on).kernel;
     assert.equal(k.enabled, true);
     assert.match(k.bin!, /\/k\/bin\/kernel$/);
@@ -196,9 +196,7 @@ const cfg = {
   db: '/scratch/db',
   vault: null,
   timeoutSeconds: 5,
-  verdicts: {},
-  onVerdict: {},
-  commitments: null,
+  status: null,
   days: null,
 };
 

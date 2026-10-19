@@ -55,20 +55,9 @@ import { did, renderDid } from '../did/run.ts';
 import { kernelIndex } from '../kernel/read.ts';
 import { planLine, runImport } from '../kernel/import.ts';
 import { MANIFEST, register } from '../kernel/register.ts';
-import { axisValues, shortId } from '../kernel/state.ts';
-import {
-  decide,
-  disagreementLine,
-  disagreements,
-  filedLine,
-  OVERRULE_VERDICTS,
-  reconcile,
-  snapshot,
-  throughLine,
-  watchedAxes,
-  writeThrough,
-  type OverruleVerdict,
-} from '../kernel/write.ts';
+import { askOf, axisValues, lifecycleOf, shortId, type Ask } from '../kernel/state.ts';
+import { decide, openIntent, OVERRULE_VERDICTS, type OverruleVerdict } from '../kernel/write.ts';
+import { noteWrites, recordChanges } from '../kernel/record.ts';
 import { settingsFor } from '../settings.ts';
 
 // ---------------------------------------------------------------- flags
@@ -265,7 +254,7 @@ Intake
   intake declined    inspect declined candidates
 
 Kernel
-  kernel             what the owner's kernel says of this vault's notes; accept or overrule a drafted verdict; sync files to it; import the vault; register
+  kernel             the owner's intents about this vault's notes: open one, judge it, see what asks; record the vault; register
 
 Vault and maintenance
   setup              inspect or initialise vault integration
@@ -318,27 +307,31 @@ starts work on the note: one JSON object, {text, repos, branch, title}.`,
 
 Apply the same scripted edit to one or more notes.`,
   kernel: `Usage: pj kernel status [--json]
+       pj kernel intent <note id> [--statement text] [--criterion text] [--horizon YYYY-MM-DD]
        pj kernel accept <note id> [--note text]
        pj kernel overrule <note id> [--verdict missed|dropped|partial] [--note text]
-       pj kernel sync
        pj kernel import [--dry-run] [--json]
        pj kernel register
 
-The owner's kernel, read through the vault's \`kernel:\` block. \`status\` lists
-every intent about a note of this vault, with the \`kernel\` axis value it
-gives the note and its latest verdict, then every note whose file still reads
-open where the kernel has closed it. \`accept\` tells the kernel the note's
-intent is met (or what the draft said); \`overrule\` says missed, dropped, or
-\`--verdict partial\` to keep it open. Both run \`<bin> judge\` as the owner,
-then write the value \`kernel.verdicts\` maps that verdict to into the note.
-\`sync\` writes those values into the files \`status\` lists as disagreeing.
+The owner's kernel, read through the vault's \`kernel:\` block. A note's
+status stays in its file; an intent about a note is a layer over it, yours to
+open when you want the kernel's help or to be held to something.
 
-\`import\` sends the vault to the kernel as one batch, as the owner: every note
-on the \`kernel.commitments\` axis as a commitment — open, met, missed,
-dropped, or none — a \`vault/status\` event per status change since the last
-import, and every note in the \`kernel.days\` folder as a \`vault/day\` event.
-\`--dry-run\` prints the batch instead of sending it. \`register\` hands the
-kernel projector's manifest, \`kernel/manifest.json\`.`,
+\`status\` lists every intent about a note of this vault, with the \`kernel\`
+axis value it gives the note and its latest verdict, then what asks: a note
+whose lifecycle is closed while its intent is open, or the other way round.
+\`intent\` opens one, as the owner: what should happen (the note's title
+when \`--statement\` is absent), how to judge it, and when it is due.
+\`accept\` tells the kernel the note's intent is met (or what the draft said);
+\`overrule\` says missed, dropped, or \`--verdict partial\` to keep it open.
+Each runs \`<bin>\` as the owner and never writes the note.
+
+Each change of a note's value on \`kernel.status\` is recorded in the kernel
+as a \`vault/status\` event — on the server's next index rebuild, or after a
+\`pj\` write — with every note in the \`kernel.days\` folder as a \`vault/day\`.
+\`import\` sends the whole of it by hand, to catch up; \`--dry-run\` prints
+the batch instead. \`register\` hands the kernel projector's manifest,
+\`kernel/manifest.json\`.`,
   mv: `Usage: pj mv <id> <new-id>
 
 Rename a note and repoint references and saved views.`,
@@ -547,7 +540,7 @@ async function cmdLs(argv: string[]): Promise<void> {
   console.log(flags.has('json') ? JSON.stringify(payload, null, 2) : renderListing(payload, spec));
 }
 
-function cmdAdd(argv: string[]): void {
+function cmdAdd(argv: string[]): string | null {
   const { flags, rest } = argFlags(argv, ['id', 'facet', 'link', 'body', 'fingerprint']);
   const title = rest.join(' ').trim();
   if (!title) {
@@ -572,10 +565,42 @@ function cmdAdd(argv: string[]): void {
   if (res.existed) {
     // A sweep run twice converges instead of refilling the inbox.
     console.log(`skipped — fingerprint already on ${res.id}`);
-    return;
+    return null;
   }
   // Where it actually went: the place depends on what kind of note it is.
   console.log(`created ${res.file ? relative(root, res.file) : `${res.id}.md`} (id: ${res.id})`);
+  return res.id;
+}
+
+/**
+ * After a \`pj\` write that touched the recorded axis: record it in the kernel
+ * as the CLI's (\`kernel/record.ts\`), and say what asks among the notes written
+ * — a status closed on a note whose intent is open, so the owner can judge it.
+ * A kernel that is absent or refuses is a line on stderr, never a failed write.
+ */
+async function recordFromCli(ids: string[], touched: boolean): Promise<void> {
+  const cfg = settingsFor(root).kernel;
+  if (!cfg.enabled || !cfg.status || !touched || !ids.length) return;
+  noteWrites(root, ids, 'cli');
+  const r = await recordChanges(root);
+  if (!r.ok) console.error(`kernel: changes not recorded — ${r.reason}`);
+  else if (r.events) console.log(`kernel: recorded ${r.events} change(s)`);
+  const k = await kernelIndex(root, 'cli-ask', { fresh: true });
+  if (k.reason) return;
+  const life = lifecycleOf(cfg.status, loadFacets(p.facets));
+  const notes = readAll(p.notes).notes;
+  for (const id of ids) {
+    const line = k.notes.get(id);
+    const ask = askOf(line, life ? notes.get(id)?.facets[life.axis] : undefined, life);
+    if (ask && line) console.log(`kernel: ${askLine(id, line.intent, ask)}`);
+  }
+}
+
+/** One line for what the owner is asked about a note, with the command that answers it. */
+function askLine(id: string, intent: string, ask: Ask): string {
+  return ask.kind === 'judge'
+    ? `${id} is ${ask.value} and its intent ${shortId(intent)} is open — judge it: \`pj kernel accept ${id}\`, or \`pj kernel overrule ${id} --verdict missed|dropped|partial\``
+    : `${id}'s intent ${shortId(intent)} is ${ask.verdict} and the note is not closed — set it: \`pj set ${id} --facet ${ask.axis}=${ask.values.join('|')}\``;
 }
 
 /**
@@ -912,25 +937,18 @@ async function cmdKernel(argv: string[]): Promise<void> {
           return { note, value, intent: i, draft: line?.intent === i.id && line.draft };
         }),
     );
-    const kcfg = settingsFor(root).kernel;
-    const differ = disagreements(kcfg, k.notes, readAll(p.notes).notes);
+    const life = lifecycleOf(settingsFor(root).kernel.status, loadFacets(p.facets));
+    const held = readAll(p.notes).notes;
+    const asks = [...k.notes]
+      .map(([note, line]) => ({ note, intent: line.intent, ask: askOf(line, life ? held.get(note)?.facets[life.axis] : undefined, life) }))
+      .filter((a): a is { note: string; intent: string; ask: Ask } => a.ask !== null)
+      .sort((a, b) => a.note.localeCompare(b.note));
     if (flags.has('json')) {
-      console.log(
-        JSON.stringify(
-          {
-            vault: k.vault,
-            notes: Object.fromEntries(k.notes),
-            intents: k.intents,
-            disagreements: differ,
-          },
-          null,
-          2,
-        ),
-      );
+      console.log(JSON.stringify({ vault: k.vault, notes: Object.fromEntries(k.notes), intents: k.intents, asks }, null, 2));
       return;
     }
     if (!rows.length) {
-      console.log(`no intent in the kernel is about a note of vault:${k.vault}`);
+      console.log(`no intent in the kernel is about a note of vault:${k.vault} — open one with \`pj kernel intent <note id>\``);
       return;
     }
     console.log(`${pad('note', 30)} ${pad('kernel', 17)} ${pad('intent', 8)}  ${pad('latest', 34)} statement`);
@@ -941,26 +959,24 @@ async function cmdKernel(argv: string[]): Promise<void> {
     }
     const drafts = rows.filter((r) => r.draft).length;
     if (drafts) console.log(`\n${drafts} drafted verdict(s) wait for you: \`pj kernel accept <id>\` or \`pj kernel overrule <id>\``);
-    // Only where the vault named its lifecycle: without \`kernel.verdicts\` there is no axis to disagree on.
-    if (Object.keys(kcfg.verdicts).length) {
-      if (!differ.length) console.log('\nno file disagrees with the kernel');
-      else {
-        console.log(`\n${differ.length} file(s) disagree with the kernel:`);
-        for (const d of differ) console.log(`  ${disagreementLine(d)}`);
-      }
+    if (asks.length) {
+      console.log(`\n${asks.length} note(s) and their intents part ways:`);
+      for (const a of asks) console.log(`  ${askLine(a.note, a.intent, a.ask)}`);
     }
     return;
   }
 
-  if (sub === 'sync') {
-    const { rest } = argFlags(more, []);
-    if (rest.length) fail('pj kernel sync takes no arguments');
-    const res = await reconcile(root);
-    if (!res.ok) fail(`pj kernel sync: ${res.reason}`);
-    if (!res.results.length) console.log('nothing to sync — no file disagrees with the kernel');
-    for (const r of res.results) {
-      (r.file.outcome === 'failed' ? console.error : console.log)(filedLine(r.id, r.verdict, r.file));
-    }
+  if (sub === 'intent') {
+    const { flags, rest } = argFlags(more, ['statement', 'criterion', 'horizon']);
+    const [id] = rest;
+    if (!id || rest.length > 1) fail('pj kernel intent <note id> [--statement text] [--criterion text] [--horizon YYYY-MM-DD]');
+    const res = await openIntent(root, id, {
+      statement: flags.get('statement')?.[0],
+      criterion: flags.get('criterion')?.[0],
+      horizon: flags.get('horizon')?.[0],
+    });
+    if (!res.ok) fail(`pj kernel intent: ${res.reason}`);
+    console.log(`${id}: intent ${shortId(res.intent)} opened — ${res.kernel?.statement ?? res.said}`);
     return;
   }
 
@@ -976,9 +992,6 @@ async function cmdKernel(argv: string[]): Promise<void> {
     if (!res.ok) fail(`pj kernel ${sub}: ${res.reason}`);
     const now = res.kernel ? (res.kernel.value ?? res.kernel.status) : 'gone from the kernel’s answer';
     console.log(`${id}: ${res.verdict} on intent ${shortId(res.intent)} — the kernel now reads ${now}`);
-    if (res.file && res.verdict !== 'partial') {
-      (res.file.outcome === 'failed' ? console.error : console.log)(filedLine(id, res.verdict, res.file));
-    }
     return;
   }
 
@@ -994,10 +1007,7 @@ async function cmdKernel(argv: string[]): Promise<void> {
       return;
     }
     console.log(`${dryRun ? 'would send' : 'sent'} ${planLine(plan)}`);
-    if (dryRun) {
-      for (const c of plan.batch.commitments) console.log(`  ${pad(c.status, 8)} ${pad(c.key, 40)} ${c.statement}`);
-      for (const e of plan.batch.events) console.log(`  ${pad(e.kind, 12)} ${e.key}`);
-    }
+    if (dryRun) for (const e of plan.batch.events) console.log(`  ${pad(e.kind, 12)} ${e.key}`);
     for (const s of plan.skipped) console.log(`  skipped ${s.id}: ${s.why}`);
     if (answer) {
       const said = Object.entries(answer)
@@ -1060,7 +1070,9 @@ if (asking) {
       break;
     }
     case 'add': {
-      cmdAdd(argv);
+      const id = cmdAdd(argv);
+      const axis = settingsFor(root).kernel.status;
+      if (id) await recordFromCli([id], !!axis && !!readAll(p.notes).notes.get(id)?.facets[axis]?.length);
       break;
     }
     case 'link':
@@ -1349,11 +1361,6 @@ if (asking) {
         ),
       ];
 
-      // What the axes `kernel.verdicts` names held before, so the kernel can be
-      // told what the owner just set — after every vault write has landed.
-      const watched = watchedAxes(settingsFor(root).kernel);
-      const before = snapshot(notes, rest, watched);
-
       // Every id gets the same edit, so a bulk move is one invocation rather
       // than one process per note re-reading the whole vault.
       for (const id of rest) {
@@ -1376,10 +1383,8 @@ if (asking) {
 
       // Additional, never blocking (C1): every note above is written whatever
       // the kernel says, and a kernel that refuses is a line on stderr.
-      if (before.size) {
-        const results = await writeThrough(root, before, snapshot(readAll(p.notes).notes, rest, watched));
-        for (const r of results) (r.outcome === 'written' ? console.log : console.error)(`kernel: ${throughLine(r)}`);
-      }
+      const axis = settingsFor(root).kernel.status;
+      await recordFromCli(rest, !!axis && ops.some((o) => o.facet === axis));
       break;
     }
 

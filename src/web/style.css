@@ -3403,6 +3403,12 @@ textarea { resize: vertical; font-family: inherit; }
 
 /* The owner's answer to a drafted kernel verdict: a row of buttons, as above. */
 .kernel-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kernel-acts + .kernel-acts, .banner + .kernel-acts { margin-top: 6px; }
+
+/* An intent about the note: three labelled fields over the row of buttons. */
+.kernel-intent { display: grid; gap: 6px; }
+.kernel-intent label { display: grid; gap: 2px; }
+.kernel-intent label span { font-size: var(--text-xs); color: var(--muted); }
 
 
 /* In flow under a heading rather than inside a list, so it spaces itself. */

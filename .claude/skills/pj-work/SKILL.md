@@ -20,9 +20,9 @@ about the vault's notes: the note's id beside its intent's.
 
 Stop and say so when:
 
-- **It has no intent, or no open one.** Only an open intent is worked. A note becomes one by carrying
-  an open value of the vault's `kernel.commitments` axis (`pj set <id> --facet status=active`, say),
-  sent by `pj kernel import`. A proposed intent waits for the owner to open it.
+- **It has no intent, or no open one.** Only an open intent is worked, and only the owner opens one:
+  Add intent in the note's panel, or `pj kernel intent <id> --criterion <how to judge>`. A proposed
+  intent waits for the owner to open it.
 - **Its project declares no repos.** The kernel refuses with "named none". Offer to add `repos` to the
   project note's frontmatter (`pj context <id>` shows which project it resolves to).
 - **It is blocked.** `pj context <id>` lists unfinished blockers; ask whether to proceed.
